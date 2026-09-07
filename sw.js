@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v16-51_diag_gps_layers_search';
-const APP_VERSION = 'v16.51';
+const SW_VERSION = 'sw-v16-55_regression_rootfix';
+const APP_VERSION = 'v16.55';
 const SIA_DATA_REVISION = '15.69';
 const SIA_DATA_URL = './sia.js';
 const SIA_DATA_CACHE = `npf-q400-sia-data-${SIA_DATA_REVISION}`;
