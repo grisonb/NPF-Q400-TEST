@@ -2,7 +2,7 @@
     "name": "NPF-Q400",
     "short_name": "NPF-Q400",
     "id": "./index.html?prod=1",
-    "start_url": "./index.html?appv=v16.55",
+    "start_url": "./index.html?appv=v16.56",
     "scope": "./",
     "display": "standalone",
     "background_color": "#0b2f6b",
