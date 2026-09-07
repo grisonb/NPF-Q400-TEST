@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v16-56_largages_stabilite';
-const APP_VERSION = 'v16.56';
+const SW_VERSION = 'sw-v16-57_zoomout_oaci_freq';
+const APP_VERSION = 'v16.57';
 const SIA_DATA_REVISION = '15.69';
 const SIA_DATA_URL = './sia.js';
 const SIA_DATA_CACHE = `npf-q400-sia-data-${SIA_DATA_REVISION}`;
