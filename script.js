@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v16.56';
+const NPF_SCRIPT_BUILD_VERSION = 'v16.57';
 
 
 /*
@@ -27211,6 +27211,13 @@ function getNpfDisplayedAirportRecordsForLabels() {
     return [...byOaci.values()];
 }
 
+/* v16.57 — fréquences aérodrome vérifiées qui ne doivent pas dépendre
+ * de la présence du terrain dans les services des espaces SIA. */
+const AIRPORT_OPERATIONAL_FREQUENCY_OVERRIDES = new Map([
+    ['LFBD', Object.freeze({ type: 'TWR', value: '118.305', priority: 0 })],
+    ['LFCS', Object.freeze({ type: 'A/A', value: '119.005', priority: 2 })]
+]);
+
 function buildAirportOperationalFrequencyIndex(dataset = siaDataset) {
     if (airportOperationalFrequencyIndex && airportOperationalFrequencyIndexDataset === dataset) {
         return airportOperationalFrequencyIndex;
@@ -27253,6 +27260,11 @@ function buildAirportOperationalFrequencyIndex(dataset = siaDataset) {
         });
     });
 
+    /* Les valeurs explicitement vérifiées priment sur l'index générique. */
+    AIRPORT_OPERATIONAL_FREQUENCY_OVERRIDES.forEach((frequency, oaci) => {
+        index.set(oaci, { ...frequency });
+    });
+
     airportOperationalFrequencyIndex = index;
     airportOperationalFrequencyIndexDataset = dataset || null;
     return index;
@@ -27279,6 +27291,11 @@ function refreshAirportOperationalLabels() {
         const latlng = L.latLng(airport.lat, airport.lon);
         if (!bounds.contains(latlng)) return;
         const freq = getAirportOperationalFrequency(airport.oaci);
+        const airportName = String(airport.name || '').trim();
+        const airportOaci = String(airport.oaci || '').trim().toUpperCase();
+        const airportDisplayName = airportName
+            ? `${airportName} (${airportOaci})`
+            : airportOaci;
         const frequencyHtml = freq
             ? `<span class="airport-operational-frequency">${escapeHtml(freq.type)} ${escapeHtml(freq.value)}</span>`
             : '';
@@ -27288,7 +27305,7 @@ function refreshAirportOperationalLabels() {
             zIndexOffset: 1650,
             icon: L.divIcon({
                 className: 'airport-operational-label-icon',
-                html: `<span class="airport-operational-label"><span class="airport-operational-name">${escapeHtml(airport.name || airport.oaci)}</span>${frequencyHtml}</span>`,
+                html: `<span class="airport-operational-label"><span class="airport-operational-name">${escapeHtml(airportDisplayName)}</span>${frequencyHtml}</span>`,
                 iconSize: [1, 1],
                 iconAnchor: [0, 0]
             })
@@ -40762,6 +40779,9 @@ let siaDecorationProgressiveRun = 0;
  */
 let siaStartupPassiveMoveendGuardUntil = 0;
 const SIA_STARTUP_PASSIVE_MOVEEND_GUARD_MS = 2500;
+/* v16.57 — tant que startup-prefs est programmé, un moveend passif de démarrage
+ * ne doit pas lancer une seconde reconstruction SIA sur la même vue. */
+let siaStartupInitialRefreshPending = false;
 /* Ancien préchargement conservé pour compatibilité mais non déclenché pendant le pan. */
 let siaMovePreloadLastTriggerAt = 0;
 const SIA_MOVE_PRELOAD_MIN_INTERVAL_MS = 400;
@@ -41063,6 +41083,25 @@ function cancelObsoleteSiaMapMotionWork(reason = 'gps-contained') {
     npfDiagSiaInteraction(
         'SIA GPS',
         `raison=${reason} · aucun traitement SIA`,
+        { totalMs: 0 }
+    );
+}
+
+/* v16.57 — un changement de zoom rend obsolète TOUT travail SIA calculé
+ * pour l'ancienne projection, quel qu'en soit le motif d'origine. */
+function cancelAllSiaWorkForZoomStart() {
+    clearTimeout(siaRefreshTimer);
+    siaRefreshTimer = null;
+    siaRefreshScheduledReason = null;
+    siaRefreshPendingReason = null;
+    clearTimeout(siaMoveDecorationRefreshTimer);
+    siaMoveDecorationRefreshTimer = null;
+    siaDecorationProgressiveRun += 1;
+    window.__npfSiaRefreshGeneration = (Number(window.__npfSiaRefreshGeneration) || 0) + 1;
+
+    npfDiagSiaInteraction(
+        'SIA ZOOM',
+        `raison=zoomstart · génération précédente invalidée · courant=${String(siaRefreshCurrentReason || 'aucun')}`,
         { totalMs: 0 }
     );
 }
@@ -43753,15 +43792,20 @@ function initializeSiaSystem() {
                 return;
             }
             const gpsFollowMoveend = sample?.source === 'gps-follow' || isNpfGpsFollowProgrammaticPan();
-            scheduleSiaCoverageRefresh(gpsFollowMoveend ? 'gps-follow' : 'moveend');
+            if (siaStartupInitialRefreshPending && !siaRenderedCoverageBounds) {
+                npfDiagSiaInteraction(
+                    'SIA RAFRAÎCHISSEMENT',
+                    `raison=moveend-démarrage · différé vers startup-prefs · zoom=${map.getZoom()}`,
+                    { totalMs: 0 }
+                );
+            } else {
+                scheduleSiaCoverageRefresh(gpsFollowMoveend ? 'gps-follow' : 'moveend');
+            }
         });
         map.on('zoomstart', () => {
             npfDiagZoomStartedAt = NPF_STARTUP_DIAGNOSTIC.now();
-            /* v16.56 — un rendu SIA calculé pour l'ancien zoom ne doit jamais finir après le geste. */
-            cancelObsoleteSiaMapMotionWork('zoomstart');
-            siaDecorationProgressiveRun += 1;
-            clearTimeout(siaMoveDecorationRefreshTimer);
-            siaMoveDecorationRefreshTimer = null;
+            /* v16.57 — tout travail de l'ancien zoom est obsolète, quel que soit son motif. */
+            cancelAllSiaWorkForZoomStart();
         });
         map.on('zoomend', () => {
             const now = NPF_STARTUP_DIAGNOSTIC.now();
@@ -43778,8 +43822,10 @@ function initializeSiaSystem() {
     }
 
     if (hasAnyEnabledSiaFilter()) {
+        siaStartupInitialRefreshPending = true;
         setTimeout(() => {
-            // v15.83 — ne pas charger/décompresser le dataset avant le fond de carte.
+            // v16.57 — un seul rendu initial, sur la vue réellement courante.
+            siaStartupInitialRefreshPending = false;
             scheduleSiaLayerRefresh('startup-prefs');
         }, 900);
     }
@@ -46222,10 +46268,12 @@ function renderSiaZoomDependentDecorations(features) {
      * Les zones, leurs contours et la sélection restent intégralement disponibles.
      */
     const scaleNm = getCurrentNpfScaleNm();
-    if (scaleNm >= SIA_DECORATION_LIGHTWEIGHT_SCALE_NM) {
+    const combinedHeavyDecorationLoad = !!(siaMapAirspacesVisible && showRoadOverlayLayer && showHighVoltageLinesLayer);
+    const combinedHeavyLightweight = combinedHeavyDecorationLoad && Number.isFinite(scaleNm) && scaleNm >= 5;
+    if (scaleNm >= SIA_DECORATION_LIGHTWEIGHT_SCALE_NM || combinedHeavyLightweight) {
         npfDiagSiaInteraction(
             'SIA DÉCORATIONS',
-            `zones=0/${features.length} · labels=0 · zoom=${map?.getZoom?.() ?? '—'} · allégées=oui · echelle=${Number.isFinite(scaleNm) ? scaleNm.toFixed(1) : '—'}NM`,
+            `zones=0/${features.length} · labels=0 · zoom=${map?.getZoom?.() ?? '—'} · allégées=oui · charge-combinée=${combinedHeavyLightweight ? 'oui' : 'non'} · echelle=${Number.isFinite(scaleNm) ? scaleNm.toFixed(1) : '—'}NM`,
             { dureeMs: Math.round(NPF_STARTUP_DIAGNOSTIC.now() - npfDiagStartedAt) }
         );
         return;
@@ -46281,11 +46329,13 @@ async function renderSiaZoomDependentDecorationsProgressive(features, refreshGen
      * observés au zoom 8/9 sur iPad, sans retirer aucune zone SIA.
      */
     const scaleNm = getCurrentNpfScaleNm();
-    if (scaleNm >= SIA_DECORATION_LIGHTWEIGHT_SCALE_NM) {
+    const combinedHeavyDecorationLoad = !!(siaMapAirspacesVisible && showRoadOverlayLayer && showHighVoltageLinesLayer);
+    const combinedHeavyLightweight = combinedHeavyDecorationLoad && Number.isFinite(scaleNm) && scaleNm >= 5;
+    if (scaleNm >= SIA_DECORATION_LIGHTWEIGHT_SCALE_NM || combinedHeavyLightweight) {
         throwIfSiaRefreshObsolete(refreshGeneration);
         npfDiagSiaInteraction(
             'SIA DÉCORATIONS',
-            `zones=0/${features.length} · labels=0 · zoom=${map?.getZoom?.() ?? '—'} · progressif=oui · allégées=oui · echelle=${Number.isFinite(scaleNm) ? scaleNm.toFixed(1) : '—'}NM`,
+            `zones=0/${features.length} · labels=0 · zoom=${map?.getZoom?.() ?? '—'} · progressif=oui · allégées=oui · charge-combinée=${combinedHeavyLightweight ? 'oui' : 'non'} · echelle=${Number.isFinite(scaleNm) ? scaleNm.toFixed(1) : '—'}NM`,
             { dureeMs: Math.round(NPF_STARTUP_DIAGNOSTIC.now() - npfDiagStartedAt) }
         );
         return;
@@ -46594,9 +46644,10 @@ async function refreshSiaLayers(reason = 'manual') {
          * de conserver deux jeux de marqueurs/points pendant la reconstruction.
          */
         const siaCombinedHeavyMapLoad = siaMapAirspacesVisible && showRoadOverlayLayer && showHighVoltageLinesLayer;
-        /* v16.56 — éviter le pic mémoire de deux jeux SIA simultanés avec Routes + HT. */
+        /* v16.57 — sous charge combinée, jamais deux jeux SIA simultanés,
+         * quel que soit le zoom : stabilité mémoire prioritaire sur iPad. */
         const preservePreviousSiaDuringRebuild = siaMapAirspacesVisible
-            && !(siaCombinedHeavyMapLoad && zoom <= 10);
+            && !siaCombinedHeavyMapLoad;
         previousSiaLayerGroupForSwap = siaLayerGroup;
         replacementSiaLayerGroupForSwap = L.layerGroup();
         siaLayerGroup = replacementSiaLayerGroupForSwap;
@@ -46612,6 +46663,14 @@ async function refreshSiaLayers(reason = 'manual') {
                 previousSiaLayerGroupForSwap.clearLayers();
             } catch (_) {}
             previousSiaLayerGroupForSwap = null;
+            /* v16.57 — l'ancien groupe n'existe plus : sa couverture ne doit
+             * jamais être réutilisée si le nouveau rendu est interrompu par un zoom. */
+            siaRenderedCoverageBounds = null;
+            siaRenderedZoom = null;
+            siaRenderedSignature = '';
+            siaRenderedAirspaceFeatures = [];
+            siaRenderedShowDesignatedPoints = null;
+            siaRenderedPointLabelsEnabled = null;
         }
 
         siaSelectedCtrTouchLayer = null;
@@ -46621,7 +46680,7 @@ async function refreshSiaLayers(reason = 'manual') {
         // Charger légèrement au-delà du viewport évite les reconstructions à
         // chaque mouvement du suivi GPS tout en bornant la mémoire Safari/iPad.
         const renderPadRatio = siaMapAirspacesVisible
-            ? ((siaCombinedHeavyMapLoad && zoom <= 10)
+            ? (siaCombinedHeavyMapLoad
                 ? SIA_COMBINED_HEAVY_RENDER_PAD_RATIO
                 : SIA_RENDER_BOUNDS_PAD_RATIO)
             : SIA_POINT_ONLY_RENDER_BOUNDS_PAD_RATIO;
