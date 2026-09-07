@@ -1,4 +1,4 @@
-/* NPF_STYLE_BUILD_VERSION: v16.55 */
+/* NPF_STYLE_BUILD_VERSION: v16.56 */
 /* v14.83 — nettoyage des références techniques et limitation des cartouches routiers. */
 /* v14.81 — recherche phonétique nationale élargie aux fragments sur deux lettres. */
 /* v14.80 — Brive conservé uniquement sous LFSL. */
@@ -15782,7 +15782,6 @@ body.gaar-point-search-open .gaar-editing-banner {
     border-radius: 15px;
     background: rgba(255,255,255,.78);
     box-shadow: 0 1px 7px rgba(0,0,0,.28);
-    touch-action: none;
     -webkit-tap-highlight-color: transparent;
 }
 
@@ -17977,4 +17976,55 @@ body.npf-waypoint-search-open {
 .terrain-airport-marker-icon {
     /* Ne jamais surcharger margin-left / margin-top : Leaflet les calcule. */
     transform-origin: center center;
+}
+
+
+/* ========================================================================== 
+   v16.56 — libellés terrains opérationnels + verrouillage overscroll calculateur
+   ========================================================================== */
+.airport-operational-label-icon {
+    background: transparent !important;
+    border: 0 !important;
+    pointer-events: none !important;
+}
+.airport-operational-label {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+    transform: translate(13px, -50%);
+    padding: 2px 4px;
+    border-radius: 4px;
+    background: rgba(255,255,255,.82);
+    color: #111827;
+    font: 800 11px/1.05 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    white-space: nowrap;
+    text-shadow: 0 0 2px #fff, 0 0 2px #fff;
+    box-shadow: 0 1px 3px rgba(0,0,0,.12);
+}
+.airport-operational-label .airport-operational-name {
+    font-weight: 900;
+}
+.airport-operational-label .airport-operational-frequency {
+    color: #0b4f8a;
+    font-size: 10px;
+    font-weight: 900;
+}
+
+#calculator-modal {
+    overflow: hidden !important;
+    overscroll-behavior: none !important;
+}
+#calculator-modal > .main-container {
+    overscroll-behavior: contain !important;
+    touch-action: pan-x pan-y;
+}
+#calculator-modal .table-wrapper,
+#calculator-modal .analyse-grid,
+#calculator-modal .onglets-navigation {
+    overscroll-behavior: contain !important;
+}
+body.npf-calculator-modal-open {
+    overflow: hidden !important;
+    overscroll-behavior: none !important;
 }
