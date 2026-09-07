@@ -1,3 +1,80 @@
+VERSION TEST v16.56 — LARGAGES CARBURANT GÉNÉRALISÉS + STABILITÉ ZONES/CALQUES + CORRECTIONS UI/VAC/RECHERCHE
+Date : 07/09/2026
+Base : TEST v16.55
+
+OBJECTIF
+- Appliquer à tous les calculs limités par le carburant la notion correcte de NOMBRE DE LARGAGES possibles, et non de rotations.
+- Conserver la fluidité obtenue en v16.55 et réduire le risque de crash lors des zooms avec Zones SIA + Routes + Lignes HT.
+- Corriger les retours de test v16.55 : fermeture fiche terrain après VAC, Lapradelle, overscroll du calculateur et diagnostic tuiles.
+- Afficher le nom du terrain et sa fréquence opérationnelle publiée à partir de l'échelle 1 NM.
+
+1. CALCUL CARBURANT — RÈGLE GÉNÉRALE « NOMBRE DE LARGAGES »
+- La règle s'applique à toutes les limites carburant utilisant Fuel sur feu - BINGO : FUEL RETOUR BASE, FUEL RETOUR PÉLIC et les mêmes calculs dans Prévi / Suivi / Dérout.-GAAR.
+- Marge = max(0, Fuel sur feu - BINGO considéré).
+- Largages/cycles complets avant le dernier = ENT(Marge / Conso rotation complète).
+- Reste = Marge - (cycles complets × Conso rotation complète).
+- Fraction du dernier largage = min(1 ; Reste / 250 kg).
+- Nombre de largages possibles = cycles complets + fraction du dernier largage.
+- Exemple validé : Fuel sur feu 1610 kg, BINGO 1408 kg, marge 202 kg -> 0 cycle complet + 202/250 = 0,808 -> affichage 0,8 largage.
+- Le forfait 250 kg n'est utilisé que pour la fraction terminale ; les largages/cycles précédents conservent la consommation complète feu ↔ pélic + largage.
+- Suppression de la logique fuel +1 spécifique qui mélangeait « premier largage » et « nombre de rotations ».
+
+2. TERMINOLOGIE CALCULATEUR
+- « PREVI. NBR ROTATIONS » devient « PREVI. NBR LARGAGES ».
+- « SUIVI ROTATIONS » devient « SUIVI LARGAGES ».
+- Les titres « NBR ROTATIONS POSSIBLES / RESTANTES » deviennent « NBR LARGAGES POSSIBLES / RESTANTS ».
+- « Durée rotation » et « Conso rotation » restent inchangés : ce sont bien les paramètres du cycle intermédiaire permettant de générer les largages suivants.
+
+3. VAC — FERMETURE DE LA FICHE TERRAIN
+- Dès l'ouverture d'une VAC, le popup/fenêtre du terrain contenant les boutons VAC / WP / Go To est fermé.
+- Au retour dans NPF après fermeture de la VAC, aucune fiche terrain résiduelle ne reste donc affichée.
+
+4. TERRAINS — NOM + FRÉQUENCE À PARTIR DE 1 NM
+- À l'échelle cartographique 1 NM ou plus rapprochée, les terrains OACI visibles reçoivent un libellé avec leur nom.
+- Lorsque le jeu SIA associe explicitement une fréquence opérationnelle au terrain, elle est affichée sous le nom.
+- Priorité de service : TWR, AFIS, A/A, INFO.
+- Seules les fréquences VHF aéronautiques explicitement rattachées au code OACI sont utilisées ; aucune fréquence n'est inventée.
+- Les libellés ne sont construits que pour les terrains dans le viewport + petite marge afin de ne pas charger toute la France.
+
+5. LAPRADELLE (11) — RÉSULTAT IMMÉDIAT
+- L'équivalence Lapradelle / Lapradelle-Puilaurens est intégrée directement au moteur principal communes/alias.
+- Elle n'attend plus l'ouverture asynchrone de l'archive nationale de localités.
+- « Lapradelle », « Lapradelle 11 » et « Lapradelle-Puilaurens 11 » peuvent donc apparaître immédiatement, avec rattachement Puilaurens (INSEE 11302) et centrage sur le lieu.
+
+6. CALCULATEUR — FIN DU GLISSEMENT VERS LE HAUT
+- Le fond de la modale calculateur est verrouillé contre le rubber-band / overscroll iPadOS.
+- Le body est bloqué tant que le calculateur est ouvert.
+- Les zones réellement défilables (tableaux, analyses, barre d'onglets) restent scrollables à l'intérieur de leur conteneur.
+- La fenêtre ne doit plus remonter en laissant apparaître une bande bleue sous la modale.
+
+7. ZONES SIA + ROUTES + HT — PROTECTION CONTRE LES PICS MÉMOIRE
+- Dès zoomstart, un travail SIA calculé pour l'ancien zoom est invalidé ; les décorations progressives précédentes sont arrêtées.
+- Avec Zones + Routes + HT simultanément et zoom <= 10, le tampon SIA hors écran est réduit afin de limiter les géométries préparées inutilement.
+- Dans cette même configuration lourde, le double-buffer SIA est désactivé pendant la reconstruction afin de ne pas conserver simultanément deux jeux complets de zones.
+- Toutes les zones réellement visibles restent prises en compte ; la réduction concerne le hors-écran et le pic transitoire de mémoire.
+- Les optimisations v16.55 de tuiles / Routes / HT sont conservées.
+
+8. DIAG TUILES — COMPTEURS SÉPARÉS
+- Le compteur auparavant nommé « interrompues » mélangeait les demandes encore en file abandonnées parce que la vue avait changé et les lectures déjà lancées devenues obsolètes.
+- Le DIAG sépare désormais : demandes en file abandonnées ; lectures devenues obsolètes ; reprises.
+- Cela permet de vérifier réellement l'absence de thrashing IndexedDB sans interpréter comme une interruption de transaction une simple purge de file.
+
+9. NON-RÉGRESSION
+- Base fonctionnelle v16.55 conservée : GPS dans couverture SIA valide = zéro travail SIA ; tuiles à 3 lectures actives ; purge ciblée ; Routes et HT agrégées ; VAC automatique ; FdS/BFG ; GLR ; recherche France ; suivi WP/PÉLIC/Feu.
+- Aucun bouton MAJ réintroduit.
+- Aucune suppression des cartes Offline ni des bases IndexedDB.
+- sia.js strictement inchangé bit pour bit.
+
+10. CONTRÔLES À LA LIVRAISON
+- node --check Script et Service Worker.
+- Scripts inline de l'Index contrôlés.
+- manifest.json parsé.
+- Cohérence v16.56 Index / Manifest / Script / Style / SW.
+- Vérification du moteur de largages carburant sur les cas 202/250 -> 0,808 et marge >= une rotation complète.
+- Vérification de l'absence de référence active v16.55 dans les marqueurs de version.
+- sia.js comparé bit-à-bit avec v16.55.
+
+
 VERSION TEST v16.55 — CORRECTION À LA SOURCE GPS/SIA + TUILES STABLES + RÉINTÉGRATION SÉLECTIVE
 Date : 07/09/2026
 Base comportementale : TEST v16.50
