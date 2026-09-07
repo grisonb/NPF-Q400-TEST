@@ -1,3 +1,243 @@
+VERSION TEST v16.55 — CORRECTION À LA SOURCE GPS/SIA + TUILES STABLES + RÉINTÉGRATION SÉLECTIVE
+Date : 07/09/2026
+Base comportementale : TEST v16.50
+Historique : v16.51 à v16.53 conservé ci-dessous à titre cumulatif, mais la v16.55 n'est pas construite en empilant la v16.53.
+
+OBJECTIF
+- Repartir du comportement général v16.50, dernière base retenue avant la régression GPS/SIA identifiée.
+- Corriger à la source les deux chaînes de régression : tuiles NPF lors des pans et GPS → SIA.
+- Réintégrer uniquement les apports utiles des v16.51-v16.53, sans conserver les garde-fous compensatoires (temporisation SIA 12 s, hystérésis GPS 10 px, priorité artificielle au clavier).
+- Corriger le calcul du dernier largage lorsque le fuel disponible au-dessus du BINGO ne permet plus une rotation complète.
+
+1. TUILES NPF — RETOUR AU COMPORTEMENT STABLE, SANS THRASHING
+- Lectures IndexedDB NPF ramenées à 3 simultanées, comme avant la hausse v16.45.
+- File maximale conservée à 96 demandes.
+- Un simple PAN n'appelle plus le garde de stabilité du fond de carte : aucune génération de lecture n'est invalidée au début d'un déplacement.
+- Un recentrage GPS ne modifie ni la priorité ni la file de tuiles à chaque position.
+- Les lectures IndexedDB déjà lancées terminent normalement.
+- La logique v16.49 de purge ciblée est conservée : à moveend/zoomend, seules les demandes réellement obsolètes et non retenues par la GridLayer sont retirées.
+- Aucun cycle annulation → retry → annulation n'est volontairement créé par le suivi GPS.
+
+2. GPS → SIA — ZÉRO TRAITEMENT SI LA COUVERTURE EST VALIDE
+- Suppression du rafraîchissement direct du profil SIA à chaque échantillon GPS.
+- Les moveend générés par le suivi GPS sont identifiés séparément des gestes utilisateur.
+- Si le viewport reste entièrement dans la couverture SIA déjà calculée : aucun scan, aucun rendu, aucune décoration, aucun profil SIA n'est relancé.
+- Les calques existants suivent le déplacement Leaflet sans reconstruction.
+- Si le viewport sort réellement de la couverture, un recalcul est autorisé immédiatement : aucune temporisation artificielle de 12 s.
+- Les traitements map-motion devenus obsolètes (gps-follow / moveend / move-preload) sont annulés sans interrompre une action explicite de filtre utilisateur.
+
+3. ZONES SIA OFF — AUCUN TRAITEMENT DE ZONES/DÉCORATIONS EN ARRIÈRE-PLAN
+- Le passage Zones OFF invalide immédiatement les décorations progressives en cours et les générations de rendu devenues obsolètes.
+- Une reconstruction point-only est ensuite effectuée proprement afin de conserver les terrains/points nécessaires sans dessiner les zones.
+- Lorsque les zones sont masquées, la couverture des points est élargie afin de réduire les reconstructions ; un nouveau calcul n'intervient que lorsque cette couverture devient insuffisante.
+
+4. ACTIVATION HT / ROUTES / ZONES SIA — PRIORITÉ AUX TUILES VISIBLES
+- Réintégration sélective de la fenêtre de priorité tuiles des v16.52-v16.53.
+- Lors d'une activation de couche lourde, le traitement attend que les tuiles visibles soient peintes et que les lectures IndexedDB NPF soient au repos.
+- Le traitement de couche commence ensuite ; aucune attente fixe n'est utilisée comme solution fonctionnelle, le délai maximum ne sert que de sécurité.
+- Routes et HT conservent leurs rendus agrégés/bornés au viewport.
+
+5. LIGNES HT — DOUBLE BUFFER CONSERVÉ
+- La couverture HT rendue est mémorisée.
+- En suivi GPS, aucun recalcul n'est lancé tant que la vue reste dans cette couverture.
+- Lorsqu'un nouveau rendu est nécessaire, le nouveau calque est ajouté avant le retrait de l'ancien afin d'éviter le clignotement.
+
+6. ROUTES / PISTES / COMMUNES EN SUIVI GPS
+- Routes : pas de reconstruction si la couverture courante reste valide.
+- HT : même principe de couverture.
+- Pistes et calque Communes : pas de rafraîchissement sur un simple recentrage GPS.
+- Les gestes utilisateur et changements de zoom conservent leurs rafraîchissements normaux.
+
+7. RECHERCHE COMMUNES / LOCALITÉS — RÉINTÉGRATION SÉLECTIVE
+- Conservation de la base nationale hors ligne de 179 402 localités.
+- Indexation sous le nom de la localité et son rattachement communal.
+- Conservation du filet d'équivalences de noms d'usage lié au code INSEE.
+- Cas Lapradelle / Lapradelle-Puilaurens conservé dans ce mécanisme général, sans remplacer le moteur national.
+
+8. DIAG — PERSISTANT ET CIBLÉ
+- Conservation du DIAG de session persistant 6 h, avec sauvegarde groupée toutes les 30 s.
+- Surveillance légère des blocages pendant toute la session, en ignorant les suspensions iPadOS/arrière-plan.
+- Conservation des plus gros blocages seulement et agrégation des mouvements GPS/manuels.
+- Compteurs ciblés : GPS, tuiles, SIA, HT, Routes, recherche France et authentification.
+- Pas de priorité clavier ajoutée : la fluidité doit venir de la suppression des tâches de fond inutiles.
+
+9. AVION — ZONE VISIBLE RÉELLE
+- Réintégration du calcul tenant compte des bandeaux visibles Route WP, Feu/commune, BINGO et commune survolée.
+- Marge de sécurité conservée pour que l'icône avion reste entièrement visible.
+- L'hystérésis GPS 10 px de v16.53 n'est pas réintégrée.
+
+10. FdS / GAAR — ASSOCIATION BFG
+- Une erreur bridge_unknown / bridge_not_paired / bridge_invalid_device ne supprime plus automatiquement l'association BFG enregistrée sur l'iPad.
+- Le code BFG 8 chiffres reste réservé à l'action explicite d'association.
+- En accès courant, le mot de passe NPF reste le seul secours si l'autorisation automatique échoue.
+- État/erreur BFG conservés dans le DIAG.
+
+11. GLR — CONNEXION BORNÉE ET DIAGNOSTIC
+- Timeout de connexion conservé à 15 s.
+- Après un échec, le bouton Connexion est réactivé sans lancer automatiquement un nouveau captcha long.
+- Le dernier état d'authentification GLR est conservé dans le DIAG.
+
+12. DERNIER LARGAGE — FRACTION CALCULÉE SUR 250 KG
+- Tant qu'un largage complet est possible, les formules existantes du premier largage et des rotations suivantes sont conservées.
+- Lorsque le fuel disponible au-dessus du BINGO retour est positif mais inférieur aux 250 kg nécessaires à un largage complet, la valeur affichée n'est plus une fraction de rotation Feu ↔ Pélic.
+- La fraction devient : (Fuel sur feu - BINGO retour) / 250 kg.
+- Exemple de principe : 200 kg disponibles au-dessus du BINGO donnent 0,8 largage possible, et non environ 0,4 rotation calculée avec la consommation d'une rotation complète.
+- La même logique est appliquée aux lignes FUEL RETOUR BASE et FUEL RETOUR PÉLIC lorsqu'un largage immédiat est autorisé.
+
+13. ÉLÉMENTS NON RÉINTÉGRÉS DE v16.53
+- Pas de temporisation SIA GPS de 12 s.
+- Pas d'hystérésis GPS de 10 px.
+- Pas de mécanisme « priorité à la saisie » suspendant artificiellement les traitements pendant un input actif.
+- Pas de conservation forcée d'une construction SIA progressive simplement parce que le mouvement provient du GPS.
+
+14. ÉLÉMENTS CONSERVÉS DE LA BASE v16.50
+- Synchronisation VAC automatique et périmètre VAC complet.
+- Agrégation Canvas Routes / HT existante.
+- Routage IndexedDB et lookup hints utiles des correctifs v16.46-v16.49.
+- Positions/orientations terrains et pistes.
+- WP, PÉLIC, Feu, GAAR, calculateur et mise à jour PWA automatique.
+- Aucun bouton MAJ réintroduit.
+- Aucune suppression des cartes Offline ni des bases IndexedDB.
+- sia.js strictement inchangé bit pour bit.
+
+15. CONTRÔLES À LA LIVRAISON
+- node --check du Script et du Service Worker.
+- Scripts inline de l'Index contrôlés.
+- Manifest JSON parsé.
+- Cohérence v16.55 Index / Manifest / Script / Style / SW.
+- Vérification qu'aucune référence active v16.50/v16.53 ne subsiste dans les marqueurs de version.
+- Vérification de l'absence des garde-fous rejetés : SIA GPS 12 s, priorité clavier et hystérésis GPS v16.53.
+- sia.js comparé bit-à-bit avec v16.50 et v16.53.
+
+
+VERSION TEST v16.53 — FLUIDITÉ GLOBALE + SUIVI GPS ALLÉGÉ + AUTH FdS/GLR ROBUSTE
+Date : 07/09/2026
+Base : TEST v16.52
+
+OBJECTIF
+- Corriger le ralentissement global constaté en v16.51, y compris avec Routes, HT et Zones SIA masquées.
+- Donner la priorité absolue à la saisie utilisateur (recherche commune, carburant, formulaires) sur les traitements cartographiques automatiques.
+- Réduire fortement les recalculs commune survolée, recentrages GPS et rafraîchissements SIA de fond.
+- Empêcher une erreur transitoire du pont BFG d'effacer silencieusement l'association et de redemander le code à 8 chiffres.
+- Rendre la connexion GLR bornée dans le temps et diagnostiquable.
+
+1. FLUIDITÉ GLOBALE — COMMUNE SURVOLÉE
+- Le calcul de commune survolée n'effectue plus un balayage national complet à chaque position GPS.
+- Cache spatial de la dernière commune et du dernier département : tant que l'avion reste dans le même polygone, un seul test géométrique est effectué.
+- Le bandeau commune survolée est actualisé au maximum environ toutes les 2,5 s sur GPS, au lieu d'être recalculé plusieurs fois pour une même position.
+- Suppression du second recalcul différé à +250 ms qui doublait inutilement le travail.
+- Le DOM du bandeau n'est réécrit que si le texte affiché change.
+
+2. SUIVI GPS — RÉDUCTION DES RECENTRAGES
+- Le marqueur avion reste mis à jour à chaque position GPS.
+- La carte n'exécute plus setView() à chaque échantillon : hystérésis de 10 px avant un recentrage automatique.
+- Les petits déplacements successifs restent donc fluides sans provoquer de cascade Leaflet / tuiles / moveend.
+- Le centrage manuel reste immédiat et exact.
+
+3. PRIORITÉ À LA SAISIE
+- Lorsqu'un input, textarea, select ou champ éditable est actif, les traitements automatiques de fond sont différés.
+- Pendant la saisie, un recentrage GPS ne déclenche pas de recalcul Routes / HT.
+- Les recalculs automatiques SIA de type gps-follow / move-preload / moveend n'ont pas priorité sur le clavier.
+- Les mises à jour calculateur provoquées uniquement par le GPS sont suspendues pendant la saisie ; les actions utilisateur restent fonctionnelles.
+- Objectif : aucune frappe de commune ou quantité carburant ne doit attendre un traitement cartographique de fond.
+
+4. SIA — CHARGE DE FOND RÉDUITE
+- Si le viewport reste dans la couverture SIA existante pendant le suivi GPS, aucun travail SIA supplémentaire n'est lancé.
+- Zones SIA masquées : le tampon de rendu des points/terrains est élargi afin de réduire la fréquence de reconstruction.
+- En sortie de tampon pendant le suivi GPS, un rendu complet SIA est limité à un maximum d'une fois toutes les 12 s.
+- Pendant une saisie utilisateur, ce rendu automatique est différé.
+- Les commandes explicites de filtre et de zoom restent prioritaires et fonctionnelles.
+- Les corrections v16.52 de priorité tuiles à l'activation des filtres sont conservées.
+
+5. DIAG — BLOCAGES RÉELS
+- Le détecteur de blocage JavaScript ignore désormais les périodes où iPadOS met la PWA en arrière-plan/suspension.
+- Les valeurs artificielles de plusieurs dizaines de secondes dues à une reprise iOS ne sont plus comptées comme blocages CPU.
+- Le DIAG conserve la mesure de sa propre charge.
+
+6. FdS / GAAR — ASSOCIATION BFG
+- Une réponse bridge_unknown / bridge_not_paired / bridge_invalid_device ne supprime plus automatiquement les identifiants d'association BFG stockés sur l'iPad.
+- Une mise à jour ou une panne transitoire NAS ne peut donc plus, à elle seule, forcer une nouvelle association à 8 chiffres.
+- Lors d'un simple accès FdS/GAAR, la fenêtre n'affiche plus le champ code BFG 8 chiffres.
+- Le code 8 chiffres reste disponible uniquement via le bouton dédié d'association BFG.
+- Si l'autorisation automatique échoue momentanément, seul le mot de passe NPF est proposé comme solution de secours.
+- Le mot de passe n'est toujours jamais stocké par NPF.
+
+7. GLR — CONNEXION ROBUSTE
+- Le login GLR est borné à 15 s.
+- En cas de timeout, message explicite au lieu d'un écran restant indéfiniment sur « Connexion… ».
+- Après un échec de login, NPF ne lance plus automatiquement un nouveau chargement captcha pouvant maintenir le bouton bloqué jusqu'à 45 s supplémentaires.
+- Le bouton Connexion est réactivé immédiatement ; « Nouveau code » permet de relancer explicitement.
+- État de connexion GLR mémorisé pour le diagnostic.
+
+8. DIAG — AUTHENTIFICATION
+- Ajout d'une ligne Authentification dans l'export :
+  - association BFG présente/absente ;
+  - session FdS/GAAR active/expirée ;
+  - dernier état/erreur du pont BFG ;
+  - session GLR active/expirée ;
+  - dernier état de connexion GLR.
+
+9. ÉLÉMENTS CONSERVÉS
+- Recherche localités / Lapradelle de v16.52 conservée.
+- Priorité stricte aux tuiles lors de l'activation HT / Routes / Zones SIA conservée.
+- VAC, WP, PÉLIC, Feu, Routes, HT, GLR, FdS/GAAR et mise à jour PWA conservés.
+- Aucune suppression des cartes Offline ou des bases IndexedDB.
+- sia.js strictement inchangé bit pour bit.
+
+10. CONTRÔLES À LA LIVRAISON
+- node --check script.js et sw.js.
+- Scripts inline index.html contrôlés.
+- manifest.json parsé.
+- Cohérence v16.53 Index / Manifest / Script / Style / SW.
+- Contrôle qu'aucune référence active v16.52 ne subsiste dans les marqueurs de version.
+- sia.js comparé bit-à-bit avec v16.52.
+
+
+VERSION TEST v16.52 — PRIORITÉ TUILES FILTRES + RECHERCHE LOCALITÉS RENFORCÉE
+Date : 06/09/2026
+Base : TEST v16.51
+
+OBJECTIF
+- Corriger le ralentissement du chargement des tuiles au moment de l'activation des filtres/couches HT, Routes et Zones SIA.
+- Garantir que le fond NPF termine son affichage avant tout traitement lourd de couche.
+- Corriger le cas Lapradelle (11) et renforcer la recherche nationale sans supprimer le moteur France de 179 402 localités.
+
+1. FILTRES / COUCHES — PRIORITÉ ABSOLUE AUX TUILES
+- Ajout d'une fenêtre de priorité commune à HT, Routes et Zones SIA.
+- Une couche lourde ne commence que lorsque toutes les tuiles visibles sont affichées, que la file IndexedDB est vide et qu'aucune lecture de tuile n'est encore active.
+- Trois contrôles stables successifs sont exigés puis deux frames de rendu sont laissées à Safari avant le traitement de la couche.
+- Si les tuiles ne deviennent pas prêtes dans le délai de sécurité, le traitement lourd est différé/reprogrammé au lieu de concurrencer le fond de carte.
+
+2. LIGNES HT
+- Lors d'une activation, le fichier HT n'est plus chargé/parsé avant la fin du chargement des tuiles.
+- Le bouton passe ON immédiatement, mais le travail lourd attend la fenêtre de priorité tuiles.
+- Le DIAG enregistre séparément attente tuiles et temps de préparation HT.
+
+3. ROUTES
+- Activation Routes soumise à la même fenêtre stricte avant chargement/rendu des secteurs visibles.
+- Le mécanisme de retry existant est conservé si la carte redevient prioritaire.
+- Le DIAG enregistre attente tuiles et temps de rendu Routes.
+
+4. ZONES SIA / FILTRES SIA
+- Les activations de zones, changement de filtre, Tous, filtre altitude et ouverture nécessitant un rendu attendent maintenant les tuiles + l'inactivité IndexedDB.
+- Les optimisations SIA v16.51 (couverture tampon, double rendu, traitement progressif) sont conservées.
+
+5. DIAG
+- Ajout des événements « FILTRE CARTE » : couche, temps d'attente tuiles, file max, lectures actives max, passages sans tuile et temps de traitement de couche.
+- La synthèse performance indique le nombre d'événements filtres, l'attente tuiles maximale et le temps de couche maximal.
+- Historique persistant v16.51 conservé.
+
+6. RECHERCHE COMMUNES / LOCALITÉS
+- Le moteur national 179 402 localités + alias communes reste inchangé comme source principale hors ligne.
+- Ajout d'un filet d'équivalences de noms d'usage rattachées au code INSEE lorsque la source nationale embarquée ne contient pas le nom recherché.
+- Cas constaté corrigé : « Lapradelle » et « Lapradelle-Puilaurens » renvoient vers Lapradelle, commune de Puilaurens (11), code INSEE 11302, avec centrage sur le lieu.
+- Cette table est un filet complémentaire ; elle ne remplace pas la recherche nationale et pourra accueillir d'autres exceptions de source sans modifier le moteur général.
+
+7. NON-RÉGRESSION
+- sia.js strictement inchangé bit pour bit.
+- Aucune suppression de carte Offline ni de base IndexedDB.
+- Moteur de suivi GPS, VAC, WP, PÉLIC, Feu et mise à jour PWA conservés.
+
 VERSION TEST v16.51 — DIAG VOL + RECHERCHE FRANCE + SUIVI GPS FLUIDE
 Date : 06/09/2026
 Base : TEST v16.50
