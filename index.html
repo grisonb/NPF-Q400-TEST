@@ -7,8 +7,8 @@
     <title>NPF-Q400</title>
     <link rel="stylesheet" href="leaflet.css">
     <link rel="preload" href="communes_aliases.json" as="fetch" crossorigin="anonymous">
-    <link rel="stylesheet" href="style.css?appv=v16.55">
-    <link rel="manifest" href="manifest.json?appv=v16.55">
+    <link rel="stylesheet" href="style.css?appv=v16.56">
+    <link rel="manifest" href="manifest.json?appv=v16.56">
     <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192x192.png?appv=v13.92">
     <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512x512.png?appv=v13.92">
     <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png?appv=v13.92">
@@ -56,7 +56,7 @@
     </style>
 
     <script>
-        const APP_VERSION = 'v16.55';
+        const APP_VERSION = 'v16.56';
         const SERVICE_WORKER_URL = `./sw.js?appv=${encodeURIComponent(APP_VERSION)}`;
         const APP_VERSION_STORAGE_KEY = 'appVersion';
         const SW_CONTROLLER_RELOAD_GUARD_KEY = 'swControllerReloadGuard';
@@ -1101,7 +1101,7 @@
     <script src="suncalc.js"></script>
     <script src="jszip.min.js"></script>
     <script src="sia.js?siav=15.69"></script>
-    <script src="script.js?appv=v16.55"></script>
+    <script src="script.js?appv=v16.56"></script>
     
     <div id="fuel-split-modal" class="fuel-split-modal" style="display: none;">
         <div class="fuel-split-modal-content">
@@ -1132,9 +1132,9 @@
         <div class="main-container">
             <button id="close-calculator-btn">&times;</button>
             <div class="onglets-navigation">
-                <button class="onglet-bouton active" data-onglet="previ-rotations">PREVI. NBR ROTATIONS</button>
+                <button class="onglet-bouton active" data-onglet="previ-rotations">PREVI. NBR LARGAGES</button>
                 <button class="onglet-bouton" data-onglet="bloc-fuel">BLOC / FUEL</button>
-                <button class="onglet-bouton" data-onglet="suivi-rotations">SUIVI ROTATIONS</button>
+                <button class="onglet-bouton" data-onglet="suivi-rotations">SUIVI LARGAGES</button>
                 <button class="onglet-bouton" data-onglet="deroutement">DEROUT. / GAAR</button>
             </div>
             <div class="onglets-conteneur">
@@ -1151,7 +1151,7 @@
                         <div class="analyse-col">
                             <span id="previ-bingo-base" class="previ-hidden-bingo-value">-- kg</span>
                             <div class="rotations-group">
-                                <h3 class="analyse-col-title">NBR ROTATIONS POSSIBLES</h3>
+                                <h3 class="analyse-col-title">NBR LARGAGES POSSIBLES</h3>
                                 <div id="previ-rotation-results-container">
                                     <div class="result-line" data-rotation-type="base"><span class="label">FUEL RETOUR BASE :<span class="formula-help-icon">?</span></span><span class="value">--</span></div>
                                     <div class="result-line" data-rotation-type="pelic"><span class="label">FUEL RETOUR PELIC :<span class="formula-help-icon">?</span></span><span class="value">--</span></div>
@@ -1205,7 +1205,7 @@
                         <div class="analyse-col">
                             <div class="bingo-group"><div class="result-line"><span class="label base-bingo-label">BINGO BASE</span><span class="value" id="suivi-bingo-base">-- kg</span></div></div><hr class="analyse-separator">
                             <div class="rotations-group rotation-count-group">
-                                <h3 class="analyse-col-title">Nbr Rotations Restantes</h3>
+                                <h3 class="analyse-col-title">Nbr Largages Restants</h3>
                                     
 <div id="suivi-rotation-results-container" class="rotation-results-container">
                                     <div class="result-line" data-rotation-type="base"><span class="label">FUEL RETOUR BASE :<span class="formula-help-icon">?</span></span><span class="value">--</span></div>
@@ -1244,7 +1244,7 @@
                                 <div class="result-line"><span class="label"><span id="derout-fuel-mini-pelic-label">Fuel mini 1 Lrg / Pélic :</span><span id="derout-fuel-mini-pelic-help" class="formula-help-icon">?</span></span><span class="value" id="derout-fuel-mini-pelic">-- kg</span></div>
                             </div>
                             <div class="rotations-group rotation-count-group">
-                                <h3 class="analyse-col-title">Nbr Rotations Possibles</h3>
+                                <h3 class="analyse-col-title">Nbr Largages Possibles</h3>
                                 <div id="derout-rotation-results-container" class="rotation-results-container">
                                     <div class="result-line" data-rotation-type="base"><span class="label">FUEL RETOUR BASE :<span class="formula-help-icon">?</span></span><span class="value">--</span></div>
                                     <div class="result-line" data-rotation-type="pelic"><span class="label">FUEL RETOUR PELIC :<span class="formula-help-icon">?</span></span><span class="value">--</span></div>
