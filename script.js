@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v16.55';
+const NPF_SCRIPT_BUILD_VERSION = 'v16.56';
 
 
 /*
@@ -42,7 +42,7 @@ const NPF_STARTUP_DIAGNOSTIC = (() => {
             roadRenderCount: 0, roadMaxRendered: 0,
             filterActivationCount: 0, filterActivationMaxWaitMs: 0, filterLayerMaxMs: 0,
             tileQueueMax: 0, tileActiveMax: 0, tileBlankSnapshots: 0,
-            tileAbortedMax: 0, tileRetriesMax: 0
+            tileAbortedMax: 0, tileQueuedDiscardedMax: 0, tileRetriesMax: 0
         },
         restoredSession: null,
         persistCount: 0,
@@ -105,6 +105,9 @@ const NPF_STARTUP_DIAGNOSTIC = (() => {
         }
         if (Number.isFinite(Number(safeMetrics.npfReadsAborted))) {
             summary.tileAbortedMax = Math.max(summary.tileAbortedMax, Number(safeMetrics.npfReadsAborted));
+        }
+        if (Number.isFinite(Number(safeMetrics.npfQueuedDiscarded))) {
+            summary.tileQueuedDiscardedMax = Math.max(Number(summary.tileQueuedDiscardedMax || 0), Number(safeMetrics.npfQueuedDiscarded));
         }
         if (Number.isFinite(Number(safeMetrics.npfTileRetries))) {
             summary.tileRetriesMax = Math.max(summary.tileRetriesMax, Number(safeMetrics.npfTileRetries));
@@ -472,6 +475,7 @@ function getNpfStartupDiagnosticOverlaySnapshot() {
         npfReadsActive: Number(directOfflineNpfActiveReads || 0),
         npfReadsQueued: Number(directOfflineNpfReadQueue?.length || 0),
         npfReadsAborted: Number(directOfflineNpfAbortedReadCount || 0),
+        npfQueuedDiscarded: Number(directOfflineNpfQueuedDiscardCount || 0),
         npfTileRetries: Number(directOfflineNpfTileRetryCount || 0),
         npfViewEpoch: Number(directOfflineTileViewPriorityEpoch || 0),
         tileBlobCache: Number(directOfflineTileBlobCache?.size || 0),
@@ -524,6 +528,7 @@ function getNpfStartupDiagnosticRuntimeInfo() {
         npfReadsActive: layers.npfReadsActive,
         npfReadsQueued: layers.npfReadsQueued,
         npfReadsAborted: layers.npfReadsAborted,
+        npfQueuedDiscarded: layers.npfQueuedDiscarded,
         npfTileRetries: layers.npfTileRetries,
         npfViewEpoch: layers.npfViewEpoch,
         tileBlobCacheSize: layers.tileBlobCache,
@@ -597,7 +602,8 @@ function buildNpfStartupDiagnosticExportText() {
         + runtime.visibleTileCount + ' visibles | '
         + runtime.npfReadsActive + ' lectures actives / '
         + runtime.npfReadsQueued + ' en file | '
-        + runtime.npfReadsAborted + ' interrompues / '
+        + runtime.npfQueuedDiscarded + ' demandes en file abandonnées | '
+        + runtime.npfReadsAborted + ' lectures devenues obsolètes / '
         + runtime.npfTileRetries + ' reprises | '
         + runtime.tileBlobCacheSize + ' blobs cache | '
         + runtime.runwayLayerCount + ' couches pistes | '
@@ -648,7 +654,7 @@ function buildNpfStartupDiagnosticExportText() {
         + 'file tuiles max ' + Math.round(layerDiag.tileQueueMax || 0) + ' | '
         + 'lectures actives max ' + Math.round(layerDiag.tileActiveMax || 0) + ' | '
         + 'snapshots écran sans tuile ' + Math.round(layerDiag.tileBlankSnapshots || 0) + ' | '
-        + 'interrompues max ' + Math.round(layerDiag.tileAbortedMax || 0) + ' / reprises max ' + Math.round(layerDiag.tileRetriesMax || 0) + ' | '
+        + 'file abandonnée max ' + Math.round(layerDiag.tileQueuedDiscardedMax || 0) + ' / lectures obsolètes max ' + Math.round(layerDiag.tileAbortedMax || 0) + ' / reprises max ' + Math.round(layerDiag.tileRetriesMax || 0) + ' | '
         + 'SIA ' + Math.round(layerDiag.siaRefreshCount || 0) + ' refresh (' + Math.round(layerDiag.siaSlowCount || 0) + ' lents, max ' + Math.round(layerDiag.siaMaxMs || 0) + ' ms) | '
         + 'HT ' + Math.round(layerDiag.htRenderCount || 0) + ' rendus | Routes ' + Math.round(layerDiag.roadRenderCount || 0) + ' rendus | '
         + 'filtres ' + Math.round(layerDiag.filterActivationCount || 0)
@@ -1699,6 +1705,10 @@ document.addEventListener('DOMContentLoaded', () => {
 // =========================================================================
 // v14.44 — filtre trafics au sol et zone centrée sur la carte.
 let allCommunes = [], map, baseTileLayer, permanentAirportLayer, routesLayer, waterPointsLayer, currentCommune = null, selectedPelicanOACI = null, selectedAirportDestination = null;
+let airportOperationalLabelLayer = null;
+let airportOperationalLabelRefreshTimer = null;
+let airportOperationalFrequencyIndex = null;
+let airportOperationalFrequencyIndexDataset = null;
 
 /*
  * Navigation automatique Feu ↔ PÉLIC.
@@ -7126,6 +7136,8 @@ function initMap() {
     setupBaseTileLayer();
     npfRunwayMapLayer = L.layerGroup().addTo(map);
     permanentAirportLayer = L.layerGroup().addTo(map);
+    airportOperationalLabelLayer = L.layerGroup().addTo(map);
+    map.on('zoomend moveend', () => scheduleAirportOperationalLabelsRefresh(90));
     routesLayer = L.layerGroup().addTo(map);
     fireHistoryLayer = L.layerGroup().addTo(map);
     waterPointsLayer = L.layerGroup().addTo(map);
@@ -8325,6 +8337,7 @@ const directOfflineNpfInflightReads = new Map();
 let directOfflineTileReadGeneration = 0;
 let directOfflineTileViewPriorityEpoch = 0;
 let directOfflineNpfAbortedReadCount = 0;
+let directOfflineNpfQueuedDiscardCount = 0;
 let directOfflineNpfTileRetryCount = 0;
 const directOfflineTileLookupHints = new Map();
 const DIRECT_OFFLINE_TILE_LOOKUP_HINT_MAX = 256;
@@ -8387,7 +8400,7 @@ function pruneDirectOfflineNpfQueueForCurrentView(reason = 'view-end') {
     directOfflineNpfReadQueue.push(...kept);
 
     for (const item of removed) {
-        directOfflineNpfAbortedReadCount += 1;
+        directOfflineNpfQueuedDiscardCount += 1;
         try { item.resolve(DIRECT_OFFLINE_TILE_ABORTED); } catch (_) {}
     }
 
@@ -8403,7 +8416,7 @@ function resetPendingDirectOfflineNpfReads() {
     directOfflineTileViewPriorityEpoch += 1;
     while (directOfflineNpfReadQueue.length) {
         const pending = directOfflineNpfReadQueue.shift();
-        directOfflineNpfAbortedReadCount += 1;
+        directOfflineNpfQueuedDiscardCount += 1;
         try { pending.resolve(DIRECT_OFFLINE_TILE_ABORTED); } catch (_) {}
     }
 }
@@ -8440,7 +8453,7 @@ function runNextDirectOfflineNpfRead() {
         const item = directOfflineNpfReadQueue.splice(itemIndex, 1)[0];
 
         if (item?.hardGeneration !== directOfflineTileReadGeneration) {
-            directOfflineNpfAbortedReadCount += 1;
+            directOfflineNpfQueuedDiscardCount += 1;
             try { item.resolve(DIRECT_OFFLINE_TILE_ABORTED); } catch (_) {}
             continue;
         }
@@ -9631,8 +9644,16 @@ function searchCommunesWithSharedEngine(rawSearch, limit = 10) {
         .filter(c => c.score < 999);
 
     const aliasResults = searchAliasCommunes(searchWords, departmentFilter);
+    /*
+     * v16.56 — les équivalences connues (dont Lapradelle) font partie du
+     * moteur principal et sont donc visibles immédiatement, avant l'ouverture
+     * asynchrone de l'archive nationale des localités.
+     */
+    const knownLocalityResults = searchNpfKnownLocalityEquivalents(searchTerm, departmentFilter);
+    knownLocalityResults.forEach(candidate => scoredResults.push(candidate));
+
     const seenResultKeys = new Set(
-        scoredResults.map(c => `commune:${c.code_insee}:${simplifyString(c.nom_standard)}`)
+        scoredResults.map(c => `${c.locality_match ? 'locality' : 'commune'}:${c.code_insee}:${simplifyString(c.nom_standard)}`)
     );
 
     aliasResults.forEach((alias) => {
@@ -10091,9 +10112,19 @@ function setupEventListeners() {
     document.addEventListener('communeSelected', closeSearchAfterTargetSelection);
     document.addEventListener('airportDestinationSelected', closeSearchAfterTargetSelection);
 
+    function setCalculatorModalOpen(open) {
+        if (!calculatorModal) return;
+        const isOpen = open === true;
+        calculatorModal.style.display = isOpen ? 'flex' : 'none';
+        document.body?.classList.toggle('npf-calculator-modal-open', isOpen);
+        if (isOpen) {
+            try { window.scrollTo({ top: 0, left: 0, behavior: 'auto' }); } catch (_) { try { window.scrollTo(0, 0); } catch (_) {} }
+        }
+    }
+
     function openCalculatorTab(tabId) {
         if (!calculatorModal) return;
-        calculatorModal.style.display = 'flex';
+        setCalculatorModalOpen(true);
         const targetTab = calculatorModal.querySelector(`.onglet-bouton[data-onglet="${tabId}"]`);
         if (targetTab) targetTab.click();
     }
@@ -10102,9 +10133,38 @@ function setupEventListeners() {
     if (blocFuelShortcutButton) {
         blocFuelShortcutButton.addEventListener('click', () => { openCalculatorTab('bloc-fuel'); });
     }
-    closeCalculatorButton.addEventListener('click', () => { calculatorModal.style.display = 'none'; });
-    calculatorModal.addEventListener('click', (e) => { if (e.target === calculatorModal) { calculatorModal.style.display = 'none'; } });
-    window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && calculatorModal.style.display === 'flex') { calculatorModal.style.display = 'none'; } });
+    closeCalculatorButton.addEventListener('click', () => { setCalculatorModalOpen(false); });
+    calculatorModal.addEventListener('click', (e) => { if (e.target === calculatorModal) { setCalculatorModalOpen(false); } });
+    window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && calculatorModal.style.display === 'flex') { setCalculatorModalOpen(false); } });
+
+    /*
+     * v16.56 — iPad : empêcher un glissement sur une zone non défilable de
+     * déplacer visuellement toute la modale. Les deux vrais conteneurs de
+     * contenu restent scrollables, mais leur rebond est bloqué aux extrémités.
+     */
+    let calculatorTouchLastY = null;
+    calculatorModal.addEventListener('touchstart', event => {
+        calculatorTouchLastY = Number(event.touches?.[0]?.clientY);
+    }, { passive: true });
+    calculatorModal.addEventListener('touchmove', event => {
+        const currentY = Number(event.touches?.[0]?.clientY);
+        const target = event.target instanceof Element ? event.target : null;
+        const scroller = target?.closest('#calculator-modal .table-wrapper, #calculator-modal .analyse-grid');
+        if (!scroller || !Number.isFinite(currentY) || !Number.isFinite(calculatorTouchLastY)) {
+            event.preventDefault();
+            calculatorTouchLastY = currentY;
+            return;
+        }
+        const deltaY = currentY - calculatorTouchLastY;
+        const atTop = scroller.scrollTop <= 0;
+        const atBottom = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1;
+        if ((deltaY > 0 && atTop) || (deltaY < 0 && atBottom)) {
+            event.preventDefault();
+        }
+        calculatorTouchLastY = currentY;
+    }, { passive: false });
+    calculatorModal.addEventListener('touchend', () => { calculatorTouchLastY = null; }, { passive: true });
+    calculatorModal.addEventListener('touchcancel', () => { calculatorTouchLastY = null; }, { passive: true });
     const importHelpContent = {
         'offline-maps': {
             title: 'Aide — Importer Cartes Offline',
@@ -10781,7 +10841,7 @@ function updateCommuneDisplay(commune) {
     const depCode = depLabel ? ` (${depLabel})` : '';
     const communeNameHTML = `<span class="commune-name">${displayCommune.nom_standard || commune.nom_standard}${depCode}</span>`;
     const closeButtonHTML = `<span id="clear-commune-btn" class="clear-commune-btn" title="Effacer le feu">×</span>`;
-    const routeInfoHTML = `<div id="gps-feu-route-info" class="gps-feu-route-info" title="Route, distance et temps GPS vers le feu">---° / -- Nm / -- min</div><div id="gps-feu-rotation-info" class="gps-feu-rotation-info" title="Durée de rotation issue de l’onglet Suivi rotation">Rot. -- min</div>`;
+    const routeInfoHTML = `<div id="gps-feu-route-info" class="gps-feu-route-info" title="Route, distance et temps GPS vers le feu">---° / -- Nm / -- min</div><div id="gps-feu-rotation-info" class="gps-feu-rotation-info" title="Durée de rotation issue de l’onglet Suivi largages">Rot. -- min</div>`;
     let sunsetHTML = '';
     if (typeof SunCalc !== 'undefined') {
         try {
@@ -21243,6 +21303,9 @@ async function openVacPdf(oaci) {
     const safeOaci = normalizeVacOaci(oaci);
     if (!safeOaci) return false;
 
+    /* v16.56 — la fiche terrain ne doit pas rester ouverte derrière la VAC. */
+    try { map?.closePopup?.(); } catch (_) {}
+
     const openedWindow = window.open('', '_blank');
 
     try {
@@ -27128,6 +27191,122 @@ function buildPelicNotamsButtonHtml(oaci) {
 
 window.openPelicNotams = openNpfPelicNotams;
 
+
+
+/* ========================================================================== 
+   v16.56 — noms + fréquence opérationnelle des terrains à l'échelle 1 NM
+   ========================================================================== */
+function getNpfDisplayedAirportRecordsForLabels() {
+    const byOaci = new Map();
+    const add = airport => {
+        const oaci = String(airport?.oaci || '').trim().toUpperCase();
+        const lat = Number(airport?.lat);
+        const lon = Number(airport?.lon);
+        if (!/^[A-Z]{4}$/.test(oaci) || !Number.isFinite(lat) || !Number.isFinite(lon)) return;
+        if (!byOaci.has(oaci)) byOaci.set(oaci, { ...airport, oaci, lat, lon });
+    };
+    (pelicanAirports || []).forEach(add);
+    (otherAirports || []).forEach(add);
+    (additionalAerodromes || []).forEach(add);
+    return [...byOaci.values()];
+}
+
+function buildAirportOperationalFrequencyIndex(dataset = siaDataset) {
+    if (airportOperationalFrequencyIndex && airportOperationalFrequencyIndexDataset === dataset) {
+        return airportOperationalFrequencyIndex;
+    }
+    const index = new Map();
+    const priorities = new Map([['TWR', 0], ['AFIS', 1], ['A/A', 2], ['INFO', 3]]);
+
+    const consider = (oaci, serviceType, frequencies) => {
+        const code = String(oaci || '').trim().toUpperCase();
+        const type = String(serviceType || '').trim().toUpperCase();
+        if (!/^[A-Z]{4}$/.test(code) || !priorities.has(type)) return;
+        const candidates = (Array.isArray(frequencies) ? frequencies : [])
+            .map(row => ({
+                raw: String(row?.[0] || '').trim(),
+                unit: String(row?.[1] || '').trim().toUpperCase(),
+                supplementary: !!row?.[4]
+            }))
+            .filter(row => row.raw)
+            .map(row => ({ ...row, numeric: Number(row.raw.replace(',', '.')) }))
+            .filter(row => Number.isFinite(row.numeric) && row.numeric >= 118 && row.numeric < 137 && Math.abs(row.numeric - 121.5) > 0.0001)
+            .sort((a, b) => Number(a.supplementary) - Number(b.supplementary));
+        if (!candidates.length) return;
+        const candidate = candidates[0];
+        const next = {
+            type,
+            value: candidate.numeric.toFixed(3),
+            priority: priorities.get(type)
+        };
+        const current = index.get(code);
+        if (!current || next.priority < current.priority) index.set(code, next);
+    };
+
+    (dataset?.airspaces || []).forEach(item => {
+        (Array.isArray(item?.sv) ? item.sv : []).forEach(service => {
+            const serviceType = String(service?.[0] || '').trim().toUpperCase();
+            const unit = String(service?.[1] || '').trim().toUpperCase();
+            const unitOaci = unit.match(/^([A-Z]{4})\b/)?.[1] || '';
+            const itemOaci = String(item?.c || '').trim().toUpperCase().match(/^([A-Z]{4})(?:\b|\d|\.|-)/)?.[1] || '';
+            consider(unitOaci || itemOaci, serviceType, service?.[2]);
+        });
+    });
+
+    airportOperationalFrequencyIndex = index;
+    airportOperationalFrequencyIndexDataset = dataset || null;
+    return index;
+}
+
+function getAirportOperationalFrequency(oaci) {
+    const code = String(oaci || '').trim().toUpperCase();
+    if (!code) return null;
+    return buildAirportOperationalFrequencyIndex(siaDataset).get(code) || null;
+}
+
+function refreshAirportOperationalLabels() {
+    if (!map) return;
+    if (!airportOperationalLabelLayer) airportOperationalLabelLayer = L.layerGroup().addTo(map);
+    const scaleNm = getCurrentNpfScaleNm();
+    if (!Number.isFinite(scaleNm) || scaleNm > 1.000001) {
+        airportOperationalLabelLayer.clearLayers();
+        return;
+    }
+
+    const bounds = map.getBounds().pad(0.05);
+    airportOperationalLabelLayer.clearLayers();
+    getNpfDisplayedAirportRecordsForLabels().forEach(airport => {
+        const latlng = L.latLng(airport.lat, airport.lon);
+        if (!bounds.contains(latlng)) return;
+        const freq = getAirportOperationalFrequency(airport.oaci);
+        const frequencyHtml = freq
+            ? `<span class="airport-operational-frequency">${escapeHtml(freq.type)} ${escapeHtml(freq.value)}</span>`
+            : '';
+        L.marker(latlng, {
+            interactive: false,
+            keyboard: false,
+            zIndexOffset: 1650,
+            icon: L.divIcon({
+                className: 'airport-operational-label-icon',
+                html: `<span class="airport-operational-label"><span class="airport-operational-name">${escapeHtml(airport.name || airport.oaci)}</span>${frequencyHtml}</span>`,
+                iconSize: [1, 1],
+                iconAnchor: [0, 0]
+            })
+        }).addTo(airportOperationalLabelLayer);
+    });
+
+    if (!siaDataset && SIA_EMBEDDED_AVAILABLE) {
+        ensureSiaDatasetLoaded().then(() => scheduleAirportOperationalLabelsRefresh(0)).catch(() => {});
+    }
+}
+
+function scheduleAirportOperationalLabelsRefresh(delay = 120) {
+    clearTimeout(airportOperationalLabelRefreshTimer);
+    airportOperationalLabelRefreshTimer = setTimeout(() => {
+        airportOperationalLabelRefreshTimer = null;
+        refreshAirportOperationalLabels();
+    }, Math.max(0, Number(delay) || 0));
+}
 
 function drawPermanentAirportMarkers() {
     permanentAirportLayer.clearLayers();
@@ -34124,6 +34303,30 @@ function formatClockLimitTime(totalMinutes) {
 }
 const parseNumeric = (numericString) => { if (!numericString) return null; const value = parseInt(numericString.replace(/[^0-9]/g, ''), 10); return isNaN(value) ? null : value; };
 
+
+/*
+ * v16.56 — règle générale carburant : le résultat est un NOMBRE DE LARGAGES.
+ * Les cycles complets précédant le dernier largage consomment la conso rotation
+ * complète. La fraction terminale est calculée uniquement sur le forfait de
+ * 250 kg, puisqu'après ce dernier largage l'avion poursuit vers la contrainte
+ * BINGO considérée sans effectuer une nouvelle rotation Feu ↔ Pélic.
+ */
+function calculateFuelLimitedDropCount(fuelOnFire, bingoFuel, fullRotationFuel, dropFuel = 250) {
+    if (![fuelOnFire, bingoFuel, fullRotationFuel, dropFuel].every(Number.isFinite)) return null;
+    if (fullRotationFuel <= 0 || dropFuel <= 0) return null;
+    const margin = Math.max(0, fuelOnFire - bingoFuel);
+    const fullCycles = Math.floor(margin / fullRotationFuel);
+    const remainderKg = Math.max(0, margin - (fullCycles * fullRotationFuel));
+    const terminalFraction = Math.min(1, remainderKg / dropFuel);
+    return {
+        margin,
+        fullCycles,
+        remainderKg,
+        terminalFraction,
+        value: fullCycles + terminalFraction
+    };
+}
+
 function updateAndSortRotations(container, current, params) {
     const FIRST_DROP_FORFAIT_MIN = Number.isFinite(params.firstDropForfaitMin) ? params.firstDropForfaitMin : 10;
     const lines = Array.from(container.querySelectorAll('.result-line'));
@@ -34135,7 +34338,6 @@ function updateAndSortRotations(container, current, params) {
     const isSuiviRotation = containerId === 'suivi-rotation-results-container';
     const isPreviRotation = containerId === 'previ-rotation-results-container';
     const isDeroutRotation = containerId === 'derout-rotation-results-container';
-    const fuelImmediateDropAllowed = (typeof params.allowFuelImmediateDrop === 'boolean') ? params.allowFuelImmediateDrop : !isSuiviRotation;
 
     const returnBaseTime = Math.round(calculateTransitTime(CALCULATOR_DATA.distBaseFeu || 0));
     const effectivePelicDistance = Math.max(CALCULATOR_DATA.distPelicFeu || 0, 10);
@@ -34196,18 +34398,12 @@ function updateAndSortRotations(container, current, params) {
         const canCalculateFuel = current.fuel !== null && Number.isFinite(current.fuel) && params.consoRotation !== null && Number.isFinite(params.consoRotation) && params.consoRotation > 0;
         const canCalculateTime = current.time !== null && Number.isFinite(current.time) && params.rotationTime !== null && Number.isFinite(params.rotationTime) && params.rotationTime > 0;
 
-        const hasFuelForFirstDropBase = fuelImmediateDropAllowed && canCalculateFuel && current.fuel >= (250 + params.bingoBase);
-        const hasFuelForFirstDropPelic = fuelImmediateDropAllowed && canCalculateFuel && current.fuel >= (250 + params.bingoPelic);
-
         if (type === 'base') {
-            const plusOne = hasFuelForFirstDropBase ? 1 : 0;
-            const fuelAboveBingo = canCalculateFuel ? current.fuel - params.bingoBase : null;
-            const isPartialLastDrop = fuelImmediateDropAllowed
-                && Number.isFinite(fuelAboveBingo)
-                && fuelAboveBingo > 0
-                && fuelAboveBingo < 250;
+            const fuelResult = canCalculateFuel
+                ? calculateFuelLimitedDropCount(current.fuel, params.bingoBase, params.consoRotation, 250)
+                : null;
             formulaString = [
-                `FUEL RETOUR BASE`,
+                `FUEL RETOUR BASE — NOMBRE DE LARGAGES`,
                 ``,
                 currentContextDetails(),
                 ``,
@@ -34215,37 +34411,25 @@ function updateAndSortRotations(container, current, params) {
                 ``,
                 rotationFormulaDetails(),
                 ``,
-                `Validation du +1 :`,
-                fuelImmediateDropAllowed
-                    ? `+1 possible si Fuel sur feu ≥ 250 kg + BINGO Base.`
-                    : `+1 fuel neutralisé : l'avion n'est pas considéré en situation de largage immédiat.`,
-                fuelImmediateDropAllowed
-                    ? `Test : ${kgOrNA(current.fuel)} ≥ 250 + ${kgOrNA(params.bingoBase)} = ${kgOrNA(250 + params.bingoBase)} → ${hasFuelForFirstDropBase ? 'OUI' : 'NON'}`
-                    : `+1 = 0`,
+                `Règle carburant :`,
+                `Marge disponible = Fuel sur feu - BINGO Base`,
+                `Rotations complètes avant le dernier largage = ENT(Marge / Conso rotation)`,
+                `Reste = Marge - (rotations complètes × Conso rotation)`,
+                `Fraction du dernier largage = min(1 ; Reste / 250 kg)`,
+                `Nbr largages = rotations complètes + fraction du dernier largage`,
                 ``,
-                `Formule finale :`,
-                isPartialLastDrop
-                    ? `Dernier largage partiel = (Fuel sur feu - BINGO Base) / 250 kg`
-                    : `Nbr rotations = ((Fuel sur feu - BINGO Base) / Conso rotation) + ${plusOne}`,
-                isPartialLastDrop
-                    ? `Calcul = (${kgOrNA(current.fuel)} - ${kgOrNA(params.bingoBase)}) / 250 kg`
-                    : `Calcul = ((${kgOrNA(current.fuel)} - ${kgOrNA(params.bingoBase)}) / ${kgOrNA(params.consoRotation)}) + ${plusOne}`
+                fuelResult
+                    ? `Calcul = marge ${kgOrNA(fuelResult.margin)} ; complets ${fuelResult.fullCycles} ; reste ${kgOrNA(fuelResult.remainderKg)} ; fraction ${(fuelResult.terminalFraction).toFixed(3)} ; total ${(fuelResult.value).toFixed(3)}`
+                    : `Données insuffisantes.`
             ].join('\n');
-            if (canCalculateFuel) {
-                value = isPartialLastDrop
-                    ? Math.max(0, fuelAboveBingo / 250)
-                    : (fuelAboveBingo / params.consoRotation) + plusOne;
-            }
+            if (fuelResult) value = fuelResult.value;
         }
         if (type === 'pelic') {
-            const plusOne = hasFuelForFirstDropPelic ? 1 : 0;
-            const fuelAboveBingo = canCalculateFuel ? current.fuel - params.bingoPelic : null;
-            const isPartialLastDrop = fuelImmediateDropAllowed
-                && Number.isFinite(fuelAboveBingo)
-                && fuelAboveBingo > 0
-                && fuelAboveBingo < 250;
+            const fuelResult = canCalculateFuel
+                ? calculateFuelLimitedDropCount(current.fuel, params.bingoPelic, params.consoRotation, 250)
+                : null;
             formulaString = [
-                `FUEL RETOUR PÉLIC`,
+                `FUEL RETOUR PÉLIC — NOMBRE DE LARGAGES`,
                 ``,
                 currentContextDetails(),
                 ``,
@@ -34253,27 +34437,18 @@ function updateAndSortRotations(container, current, params) {
                 ``,
                 rotationFormulaDetails(),
                 ``,
-                `Validation du +1 :`,
-                fuelImmediateDropAllowed
-                    ? `+1 possible si Fuel sur feu ≥ 250 kg + BINGO Pélic.`
-                    : `+1 fuel neutralisé : l'avion n'est pas considéré en situation de largage immédiat.`,
-                fuelImmediateDropAllowed
-                    ? `Test : ${kgOrNA(current.fuel)} ≥ 250 + ${kgOrNA(params.bingoPelic)} = ${kgOrNA(250 + params.bingoPelic)} → ${hasFuelForFirstDropPelic ? 'OUI' : 'NON'}`
-                    : `+1 = 0`,
+                `Règle carburant :`,
+                `Marge disponible = Fuel sur feu - BINGO Pélic`,
+                `Rotations complètes avant le dernier largage = ENT(Marge / Conso rotation)`,
+                `Reste = Marge - (rotations complètes × Conso rotation)`,
+                `Fraction du dernier largage = min(1 ; Reste / 250 kg)`,
+                `Nbr largages = rotations complètes + fraction du dernier largage`,
                 ``,
-                `Formule finale :`,
-                isPartialLastDrop
-                    ? `Dernier largage partiel = (Fuel sur feu - BINGO Pélic) / 250 kg`
-                    : `Nbr rotations = ((Fuel sur feu - BINGO Pélic) / Conso rotation) + ${plusOne}`,
-                isPartialLastDrop
-                    ? `Calcul = (${kgOrNA(current.fuel)} - ${kgOrNA(params.bingoPelic)}) / 250 kg`
-                    : `Calcul = ((${kgOrNA(current.fuel)} - ${kgOrNA(params.bingoPelic)}) / ${kgOrNA(params.consoRotation)}) + ${plusOne}`
+                fuelResult
+                    ? `Calcul = marge ${kgOrNA(fuelResult.margin)} ; complets ${fuelResult.fullCycles} ; reste ${kgOrNA(fuelResult.remainderKg)} ; fraction ${(fuelResult.terminalFraction).toFixed(3)} ; total ${(fuelResult.value).toFixed(3)}`
+                    : `Données insuffisantes.`
             ].join('\n');
-            if (canCalculateFuel) {
-                value = isPartialLastDrop
-                    ? Math.max(0, fuelAboveBingo / 250)
-                    : (fuelAboveBingo / params.consoRotation) + plusOne;
-            }
+            if (fuelResult) value = fuelResult.value;
         }
         if (type === 'cs') {
             const firstDropTime = canCalculateTime ? current.time + FIRST_DROP_FORFAIT_MIN : null;
@@ -34293,7 +34468,7 @@ function updateAndSortRotations(container, current, params) {
                 ``,
                 `Si le +1 est impossible : résultat = 0.`,
                 `Si le +1 est possible :`,
-                `Nbr rotations CS = 1 + ((CS - Heure premier largage) / Durée rotation)`,
+                `Nbr largages CS = 1 + ((CS - Heure premier largage) / Durée rotation)`,
                 `Heure premier largage = Heure sur feu + ${FIRST_DROP_FORFAIT_MIN} min`,
                 `Calcul = 1 + ((${timeOrNA(params.csFeuTime)} - ${timeOrNA(firstDropTime)}) / ${minOrNA(params.rotationTime)})`
             ].join('\n');
@@ -34322,7 +34497,7 @@ function updateAndSortRotations(container, current, params) {
                 ``,
                 `Si le +1 est impossible : résultat = 0.`,
                 `Si le +1 est possible :`,
-                `Nbr rotations TMD = 1 + ((TMD - Heure premier largage - Retour base final) / Durée rotation)`,
+                `Nbr largages TMD = 1 + ((TMD - Heure premier largage - Retour base final) / Durée rotation)`,
                 `Heure premier largage = Heure sur feu + ${FIRST_DROP_FORFAIT_MIN} min`,
                 `Calcul = 1 + ((${formatClockLimitTime(effectiveTmdTime) || 'N/A'} - ${formatClockLimitTime(firstDropTime) || 'N/A'} - ${minOrNA(returnBaseTime)}) / ${minOrNA(params.rotationTime)})`
             ].join('\n');
@@ -34349,7 +34524,7 @@ function updateAndSortRotations(container, current, params) {
                 ``,
                 `Si le +1 est impossible : résultat = 0.`,
                 `Si le +1 est possible :`,
-                `Nbr rotations HDV = 1 + ((HDV restantes - Transit vers feu - ${FIRST_DROP_FORFAIT_MIN} min - Retour base final) / Durée rotation)`,
+                `Nbr largages HDV = 1 + ((HDV restantes - Transit vers feu - ${FIRST_DROP_FORFAIT_MIN} min - Retour base final) / Durée rotation)`,
                 `Calcul = 1 + ((${timeOrNA(params.limiteHDV)} - ${minOrNA(params.transitTime)} - ${FIRST_DROP_FORFAIT_MIN} min - ${minOrNA(returnBaseTime)}) / ${minOrNA(params.rotationTime)})`
             ].join('\n');
             if (canCalculateTime && params.limiteHDV !== null && Number.isFinite(params.limiteHDV)) {
@@ -34452,7 +34627,7 @@ function recalculateBlocFuel() {
             /*
              * v12.84 — Plein au départ : la ligne reste une ligne de départ
              * exploitable. On ne verrouille/masque plus Fuel ni OACI : ces
-             * deux valeurs servent notamment au premier transit Suivi rotations.
+             * deux valeurs servent notamment au premier transit Suivi largages.
              * Seules les colonnes de rotations calculées restent vides pour
              * cette ligne.
              */
@@ -34783,7 +34958,7 @@ function updateSuiviTab() {
         : null;
 
     setSuiviHelp('suivi-duree-transit-help', transitTimeVersFeu !== null
-        ? `DURÉE TRANSIT SOURCE → FEU — SUIVI ROTATIONS
+        ? `DURÉE TRANSIT SOURCE → FEU — SUIVI LARGAGES
 
 ${transitSourceDetail}
 Source utilisée : ${transitSourceLabel}
@@ -34801,7 +34976,7 @@ ${preTransitForfaitReason}`
         : 'Distance vers le feu indisponible. Vérifiez le terrain de départ, le pélicandrome sélectionné et le feu.');
 
     setSuiviHelp('suivi-fuel-sur-feu-help', fuelSurFeu !== null && currentFuel !== null && consoTransitVersFeu !== null
-        ? `FUEL SUR FEU — SUIVI ROTATIONS
+        ? `FUEL SUR FEU — SUIVI LARGAGES
 
 Formule : Fuel retenu au départ du transit - Conso transit vers le feu
 
@@ -34819,7 +34994,7 @@ Le forfait avant transit de ${preTransitForfaitMin} min n'ajoute pas de consomma
         : 'Fuel de départ du transit ou distance vers le feu indisponible.');
 
     setSuiviHelp('suivi-duree-rotation-help', rotationDistanceRetained !== null && rotationTime !== null
-        ? `DURÉE ROTATION FEU ↔ PÉLIC — SUIVI ROTATIONS
+        ? `DURÉE ROTATION FEU ↔ PÉLIC — SUIVI LARGAGES
 
 Mode actuel : ${isSuiviDureeManual ? 'MANUEL' : 'AUTO'}
 Valeur utilisée : ${formatTime(rotationTime) || 'N/A'}${rotationTime !== null ? ` (${rotationTime} min)` : ''}
@@ -34837,7 +35012,7 @@ ${isSuiviDureeManual ? 'La valeur manuelle remplace actuellement le calcul AUTO 
         : 'Sélectionnez un pélicandrome et renseignez une durée de rotation exploitable.');
 
     setSuiviHelp('suivi-conso-rotation-help', rotationDistanceRetained !== null && consoRotation !== null
-        ? `CONSO ROTATION FEU ↔ PÉLIC — SUIVI ROTATIONS
+        ? `CONSO ROTATION FEU ↔ PÉLIC — SUIVI LARGAGES
 
 Mode actuel : ${isSuiviConsoManual ? 'MANUEL' : 'AUTO'}
 Valeur utilisée : ${consoRotation} kg
@@ -34872,7 +35047,7 @@ ${isSuiviConsoManual ? 'La valeur manuelle remplace actuellement le calcul AUTO 
         const suiviFuelSurFeuEl = document.getElementById('suivi-fuel-sur-feu'); if (suiviFuelSurFeuEl) suiviFuelSurFeuEl.textContent = fuelSurFeu !== null ? `${fuelSurFeu} kg` : '-- kg';
         const suiviHeureHelpIcon = document.getElementById('suivi-heure-sur-feu-help');
         if (suiviHeureHelpIcon) {
-            suiviHeureHelpIcon.onclick = () => alert(`HEURE SUR FEU — SUIVI ROTATION
+            suiviHeureHelpIcon.onclick = () => alert(`HEURE SUR FEU — SUIVI LARGAGES
 
 Règle v14.47 :
 - premier transit : BLOC DÉPART + 10 min plein retardant + transit vers le feu ;
@@ -34914,7 +35089,6 @@ Validation du largage : Heure sur feu + 10 min avant CS/TMD/HDV.`);
                 effectiveTransitDistance: transitEffectiveDistanceVersFeu,
                 transitSourceLabel,
                 currentTimeLabel: 'Heure sur feu',
-                allowFuelImmediateDrop: true,
                 firstDropForfaitMin: 10
             }
         );
@@ -40553,6 +40727,7 @@ function setSiaMapVrpVisible(visible) {
 
 // v15.75 — tampon de rendu et cache de géométries pour limiter les reconstructions iPad.
 const SIA_RENDER_BOUNDS_PAD_RATIO = 0.25;
+const SIA_COMBINED_HEAVY_RENDER_PAD_RATIO = 0.08;
 const SIA_POINT_ONLY_RENDER_BOUNDS_PAD_RATIO = 0.80;
 let siaRenderedCoverageBounds = null;
 let siaRenderedZoom = null;
@@ -43582,6 +43757,11 @@ function initializeSiaSystem() {
         });
         map.on('zoomstart', () => {
             npfDiagZoomStartedAt = NPF_STARTUP_DIAGNOSTIC.now();
+            /* v16.56 — un rendu SIA calculé pour l'ancien zoom ne doit jamais finir après le geste. */
+            cancelObsoleteSiaMapMotionWork('zoomstart');
+            siaDecorationProgressiveRun += 1;
+            clearTimeout(siaMoveDecorationRefreshTimer);
+            siaMoveDecorationRefreshTimer = null;
         });
         map.on('zoomend', () => {
             const now = NPF_STARTUP_DIAGNOSTIC.now();
@@ -46413,7 +46593,10 @@ async function refreshSiaLayers(reason = 'manual') {
          * visibles. Zones masquées : libérer immédiatement l'ancien groupe évite
          * de conserver deux jeux de marqueurs/points pendant la reconstruction.
          */
-        const preservePreviousSiaDuringRebuild = siaMapAirspacesVisible;
+        const siaCombinedHeavyMapLoad = siaMapAirspacesVisible && showRoadOverlayLayer && showHighVoltageLinesLayer;
+        /* v16.56 — éviter le pic mémoire de deux jeux SIA simultanés avec Routes + HT. */
+        const preservePreviousSiaDuringRebuild = siaMapAirspacesVisible
+            && !(siaCombinedHeavyMapLoad && zoom <= 10);
         previousSiaLayerGroupForSwap = siaLayerGroup;
         replacementSiaLayerGroupForSwap = L.layerGroup();
         siaLayerGroup = replacementSiaLayerGroupForSwap;
@@ -46438,7 +46621,9 @@ async function refreshSiaLayers(reason = 'manual') {
         // Charger légèrement au-delà du viewport évite les reconstructions à
         // chaque mouvement du suivi GPS tout en bornant la mémoire Safari/iPad.
         const renderPadRatio = siaMapAirspacesVisible
-            ? SIA_RENDER_BOUNDS_PAD_RATIO
+            ? ((siaCombinedHeavyMapLoad && zoom <= 10)
+                ? SIA_COMBINED_HEAVY_RENDER_PAD_RATIO
+                : SIA_RENDER_BOUNDS_PAD_RATIO)
             : SIA_POINT_ONLY_RENDER_BOUNDS_PAD_RATIO;
         const renderBounds = currentBounds.pad(renderPadRatio);
         const pointBounds = renderBounds.pad(0.03);
