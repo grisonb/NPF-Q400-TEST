@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v16.51';
+const NPF_SCRIPT_BUILD_VERSION = 'v16.55';
 
 
 /*
@@ -40,6 +40,7 @@ const NPF_STARTUP_DIAGNOSTIC = (() => {
             siaRefreshCount: 0, siaSlowCount: 0, siaMaxMs: 0, siaMaxPointsMs: 0, siaMaxDecorMs: 0,
             htRenderCount: 0, htMaxRendered: 0,
             roadRenderCount: 0, roadMaxRendered: 0,
+            filterActivationCount: 0, filterActivationMaxWaitMs: 0, filterLayerMaxMs: 0,
             tileQueueMax: 0, tileActiveMax: 0, tileBlankSnapshots: 0,
             tileAbortedMax: 0, tileRetriesMax: 0
         },
@@ -121,6 +122,18 @@ const NPF_STARTUP_DIAGNOSTIC = (() => {
             summary.siaMaxDecorMs = Math.max(summary.siaMaxDecorMs, Math.max(0, Number(safeMetrics.touchDecorMs) || Number(safeMetrics.decorationsMs) || 0));
         }
 
+        if (kind === 'FILTRE CARTE') {
+            summary.filterActivationCount += 1;
+            summary.filterActivationMaxWaitMs = Math.max(
+                summary.filterActivationMaxWaitMs,
+                Math.max(0, Number(safeMetrics.waitMs) || 0)
+            );
+            summary.filterLayerMaxMs = Math.max(
+                summary.filterLayerMaxMs,
+                Math.max(0, Number(safeMetrics.layerMs) || 0)
+            );
+        }
+
         if (kind === 'Couches carte') {
             const safeDetail = String(detail || '');
             if (safeDetail.includes('lignes-ht rendu')) {
@@ -144,6 +157,7 @@ const NPF_STARTUP_DIAGNOSTIC = (() => {
                 || safeDetail.includes('profile-hide-map-zones')
                 || safeDetail.includes('startup');
         }
+        if (kind === 'FILTRE CARTE') return true;
         if (kind === 'Couches carte') {
             const safeDetail = String(detail || '');
             return safeDetail.includes('tile-priority-retry')
@@ -301,8 +315,26 @@ const NPF_STARTUP_DIAGNOSTIC = (() => {
          */
         const intervalMs = 1000;
         let expected = now() + intervalMs;
+        let wasVisible = document.visibilityState !== 'hidden';
+
+        document.addEventListener('visibilitychange', () => {
+            wasVisible = document.visibilityState !== 'hidden';
+            expected = now() + intervalMs;
+        }, { passive: true });
+
         setInterval(() => {
             const current = now();
+
+            /*
+             * v16.53 — une suspension iPadOS / passage en arrière-plan n'est
+             * pas un blocage JavaScript. On réarme simplement la référence
+             * temporelle au retour au premier plan.
+             */
+            if (!wasVisible || document.visibilityState === 'hidden') {
+                expected = current + intervalMs;
+                return;
+            }
+
             const drift = Math.max(0, current - expected);
             if (drift >= 120) {
                 state.stalls.push({ t: current, at: Date.now(), delay: drift });
@@ -513,6 +545,12 @@ function getNpfStartupDiagnosticRuntimeInfo() {
         localityOrphanCount: Math.max(0, Number(namedPlacesOfflineOrphanCount) || 0),
         localityCachedShards: Number(namedPlacesOfflineShardCache?.size || 0),
         localityLoadError: String(namedPlacesOfflineLoadError || ''),
+        bfgPaired: (() => { try { return Boolean(getStoredNpfBfgBridgeCredentials()); } catch (_) { return false; } })(),
+        briefingSessionActive: (() => { try { return Boolean(getStoredBriefingDocsSession()); } catch (_) { return false; } })(),
+        bfgBridgeLastStatus: String(typeof npfBfgBridgeLastStatus !== 'undefined' ? npfBfgBridgeLastStatus : '—'),
+        bfgBridgeLastError: String(typeof npfBfgBridgeLastError !== 'undefined' ? npfBfgBridgeLastError : ''),
+        glrSessionActive: (() => { try { return Boolean(getStoredGlobalLinkSession()); } catch (_) { return false; } })(),
+        glrLastAuthState: String(typeof npfGlobalLinkLastAuthState !== 'undefined' ? npfGlobalLinkLastAuthState : '—'),
         diagMapMotion: NPF_STARTUP_DIAGNOSTIC.state.mapMotionSummary,
         diagGps: NPF_STARTUP_DIAGNOSTIC.state.gpsSummary,
         diagLayers: NPF_STARTUP_DIAGNOSTIC.state.layerSummary,
@@ -612,13 +650,24 @@ function buildNpfStartupDiagnosticExportText() {
         + 'snapshots écran sans tuile ' + Math.round(layerDiag.tileBlankSnapshots || 0) + ' | '
         + 'interrompues max ' + Math.round(layerDiag.tileAbortedMax || 0) + ' / reprises max ' + Math.round(layerDiag.tileRetriesMax || 0) + ' | '
         + 'SIA ' + Math.round(layerDiag.siaRefreshCount || 0) + ' refresh (' + Math.round(layerDiag.siaSlowCount || 0) + ' lents, max ' + Math.round(layerDiag.siaMaxMs || 0) + ' ms) | '
-        + 'HT ' + Math.round(layerDiag.htRenderCount || 0) + ' rendus | Routes ' + Math.round(layerDiag.roadRenderCount || 0) + ' rendus'
+        + 'HT ' + Math.round(layerDiag.htRenderCount || 0) + ' rendus | Routes ' + Math.round(layerDiag.roadRenderCount || 0) + ' rendus | '
+        + 'filtres ' + Math.round(layerDiag.filterActivationCount || 0)
+        + ' événements (attente tuiles max ' + Math.round(layerDiag.filterActivationMaxWaitMs || 0)
+        + ' ms / couche max ' + Math.round(layerDiag.filterLayerMaxMs || 0) + ' ms)'
     );
     lines.push(
         'Charge DIAG : '
         + Math.round(runtime.diagPersistCount || 0) + ' écritures groupées | '
         + 'écriture max ' + Math.round(runtime.diagPersistMaxMs || 0) + ' ms | '
         + 'temps total ' + Math.round(runtime.diagPersistTotalMs || 0) + ' ms'
+    );
+    lines.push(
+        'Authentification : BFG associé ' + (runtime.bfgPaired ? 'OUI' : 'NON')
+        + ' | session FdS/GAAR ' + (runtime.briefingSessionActive ? 'ACTIVE' : 'ABSENTE/EXPIRÉE')
+        + ' | pont BFG ' + (runtime.bfgBridgeLastStatus || '—')
+        + (runtime.bfgBridgeLastError ? ' (' + runtime.bfgBridgeLastError + ')' : '')
+        + ' | session GLR ' + (runtime.glrSessionActive ? 'ACTIVE' : 'ABSENTE/EXPIRÉE')
+        + ' | état GLR ' + (runtime.glrLastAuthState || '—')
     );
     const restoredDiag = runtime.diagRestoredSession;
     if (restoredDiag) {
@@ -1779,6 +1828,71 @@ const NAMED_PLACES_OFFLINE_SHARD_PREFIX_LENGTH = 3;
 const NAMED_PLACES_OFFLINE_PHONETIC_PREFIX_LENGTH = 2;
 const NAMED_PLACES_OFFLINE_SHARD_CACHE_MAX = 64;
 
+/*
+ * v16.52 — filet national des noms d'usage.
+ * La recherche principale reste la base nationale de 179 402 localités + les
+ * alias de communes. Cette petite table ne remplace pas la base nationale : elle
+ * corrige uniquement des noms d'usage administratifs connus qui peuvent être
+ * absents des sources embarquées. Chaque entrée pointe vers le code INSEE de la
+ * commune et vers les coordonnées du lieu réellement recherché.
+ */
+const NPF_KNOWN_LOCALITY_EQUIVALENTS = Object.freeze([
+    Object.freeze({
+        names: Object.freeze(['lapradelle', 'lapradelle puilaurens']),
+        displayName: 'Lapradelle',
+        municipalityName: 'Puilaurens',
+        codeInsee: '11302',
+        departmentCode: '11',
+        latitude: 42.80994,
+        longitude: 2.30584
+    })
+]);
+
+function searchNpfKnownLocalityEquivalents(searchTerm, departmentFilter = null) {
+    const normalizedQuery = simplifyString(searchTerm);
+    if (!normalizedQuery || normalizedQuery.length < 3) return [];
+
+    return NPF_KNOWN_LOCALITY_EQUIVALENTS
+        .filter(entry => !departmentFilter || entry.departmentCode === departmentFilter)
+        .filter(entry => entry.names.some(name => {
+            const normalizedName = simplifyString(name);
+            return normalizedName === normalizedQuery
+                || normalizedName.startsWith(normalizedQuery)
+                || normalizedQuery.startsWith(normalizedName);
+        }))
+        .map(entry => {
+            const commune = communesByCodeInsee.get(entry.codeInsee);
+            const normalizedName = simplifyString(entry.displayName);
+            const municipalityNormalized = simplifyString(entry.municipalityName);
+            const searchParts = Array.from(new Set([
+                ...normalizedName.split(' ').filter(Boolean),
+                ...municipalityNormalized.split(' ').filter(Boolean)
+            ]));
+            return {
+                ...(commune || {}),
+                nom_standard: entry.displayName,
+                nom_sans_pronom: entry.displayName,
+                nom_sans_accent: normalizedName.replace(/\s+/g, '-'),
+                normalized_name: normalizedName,
+                search_parts: searchParts,
+                search_compact: searchParts.join(''),
+                soundex_parts: searchParts.map(part => soundex(part)),
+                latitude_mairie: Number(entry.latitude),
+                longitude_mairie: Number(entry.longitude),
+                dep_code: entry.departmentCode,
+                dep_nom: commune?.dep_nom || '',
+                code_insee: entry.codeInsee,
+                locality_match: true,
+                locality_commune_name: entry.municipalityName,
+                locality_type: 'village, hameau ou lieu-dit',
+                locality_source: 'Équivalence locale NPF — rattachement commune INSEE',
+                locality_offline: true,
+                locality_linked_commune: !!commune,
+                score: normalizedName === normalizedQuery ? -0.75 : -0.25
+            };
+        });
+}
+
 let namedPlacesSearchSequence = 0;
 let namedPlacesOfflineArchive = null;
 let namedPlacesOfflineIndex = null;
@@ -1795,6 +1909,7 @@ const MAGNETIC_DECLINATION = 1.0;
 let userMarker = null, watchId = null, accuracyCircle = null, headingLayer = null, lastPosition = null;
 let centerGpsFollowActive = false;
 let centerGpsFollowProgrammaticMove = false;
+let centerGpsFollowLastProgrammaticMoveAt = 0;
 let centerGpsFollowPauseTimer = null;
 let centerGpsFollowPausedUntil = 0;
 let centerGpsFollowStartedLiveGps = false;
@@ -1811,9 +1926,10 @@ const CENTER_GPS_FOLLOW_RECENTER_DELAY_MS = 10000;
 const CENTER_GPS_BUTTON_LONG_PRESS_MS = 650;
 const CENTER_GPS_BUTTON_MOVE_TOLERANCE_PX = 14;
 function isNpfGpsFollowProgrammaticPan() {
+    const recentProgrammaticMove = (Date.now() - Number(centerGpsFollowLastProgrammaticMoveAt || 0)) < 800;
     return !!(
         centerGpsFollowActive
-        && centerGpsFollowProgrammaticMove
+        && (centerGpsFollowProgrammaticMove || recentProgrammaticMove)
         && !centerGpsFollowUserGestureActive
         && (Date.now() - Number(centerGpsFollowLastUserGestureAt || 0)) > 180
     );
@@ -2025,6 +2141,8 @@ const NPF_BRIEFING_DOCS_LAST_SYNC_KEY = 'npfBriefingDocsLastSyncV1';
 // v15.99 — association persistante de cette PWA NPF avec BFG via le NAS.
 const NPF_BFG_BRIDGE_ID_KEY = 'npfBfgBridgeIdV1';
 const NPF_BFG_BRIDGE_DEVICE_SECRET_KEY = 'npfBfgBridgeDeviceSecretV1';
+let npfBfgBridgeLastError = '';
+let npfBfgBridgeLastStatus = 'non-testé';
 let npfBfgBridgeAuthorizationPromise = null;
 const NPF_BRIEFING_DOC_TYPES = Object.freeze(['fds', 'gaar']);
 let npfBriefingDocsDb = null;
@@ -5955,16 +6073,22 @@ async function searchNamedPlacesOffline(
         return [];
     }
 
+    const normalizedQuery = simplifyString(searchTerm);
+    const knownEquivalentResults = searchNpfKnownLocalityEquivalents(
+        searchTerm,
+        departmentFilter
+    );
+
     const records =
         await loadNamedPlacesOfflineDatabase({
             searchTerm
         });
-    if (!records.length) return [];
+    if (!records.length) {
+        return knownEquivalentResults.slice(0, NAMED_PLACES_OFFLINE_RESULT_LIMIT);
+    }
 
     const searchCompact =
         searchWords.join('');
-    const normalizedQuery =
-        simplifyString(searchTerm);
 
     const scored = records
         .filter(candidate => (
@@ -6014,7 +6138,7 @@ async function searchNamedPlacesOffline(
 
     const grouped =
         groupOfflineNamedPlaceResults(
-            scored,
+            [...knownEquivalentResults, ...scored],
             searchTerm
         );
 
@@ -6807,17 +6931,33 @@ function initMap() {
 
     map.on('movestart', () => {
         const gpsFollowPan = isNpfGpsFollowProgrammaticPan();
-        if (!gpsFollowPan) {
-            beginBaseMapZoomStabilityGuard('movestart');
-            beginMapVisualRenderGuard('movestart');
-            if (showRoadOverlayLayer) {
-                roadOverlayRefreshToken += 1;
-                clearTimeout(roadOverlayRefreshTimer);
+
+        /*
+         * v16.55 — un PAN, manuel ou GPS, ne touche jamais à la génération
+         * des lectures de tuiles NPF. Les transactions IndexedDB déjà lancées
+         * terminent normalement. La purge ciblée reste réservée à moveend et
+         * uniquement pour les demandes réellement devenues hors vue.
+         */
+        if (gpsFollowPan) {
+            /*
+             * v16.55 — arrêter uniquement un ancien travail SIA issu du
+             * mouvement carte. Une action explicite filtre/zoom/utilisateur
+             * n'est jamais annulée par le suivi GPS. Les tuiles restent intactes.
+             */
+            if (typeof cancelObsoleteSiaMapMotionWork === 'function') {
+                cancelObsoleteSiaMapMotionWork('gps-movestart');
             }
-            if (showHighVoltageLinesLayer) {
-                highVoltageLinesRefreshToken += 1;
-                clearTimeout(highVoltageLinesRefreshTimer);
-            }
+            return;
+        }
+
+        beginMapVisualRenderGuard('movestart');
+        if (showRoadOverlayLayer) {
+            roadOverlayRefreshToken += 1;
+            clearTimeout(roadOverlayRefreshTimer);
+        }
+        if (showHighVoltageLinesLayer) {
+            highVoltageLinesRefreshToken += 1;
+            clearTimeout(highVoltageLinesRefreshTimer);
         }
     });
     map.on('zoomstart', () => {
@@ -6840,14 +6980,7 @@ function initMap() {
         scheduleTrafficVisualResumeAfterMapInteraction('zoomend');
     });
     map.on('moveend', () => {
-        if (isNpfGpsFollowProgrammaticPan()) {
-            /*
-             * v16.51 — un recentrage GPS ne change pas de priorité à chaque
-             * seconde et ne purge pas les lectures IDB encore utiles. La limite
-             * dure de file reste active dans enqueueDirectOfflineNpfRead().
-             */
-            return;
-        }
+        if (isNpfGpsFollowProgrammaticPan()) return;
         try { pruneDirectOfflineNpfQueueForCurrentView('moveend'); } catch (_) {}
         scheduleTrafficVisualResumeAfterMapInteraction('moveend');
     });
@@ -7262,6 +7395,107 @@ async function waitForNpfVisibleBaseTilesReady(options = {}) {
         }
 
         await new Promise(resolve => setTimeout(resolve, pollMs));
+    }
+}
+
+/*
+ * v16.52 — fenêtre de priorité absolue aux tuiles lors de l'activation d'une
+ * couche lourde. Une couche ne commence son travail que lorsque toutes les
+ * tuiles visibles sont peintes ET que la file IndexedDB est au repos. Deux
+ * frames supplémentaires sont laissées à Safari avant le traitement lourd.
+ */
+async function waitForNpfLayerActivationTileWindow(layerKey, options = {}) {
+    const startedAt = NPF_STARTUP_DIAGNOSTIC.now();
+    const isCancelled = typeof options.isCancelled === 'function'
+        ? options.isCancelled
+        : () => false;
+    const maxWaitMs = Number.isFinite(Number(options.maxWaitMs))
+        ? Math.max(1000, Number(options.maxWaitMs))
+        : 12000;
+    let stablePasses = 0;
+    let maxQueued = 0;
+    let maxActive = 0;
+    let blankPasses = 0;
+
+    while (true) {
+        if (isCancelled()) return false;
+
+        const tileState = typeof getVisibleBaseTileLoadStateForSia === 'function'
+            ? getVisibleBaseTileLoadStateForSia()
+            : {
+                total: getNpfRetainedBaseTileCount(),
+                loaded: countVisibleLoadedBaseTiles(),
+                tileZoomReady: true
+            };
+        const activeReads = Math.max(0, Number(directOfflineNpfActiveReads || 0));
+        const queuedReads = Math.max(0, Number(directOfflineNpfReadQueue?.length || 0));
+        maxQueued = Math.max(maxQueued, queuedReads);
+        maxActive = Math.max(maxActive, activeReads);
+        if (Number(tileState.loaded || 0) === 0) blankPasses += 1;
+
+        const directNpfOffline = !!(
+            offlineTilesMode
+            && typeof isNpfOfflinePackSelection === 'function'
+            && isNpfOfflinePackSelection()
+        );
+        const tilesReady = !directNpfOffline || (
+            Number(tileState.total || 0) > 0
+            && Number(tileState.loaded || 0) >= Number(tileState.total || 0)
+            && tileState.tileZoomReady
+            && activeReads === 0
+            && queuedReads === 0
+        );
+
+        if (tilesReady) {
+            stablePasses += 1;
+            if (stablePasses >= 3) {
+                for (let frame = 0; frame < 2; frame += 1) {
+                    await new Promise(resolve => {
+                        if (typeof requestAnimationFrame === 'function') {
+                            requestAnimationFrame(() => resolve());
+                        } else {
+                            setTimeout(resolve, 0);
+                        }
+                    });
+                    if (isCancelled()) return false;
+                }
+                npfDiagSiaInteraction(
+                    'FILTRE CARTE',
+                    `couche=${String(layerKey || 'inconnue')} · tuiles-prêtes`,
+                    {
+                        waitMs: Math.round(NPF_STARTUP_DIAGNOSTIC.now() - startedAt),
+                        maxQueued,
+                        maxActive,
+                        blankPasses,
+                        tilesVisible: countVisibleLoadedBaseTiles(),
+                        npfReadsQueued: Number(directOfflineNpfReadQueue?.length || 0),
+                        npfReadsActive: Number(directOfflineNpfActiveReads || 0)
+                    }
+                );
+                return true;
+            }
+        } else {
+            stablePasses = 0;
+        }
+
+        if (NPF_STARTUP_DIAGNOSTIC.now() - startedAt >= maxWaitMs) {
+            npfDiagSiaInteraction(
+                'FILTRE CARTE',
+                `couche=${String(layerKey || 'inconnue')} · attente-tuiles-timeout`,
+                {
+                    waitMs: Math.round(NPF_STARTUP_DIAGNOSTIC.now() - startedAt),
+                    maxQueued,
+                    maxActive,
+                    blankPasses,
+                    tilesVisible: countVisibleLoadedBaseTiles(),
+                    npfReadsQueued: Number(directOfflineNpfReadQueue?.length || 0),
+                    npfReadsActive: Number(directOfflineNpfActiveReads || 0)
+                }
+            );
+            return false;
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 80));
     }
 }
 
@@ -8082,7 +8316,7 @@ let directOfflineLastRecoveryReason = '';
  * rafale de transactions parallèles au premier affichage. On limite donc la
  * concurrence uniquement pour le groupe NPF ; OACI conserve son chemin rapide.
  */
-const DIRECT_OFFLINE_NPF_MAX_CONCURRENT_READS = 5;
+const DIRECT_OFFLINE_NPF_MAX_CONCURRENT_READS = 3;
 const DIRECT_OFFLINE_NPF_MAX_QUEUED_READS = 96;
 const DIRECT_OFFLINE_TILE_ABORTED = Symbol('direct-offline-tile-aborted');
 let directOfflineNpfActiveReads = 0;
@@ -11123,15 +11357,48 @@ async function toggleHighVoltageLinesLayer(forceState = null, options = {}) {
     const silent = !!options.silent;
     const allowRetry = options.retry !== false;
 
-    if (shouldShow && !hasLoadedHighVoltageLines) {
+    showHighVoltageLinesLayer = shouldShow;
+    localStorage.setItem(HIGH_VOLTAGE_LINES_LAYER_KEY, String(showHighVoltageLinesLayer));
+    refreshHighVoltageLinesButtonState();
+
+    if (!showHighVoltageLinesLayer) {
+        highVoltageLinesRefreshToken += 1;
+        highVoltageLinesRetryToken += 1;
+        clearTimeout(highVoltageLinesRefreshTimer);
+        if (highVoltageLinesLayer && map?.hasLayer(highVoltageLinesLayer)) {
+            map.removeLayer(highVoltageLinesLayer);
+        }
+        recordNpfStartupDiagnosticOverlaySnapshot(`lignes-ht OFF · ${options.source || 'toggle'}`);
+        return;
+    }
+
+    if (highVoltageLinesLayer && map && !map.hasLayer(highVoltageLinesLayer)) {
+        highVoltageLinesLayer.addTo(map);
+    }
+
+    if (!hasLoadedHighVoltageLines) {
+        const ready = await waitForNpfLayerActivationTileWindow('HT', {
+            maxWaitMs: 12000,
+            isCancelled: () => !showHighVoltageLinesLayer
+        });
+        if (!ready || !showHighVoltageLinesLayer) {
+            if (allowRetry && showHighVoltageLinesLayer) scheduleHighVoltageLinesRetry(options.source || 'tile-priority');
+            recordNpfStartupDiagnosticOverlaySnapshot(`lignes-ht ON · ${options.source || 'toggle'} · attente tuiles`);
+            return;
+        }
+
+        const loadStartedAt = NPF_STARTUP_DIAGNOSTIC.now();
         try {
             await loadHighVoltageLinesLayerData();
+            npfDiagSiaInteraction('FILTRE CARTE', 'couche=HT · données-prêtes', {
+                layerMs: Math.round(NPF_STARTUP_DIAGNOSTIC.now() - loadStartedAt),
+                htSegments: Number(highVoltageLinesFeatureCount || 0),
+                tilesVisible: countVisibleLoadedBaseTiles(),
+                npfReadsQueued: Number(directOfflineNpfReadQueue?.length || 0),
+                npfReadsActive: Number(directOfflineNpfActiveReads || 0)
+            });
         } catch (error) {
             console.warn('Chargement lignes HT différé:', options.source || 'manual', error);
-            showHighVoltageLinesLayer = true;
-            localStorage.setItem(HIGH_VOLTAGE_LINES_LAYER_KEY, 'true');
-            refreshHighVoltageLinesButtonState();
-            recordNpfStartupDiagnosticOverlaySnapshot(`lignes-ht ${showHighVoltageLinesLayer ? 'ON' : 'OFF'} · ${options.source || 'load-error'}`);
             if (allowRetry) scheduleHighVoltageLinesRetry(options.source || 'load-error');
             if (!silent) {
                 alert("Chargement Lignes HT différé. L'application va réessayer automatiquement.");
@@ -11140,28 +11407,11 @@ async function toggleHighVoltageLinesLayer(forceState = null, options = {}) {
         }
     }
 
-    showHighVoltageLinesLayer = shouldShow;
-
-    if (showHighVoltageLinesLayer) {
-        if (highVoltageLinesLayer && !map.hasLayer(highVoltageLinesLayer)) {
-            highVoltageLinesLayer.addTo(map);
-        }
-        scheduleHighVoltageLinesRefresh(options.source || 'toggle');
-    } else {
-        highVoltageLinesRefreshToken += 1;
-        clearTimeout(highVoltageLinesRefreshTimer);
-        highVoltageLinesRefreshTimer = null;
-        clearRenderedHighVoltageLines();
-        if (highVoltageLinesLayer && map.hasLayer(highVoltageLinesLayer)) {
-            map.removeLayer(highVoltageLinesLayer);
-        }
-    }
-
-    localStorage.setItem(HIGH_VOLTAGE_LINES_LAYER_KEY, String(showHighVoltageLinesLayer));
+    if (!showHighVoltageLinesLayer) return;
+    await refreshVisibleHighVoltageLines(options.source || 'toggle');
     refreshHighVoltageLinesButtonState();
-    recordNpfStartupDiagnosticOverlaySnapshot(`lignes-ht ${showHighVoltageLinesLayer ? 'ON' : 'OFF'} · ${options.source || 'toggle'}`);
+    recordNpfStartupDiagnosticOverlaySnapshot(`lignes-ht ON · ${options.source || 'toggle'}`);
 }
-
 
 
 // =========================================================================
@@ -12855,12 +13105,33 @@ async function toggleRoadOverlayLayer(forceState = null, options = {}) {
 
     showRoadOverlayLayer = shouldShow;
     localStorage.setItem(ROAD_OVERLAY_LAYER_KEY, String(showRoadOverlayLayer));
+    refreshRoadOverlayButtonState();
 
     if (showRoadOverlayLayer) {
         if (roadOverlayLayer && !map.hasLayer(roadOverlayLayer)) {
             roadOverlayLayer.addTo(map);
         }
+
+        const ready = await waitForNpfLayerActivationTileWindow('Routes', {
+            maxWaitMs: 12000,
+            isCancelled: () => !showRoadOverlayLayer
+        });
+        if (!ready || !showRoadOverlayLayer) {
+            scheduleRoadOverlayRefresh('tile-priority-retry');
+            recordNpfStartupDiagnosticOverlaySnapshot(`routes ON · ${options.source || 'toggle'} · attente tuiles`);
+            return;
+        }
+
+        const renderStartedAt = NPF_STARTUP_DIAGNOSTIC.now();
         await refreshRoadOverlayVisibleParts(options.source || 'toggle');
+        npfDiagSiaInteraction('FILTRE CARTE', 'couche=Routes · rendu-prêt', {
+            layerMs: Math.round(NPF_STARTUP_DIAGNOSTIC.now() - renderStartedAt),
+            routesSource: getNpfRoadSourceFeatureCount(),
+            routesRendered: getNpfRenderedRoadFeatureCount(),
+            tilesVisible: countVisibleLoadedBaseTiles(),
+            npfReadsQueued: Number(directOfflineNpfReadQueue?.length || 0),
+            npfReadsActive: Number(directOfflineNpfActiveReads || 0)
+        });
     } else {
         roadOverlayRefreshToken += 1;
         clearTimeout(roadOverlayRefreshTimer);
@@ -21294,18 +21565,26 @@ async function tryAuthorizeBriefingDocsFromBfgBridge(options = {}) {
             const payload = await response.json().catch(() => null);
             if (!response.ok || !payload || payload.ok !== true || !payload.token || !payload.expiresAt) {
                 const errorCode = String(payload?.error || '');
-                if (['bridge_unknown', 'bridge_not_paired', 'bridge_invalid_device'].includes(errorCode)) {
-                    clearNpfBfgBridgeCredentials();
-                }
+                npfBfgBridgeLastError = errorCode || `http_${response.status}`;
+                npfBfgBridgeLastStatus = 'refusé';
+                /*
+                 * v16.53 — ne pas effacer silencieusement l'association BFG.
+                 * Une panne/transitoire NAS ne doit plus forcer un nouveau
+                 * code à 8 chiffres.
+                 */
                 if (!silent && errorCode !== 'bridge_not_granted') {
                     console.warn('[BFG -> NPF] Autorisation refusée:', payload?.message || errorCode || response.status);
                 }
                 return null;
             }
             if (!storeBriefingDocsSession(payload.token, payload.expiresAt)) return null;
+            npfBfgBridgeLastError = '';
+            npfBfgBridgeLastStatus = 'session-ok';
             console.info('[BFG -> NPF] Session NPF récupérée automatiquement.');
             return getStoredBriefingDocsSession();
         } catch (error) {
+            npfBfgBridgeLastError = String(error?.message || error || 'pont_indisponible');
+            npfBfgBridgeLastStatus = 'indisponible';
             if (!silent) console.warn('[BFG -> NPF] Pont indisponible:', error);
             return null;
         } finally {
@@ -21336,6 +21615,8 @@ async function claimBfgBridgePairingCode(code) {
     if (!storeBriefingDocsSession(payload.token, payload.expiresAt)) {
         throw new Error('Association réussie mais session NPF impossible à enregistrer.');
     }
+    npfBfgBridgeLastError = '';
+    npfBfgBridgeLastStatus = 'associé';
     return getStoredBriefingDocsSession();
 }
 
@@ -21665,11 +21946,16 @@ function openBriefingDocsPasswordModal(type) {
     npfBriefingDocsPendingType = safeType;
     const label = safeType === 'gaar' ? 'GAAR' : 'FdS';
     if (title) title.textContent = `Accès ${label}`;
-    if (help) help.textContent = `Si BFG a déjà été connecté aujourd’hui, NPF tente d’abord l’autorisation automatique. Sinon utilise le mot de passe NPF ou le code BFG pour la première association.`;
+    const paired = Boolean(getStoredNpfBfgBridgeCredentials());
+    if (help) {
+        help.textContent = paired
+            ? `L’association BFG de cet iPad est conservée. Si l’autorisation automatique n’est momentanément pas disponible, utilise seulement le mot de passe NPF.`
+            : `Utilise le mot de passe NPF. Pour associer BFG à cet iPad, ferme cette fenêtre puis utilise le bouton BFG dédié.`;
+    }
     if (input) { input.value = ''; input.style.display = ''; }
     if (authorizeButton) authorizeButton.style.display = '';
-    if (separator) separator.style.display = '';
-    if (bfgCodeInput) { bfgCodeInput.value = ''; bfgCodeInput.style.display = ''; }
+    if (separator) separator.style.display = 'none';
+    if (bfgCodeInput) { bfgCodeInput.value = ''; bfgCodeInput.style.display = 'none'; }
     if (status) status.textContent = '';
     modal.style.display = 'flex';
     modal.setAttribute('aria-hidden', 'false');
@@ -22290,6 +22576,7 @@ let npfGlobalLinkRelayoutTimer = null;
 /* v15.51 — authentification GLR : mot de passe masqué et chargement captcha sérialisé. */
 let npfGlobalLinkCaptchaLoadPromise = null;
 let npfGlobalLinkPasswordAuthPromise = null;
+let npfGlobalLinkLastAuthState = 'non-testé';
 
 /*
  * v15.94 — les trafics GLR non actifs sont affichés par défaut.
@@ -22536,6 +22823,7 @@ async function loadGlobalLinkCaptcha() {
     npfGlobalLinkCaptchaLoadPromise = (async () => {
         const docsSession = await ensureGlobalLinkNpfAuthorization();
         openGlobalLinkAuthModal();
+        npfGlobalLinkLastAuthState = 'captcha-chargement';
         setGlobalLinkAuthStatus('Chargement du code de sécurité…');
         const image = document.getElementById('global-link-captcha-image');
         if (image) {
@@ -22560,6 +22848,7 @@ async function loadGlobalLinkCaptcha() {
             image.style.visibility = 'visible';
         }
 
+        npfGlobalLinkLastAuthState = 'captcha-prêt';
         setGlobalLinkAuthStatus('Saisis le code affiché puis appuie sur Connexion.');
         const input = document.getElementById('global-link-captcha-input');
         if (input) {
@@ -22585,24 +22874,39 @@ async function submitGlobalLinkCaptcha() {
     if (!npfGlobalLinkAttempt) throw new Error('Charge d’abord un code de sécurité.');
     if (!captcha) throw new Error('Saisis le code de sécurité.');
     const docsSession = await ensureGlobalLinkNpfAuthorization();
+    npfGlobalLinkLastAuthState = 'connexion-en-cours';
     setGlobalLinkAuthStatus('Connexion à Global Link…');
-    const response = await fetchGlobalLinkNas('login', {
-        method: 'POST',
-        headers: {
-            ...globalLinkAuthHeaders(docsSession),
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ attempt: npfGlobalLinkAttempt, captcha })
-    }, 20000);
+
+    let response;
+    try {
+        response = await fetchGlobalLinkNas('login', {
+            method: 'POST',
+            headers: {
+                ...globalLinkAuthHeaders(docsSession),
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ attempt: npfGlobalLinkAttempt, captcha })
+        }, 15000);
+    } catch (error) {
+        if (isGlobalLinkAbortError(error)) {
+            npfGlobalLinkLastAuthState = 'timeout-login';
+            throw new Error('Global Link ne répond pas (délai 15 s dépassé). Appuie sur Nouveau code puis réessaie.');
+        }
+        npfGlobalLinkLastAuthState = 'erreur-réseau';
+        throw error;
+    }
+
     const payload = await response.json().catch(() => null);
     if (!response.ok || !payload || payload.ok !== true || !payload.session || !payload.expiresAt) {
         if (response.status === 401 && payload?.error === 'npf_authorization_required') clearBriefingDocsSession();
+        npfGlobalLinkLastAuthState = `refusé:${String(payload?.error || response.status)}`;
         throw new Error(payload?.message || payload?.error || `Connexion Global Link refusée (${response.status})`);
     }
     if (!storeGlobalLinkSession(payload.session, payload.expiresAt)) {
         throw new Error('Session Global Link reçue mais impossible à enregistrer.');
     }
     npfGlobalLinkAttempt = '';
+    npfGlobalLinkLastAuthState = 'connecté';
     setGlobalLinkAuthStatus('Connexion Global Link établie.', 'success');
     setTimeout(closeGlobalLinkAuthModal, 250);
     return getStoredGlobalLinkSession();
@@ -23755,8 +24059,11 @@ function initializeGlobalLinkUi() {
             await submitGlobalLinkCaptcha();
             setGlobalLinkEnabled(true, { refresh: true, silent: false });
         } catch (error) {
+            /*
+             * v16.53 — ne plus bloquer le bouton pendant un rechargement
+             * automatique de captcha pouvant durer 45 s.
+             */
             setGlobalLinkAuthStatus(error.message || String(error), 'error');
-            try { await loadGlobalLinkCaptcha(); } catch (_) {}
         } finally {
             if (submitButton) { submitButton.disabled = false; submitButton.textContent = originalText; }
         }
@@ -28747,10 +29054,12 @@ function recenterMapOnKnownGpsPosition(reason = 'manual') {
         if (currentCenter && typeof map.distance === 'function') {
             npfDiagCenterShiftM = Number(map.distance(currentCenter, L.latLng(mapCenter.lat, mapCenter.lng))) || 0;
         }
+
     } catch (_) {}
     try { npfDiagGpsRecenter(reason, npfDiagCenterShiftM); } catch (_) {}
 
     centerGpsFollowProgrammaticMove = true;
+    centerGpsFollowLastProgrammaticMoveAt = Date.now();
     try {
         map.setView([mapCenter.lat, mapCenter.lng], currentZoom, {
             animate: false,
@@ -29807,8 +30116,11 @@ function updateUserPosition(pos) {
         handleNpfFirePelicAutoCycle(latitude, longitude);
     }
 
-    scheduleSiaProfileRefresh('gps');
-
+    /*
+     * v16.55 — aucune tâche SIA n'est déclenchée directement par l'échantillon
+     * GPS. Le moteur SIA ne travaille qu'à moveend si sa couverture est devenue
+     * réellement insuffisante.
+     */
     updateNearestCommuneDisplay(latitude, longitude);
     setTimeout(() => { if (typeof refreshNearestCommuneDisplayFromKnownGps === 'function') refreshNearestCommuneDisplayFromKnownGps(); }, 250);
 
@@ -33889,6 +34201,11 @@ function updateAndSortRotations(container, current, params) {
 
         if (type === 'base') {
             const plusOne = hasFuelForFirstDropBase ? 1 : 0;
+            const fuelAboveBingo = canCalculateFuel ? current.fuel - params.bingoBase : null;
+            const isPartialLastDrop = fuelImmediateDropAllowed
+                && Number.isFinite(fuelAboveBingo)
+                && fuelAboveBingo > 0
+                && fuelAboveBingo < 250;
             formulaString = [
                 `FUEL RETOUR BASE`,
                 ``,
@@ -33907,13 +34224,26 @@ function updateAndSortRotations(container, current, params) {
                     : `+1 = 0`,
                 ``,
                 `Formule finale :`,
-                `Nbr rotations = ((Fuel sur feu - BINGO Base) / Conso rotation) + ${plusOne}`,
-                `Calcul = ((${kgOrNA(current.fuel)} - ${kgOrNA(params.bingoBase)}) / ${kgOrNA(params.consoRotation)}) + ${plusOne}`
+                isPartialLastDrop
+                    ? `Dernier largage partiel = (Fuel sur feu - BINGO Base) / 250 kg`
+                    : `Nbr rotations = ((Fuel sur feu - BINGO Base) / Conso rotation) + ${plusOne}`,
+                isPartialLastDrop
+                    ? `Calcul = (${kgOrNA(current.fuel)} - ${kgOrNA(params.bingoBase)}) / 250 kg`
+                    : `Calcul = ((${kgOrNA(current.fuel)} - ${kgOrNA(params.bingoBase)}) / ${kgOrNA(params.consoRotation)}) + ${plusOne}`
             ].join('\n');
-            if (canCalculateFuel) value = ((current.fuel - params.bingoBase) / params.consoRotation) + plusOne;
+            if (canCalculateFuel) {
+                value = isPartialLastDrop
+                    ? Math.max(0, fuelAboveBingo / 250)
+                    : (fuelAboveBingo / params.consoRotation) + plusOne;
+            }
         }
         if (type === 'pelic') {
             const plusOne = hasFuelForFirstDropPelic ? 1 : 0;
+            const fuelAboveBingo = canCalculateFuel ? current.fuel - params.bingoPelic : null;
+            const isPartialLastDrop = fuelImmediateDropAllowed
+                && Number.isFinite(fuelAboveBingo)
+                && fuelAboveBingo > 0
+                && fuelAboveBingo < 250;
             formulaString = [
                 `FUEL RETOUR PÉLIC`,
                 ``,
@@ -33932,10 +34262,18 @@ function updateAndSortRotations(container, current, params) {
                     : `+1 = 0`,
                 ``,
                 `Formule finale :`,
-                `Nbr rotations = ((Fuel sur feu - BINGO Pélic) / Conso rotation) + ${plusOne}`,
-                `Calcul = ((${kgOrNA(current.fuel)} - ${kgOrNA(params.bingoPelic)}) / ${kgOrNA(params.consoRotation)}) + ${plusOne}`
+                isPartialLastDrop
+                    ? `Dernier largage partiel = (Fuel sur feu - BINGO Pélic) / 250 kg`
+                    : `Nbr rotations = ((Fuel sur feu - BINGO Pélic) / Conso rotation) + ${plusOne}`,
+                isPartialLastDrop
+                    ? `Calcul = (${kgOrNA(current.fuel)} - ${kgOrNA(params.bingoPelic)}) / 250 kg`
+                    : `Calcul = ((${kgOrNA(current.fuel)} - ${kgOrNA(params.bingoPelic)}) / ${kgOrNA(params.consoRotation)}) + ${plusOne}`
             ].join('\n');
-            if (canCalculateFuel) value = ((current.fuel - params.bingoPelic) / params.consoRotation) + plusOne;
+            if (canCalculateFuel) {
+                value = isPartialLastDrop
+                    ? Math.max(0, fuelAboveBingo / 250)
+                    : (fuelAboveBingo / params.consoRotation) + plusOne;
+            }
         }
         if (type === 'cs') {
             const firstDropTime = canCalculateTime ? current.time + FIRST_DROP_FORFAIT_MIN : null;
@@ -40215,6 +40553,7 @@ function setSiaMapVrpVisible(visible) {
 
 // v15.75 — tampon de rendu et cache de géométries pour limiter les reconstructions iPad.
 const SIA_RENDER_BOUNDS_PAD_RATIO = 0.25;
+const SIA_POINT_ONLY_RENDER_BOUNDS_PAD_RATIO = 0.80;
 let siaRenderedCoverageBounds = null;
 let siaRenderedZoom = null;
 let siaRenderedSignature = '';
@@ -40224,6 +40563,8 @@ let siaRenderedShowDesignatedPoints = null;
 let siaRenderedPointLabelsEnabled = null;
 let siaRefreshInProgress = false;
 let siaRefreshPendingReason = null;
+let siaRefreshCurrentReason = null;
+let siaRefreshScheduledReason = null;
 /*
  * Fluidité iPad : pendant un pan, Leaflet déplace le rendu existant sans
  * reconstruire le SIA. Les décorations dépendantes de l'écran sont recalculées
@@ -40519,6 +40860,38 @@ function consumeSiaStartupPassiveMoveendGuard() {
     return active;
 }
 
+function cancelObsoleteSiaMapMotionWork(reason = 'gps-contained') {
+    const mapMotionReasons = new Set([
+        'gps-follow',
+        'moveend',
+        'move-preload',
+        'moveend-refresh-contained',
+        'moveend-contained'
+    ]);
+
+    clearTimeout(siaMoveDecorationRefreshTimer);
+    siaMoveDecorationRefreshTimer = null;
+    siaDecorationProgressiveRun += 1;
+
+    if (mapMotionReasons.has(String(siaRefreshScheduledReason || '')) && siaRefreshTimer) {
+        clearTimeout(siaRefreshTimer);
+        siaRefreshTimer = null;
+        siaRefreshScheduledReason = null;
+    }
+    if (mapMotionReasons.has(String(siaRefreshPendingReason || ''))) {
+        siaRefreshPendingReason = null;
+    }
+    if (mapMotionReasons.has(String(siaRefreshCurrentReason || ''))) {
+        window.__npfSiaRefreshGeneration = (Number(window.__npfSiaRefreshGeneration) || 0) + 1;
+    }
+
+    npfDiagSiaInteraction(
+        'SIA GPS',
+        `raison=${reason} · aucun traitement SIA`,
+        { totalMs: 0 }
+    );
+}
+
 function scheduleSiaMovePreloadRefresh() {
     if (!map || !hasAnyEnabledSiaFilter() || !siaRenderedCoverageBounds) return;
 
@@ -40558,25 +40931,33 @@ function scheduleSiaCoverageRefresh(reason = 'moveend') {
     const currentBounds = map.getBounds();
     const currentZoom = map.getZoom();
     const signature = getSiaRenderSignature();
-    if (
+    const contained = !!(
         siaRenderedCoverageBounds
         && siaRenderedZoom === currentZoom
         && siaRenderedSignature === signature
         && siaBoundsFullyContains(siaRenderedCoverageBounds, currentBounds)
-    ) {
-        /*
-         * v16.51 — en suivi GPS, conserver intégralement le rendu tant que le
-         * viewport reste dans le tampon. Les décorations ne sont plus supprimées
-         * puis recréées à chaque position : disparition du clignotement SIA.
-         */
-        if (reason === 'gps-follow') {
-            scheduleSiaProfileRefresh('sia-gps-follow-contained');
-            return;
-        }
+    );
+
+    /*
+     * v16.55 — suivi GPS dans une couverture déjà valide = ZÉRO travail SIA.
+     * Pas de profil, pas de décorations, pas de scan points/zones. Les calques
+     * existants suivent nativement le déplacement Leaflet.
+     */
+    if (reason === 'gps-follow' && contained) {
+        cancelObsoleteSiaMapMotionWork('gps-follow-contained');
+        return;
+    }
+
+    if (contained) {
         scheduleSiaMoveDecorationRefresh('moveend-contained');
         scheduleSiaProfileRefresh('sia-moveend-contained');
         return;
     }
+
+    /*
+     * GPS hors couverture : recalcul uniquement parce que la couverture est
+     * réellement devenue insuffisante. Aucun throttle artificiel de 12 s.
+     */
     scheduleSiaLayerRefresh(reason);
 }
 
@@ -40617,6 +40998,15 @@ function setSiaMapAirspacesVisible(visible) {
     siaMapAirspacesVisible = next;
     updateSiaProfileMapZonesToggleButton();
     // Les cases du filtre principal et celles du profil ne sont jamais modifiées ici.
+    if (!next) {
+        clearTimeout(siaMoveDecorationRefreshTimer);
+        siaMoveDecorationRefreshTimer = null;
+        siaDecorationProgressiveRun += 1;
+        window.__npfSiaRefreshGeneration = (Number(window.__npfSiaRefreshGeneration) || 0) + 1;
+        if (['gps-follow', 'moveend', 'move-preload'].includes(String(siaRefreshPendingReason || ''))) {
+            siaRefreshPendingReason = null;
+        }
+    }
     scheduleSiaLayerRefresh(next ? 'profile-show-map-zones' : 'profile-hide-map-zones');
 }
 
@@ -41798,11 +42188,45 @@ function getVisibleBaseTileLoadStateForSia() {
 function shouldSiaWaitForBaseMap(reason) {
     return reason === 'moveend'
         || reason === 'zoomend'
-        || reason === 'startup-prefs';
+        || reason === 'startup-prefs'
+        || reason === 'profile-show-map-zones'
+        || reason === 'filters-all'
+        || reason === 'filter-change'
+        || reason === 'altitude-filter-change'
+        || reason === 'filter-open'
+        || reason === 'management-check';
 }
 
 async function waitForBaseMapBeforeSiaRefresh(reason, refreshGeneration) {
     if (!shouldSiaWaitForBaseMap(reason) || !map || !baseTileLayer) return;
+
+    const isFilterActivation = reason === 'profile-show-map-zones'
+        || reason === 'filters-all'
+        || reason === 'filter-change'
+        || reason === 'altitude-filter-change'
+        || reason === 'filter-open'
+        || reason === 'management-check';
+
+    if (isFilterActivation) {
+        const ready = await waitForNpfLayerActivationTileWindow(`SIA:${reason}`, {
+            maxWaitMs: 12000,
+            isCancelled: () => {
+                try {
+                    throwIfSiaRefreshObsolete(refreshGeneration);
+                    return false;
+                } catch (_) {
+                    return true;
+                }
+            }
+        });
+        throwIfSiaRefreshObsolete(refreshGeneration);
+        if (!ready) {
+            const error = new Error('Priorité tuiles SIA');
+            error.name = SIA_REFRESH_ABORT_ERROR_NAME;
+            throw error;
+        }
+        return;
+    }
 
     const directNpfOffline = !!(
         offlineTilesMode
@@ -41811,23 +42235,25 @@ async function waitForBaseMapBeforeSiaRefresh(reason, refreshGeneration) {
     );
     const maxWaitMs = directNpfOffline ? 6500 : 1000;
     const pollMs = directNpfOffline ? 90 : 70;
-    const startedAt = (typeof performance !== 'undefined' && performance.now)
-        ? performance.now()
-        : Date.now();
+    const startedAt = NPF_STARTUP_DIAGNOSTIC.now();
     let stablePasses = 0;
 
     while (true) {
         throwIfSiaRefreshObsolete(refreshGeneration);
 
         const state = getVisibleBaseTileLoadStateForSia();
+        const readsIdle = !directNpfOffline || (
+            Number(directOfflineNpfActiveReads || 0) === 0
+            && Number(directOfflineNpfReadQueue?.length || 0) === 0
+        );
         const allVisibleTilesReady = state.total > 0
             && state.loaded >= state.total
-            && state.tileZoomReady;
+            && state.tileZoomReady
+            && readsIdle;
 
         if (allVisibleTilesReady) {
             stablePasses += 1;
             if (stablePasses >= 2) {
-                // Dernière respiration : laisser Safari peindre les tuiles avant le Canvas/SVG SIA.
                 await yieldSiaRefreshToMap(refreshGeneration);
                 return;
             }
@@ -41835,11 +42261,7 @@ async function waitForBaseMapBeforeSiaRefresh(reason, refreshGeneration) {
             stablePasses = 0;
         }
 
-        const now = (typeof performance !== 'undefined' && performance.now)
-            ? performance.now()
-            : Date.now();
-        if (now - startedAt >= maxWaitMs) {
-            // Filet de sécurité : une tuile absente ne doit jamais bloquer le SIA indéfiniment.
+        if (NPF_STARTUP_DIAGNOSTIC.now() - startedAt >= maxWaitMs) {
             await yieldSiaRefreshToMap(refreshGeneration);
             return;
         }
@@ -41850,6 +42272,7 @@ async function waitForBaseMapBeforeSiaRefresh(reason, refreshGeneration) {
 
 function scheduleSiaLayerRefresh(reason = 'unspecified') {
     clearTimeout(siaRefreshTimer);
+    siaRefreshScheduledReason = String(reason || 'unspecified');
 
     /*
      * v15.83 — après un geste carte, le SIA ne repart plus sur un chronomètre
@@ -41860,6 +42283,7 @@ function scheduleSiaLayerRefresh(reason = 'unspecified') {
 
     siaRefreshTimer = setTimeout(async () => {
         siaRefreshTimer = null;
+        siaRefreshScheduledReason = null;
         try {
             await waitForBaseMapBeforeSiaRefresh(reason, scheduledGeneration);
             throwIfSiaRefreshObsolete(scheduledGeneration);
@@ -43108,12 +43532,6 @@ function initializeSiaSystem() {
             if (!gpsFollowPan) {
                 clearTimeout(siaMoveDecorationRefreshTimer);
                 siaMoveDecorationRefreshTimer = null;
-                /*
-                 * Un geste utilisateur / zoom invalide la construction en cours.
-                 * En revanche, un recentrage GPS garde le calque et sa construction
-                 * progressive : sinon le suivi à 1 Hz peut interrompre le rendu sans
-                 * jamais lui laisser le temps de terminer.
-                 */
                 siaDecorationProgressiveRun += 1;
             }
             const now = NPF_STARTUP_DIAGNOSTIC.now();
@@ -43129,10 +43547,6 @@ function initializeSiaSystem() {
             };
         });
         map.on('move', () => {
-            /*
-             * Ne lancer aucun scan/rendu SIA pendant le geste. Les calques déjà
-             * présents suivent la carte avec Leaflet ; le refresh intervient à moveend.
-             */
             if (!npfDiagMoveSample) return;
             const now = NPF_STARTUP_DIAGNOSTIC.now();
             const gap = Math.max(0, now - npfDiagMoveSample.lastAt);
@@ -43147,22 +43561,15 @@ function initializeSiaSystem() {
             if (sample) {
                 const now = NPF_STARTUP_DIAGNOSTIC.now();
                 const avgGap = sample.events > 0 ? sample.gapTotal / sample.events : 0;
-                npfDiagMapMotion(
-                    sample.source || (isNpfGpsFollowProgrammaticPan() ? 'gps-follow' : 'autre'),
-                    {
-                        dureeMs: Math.round(now - sample.startedAt),
-                        moveEvents: sample.events,
-                        gapMoyMs: Math.round(avgGap),
-                        gapMaxMs: Math.round(sample.maxGap),
-                        zoom: map.getZoom(),
-                        zonesVisibles: Array.isArray(siaRenderedAirspaceFeatures) ? siaRenderedAirspaceFeatures.length : 0
-                    }
-                );
+                npfDiagMapMotion(sample.source || 'autre', {
+                    dureeMs: Math.round(now - sample.startedAt),
+                    moveEvents: sample.events,
+                    gapMoyMs: Math.round(avgGap),
+                    gapMaxMs: Math.round(sample.maxGap),
+                    zoom: map.getZoom(),
+                    zonesVisibles: Array.isArray(siaRenderedAirspaceFeatures) ? siaRenderedAirspaceFeatures.length : 0
+                });
             } else if (consumeSiaStartupPassiveMoveendGuard()) {
-                /*
-                 * v16.34 — moveend passif immédiatement après startup-prefs :
-                 * le rendu est déjà à jour, donc ne pas reconstruire les décorations.
-                 */
                 npfDiagSiaInteraction(
                     'SIA RAFRAÎCHISSEMENT',
                     `raison=moveend-passif-post-startup · ignoré · zoom=${map.getZoom()} · zones=${Array.isArray(siaRenderedAirspaceFeatures) ? siaRenderedAirspaceFeatures.length : 0}`,
@@ -43170,7 +43577,8 @@ function initializeSiaSystem() {
                 );
                 return;
             }
-            scheduleSiaCoverageRefresh(sample?.source === 'gps-follow' ? 'gps-follow' : 'moveend');
+            const gpsFollowMoveend = sample?.source === 'gps-follow' || isNpfGpsFollowProgrammaticPan();
+            scheduleSiaCoverageRefresh(gpsFollowMoveend ? 'gps-follow' : 'moveend');
         });
         map.on('zoomstart', () => {
             npfDiagZoomStartedAt = NPF_STARTUP_DIAGNOSTIC.now();
@@ -45901,6 +46309,7 @@ async function refreshSiaLayers(reason = 'manual') {
     }
 
     siaRefreshInProgress = true;
+    siaRefreshCurrentReason = String(reason || 'manual');
     try {
         if (!hasAnyEnabledSiaFilter()) {
             clearSiaRenderedLayers();
@@ -45910,6 +46319,17 @@ async function refreshSiaLayers(reason = 'manual') {
         const currentBounds = map.getBounds();
         const zoom = map.getZoom();
         const signature = getSiaRenderSignature();
+
+        if (
+            reason === 'gps-follow'
+            && siaRenderedCoverageBounds
+            && siaRenderedZoom === zoom
+            && siaRenderedSignature === signature
+            && siaBoundsFullyContains(siaRenderedCoverageBounds, currentBounds)
+        ) {
+            cancelObsoleteSiaMapMotionWork('gps-follow-contained-execution');
+            return;
+        }
         const showSiaDesignatedPointsNow = shouldDisplaySiaDesignatedPoints();
         const pointLabelsEnabledNow = zoom >= 8;
 
@@ -46017,7 +46437,10 @@ async function refreshSiaLayers(reason = 'manual') {
 
         // Charger légèrement au-delà du viewport évite les reconstructions à
         // chaque mouvement du suivi GPS tout en bornant la mémoire Safari/iPad.
-        const renderBounds = currentBounds.pad(SIA_RENDER_BOUNDS_PAD_RATIO);
+        const renderPadRatio = siaMapAirspacesVisible
+            ? SIA_RENDER_BOUNDS_PAD_RATIO
+            : SIA_POINT_ONLY_RENDER_BOUNDS_PAD_RATIO;
+        const renderBounds = currentBounds.pad(renderPadRatio);
         const pointBounds = renderBounds.pad(0.03);
         let rendered = 0;
 
@@ -46274,6 +46697,7 @@ async function refreshSiaLayers(reason = 'manual') {
         throw error;
     } finally {
         siaRefreshInProgress = false;
+        siaRefreshCurrentReason = null;
         const pending = siaRefreshPendingReason;
         siaRefreshPendingReason = null;
         if (pending) scheduleSiaLayerRefresh(pending);
