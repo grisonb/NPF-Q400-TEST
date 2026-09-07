@@ -1,3 +1,73 @@
+VERSION TEST v16.57 — STABILITÉ ZOOM OUT + LIBELLÉS TERRAINS OACI/FRÉQUENCES
+Date : 07/09/2026
+Base : TEST v16.56
+
+OBJECTIF
+- Corriger les plantages/rechargements de la PWA observés en zoom out, principalement avec Zones SIA + Routes + Lignes HT simultanément.
+- Empêcher tout rendu SIA devenu obsolète de poursuivre son travail lorsqu'un nouveau zoom commence.
+- Réduire le pic mémoire transitoire SIA pendant les changements de zoom avec les couches lourdes combinées.
+- Éviter le double rafraîchissement SIA de démarrage moveend + startup-prefs constaté dans le DIAG v16.56.
+- Compléter les libellés terrain par le code OACI et fiabiliser les fréquences opérationnelles demandées pour LFBD et LFCS.
+
+1. ZOOM OUT — ANNULATION FORTE DU TRAVAIL SIA DE L'ANCIEN ZOOM
+- zoomstart invalide désormais sans condition la génération SIA en cours : rendu principal, décorations progressives, temporisation de rafraîchissement et demande en attente calculés pour l'ancienne vue.
+- Un travail lancé par zoomend, moveend, startup-prefs ou tout autre motif ne peut donc plus terminer et être commité après le début d'un nouveau zoom.
+- Le moteur de tuiles NPF n'est pas modifié : les lectures IndexedDB déjà lancées continuent normalement et la purge ciblée v16.55/v16.56 est conservée.
+
+2. ZONES + ROUTES + HT — SUPPRESSION DU DOUBLE BUFFER SIA
+- Lorsque Zones SIA + Routes + HT sont simultanément actifs, l'ancien groupe SIA est retiré et libéré avant la reconstruction du nouveau groupe, quel que soit le niveau de zoom.
+- Sa couverture mémorisée est invalidée au même moment : si le nouveau rendu est interrompu par un autre zoom, NPF ne peut pas considérer par erreur l’ancien groupe déjà libéré comme encore exploitable.
+- La v16.56 ne supprimait ce double-buffer qu'à zoom <= 10 ; le DIAG a montré qu'un zoom 13 puis un zoom out pouvait conserver simultanément plusieurs milliers de segments Routes, HT et l'ancien jeu SIA.
+- Le tampon hors écran SIA réduit est maintenant utilisé pour toute reconstruction sous charge combinée Zones + Routes + HT, et non uniquement à zoom <= 10.
+- La priorité est donnée à la stabilité mémoire iPad ; un très bref renouvellement des zones pendant la reconstruction est accepté plutôt qu'un pic mémoire susceptible de faire relancer la PWA.
+
+3. DÉCORATIONS SIA — MODE ALLÉGÉ PLUS TÔT SOUS CHARGE COMBINÉE
+- Le mode SIA allégé historique reste actif à partir de l'échelle 10 NM dans tous les cas.
+- Lorsque Zones + Routes + HT sont simultanément actifs, les bandes intérieures et libellés SIA sont omis dès l'échelle 5 NM.
+- Les contours principaux des zones et la sélection opérationnelle restent présents ; seules les décorations coûteuses dépendantes des pixels écran sont retirées aux échelles concernées.
+- Le DIAG indique explicitement lorsque l'allègement est dû à la charge combinée.
+
+4. DÉMARRAGE SIA — UN SEUL RAFRAÎCHISSEMENT INITIAL
+- Tant que le rafraîchissement initial startup-prefs est programmé et qu'aucune couverture SIA valide n'existe encore, un moveend passif de démarrage ne lance plus une reconstruction concurrente.
+- Le rafraîchissement startup-prefs utilise alors directement la vue courante.
+- Cela supprime le couple de traitements successifs moveend + startup-prefs observé en v16.56 autour de 1 seconde chacun.
+
+5. TERRAINS — NOM + CODE OACI + FRÉQUENCE
+- À partir de l'échelle 1 NM, le format devient : « Nom du terrain (OACI) — service fréquence ».
+- Exemple : « Bordeaux-Mérignac (LFBD) — TWR 118.305 ».
+- Exemple : « Bordeaux-Léognan-Saucats (LFCS) — A/A 119.005 ».
+- Si aucune fréquence opérationnelle exploitable n'est disponible, le nom et le code OACI restent affichés.
+- Priorité conservée : TWR, AFIS, A/A, INFO.
+
+6. FRÉQUENCES LFBD / LFCS — VALEURS VÉRIFIÉES PRIORITAIRES
+- LFBD : TWR 118.305 MHz.
+- LFCS : A/A 119.005 MHz.
+- Ces deux valeurs vérifiées sont placées dans une table de surcharge explicite et prioritaire afin qu'elles ne dépendent pas de la présence d'un service dans le dataset des espaces SIA.
+- Pour les autres terrains, la recherche automatique existante dans les services SIA est conservée ; aucune fréquence absente de la source n'est inventée.
+
+7. NON-RÉGRESSION
+- Règle carburant v16.56 conservée dans tous les calculs concernés : résultat exprimé en nombre de largages ; cycles intermédiaires sur conso rotation complète ; fraction terminale sur 250 kg.
+- Fermeture de la fiche terrain lors de l'ouverture VAC conservée.
+- Recherche Lapradelle (11) conservée dans le moteur principal.
+- Verrouillage overscroll du calculateur conservé.
+- DIAG tuiles séparant demandes en file abandonnées et lectures réellement devenues obsolètes conservé.
+- GPS dans couverture SIA valide = zéro travail SIA conservé.
+- Aucun bouton MAJ réintroduit.
+- Aucune suppression des cartes Offline ni des bases IndexedDB.
+- sia.js strictement inchangé bit pour bit.
+
+8. CONTRÔLES À LA LIVRAISON
+- node --check Script et Service Worker.
+- Scripts inline de l'Index contrôlés.
+- manifest.json parsé.
+- Cohérence v16.57 Index / Manifest / Script / Style / SW.
+- Vérification LFBD -> TWR 118.305 et LFCS -> A/A 119.005.
+- Vérification du format de libellé Nom (OACI).
+- Vérification annulation forte SIA à zoomstart, suppression du double-buffer sous charge combinée et garde du rafraîchissement initial.
+- Vérification de l'absence de bouton MAJ.
+- sia.js comparé bit-à-bit avec v16.56.
+
+
 VERSION TEST v16.56 — LARGAGES CARBURANT GÉNÉRALISÉS + STABILITÉ ZONES/CALQUES + CORRECTIONS UI/VAC/RECHERCHE
 Date : 07/09/2026
 Base : TEST v16.55
