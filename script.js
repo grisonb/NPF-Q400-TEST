@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v16.61';
+const NPF_SCRIPT_BUILD_VERSION = 'v16.62';
 
 
 /*
@@ -2207,12 +2207,19 @@ const ROAD_OVERLAY_MANIFEST_KEY = 'npfRoadOverlayManifestV1';
 const ROAD_OVERLAY_RESOURCE_PREFIX = './__npf_road_overlay__/';
 let showRoadOverlayLayer = localStorage.getItem(ROAD_OVERLAY_LAYER_KEY) === 'true';
 let isRoadOverlayLoading = false;
-/* v16.60 — zoom out iPad : masquer pendant le geste puis libérer/reconstruire
- * Routes → HT → SIA par tranches annulables, sans gros clearLayers synchrone. */
+/* v16.62 — zoom out iPad : une seule transaction lourde après stabilisation
+ * réelle du pinch. Routes/HT sont masqués pendant le geste, puis reconstruits
+ * une seule fois sur la vue finale avant l'unique rendu SIA. */
 let npfHeavyOverlayZoomStartLevel = null;
 let npfHeavyOverlayZoomSerialToken = 0;
 let npfHeavyOverlayZoomOutPromise = null;
+let npfHeavyOverlayZoomSettleTimer = null;
+let npfHeavyOverlayPendingStartZoom = null;
+let npfHeavyOverlayPendingFinalZoom = null;
+let npfHeavyOverlayPendingResolve = null;
 let npfHeavyOverlayPanesHidden = false;
+const NPF_HEAVY_OVERLAY_ZOOM_SETTLE_MS = 360;
+const ROAD_OVERLAY_SOURCE_FEATURE_SOFT_LIMIT = 12000;
 
 const TRAFFIC_LAYER_KEY = 'showTrafficLayer';
 // v15.98 — état du masque secondaire SafeSky (compteur vert) restauré au redémarrage.
@@ -7035,8 +7042,16 @@ function initMap() {
          * Quand Routes + HT sont actifs, masquer les panes immédiatement :
          * WebKit ne redimensionne/repeint plus les anciens Canvas pendant le pinch. */
         npfHeavyOverlayZoomSerialToken += 1;
+        if (npfHeavyOverlayZoomSettleTimer) {
+            clearTimeout(npfHeavyOverlayZoomSettleTimer);
+            npfHeavyOverlayZoomSettleTimer = null;
+        }
         if (showRoadOverlayLayer && showHighVoltageLinesLayer) {
             setNpfHeavyOverlayPanesHidden(true);
+            /* v16.62 — ne pas conserver des dizaines de milliers de tronçons
+             * bruts Routes pendant le pinch avec HT actif. Le rendu filtré déjà
+             * visible reste intact ; seul le cache source rechargeable est libéré. */
+            releaseRoadOverlaySourceCacheIfHeavy('zoomstart-ht-routes');
         }
         if (directOfflineNpfZoomSettleTimer) {
             clearTimeout(directOfflineNpfZoomSettleTimer);
@@ -7287,15 +7302,19 @@ function initMap() {
         );
 
         if (combinedZoomOut) {
-            /* v16.60 — le zoom out HT + Routes est traité comme une transaction
-             * annulable : panes déjà masqués au zoomstart, Routes libérées par
-             * tranches, puis HT, puis seulement SIA via son handler zoomend. */
+            /* v16.62 — ne plus exécuter une transaction à chaque zoomend
+             * intermédiaire du pinch. Le même Promise est conservé et le timer
+             * 360 ms est repoussé jusqu'au dernier niveau réellement atteint. */
             scheduleSerializedHeavyOverlayZoomOut(startZoom, finalZoom);
-            npfHeavyOverlayZoomStartLevel = null;
             return;
         }
 
         if (zoomEnded) {
+            /* Si le geste a finalement été inversé/annulé avant le seuil de
+             * zoom-out, invalider la transaction différée et rendre les panes. */
+            if (npfHeavyOverlayZoomOutPromise) {
+                cancelPendingSerializedHeavyOverlayZoomOut('zoomend-non-combine');
+            }
             npfHeavyOverlayZoomStartLevel = null;
             /* Pas de séquence zoom-out lourde : rendre les panes visibles après
              * stabilisation. Un éventuel refresh normal s'exécute ensuite. */
@@ -11569,6 +11588,7 @@ async function runSerializedHeavyOverlayZoomOut(startZoom, finalZoom) {
         } else {
             await refreshRoadOverlayVisibleParts('zoom-out-serial-routes');
             if (token !== npfHeavyOverlayZoomSerialToken) return;
+            releaseRoadOverlaySourceCacheIfHeavy('zoom-out-serial-apres-routes');
         }
     }
 
@@ -11605,14 +11625,78 @@ async function runSerializedHeavyOverlayZoomOut(startZoom, finalZoom) {
     recordNpfStartupDiagnosticOverlaySnapshot(`zoom-out série · terminé z${startZoom}->${finalZoom}`);
 }
 
+function cancelPendingSerializedHeavyOverlayZoomOut(reason = 'annulé') {
+    if (npfHeavyOverlayZoomSettleTimer) {
+        clearTimeout(npfHeavyOverlayZoomSettleTimer);
+        npfHeavyOverlayZoomSettleTimer = null;
+    }
+    const pendingPromise = npfHeavyOverlayZoomOutPromise;
+    const resolvePending = npfHeavyOverlayPendingResolve;
+    npfHeavyOverlayPendingStartZoom = null;
+    npfHeavyOverlayPendingFinalZoom = null;
+    npfHeavyOverlayPendingResolve = null;
+    npfHeavyOverlayZoomOutPromise = null;
+    npfHeavyOverlayZoomSerialToken += 1;
+    try { setNpfHeavyOverlayPanesHidden(false); } catch (_) {}
+    if (typeof resolvePending === 'function') resolvePending();
+    try {
+        if (typeof siaHeavyZoomObservedPromise !== 'undefined' && siaHeavyZoomObservedPromise === pendingPromise) {
+            siaHeavyZoomObservedPromise = null;
+            siaHeavyZoomFinalRefreshPending = false;
+        }
+    } catch (_) {}
+    if (reason) recordNpfStartupDiagnosticOverlaySnapshot(`zoom-out différé · ${reason}`);
+}
+
 function scheduleSerializedHeavyOverlayZoomOut(startZoom, finalZoom) {
-    const currentPromise = runSerializedHeavyOverlayZoomOut(startZoom, finalZoom)
-        .catch(error => console.warn('Zoom out Routes/HT sérialisé impossible:', error));
-    npfHeavyOverlayZoomOutPromise = currentPromise;
-    currentPromise.finally(() => {
-        if (npfHeavyOverlayZoomOutPromise === currentPromise) npfHeavyOverlayZoomOutPromise = null;
-    });
-    return currentPromise;
+    if (!Number.isFinite(npfHeavyOverlayPendingStartZoom)) {
+        npfHeavyOverlayPendingStartZoom = Number(startZoom);
+    }
+    npfHeavyOverlayPendingFinalZoom = Number(finalZoom);
+
+    if (!npfHeavyOverlayZoomOutPromise) {
+        npfHeavyOverlayZoomOutPromise = new Promise(resolve => {
+            npfHeavyOverlayPendingResolve = resolve;
+        });
+    }
+    const pendingPromise = npfHeavyOverlayZoomOutPromise;
+
+    if (npfHeavyOverlayZoomSettleTimer) clearTimeout(npfHeavyOverlayZoomSettleTimer);
+    npfHeavyOverlayZoomSettleTimer = setTimeout(async () => {
+        npfHeavyOverlayZoomSettleTimer = null;
+        const settledStart = Number(npfHeavyOverlayPendingStartZoom);
+        const settledFinal = Number(map?.getZoom?.());
+        const resolvePending = npfHeavyOverlayPendingResolve;
+        npfHeavyOverlayPendingStartZoom = null;
+        npfHeavyOverlayPendingFinalZoom = null;
+        npfHeavyOverlayPendingResolve = null;
+        npfHeavyOverlayZoomStartLevel = null;
+
+        try {
+            if (
+                Number.isFinite(settledStart)
+                && Number.isFinite(settledFinal)
+                && settledFinal < settledStart - 0.01
+                && showRoadOverlayLayer
+                && showHighVoltageLinesLayer
+                && hasLoadedHighVoltageLines
+            ) {
+                await runSerializedHeavyOverlayZoomOut(settledStart, settledFinal);
+            } else {
+                setNpfHeavyOverlayPanesHidden(false);
+            }
+        } catch (error) {
+            console.warn('Zoom out Routes/HT sérialisé impossible:', error);
+            setNpfHeavyOverlayPanesHidden(false);
+        } finally {
+            if (npfHeavyOverlayZoomOutPromise === pendingPromise) {
+                npfHeavyOverlayZoomOutPromise = null;
+            }
+            if (typeof resolvePending === 'function') resolvePending();
+        }
+    }, NPF_HEAVY_OVERLAY_ZOOM_SETTLE_MS);
+
+    return pendingPromise;
 }
 
 function scheduleHighVoltageLinesRefresh(source = 'scheduled') {
@@ -12975,6 +13059,17 @@ function clearRoadOverlaySourceParts() {
     roadOverlaySourceParts.clear();
 }
 
+function releaseRoadOverlaySourceCacheIfHeavy(reason = '', force = false) {
+    const before = getNpfRoadSourceFeatureCount();
+    if (before <= 0) return false;
+    if (!force && before <= ROAD_OVERLAY_SOURCE_FEATURE_SOFT_LIMIT) return false;
+    clearRoadOverlaySourceParts();
+    recordNpfStartupDiagnosticOverlaySnapshot(
+        `routes cache source libéré · ${reason || 'mémoire'} · avant=${before}`
+    );
+    return true;
+}
+
 function pruneRoadOverlaySourceParts(visibleKeys) {
     if (!(visibleKeys instanceof Set)) return;
     [...roadOverlaySourceParts.keys()].forEach(key => {
@@ -13403,6 +13498,14 @@ async function refreshRoadOverlayVisibleParts(source = 'refresh') {
             roadOverlayLastVisiblePartSignature = visibleSignature;
             roadOverlayRenderedPartSignature = visibleSignature;
             roadOverlayRenderedBounds = cloneRoadOverlayBounds(renderBounds);
+
+            /* v16.62 — avec HT actif le cache brut Routes n'est qu'un cache de
+             * confort. Au-delà de 12 000 tronçons, le libérer après le rendu
+             * filtré évite un pic mémoire WebKit ; les parties restent
+             * rechargeables depuis Cache Storage au prochain viewport. */
+            if (showHighVoltageLinesLayer) {
+                releaseRoadOverlaySourceCacheIfHeavy('apres-rendu-routes-ht');
+            }
         }
 
         if (
@@ -23128,29 +23231,55 @@ function shouldRetryGlobalLinkFromEnabledButton() {
         && (isGlobalLinkTemporaryNetworkError(lastError) || /positions-.*(?:fail|erreur)/.test(state));
 }
 
-async function probeGlobalLinkNasSimple(timeoutMs = 6500) {
-    /* Travail après v16.60 — requête CORS simple, sans Authorization ni
-     * X-Global-Link-Session. Une réponse HTTP (401 attendu sans autorisation)
-     * prouve que Safari atteint bien le PHP ; un nouveau Load failed situe le
-     * défaut avant PHP (DNS/TLS/réseau). */
+async function probeGlobalLinkEndpoint(url, mode = 'cors', timeoutMs = 6500) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-        const separator = NPF_GLOBAL_LINK_API_URL.includes('?') ? '&' : '?';
-        const url = `${NPF_GLOBAL_LINK_API_URL}${separator}action=positions&npf_probe=1&t=${Date.now()}`;
         const response = await fetch(url, {
             method: 'GET',
             cache: 'no-store',
-            mode: 'cors',
+            mode,
             credentials: 'omit',
             signal: controller.signal
         });
-        return { reached: true, status: Number(response?.status || 0), error: '' };
+        return {
+            reached: true,
+            status: Number(response?.status || 0),
+            opaque: response?.type === 'opaque',
+            error: ''
+        };
     } catch (error) {
-        return { reached: false, status: 0, error: String(error?.message || error || '') };
+        return { reached: false, status: 0, opaque: false, error: String(error?.message || error || '') };
     } finally {
         clearTimeout(timer);
     }
+}
+
+async function diagnoseGlobalLinkLoadFailure(timeoutMs = 6500) {
+    /* v16.62 — un fetch CORS qui échoue ne permet pas de distinguer CORS de
+     * DNS/TLS. On teste donc le même PHP GLR en no-cors, puis le PHP FDS/GAAR
+     * du même NAS. Aucun en-tête d'authentification ni token n'est envoyé. */
+    const glrSeparator = NPF_GLOBAL_LINK_API_URL.includes('?') ? '&' : '?';
+    const glrUrl = `${NPF_GLOBAL_LINK_API_URL}${glrSeparator}action=positions&npf_probe=1&t=${Date.now()}`;
+    const docsSeparator = NPF_BRIEFING_DOCS_API_URL.includes('?') ? '&' : '?';
+    const docsUrl = `${NPF_BRIEFING_DOCS_API_URL}${docsSeparator}action=status&npf_probe=1&t=${Date.now()}`;
+
+    const corsProbe = await probeGlobalLinkEndpoint(glrUrl, 'cors', timeoutMs);
+    if (corsProbe.reached) {
+        return { state: 'positions-auth-ou-entetes-fail', glrCors: corsProbe, glrNoCors: null, docsNoCors: null };
+    }
+
+    const glrNoCors = await probeGlobalLinkEndpoint(glrUrl, 'no-cors', timeoutMs);
+    if (glrNoCors.reached) {
+        return { state: 'positions-cors-fail', glrCors: corsProbe, glrNoCors, docsNoCors: null };
+    }
+
+    const docsNoCors = await probeGlobalLinkEndpoint(docsUrl, 'no-cors', timeoutMs);
+    if (docsNoCors.reached) {
+        return { state: 'positions-endpoint-glr-fail', glrCors: corsProbe, glrNoCors, docsNoCors };
+    }
+
+    return { state: 'positions-nas-reseau-fail', glrCors: corsProbe, glrNoCors, docsNoCors };
 }
 
 function setGlobalLinkPasswordStatus(message = '', type = '') {
@@ -24360,13 +24489,16 @@ async function refreshGlobalLinkPositions(options = {}) {
     } catch (error) {
         let userMessage = String(error?.message || error || 'Erreur Global Link');
         if (isGlobalLinkTemporaryNetworkError(error)) {
-            const probe = await probeGlobalLinkNasSimple();
-            if (probe.reached) {
-                npfGlobalLinkLastAuthState = 'positions-preflight-ou-entetes-fail';
-                userMessage = `Load failed — NAS joignable (HTTP ${probe.status || 'réponse'}), requête authentifiée GLR bloquée avant réponse.`;
+            const diagnostic = await diagnoseGlobalLinkLoadFailure();
+            npfGlobalLinkLastAuthState = diagnostic.state;
+            if (diagnostic.state === 'positions-cors-fail') {
+                userMessage = 'Load failed — relais GLR joignable sans CORS : blocage CORS probable sur npf-global-link-api.php.';
+            } else if (diagnostic.state === 'positions-endpoint-glr-fail') {
+                userMessage = 'Load failed — NAS joignable via FDS/GAAR, mais endpoint npf-global-link-api.php inaccessible.';
+            } else if (diagnostic.state === 'positions-nas-reseau-fail') {
+                userMessage = 'Load failed — NAS non joignable depuis Safari, y compris via le relais FDS/GAAR.';
             } else {
-                npfGlobalLinkLastAuthState = 'positions-nas-injoignable';
-                userMessage = `Load failed — relais NAS GLR injoignable depuis Safari${probe.error ? ` (${probe.error})` : ''}.`;
+                userMessage = `Load failed — relais GLR joignable en CORS (HTTP ${diagnostic.glrCors?.status || 'réponse'}), requête authentifiée/en-têtes à contrôler.`;
             }
         }
         rememberGlobalLinkRequestState(
@@ -41539,9 +41671,10 @@ const SIA_STARTUP_PASSIVE_MOVEEND_GUARD_MS = 2500;
 let siaStartupInitialRefreshPending = false;
 /* v16.58 — empêche moveend de lancer un rendu intermédiaire pendant un zoom. */
 let siaZoomGestureActive = false;
-/* Travail après v16.60 — lorsqu'un zoom out HT+Routes est en cours, le moveend
- * associé ne doit pas déclencher un second rendu SIA avant le rendu final. */
+/* v16.62 — lorsqu'un zoom out HT+Routes est en cours, le moveend associé ne
+ * doit pas déclencher un rendu SIA avant la vue finale stabilisée. */
 let siaHeavyZoomFinalRefreshPending = false;
+let siaHeavyZoomObservedPromise = null;
 /* Ancien préchargement conservé pour compatibilité mais non déclenché pendant le pan. */
 let siaMovePreloadLastTriggerAt = 0;
 const SIA_MOVE_PRELOAD_MIN_INTERVAL_MS = 400;
@@ -44599,7 +44732,10 @@ function initializeSiaSystem() {
         map.on('zoomstart', () => {
             npfDiagZoomStartedAt = NPF_STARTUP_DIAGNOSTIC.now();
             siaZoomGestureActive = true;
-            siaHeavyZoomFinalRefreshPending = false;
+            /* v16.62 — une transaction Routes/HT différée peut couvrir plusieurs
+             * zoomend intermédiaires. Garder le verrou SIA tant que son Promise
+             * commun n'est pas résolu. */
+            siaHeavyZoomFinalRefreshPending = Boolean(npfHeavyOverlayZoomOutPromise);
             /* v16.58 — tout travail de l'ancien zoom est obsolète, quel que soit son motif. */
             cancelAllSiaWorkForZoomStart();
         });
@@ -44616,16 +44752,22 @@ function initializeSiaSystem() {
             }
             const heavyZoomPromise = npfHeavyOverlayZoomOutPromise;
             if (heavyZoomPromise) {
-                /* Sous HT + Routes, le moveend de la même transaction est bloqué
-                 * jusqu'à la fin du rendu SIA final : une seule reconstruction. */
+                /* v16.62 — tous les zoomend intermédiaires observent le même
+                 * Promise débouncé. N'enregistrer qu'un seul finally afin de ne
+                 * lancer qu'un unique SIA sur la vue finale stabilisée. */
                 siaHeavyZoomFinalRefreshPending = true;
-                heavyZoomPromise.finally(() => {
-                    if (!siaZoomGestureActive) {
-                        scheduleSiaLayerRefresh('zoomend-after-routes-ht');
-                    } else {
-                        siaHeavyZoomFinalRefreshPending = false;
-                    }
-                });
+                if (siaHeavyZoomObservedPromise !== heavyZoomPromise) {
+                    siaHeavyZoomObservedPromise = heavyZoomPromise;
+                    heavyZoomPromise.finally(() => {
+                        if (siaHeavyZoomObservedPromise !== heavyZoomPromise) return;
+                        siaHeavyZoomObservedPromise = null;
+                        if (!siaZoomGestureActive) {
+                            scheduleSiaLayerRefresh('zoomend-after-routes-ht');
+                        } else {
+                            siaHeavyZoomFinalRefreshPending = false;
+                        }
+                    });
+                }
             } else {
                 scheduleSiaLayerRefresh('zoomend');
             }
