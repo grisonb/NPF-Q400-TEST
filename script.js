@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v16.58';
+const NPF_SCRIPT_BUILD_VERSION = 'v16.59';
 
 
 /*
@@ -563,6 +563,9 @@ function getNpfStartupDiagnosticRuntimeInfo() {
         bfgBridgeLastError: String(typeof npfBfgBridgeLastError !== 'undefined' ? npfBfgBridgeLastError : ''),
         glrSessionActive: (() => { try { return Boolean(getStoredGlobalLinkSession()); } catch (_) { return false; } })(),
         glrLastAuthState: String(typeof npfGlobalLinkLastAuthState !== 'undefined' ? npfGlobalLinkLastAuthState : '—'),
+        glrLastAction: String(typeof npfGlobalLinkLastAction !== 'undefined' ? npfGlobalLinkLastAction : '—'),
+        glrLastHttpStatus: Number(typeof npfGlobalLinkLastHttpStatus !== 'undefined' ? npfGlobalLinkLastHttpStatus : 0),
+        glrLastError: String(typeof npfGlobalLinkLastError !== 'undefined' ? npfGlobalLinkLastError : ''),
         diagMapMotion: NPF_STARTUP_DIAGNOSTIC.state.mapMotionSummary,
         diagGps: NPF_STARTUP_DIAGNOSTIC.state.gpsSummary,
         diagLayers: NPF_STARTUP_DIAGNOSTIC.state.layerSummary,
@@ -687,6 +690,9 @@ function buildNpfStartupDiagnosticExportText() {
         + (runtime.bfgBridgeLastError ? ' (' + runtime.bfgBridgeLastError + ')' : '')
         + ' | session GLR ' + (runtime.glrSessionActive ? 'ACTIVE' : 'ABSENTE/EXPIRÉE')
         + ' | état GLR ' + (runtime.glrLastAuthState || '—')
+        + ' | action ' + (runtime.glrLastAction || '—')
+        + (runtime.glrLastHttpStatus ? ' HTTP ' + runtime.glrLastHttpStatus : '')
+        + (runtime.glrLastError ? ' (' + runtime.glrLastError + ')' : '')
     );
     const restoredDiag = runtime.diagRestoredSession;
     if (restoredDiag) {
@@ -2201,6 +2207,10 @@ const ROAD_OVERLAY_MANIFEST_KEY = 'npfRoadOverlayManifestV1';
 const ROAD_OVERLAY_RESOURCE_PREFIX = './__npf_road_overlay__/';
 let showRoadOverlayLayer = localStorage.getItem(ROAD_OVERLAY_LAYER_KEY) === 'true';
 let isRoadOverlayLoading = false;
+/* v16.59 — zoom out : Routes puis HT puis SIA, jamais en reconstruction simultanée. */
+let npfHeavyOverlayZoomStartLevel = null;
+let npfHeavyOverlayZoomSerialToken = 0;
+let npfHeavyOverlayZoomOutPromise = null;
 
 const TRAFFIC_LAYER_KEY = 'showTrafficLayer';
 // v15.98 — état du masque secondaire SafeSky (compteur vert) restauré au redémarrage.
@@ -7011,6 +7021,9 @@ function initMap() {
         }
     });
     map.on('zoomstart', () => {
+        if (!Number.isFinite(npfHeavyOverlayZoomStartLevel)) {
+            npfHeavyOverlayZoomStartLevel = Number(map.getZoom?.());
+        }
         beginBaseMapZoomStabilityGuard('zoomstart');
         beginMapVisualRenderGuard('zoomstart');
         if (showRoadOverlayLayer) {
@@ -7237,30 +7250,50 @@ function initMap() {
     map.on('moveend zoomend', event => {
         const gpsFollowPan = event?.type === 'moveend' && isNpfGpsFollowProgrammaticPan();
         const zoomEnded = event?.type === 'zoomend';
+        const finalZoom = Number(map.getZoom?.());
+        const startZoom = Number(npfHeavyOverlayZoomStartLevel);
+        const combinedZoomOut = !!(
+            zoomEnded
+            && showRoadOverlayLayer
+            && showHighVoltageLinesLayer
+            && hasLoadedHighVoltageLines
+            && Number.isFinite(startZoom)
+            && Number.isFinite(finalZoom)
+            && finalZoom < startZoom - 0.01
+        );
+
+        if (combinedZoomOut) {
+            /* v16.59 — le zoom out HT + Routes est traité comme une transaction :
+             * détachement, Routes, HT, puis seulement SIA via son handler zoomend. */
+            scheduleSerializedHeavyOverlayZoomOut(startZoom, finalZoom);
+            npfHeavyOverlayZoomStartLevel = null;
+            return;
+        }
+
+        if (zoomEnded) npfHeavyOverlayZoomStartLevel = null;
 
         if (showRoadOverlayLayer) {
-            /* v16.58 — si le zoom final est sous le seuil d'affichage Routes,
-             * libérer immédiatement les milliers de géométries de l'ancien
-             * zoom au lieu d'attendre le refresh différé de 1,15 s. */
+            if (roadOverlayLayer && getRoadOverlayZoomTier() > 0 && !map.hasLayer(roadOverlayLayer)) {
+                roadOverlayLayer.addTo(map);
+            }
             if (zoomEnded && getRoadOverlayZoomTier() === 0) {
                 roadOverlayRefreshToken += 1;
                 clearTimeout(roadOverlayRefreshTimer);
                 roadOverlayRefreshTimer = null;
-                clearRoadOverlayRenderedParts({ resetTier: false, clearSources: true });
-                roadOverlayLoadedZoomTier = 0;
+                /* Hors combinaison HT : le nettoyage peut rester différé d'un tour
+                 * pour ne pas bloquer le même frame que zoomend. */
+                try { if (roadOverlayLayer && map.hasLayer(roadOverlayLayer)) map.removeLayer(roadOverlayLayer); } catch (_) {}
+                setTimeout(() => {
+                    if (!showRoadOverlayLayer || getRoadOverlayZoomTier() !== 0) return;
+                    clearRoadOverlayRenderedParts({ resetTier: false, clearSources: true });
+                    roadOverlayLoadedZoomTier = 0;
+                }, 180);
             } else if (!gpsFollowPan || !isRoadOverlayCoverageValidForCurrentView()) {
                 scheduleRoadOverlayRefresh(gpsFollowPan ? 'gps-follow-edge' : 'map-change');
             }
         }
         if (showHighVoltageLinesLayer && hasLoadedHighVoltageLines) {
-            /* Même principe pour HT : à l'échelle éloignée, ne pas conserver
-             * un ancien rendu détaillé massif pendant l'attente des tuiles. */
-            if (zoomEnded && Number(map.getZoom?.()) <= 10 && highVoltageLinesRenderedFeatureCount > 2500) {
-                highVoltageLinesRefreshToken += 1;
-                clearTimeout(highVoltageLinesRefreshTimer);
-                highVoltageLinesRefreshTimer = null;
-                clearRenderedHighVoltageLines();
-            }
+            if (highVoltageLinesLayer && !map.hasLayer(highVoltageLinesLayer)) highVoltageLinesLayer.addTo(map);
             if (!gpsFollowPan || !isHighVoltageCoverageValidForCurrentView()) {
                 scheduleHighVoltageLinesRefresh(gpsFollowPan ? 'gps-follow-edge' : 'map-change');
             }
@@ -11467,6 +11500,64 @@ async function refreshVisibleHighVoltageLines(source = 'refresh') {
     if (source !== 'map-change') {
         recordNpfStartupDiagnosticOverlaySnapshot(`lignes-ht rendu ${source}`);
     }
+}
+
+async function runSerializedHeavyOverlayZoomOut(startZoom, finalZoom) {
+    const token = ++npfHeavyOverlayZoomSerialToken;
+
+    roadOverlayRefreshToken += 1;
+    highVoltageLinesRefreshToken += 1;
+    clearTimeout(roadOverlayRefreshTimer);
+    clearTimeout(highVoltageLinesRefreshTimer);
+    roadOverlayRefreshTimer = null;
+    highVoltageLinesRefreshTimer = null;
+
+    /* Détacher d'abord les deux Canvas : WebKit ne doit pas repeindre les
+     * géométries de l'ancien zoom pendant leur destruction/reconstruction. */
+    try { if (roadOverlayLayer && map?.hasLayer(roadOverlayLayer)) map.removeLayer(roadOverlayLayer); } catch (_) {}
+    try { if (highVoltageLinesLayer && map?.hasLayer(highVoltageLinesLayer)) map.removeLayer(highVoltageLinesLayer); } catch (_) {}
+    recordNpfStartupDiagnosticOverlaySnapshot(`zoom-out série · détaché z${startZoom}->${finalZoom}`);
+
+    await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
+    if (token !== npfHeavyOverlayZoomSerialToken || !map) return;
+
+    /* 1 — Routes. Sous le seuil : libération hors écran. Sinon reconstruction
+     * complète hors carte puis rattachement en une fois. */
+    if (showRoadOverlayLayer) {
+        const tier = getRoadOverlayZoomTier();
+        if (tier === 0) {
+            clearRoadOverlayRenderedParts({ resetTier: false, clearSources: true });
+            roadOverlayLoadedZoomTier = 0;
+        } else {
+            await refreshRoadOverlayVisibleParts('zoom-out-serial-routes');
+            if (token !== npfHeavyOverlayZoomSerialToken) return;
+            try { if (roadOverlayLayer && !map.hasLayer(roadOverlayLayer)) roadOverlayLayer.addTo(map); } catch (_) {}
+        }
+    }
+
+    await yieldRoadOverlayRenderTurn();
+    if (token !== npfHeavyOverlayZoomSerialToken || !map) return;
+
+    /* 2 — HT seulement après Routes. L'ancien rendu est libéré hors écran,
+     * puis le nouveau est construit avant rattachement. */
+    if (showHighVoltageLinesLayer && hasLoadedHighVoltageLines) {
+        clearRenderedHighVoltageLines();
+        await refreshVisibleHighVoltageLines('zoom-out-serial-ht');
+        if (token !== npfHeavyOverlayZoomSerialToken) return;
+        try { if (highVoltageLinesLayer && !map.hasLayer(highVoltageLinesLayer)) highVoltageLinesLayer.addTo(map); } catch (_) {}
+    }
+
+    recordNpfStartupDiagnosticOverlaySnapshot(`zoom-out série · terminé z${startZoom}->${finalZoom}`);
+}
+
+function scheduleSerializedHeavyOverlayZoomOut(startZoom, finalZoom) {
+    const currentPromise = runSerializedHeavyOverlayZoomOut(startZoom, finalZoom)
+        .catch(error => console.warn('Zoom out Routes/HT sérialisé impossible:', error));
+    npfHeavyOverlayZoomOutPromise = currentPromise;
+    currentPromise.finally(() => {
+        if (npfHeavyOverlayZoomOutPromise === currentPromise) npfHeavyOverlayZoomOutPromise = null;
+    });
+    return currentPromise;
 }
 
 function scheduleHighVoltageLinesRefresh(source = 'scheduled') {
@@ -22748,6 +22839,21 @@ let npfGlobalLinkRelayoutTimer = null;
 let npfGlobalLinkCaptchaLoadPromise = null;
 let npfGlobalLinkPasswordAuthPromise = null;
 let npfGlobalLinkLastAuthState = 'non-testé';
+/* v16.59 — diagnostic GLR sans donnée sensible : action, HTTP et erreur amont. */
+let npfGlobalLinkLastAction = '—';
+let npfGlobalLinkLastHttpStatus = 0;
+let npfGlobalLinkLastError = '';
+
+function rememberGlobalLinkRequestState(action, response = null, error = '') {
+    npfGlobalLinkLastAction = String(action || '—');
+    npfGlobalLinkLastHttpStatus = Number(response?.status || 0);
+    npfGlobalLinkLastError = String(error || '').replace(/\s+/g, ' ').trim().slice(0, 180);
+}
+
+function isGlobalLinkTemporaryLoadFail(value) {
+    const text = String(value?.message || value?.error || value || '');
+    return /\bload\s*fail\b/i.test(text);
+}
 
 /*
  * v15.94 — les trafics GLR non actifs sont affichés par défaut.
@@ -22825,10 +22931,18 @@ function globalLinkAuthHeaders(docsSession, globalSession = null) {
 async function fetchGlobalLinkNas(action, options = {}, timeoutMs = 20000) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
+    npfGlobalLinkLastAction = String(action || '—');
+    npfGlobalLinkLastHttpStatus = 0;
+    npfGlobalLinkLastError = '';
     try {
         const separator = NPF_GLOBAL_LINK_API_URL.includes('?') ? '&' : '?';
         const url = `${NPF_GLOBAL_LINK_API_URL}${separator}action=${encodeURIComponent(action)}&t=${Date.now()}`;
-        return await fetch(url, { ...options, cache: 'no-store', signal: controller.signal });
+        const response = await fetch(url, { ...options, cache: 'no-store', signal: controller.signal });
+        npfGlobalLinkLastHttpStatus = Number(response?.status || 0);
+        return response;
+    } catch (error) {
+        npfGlobalLinkLastError = String(error?.message || error || '').replace(/\s+/g, ' ').trim().slice(0, 180);
+        throw error;
     } finally {
         clearTimeout(timer);
     }
@@ -23007,11 +23121,15 @@ async function loadGlobalLinkCaptcha() {
             headers: globalLinkAuthHeaders(docsSession)
         }, 45000);
         const payload = await response.json().catch(() => null);
+        const captchaError = payload?.message || payload?.error || (!response.ok ? `Captcha Global Link impossible (${response.status})` : '');
+        rememberGlobalLinkRequestState('captcha', response, captchaError);
 
         if (!response.ok || !payload || payload.ok !== true || !payload.attempt || !payload.imageDataUrl) {
             if (response.status === 401) clearBriefingDocsSession();
-            throw new Error(payload?.message || payload?.error || `Captcha Global Link impossible (${response.status})`);
+            if (isGlobalLinkTemporaryLoadFail(captchaError)) npfGlobalLinkLastAuthState = 'captcha-load-fail-temporaire';
+            throw new Error(captchaError || `Captcha Global Link impossible (${response.status})`);
         }
+        rememberGlobalLinkRequestState('captcha', response, '');
 
         npfGlobalLinkAttempt = String(payload.attempt);
         if (image) {
@@ -23068,11 +23186,16 @@ async function submitGlobalLinkCaptcha() {
     }
 
     const payload = await response.json().catch(() => null);
+    const loginError = payload?.message || payload?.error || (!response.ok ? `Connexion Global Link refusée (${response.status})` : '');
+    rememberGlobalLinkRequestState('login', response, loginError);
     if (!response.ok || !payload || payload.ok !== true || !payload.session || !payload.expiresAt) {
         if (response.status === 401 && payload?.error === 'npf_authorization_required') clearBriefingDocsSession();
-        npfGlobalLinkLastAuthState = `refusé:${String(payload?.error || response.status)}`;
-        throw new Error(payload?.message || payload?.error || `Connexion Global Link refusée (${response.status})`);
+        npfGlobalLinkLastAuthState = isGlobalLinkTemporaryLoadFail(loginError)
+            ? 'login-load-fail-temporaire'
+            : `refusé:${String(payload?.error || response.status)}`;
+        throw new Error(loginError || `Connexion Global Link refusée (${response.status})`);
     }
+    rememberGlobalLinkRequestState('login', response, '');
     if (!storeGlobalLinkSession(payload.session, payload.expiresAt)) {
         throw new Error('Session Global Link reçue mais impossible à enregistrer.');
     }
@@ -24002,21 +24125,50 @@ async function refreshGlobalLinkPositions(options = {}) {
     npfGlobalLinkFetchInProgress = true;
     updateGlobalLinkButton({ loading: true });
     try {
-        const response = await fetchGlobalLinkNas('positions', {
-            method: 'GET',
-            headers: globalLinkAuthHeaders(docsSession, globalSession)
-        }, 20000);
-        const payload = await response.json().catch(() => null);
-        if (!response.ok || !payload || payload.ok !== true) {
-            if (response.status === 401) {
+        let response = null;
+        let payload = null;
+        let lastMessage = '';
+
+        /* v16.59 — « Load Fail » vient du relais/amont GLR et est temporaire.
+         * Pour les positions seulement, une unique seconde tentative est faite.
+         * Une session valide n'est jamais supprimée sur ce message. */
+        for (let attemptIndex = 0; attemptIndex < 2; attemptIndex += 1) {
+            response = await fetchGlobalLinkNas('positions', {
+                method: 'GET',
+                headers: globalLinkAuthHeaders(docsSession, globalSession)
+            }, 20000);
+            payload = await response.json().catch(() => null);
+            lastMessage = payload?.message || payload?.error || (!response.ok ? `Positions Global Link indisponibles (${response.status})` : '');
+            rememberGlobalLinkRequestState('positions', response, lastMessage);
+
+            if (response.ok && payload && payload.ok === true) break;
+
+            const temporaryLoadFail = isGlobalLinkTemporaryLoadFail(lastMessage);
+            if (temporaryLoadFail && attemptIndex === 0) {
+                npfGlobalLinkLastAuthState = 'positions-load-fail-retry';
+                await new Promise(resolve => setTimeout(resolve, 650));
+                continue;
+            }
+            break;
+        }
+
+        if (!response?.ok || !payload || payload.ok !== true) {
+            if (response?.status === 401) {
                 if (payload?.error === 'npf_authorization_required') clearBriefingDocsSession();
                 if (payload?.error === 'global_session_invalid') clearStoredGlobalLinkSession();
             }
-            throw new Error(payload?.message || payload?.error || `Positions Global Link indisponibles (${response.status})`);
+            if (isGlobalLinkTemporaryLoadFail(lastMessage)) {
+                npfGlobalLinkLastAuthState = 'positions-load-fail-temporaire';
+            }
+            throw new Error(lastMessage || `Positions Global Link indisponibles (${response?.status || 0})`);
         }
+
+        rememberGlobalLinkRequestState('positions', response, '');
+        npfGlobalLinkLastAuthState = 'positions-ok';
         renderGlobalLinkPositions(payload.positions || []);
         return true;
     } catch (error) {
+        rememberGlobalLinkRequestState(npfGlobalLinkLastAction || 'positions', { status: npfGlobalLinkLastHttpStatus }, error?.message || error);
         console.warn('[Global Link]', error);
         updateGlobalLinkButton();
         if (!options.silent && !isGlobalLinkAbortError(error)) {
@@ -34623,11 +34775,20 @@ const parseNumeric = (numericString) => { if (!numericString) return null; const
 
 
 /*
- * v16.56 — règle générale carburant : le résultat est un NOMBRE DE LARGAGES.
- * Les cycles complets précédant le dernier largage consomment la conso rotation
- * complète. La fraction terminale est calculée uniquement sur le forfait de
- * 250 kg, puisqu'après ce dernier largage l'avion poursuit vers la contrainte
- * BINGO considérée sans effectuer une nouvelle rotation Feu ↔ Pélic.
+ * v16.59 — calcul carburant exprimé en NOMBRE DE LARGAGES selon le point de départ.
+ *
+ * RETOUR BASE : on raisonne sur le feu. Les rotations intermédiaires consomment
+ * une rotation complète ; le dernier largage ne consomme dans la marge que le
+ * forfait 250 kg, puisque Feu → Base est déjà contenu dans le BINGO Base.
+ *
+ * RETOUR PÉLIC depuis le PÉLIC : aucun +1. Chaque largage appartient à une
+ * rotation complète Pélic → Feu → largage → Pélic. La marge est Fuel départ
+ * Pélic - réserve 700 kg.
+ *
+ * ARRIVÉE SUR FEU depuis Base/GPS (prévi / déroutement direct) : le premier
+ * largage est immédiat et coûte d'abord 250 kg dans la marge Feu → BINGO Pélic ;
+ * les largages suivants consomment chacun une rotation complète. C'est la
+ * traduction correcte du « +1 » opérationnel, sans ajouter un largage gratuit.
  */
 function calculateFuelLimitedDropCount(fuelOnFire, bingoFuel, fullRotationFuel, dropFuel = 250) {
     if (![fuelOnFire, bingoFuel, fullRotationFuel, dropFuel].every(Number.isFinite)) return null;
@@ -34636,12 +34797,37 @@ function calculateFuelLimitedDropCount(fuelOnFire, bingoFuel, fullRotationFuel, 
     const fullCycles = Math.floor(margin / fullRotationFuel);
     const remainderKg = Math.max(0, margin - (fullCycles * fullRotationFuel));
     const terminalFraction = Math.min(1, remainderKg / dropFuel);
+    return { margin, fullCycles, remainderKg, terminalFraction, value: fullCycles + terminalFraction };
+}
+
+function calculateFuelDropsFromPelicDeparture(fuelAtPelic, fullRotationFuel, reserveFuel = 700) {
+    if (![fuelAtPelic, fullRotationFuel, reserveFuel].every(Number.isFinite)) return null;
+    if (fullRotationFuel <= 0) return null;
+    const margin = Math.max(0, fuelAtPelic - reserveFuel);
+    return { margin, reserveFuel, value: margin / fullRotationFuel };
+}
+
+function calculateFuelDropsFromInboundFireToPelic(fuelOnFire, bingoPelic, fullRotationFuel, dropFuel = 250) {
+    if (![fuelOnFire, bingoPelic, fullRotationFuel, dropFuel].every(Number.isFinite)) return null;
+    if (fullRotationFuel <= 0 || dropFuel <= 0) return null;
+    const margin = Math.max(0, fuelOnFire - bingoPelic);
+    if (margin <= dropFuel) {
+        return {
+            margin,
+            firstDropFraction: margin / dropFuel,
+            fuelAfterFirstDropMargin: 0,
+            followingRotations: 0,
+            value: margin / dropFuel
+        };
+    }
+    const fuelAfterFirstDropMargin = margin - dropFuel;
+    const followingRotations = fuelAfterFirstDropMargin / fullRotationFuel;
     return {
         margin,
-        fullCycles,
-        remainderKg,
-        terminalFraction,
-        value: fullCycles + terminalFraction
+        firstDropFraction: 1,
+        fuelAfterFirstDropMargin,
+        followingRotations,
+        value: 1 + followingRotations
     };
 }
 
@@ -34743,29 +34929,57 @@ function updateAndSortRotations(container, current, params) {
             if (fuelResult) value = fuelResult.value;
         }
         if (type === 'pelic') {
+            const pelicFuelMode = String(params.pelicFuelMode || 'inbound-fire');
             const fuelResult = canCalculateFuel
-                ? calculateFuelLimitedDropCount(current.fuel, params.bingoPelic, params.consoRotation, 250)
+                ? (
+                    pelicFuelMode === 'pelic-departure'
+                        ? calculateFuelDropsFromPelicDeparture(params.pelicDepartureFuel, params.consoRotation, 700)
+                        : calculateFuelDropsFromInboundFireToPelic(current.fuel, params.bingoPelic, params.consoRotation, 250)
+                )
                 : null;
-            formulaString = [
-                `FUEL RETOUR PÉLIC — NOMBRE DE LARGAGES`,
-                ``,
-                currentContextDetails(),
-                ``,
-                bingoPelicDetails(),
-                ``,
-                rotationFormulaDetails(),
-                ``,
-                `Règle carburant :`,
-                `Marge disponible = Fuel sur feu - BINGO Pélic`,
-                `Rotations complètes avant le dernier largage = ENT(Marge / Conso rotation)`,
-                `Reste = Marge - (rotations complètes × Conso rotation)`,
-                `Fraction du dernier largage = min(1 ; Reste / 250 kg)`,
-                `Nbr largages = rotations complètes + fraction du dernier largage`,
-                ``,
-                fuelResult
-                    ? `Calcul = marge ${kgOrNA(fuelResult.margin)} ; complets ${fuelResult.fullCycles} ; reste ${kgOrNA(fuelResult.remainderKg)} ; fraction ${(fuelResult.terminalFraction).toFixed(3)} ; total ${(fuelResult.value).toFixed(3)}`
-                    : `Données insuffisantes.`
-            ].join('\n');
+
+            if (pelicFuelMode === 'pelic-departure') {
+                formulaString = [
+                    `FUEL RETOUR PÉLIC — NOMBRE DE LARGAGES`,
+                    ``,
+                    `Point de départ du calcul : PÉLIC`,
+                    `Fuel départ Pélic = ${kgOrNA(params.pelicDepartureFuel)}`,
+                    `Réserve arrivée Pélic = 700 kg`,
+                    ``,
+                    rotationFormulaDetails(),
+                    ``,
+                    `Règle carburant :`,
+                    `Marge utilisable = Fuel départ Pélic - 700 kg`,
+                    `Chaque largage = une rotation complète Pélic → Feu → largage → Pélic`,
+                    `Aucun +1 : le calcul commence avant le départ du Pélic`,
+                    `Nbr largages = Marge utilisable / Conso rotation`,
+                    ``,
+                    fuelResult
+                        ? `Calcul = (${params.pelicDepartureFuel} - 700) / ${params.consoRotation} = ${(fuelResult.value).toFixed(3)}`
+                        : `Données insuffisantes.`
+                ].join('\n');
+            } else {
+                formulaString = [
+                    `FUEL RETOUR PÉLIC — NOMBRE DE LARGAGES`,
+                    ``,
+                    currentContextDetails(),
+                    ``,
+                    bingoPelicDetails(),
+                    ``,
+                    rotationFormulaDetails(),
+                    ``,
+                    `Règle carburant — arrivée sur feu depuis Base/GPS :`,
+                    `Marge disponible = Fuel sur feu - BINGO Pélic`,
+                    `Le premier largage est immédiat : il consomme d'abord 250 kg dans cette marge`,
+                    `Si la marge est < 250 kg : fraction du 1er largage = Marge / 250`,
+                    `Sinon : 1er largage = 1 puis rotations suivantes = (Marge - 250) / Conso rotation`,
+                    `Nbr largages = 1 + rotations suivantes`,
+                    ``,
+                    fuelResult
+                        ? `Calcul = marge ${kgOrNA(fuelResult.margin)} ; 1er largage ${(fuelResult.firstDropFraction).toFixed(3)} ; marge après 1er largage ${kgOrNA(fuelResult.fuelAfterFirstDropMargin)} ; rotations suivantes ${(fuelResult.followingRotations).toFixed(3)} ; total ${(fuelResult.value).toFixed(3)}`
+                        : `Données insuffisantes.`
+                ].join('\n');
+            }
             if (fuelResult) value = fuelResult.value;
         }
         if (type === 'cs') {
@@ -35096,7 +35310,9 @@ Cette valeur sert aux calculs Fuel retour Base/Pélic.`);
             transitSourceLabel: selectedBaseOACI ? `BLOC DÉPART / base (${selectedBaseOACI})` : 'BLOC DÉPART / base non renseignée',
             currentTimeLabel: 'Heure sur feu',
             consoTransitFromGps: consoAller,
-            firstDropForfaitMin: 10
+            firstDropForfaitMin: 10,
+            pelicFuelMode: 'inbound-fire',
+            pelicDepartureFuel: null
         }
     );
 }
@@ -35248,6 +35464,13 @@ function updateSuiviTab() {
         transitSourceLabel = selectedBaseOACI ? `BLOC DÉPART / base (${selectedBaseOACI})` : 'BLOC DÉPART / base non renseignée';
         transitSourceDetail = `Terrain départ retenu : ligne BLOC DÉPART / FUEL DÉPART / BASE`;
     }
+
+    const fuelCalculationStartsAtPelic = !!(
+        lastFilledRow
+        && !(lastFilledRow === firstRow && isFirstRowFullDeparture)
+        && selectedPelicanOACI
+        && currentFuel !== null
+    );
 
     const consoRotation = parseNumeric(suiviConsoInput.value);
     const rotationTime = parseTime(suiviDureeInput.value);
@@ -35407,7 +35630,9 @@ Validation du largage : Heure sur feu + 10 min avant CS/TMD/HDV.`);
                 effectiveTransitDistance: transitEffectiveDistanceVersFeu,
                 transitSourceLabel,
                 currentTimeLabel: 'Heure sur feu',
-                firstDropForfaitMin: 10
+                firstDropForfaitMin: 10,
+                pelicFuelMode: fuelCalculationStartsAtPelic ? 'pelic-departure' : 'inbound-fire',
+                pelicDepartureFuel: fuelCalculationStartsAtPelic ? currentFuel : null
             }
         );
     }
@@ -35627,11 +35852,28 @@ Sélectionnez un pélicandrome pour calculer la consommation de rotation.`);
     }
 
     const fuelSurFeu = fuelActuel - consoTransitFromGps;
+    const fuelAtPelicBeforeFire = (
+        isEmptyRetardant
+        && fuelActuel !== null
+        && Number.isFinite(distGpsPelic)
+    ) ? fuelActuel - calculateFuelToGo(distGpsPelic) : null;
 
     updateAndSortRotations(
         resultsContainer,
         { fuel: fuelSurFeu, time: heureSurFeu },
-        { bingoBase, bingoPelic, consoRotation, rotationTime, csFeuTime, tmdTime, limiteHDV, transitTime: transitTimeFromGps, consoTransitFromGps: consoTransitFromGps }
+        {
+            bingoBase,
+            bingoPelic,
+            consoRotation,
+            rotationTime,
+            csFeuTime,
+            tmdTime,
+            limiteHDV,
+            transitTime: transitTimeFromGps,
+            consoTransitFromGps: consoTransitFromGps,
+            pelicFuelMode: isEmptyRetardant ? 'pelic-departure' : 'inbound-fire',
+            pelicDepartureFuel: isEmptyRetardant ? fuelAtPelicBeforeFire : null
+        }
     );
 }
 
@@ -44148,7 +44390,16 @@ function initializeSiaSystem() {
                 });
                 npfDiagZoomStartedAt = 0;
             }
-            scheduleSiaLayerRefresh('zoomend');
+            const heavyZoomPromise = npfHeavyOverlayZoomOutPromise;
+            if (heavyZoomPromise) {
+                /* v16.59 — sous HT + Routes en zoom out, le SIA attend la fin
+                 * des deux reconstructions lourdes pour éviter un troisième pic. */
+                heavyZoomPromise.finally(() => {
+                    if (!siaZoomGestureActive) scheduleSiaLayerRefresh('zoomend-after-routes-ht');
+                });
+            } else {
+                scheduleSiaLayerRefresh('zoomend');
+            }
         });
     }
 
