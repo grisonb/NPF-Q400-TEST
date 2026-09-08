@@ -1,3 +1,76 @@
+VERSION TEST v16.59 — GLR + FUEL PÉLIC/DÉROUTEMENT + ZOOM OUT HT/ROUTES SÉRIALISÉ
+Date : 08/09/2026
+Base : TEST v16.58
+
+OBJECTIF
+- Corriger le message GLR « Global Link: Load Fail » sans détruire une session encore valide et améliorer le diagnostic GLR.
+- Agrandir les étiquettes Nom/OACI/fréquence des aérodromes.
+- Corriger le calcul FUEL RETOUR PÉLIC selon le véritable point de départ : Pélic versus arrivée sur feu depuis Base/GPS.
+- Conserver la règle FUEL RETOUR BASE validée avec fraction terminale du dernier largage sur 250 kg.
+- Supprimer la reconstruction simultanée Routes + HT + SIA pendant un zoom out, encore susceptible de faire relancer Safari/iPadOS.
+
+1. FUEL RETOUR PÉLIC — POINT DE DÉPART PÉLIC
+- En SUIVI LARGAGES, lorsque la source de la dernière ligne BLOC/FUEL est le pélicandrome sélectionné, le calcul FUEL RETOUR PÉLIC part désormais du fuel disponible AU DÉPART DU PÉLIC.
+- Formule : (Fuel départ Pélic - 700 kg) / Conso rotation.
+- Il n'y a aucun +1 dans ce cas : chaque largage appartient à une rotation complète Pélic → Feu → largage → Pélic.
+- Le calcul n'utilise plus Fuel sur feu - BINGO Pélic pour ce cas.
+- Exemple de logique : avec 1730 kg au départ Pélic, la marge est 1030 kg avant division par la consommation de rotation réelle calculée par NPF.
+
+2. FUEL PÉLIC — ARRIVÉE SUR FEU DEPUIS BASE / GPS
+- En PRÉVI, au premier transit SUIVI depuis la base, et en DÉROUTEMENT direct GPS → Feu, l'avion arrive sur le feu sans avoir à effectuer Pélic → Feu pour le premier largage.
+- Le « +1 » est donc conservé conceptuellement pour ce premier largage, mais il n'est plus ajouté gratuitement.
+- La marge Fuel sur feu - BINGO Pélic doit d'abord financer le forfait largage de 250 kg.
+- Si la marge est < 250 kg : fraction du premier largage = marge / 250.
+- Si la marge est ≥ 250 kg : premier largage = 1 ; les largages suivants = (marge - 250) / Conso rotation.
+- En mode DÉROUTEMENT « Retour Pélic avant feu », le calcul repart au contraire du fuel estimé au passage/départ du Pélic et utilise la formule sans +1.
+
+3. FUEL RETOUR BASE — RÈGLE v16.56 CONSERVÉE
+- Aucun changement sur la logique validée du retour Base.
+- Les rotations complètes intermédiaires utilisent la consommation rotation complète.
+- Le dernier largage est fractionné sur le forfait 250 kg puisque le trajet Feu → Base est déjà inclus dans le BINGO Base.
+- Le cas précédemment validé à 0,8 reste donc traité par cette règle.
+
+4. GLR — « LOAD FAIL »
+- « Load Fail » est traité comme une erreur temporaire du relais/amont GLR et non comme une preuve de session invalide.
+- Une session GLR existante n'est pas supprimée sur ce seul message.
+- Pour l'action POSITIONS uniquement, une seconde tentative automatique unique est effectuée après 650 ms.
+- CAPTCHA et LOGIN ne sont pas rejoués automatiquement afin d'éviter un double envoi utilisateur.
+- Le DIAG enregistre maintenant l'action GLR (captcha/login/positions), le code HTTP et le dernier message d'erreur, sans token, mot de passe ni captcha.
+
+5. ÉTIQUETTES TERRAINS — POLICE AGRANDIE
+- Nom + code OACI : 13 px au lieu de 11 px.
+- Fréquence/service : 12 px au lieu de 10 px.
+- Fond blanc semi-transparent, placement et comportement non interactif conservés.
+
+6. ZOOM OUT — ROUTES + HT SÉRIALISÉS
+- Lorsqu'un vrai zoom out est détecté avec Routes et HT actifs, les deux calques lourds sont d'abord détachés de la carte pour éviter que WebKit repeigne les anciennes géométries au nouveau zoom.
+- Les rafraîchissements Routes et HT en attente sont invalidés avant la reconstruction.
+- Reconstruction dans l'ordre : 1) Routes ; 2) yield d'un frame ; 3) HT.
+- Si le zoom final est sous le seuil Routes, les anciennes géométries Routes sont libérées hors écran et le calque reste détaché.
+- Si Routes doivent rester visibles, elles sont reconstruites hors carte puis rattachées en une fois.
+- HT est ensuite reconstruite hors carte et rattachée seulement une fois le nouveau rendu prêt.
+- Le SIA attend la fin de cette séquence Routes + HT avant son refresh zoomend : pas de troisième reconstruction lourde concurrente.
+- En dehors du couple HT + Routes, la libération Routes sous seuil est différée de 180 ms au lieu d'être exécutée dans le même frame que zoomend.
+
+7. NON-RÉGRESSION
+- Moteur de tuiles v16.58 conservé : aucune lecture IndexedDB active annulée, pas de retour du trim 96 au zoomstart.
+- Référentiel fréquences aérodromes v16.58 conservé, y compris LFBD TWR 118.305 et LFCS A/A 119.005.
+- Nom + OACI, VAC, Lapradelle, overscroll calculateur, BFG/FdS/GAAR et diagnostics existants conservés.
+- Aucun bouton MAJ réintroduit.
+- sia.js strictement inchangé bit pour bit.
+
+8. CONTRÔLES À LA LIVRAISON
+- node --check Script et Service Worker.
+- Scripts inline Index contrôlés.
+- manifest.json parsé.
+- Cohérence v16.59 Index / Manifest / Script / Style / SW.
+- Test unitaire des trois règles fuel : retour Base terminal 250 ; départ Pélic sans +1 ; arrivée sur feu avec premier largage immédiat mais 250 kg financés.
+- Vérification GLR : Load Fail positions = une seule relance, session conservée, DIAG action/HTTP/erreur.
+- Vérification étiquettes 13/12 px.
+- Vérification zoom out HT+Routes : détachement puis Routes → HT → SIA, sans reconstruction simultanée.
+- sia.js comparé bit-à-bit avec v16.58.
+
+
 VERSION TEST v16.58 — FRÉQUENCES AÉRODROMES ÉTENDUES + ZOOM OUT STABILISÉ
 Date : 07/09/2026
 Base : TEST v16.57
