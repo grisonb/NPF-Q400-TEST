@@ -1,3 +1,65 @@
+VERSION TEST v16.61 — GLR DIAGNOSTIC RÉSEAU + FLUIDITÉ ZOOM / SIA DÉDUPLIQUÉ
+Date : 08/09/2026
+Base : TEST v16.60
+
+OBJECTIF
+- Conserver l'amélioration anti-plantage obtenue en v16.60 avec Routes + HT lors des zooms out.
+- Réduire les saccades restantes observées en v16.60 : demandes de tuiles transitoires abandonnées pendant les pinch successifs et doubles rafraîchissements SIA sur une même vue finale.
+- Instrumenter précisément l'erreur GLR « Load failed » afin de distinguer un relais NAS joignable avec requête authentifiée bloquée d'un relais NAS réellement injoignable depuis Safari.
+- Ne pas modifier les règles FUEL validées en v16.59/v16.60 ni la couverture des fréquences terrain.
+
+1. GLR — TEST RÉSEAU SIMPLE APRÈS « LOAD FAILED »
+- Lorsqu'une action POSITIONS échoue avec l'exception réseau Safari « Load failed », NPF lance un test CORS simple vers le même relais NAS, sans Authorization ni X-Global-Link-Session.
+- Si une réponse HTTP est reçue, même 401, le DIAG classe l'état « positions-preflight-ou-entetes-fail » : Safari atteint le PHP, mais la requête GLR authentifiée est bloquée avant réponse exploitable.
+- Si aucune réponse n'est reçue, le DIAG classe l'état « positions-nas-injoignable » : panne située avant le PHP (réseau, DNS, TLS ou reverse proxy).
+- Le message utilisateur précise lequel des deux cas a été détecté.
+- Aucun token GLR, token NPF, mot de passe ou captcha n'est ajouté au DIAG.
+- Cette version n'affirme pas réparer le relais NAS : elle isole la cause réelle du « Load failed » pour la correction suivante si nécessaire.
+
+2. TUILES NPF OFFLINE — FIN DES PURGES SUR ZOOMEND INTERMÉDIAIRE
+- Un pinch iPad peut produire plusieurs zoomend/moveend intermédiaires avant la vue finale.
+- La priorité du viewport, la purge de la file et le trim du cache sont maintenant débouncés pendant 240 ms.
+- Un nouveau zoomstart annule le timer de stabilisation précédent.
+- Tant qu'un zoom final n'est pas stabilisé, moveend ne purge plus la file IndexedDB.
+- Les lectures IndexedDB déjà actives ne sont toujours pas annulées.
+
+3. TUILES NPF OFFLINE — CHARGEMENT À LA FIN DU GESTE
+- La couche NPF Offline utilise désormais updateWhenIdle=true.
+- Les nouvelles tuiles ne sont plus demandées en continu pendant le déplacement/pinch.
+- Le keepBuffer conserve les anciennes tuiles pendant le geste afin d'éviter un fond vide autant que possible.
+- Objectif : réduire fortement les centaines/milliers de demandes transitoires abandonnées observées dans le DIAG v16.60.
+
+4. SIA — UN SEUL RAFRAÎCHISSEMENT FINAL APRÈS ROUTES + HT
+- Lorsqu'une transaction zoom out Routes + HT est active, le moveend associé est explicitement bloqué pour le SIA.
+- Le SIA attend la fin de la Promise Routes → HT avant de lancer son unique refresh final « zoomend-after-routes-ht ».
+- Le verrou reste actif jusqu'à la fin effective de ce refresh final, afin qu'un moveend tardif ne relance pas une deuxième reconstruction de la même vue.
+- Un nouveau zoomstart invalide ce verrou et annule le travail devenu obsolète.
+
+5. ANTI-PLANTAGE v16.60 CONSERVÉ
+- Les panes Routes/HT restent masqués pendant le geste lorsque les deux couches sont actives.
+- Les Routes restent libérées progressivement partie par partie, avec restitution d'une frame entre les parties.
+- La reconstruction reste sérialisée Routes → HT → SIA.
+- Aucun retour au clearLayers monolithique pendant zoomend.
+
+6. NON-RÉGRESSION
+- Calcul FUEL retour Base, départ Pélic et déroutement inchangé depuis v16.59.
+- Étiquettes terrains conservées : Nom/OACI 14 px, fréquence 15 px en gras.
+- Référentiel fréquences léger conservé, y compris LFBD 118.305 et LFCS 119.005 prioritaires.
+- VAC, Lapradelle, overscroll calculateur, BFG/FdS/GAAR, diagnostics et mise à jour automatique conservés.
+- Aucun bouton MAJ principal réintroduit.
+- sia.js strictement inchangé bit pour bit.
+
+7. CONTRÔLES À LA LIVRAISON
+- node --check Script et Service Worker.
+- Scripts inline Index contrôlés.
+- manifest.json parsé.
+- Cohérence v16.61 Index / Manifest / Script / Style / SW.
+- Vérification du debounce tuiles 240 ms et de l'absence de purge moveend pendant stabilisation.
+- Vérification du verrou SIA final Routes + HT.
+- Vérification du probe GLR sans en-têtes sensibles.
+- sia.js comparé bit-à-bit avec v16.60.
+
+
 VERSION TEST v16.60 — GLR PREMIER CLIC + FRÉQUENCES AGRANDIES + ZOOM OUT ROUTES/HT PAR TRANCHES
 Date : 08/09/2026
 Base : TEST v16.59
