@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v16.60';
+const NPF_SCRIPT_BUILD_VERSION = 'v16.61';
 
 
 /*
@@ -2457,6 +2457,11 @@ const OFFLINE_DISABLE_STARTUP_FORCE_SCAN = true;
 let offlineTileWakeToken = 0;
 // v14.94 — rafraîchissement léger et dédupliqué du fond de carte après un geste/UI lourd.
 let baseMapStabilityRefreshToken = 0;
+/* Travail après v16.60 — un pinch iPad peut émettre plusieurs zoomend/moveend
+ * intermédiaires. La priorité/purge des tuiles NPF ne doit être validée qu'une
+ * fois lorsque le geste est réellement stabilisé. */
+let directOfflineNpfZoomSettleTimer = null;
+const DIRECT_OFFLINE_NPF_ZOOM_SETTLE_MS = 240;
 let offlineStartupLayerRecoveryToken = 0;
 let offlineMapSwitchToken = 0;
 let highVoltageLinesRetryToken = 0;
@@ -7033,6 +7038,10 @@ function initMap() {
         if (showRoadOverlayLayer && showHighVoltageLinesLayer) {
             setNpfHeavyOverlayPanesHidden(true);
         }
+        if (directOfflineNpfZoomSettleTimer) {
+            clearTimeout(directOfflineNpfZoomSettleTimer);
+            directOfflineNpfZoomSettleTimer = null;
+        }
         beginBaseMapZoomStabilityGuard('zoomstart');
         beginMapVisualRenderGuard('zoomstart');
         if (showRoadOverlayLayer) {
@@ -7050,18 +7059,24 @@ function initMap() {
          * stabilisé, le viewport courant devient prioritaire puis seule la file
          * réellement obsolète est nettoyée après que Leaflet a fini de retenir
          * ses nouvelles tuiles. Les lectures IndexedDB actives restent intactes. */
-        try { markDirectOfflineNpfViewportPriority('zoomend-stable'); } catch (_) {}
-        setTimeout(() => {
+        if (directOfflineNpfZoomSettleTimer) clearTimeout(directOfflineNpfZoomSettleTimer);
+        directOfflineNpfZoomSettleTimer = setTimeout(() => {
+            directOfflineNpfZoomSettleTimer = null;
+            try { markDirectOfflineNpfViewportPriority('zoomend-stable'); } catch (_) {}
             try { pruneDirectOfflineNpfQueueForCurrentView('zoomend-stable'); } catch (_) {}
             try { trimDirectOfflineTileBlobCache(); } catch (_) {}
-        }, 140);
+        }, DIRECT_OFFLINE_NPF_ZOOM_SETTLE_MS);
         scheduleBaseMapStabilityRefresh('zoomend');
         scheduleNpfOfflineZoomCleanup('zoomend');
         scheduleTrafficVisualResumeAfterMapInteraction('zoomend');
     });
     map.on('moveend', () => {
         if (isNpfGpsFollowProgrammaticPan()) return;
-        try { pruneDirectOfflineNpfQueueForCurrentView('moveend'); } catch (_) {}
+        /* Un moveend émis entre deux étapes d'un pinch ne doit pas purger la
+         * file du zoom qui va immédiatement suivre. */
+        if (!directOfflineNpfZoomSettleTimer) {
+            try { pruneDirectOfflineNpfQueueForCurrentView('moveend'); } catch (_) {}
+        }
         scheduleTrafficVisualResumeAfterMapInteraction('moveend');
     });
     L.control.zoom({ position: 'bottomleft' }).addTo(map);
@@ -9635,7 +9650,10 @@ function setupBaseTileLayer() {
          * pendant le déplacement, au lieu d'attendre obligatoirement moveend.
          * Les autres packs conservent le comportement précédent.
          */
-        updateWhenIdle: !isNpfDirectOfflineLayer,
+        /* Travail après v16.60 — en OFFLINE NPF, attendre la fin du geste évite
+         * de créer des dizaines de demandes transitoires à chaque niveau d'un
+         * pinch. Les anciennes tuiles restent retenues par keepBuffer. */
+        updateWhenIdle: true,
         updateInterval: isNpfDirectOfflineLayer
             ? 60
             : OFFLINE_TILE_UPDATE_INTERVAL_MS,
@@ -23110,6 +23128,31 @@ function shouldRetryGlobalLinkFromEnabledButton() {
         && (isGlobalLinkTemporaryNetworkError(lastError) || /positions-.*(?:fail|erreur)/.test(state));
 }
 
+async function probeGlobalLinkNasSimple(timeoutMs = 6500) {
+    /* Travail après v16.60 — requête CORS simple, sans Authorization ni
+     * X-Global-Link-Session. Une réponse HTTP (401 attendu sans autorisation)
+     * prouve que Safari atteint bien le PHP ; un nouveau Load failed situe le
+     * défaut avant PHP (DNS/TLS/réseau). */
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        const separator = NPF_GLOBAL_LINK_API_URL.includes('?') ? '&' : '?';
+        const url = `${NPF_GLOBAL_LINK_API_URL}${separator}action=positions&npf_probe=1&t=${Date.now()}`;
+        const response = await fetch(url, {
+            method: 'GET',
+            cache: 'no-store',
+            mode: 'cors',
+            credentials: 'omit',
+            signal: controller.signal
+        });
+        return { reached: true, status: Number(response?.status || 0), error: '' };
+    } catch (error) {
+        return { reached: false, status: 0, error: String(error?.message || error || '') };
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
 function setGlobalLinkPasswordStatus(message = '', type = '') {
     const el = document.getElementById('global-link-password-status');
     if (!el) return;
@@ -24315,11 +24358,26 @@ async function refreshGlobalLinkPositions(options = {}) {
         renderGlobalLinkPositions(payload.positions || []);
         return true;
     } catch (error) {
-        rememberGlobalLinkRequestState(npfGlobalLinkLastAction || 'positions', { status: npfGlobalLinkLastHttpStatus }, error?.message || error);
+        let userMessage = String(error?.message || error || 'Erreur Global Link');
+        if (isGlobalLinkTemporaryNetworkError(error)) {
+            const probe = await probeGlobalLinkNasSimple();
+            if (probe.reached) {
+                npfGlobalLinkLastAuthState = 'positions-preflight-ou-entetes-fail';
+                userMessage = `Load failed — NAS joignable (HTTP ${probe.status || 'réponse'}), requête authentifiée GLR bloquée avant réponse.`;
+            } else {
+                npfGlobalLinkLastAuthState = 'positions-nas-injoignable';
+                userMessage = `Load failed — relais NAS GLR injoignable depuis Safari${probe.error ? ` (${probe.error})` : ''}.`;
+            }
+        }
+        rememberGlobalLinkRequestState(
+            npfGlobalLinkLastAction || 'positions',
+            { status: npfGlobalLinkLastHttpStatus },
+            userMessage
+        );
         console.warn('[Global Link]', error);
         updateGlobalLinkButton();
         if (!options.silent && !isGlobalLinkAbortError(error)) {
-            alert(`Global Link : ${error.message || error}`);
+            alert(`Global Link : ${userMessage}`);
         }
         return false;
     } finally {
@@ -41481,6 +41539,9 @@ const SIA_STARTUP_PASSIVE_MOVEEND_GUARD_MS = 2500;
 let siaStartupInitialRefreshPending = false;
 /* v16.58 — empêche moveend de lancer un rendu intermédiaire pendant un zoom. */
 let siaZoomGestureActive = false;
+/* Travail après v16.60 — lorsqu'un zoom out HT+Routes est en cours, le moveend
+ * associé ne doit pas déclencher un second rendu SIA avant le rendu final. */
+let siaHeavyZoomFinalRefreshPending = false;
 /* Ancien préchargement conservé pour compatibilité mais non déclenché pendant le pan. */
 let siaMovePreloadLastTriggerAt = 0;
 const SIA_MOVE_PRELOAD_MIN_INTERVAL_MS = 400;
@@ -44517,6 +44578,14 @@ function initializeSiaSystem() {
                 );
                 return;
             }
+            if (siaHeavyZoomFinalRefreshPending) {
+                npfDiagSiaInteraction(
+                    'SIA RAFRAÎCHISSEMENT',
+                    `raison=moveend-attente-fin-routes-ht · ignoré · zoom=${map.getZoom()}`,
+                    { totalMs: 0 }
+                );
+                return;
+            }
             if (siaStartupInitialRefreshPending && !siaRenderedCoverageBounds) {
                 npfDiagSiaInteraction(
                     'SIA RAFRAÎCHISSEMENT',
@@ -44530,6 +44599,7 @@ function initializeSiaSystem() {
         map.on('zoomstart', () => {
             npfDiagZoomStartedAt = NPF_STARTUP_DIAGNOSTIC.now();
             siaZoomGestureActive = true;
+            siaHeavyZoomFinalRefreshPending = false;
             /* v16.58 — tout travail de l'ancien zoom est obsolète, quel que soit son motif. */
             cancelAllSiaWorkForZoomStart();
         });
@@ -44546,10 +44616,15 @@ function initializeSiaSystem() {
             }
             const heavyZoomPromise = npfHeavyOverlayZoomOutPromise;
             if (heavyZoomPromise) {
-                /* v16.60 — sous HT + Routes en zoom out, le SIA attend la fin
-                 * des deux reconstructions lourdes pour éviter un troisième pic. */
+                /* Sous HT + Routes, le moveend de la même transaction est bloqué
+                 * jusqu'à la fin du rendu SIA final : une seule reconstruction. */
+                siaHeavyZoomFinalRefreshPending = true;
                 heavyZoomPromise.finally(() => {
-                    if (!siaZoomGestureActive) scheduleSiaLayerRefresh('zoomend-after-routes-ht');
+                    if (!siaZoomGestureActive) {
+                        scheduleSiaLayerRefresh('zoomend-after-routes-ht');
+                    } else {
+                        siaHeavyZoomFinalRefreshPending = false;
+                    }
                 });
             } else {
                 scheduleSiaLayerRefresh('zoomend');
@@ -47676,6 +47751,9 @@ async function refreshSiaLayers(reason = 'manual') {
         }
         throw error;
     } finally {
+        if (String(reason || '') === 'zoomend-after-routes-ht') {
+            siaHeavyZoomFinalRefreshPending = false;
+        }
         siaRefreshInProgress = false;
         siaRefreshCurrentReason = null;
         const pending = siaRefreshPendingReason;
