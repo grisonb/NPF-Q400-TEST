@@ -1,3 +1,73 @@
+VERSION TEST v16.60 — GLR PREMIER CLIC + FRÉQUENCES AGRANDIES + ZOOM OUT ROUTES/HT PAR TRANCHES
+Date : 08/09/2026
+Base : TEST v16.59
+
+OBJECTIF
+- Corriger l'échec GLR Safari « Load failed » lorsqu'aucune réponse HTTP n'est obtenue.
+- Supprimer le double-clic nécessaire sur l'icône GLR après un échec silencieux des positions.
+- Augmenter encore la lisibilité des fréquences terrain.
+- Remplacer la destruction monolithique Routes pendant un zoom out par une libération progressive annulable, puis HT, puis SIA.
+- Conserver sans modification les règles FUEL Base / Pélic / déroutement validées en v16.59.
+
+1. GLR — « LOAD FAILED » SAFARI TRAITÉ AU NIVEAU FETCH
+- La v16.59 ne relançait que les réponses GLR contenant un message « Load Fail » ; Safari peut au contraire lever directement TypeError « Load failed » avant toute réponse HTTP.
+- L'action POSITIONS intercepte maintenant aussi cette exception réseau.
+- Une seule seconde tentative automatique est effectuée après 650 ms.
+- Une erreur réseau temporaire POSITIONS ne supprime ni la session GLR ni la session NPF/FdS.
+- CAPTCHA et LOGIN ne sont toujours jamais rejoués automatiquement.
+- Le DIAG conserve action=positions, HTTP=0 lorsqu'aucune réponse n'a été reçue et le texte de l'exception, sans donnée sensible.
+
+2. GLR — PLUS DE DOUBLE CLIC APRÈS ÉCHEC SILENCIEUX
+- Si GLR est mémorisé ON mais que la dernière action POSITIONS a échoué temporairement, le premier clic sur l'icône ne désactive plus GLR.
+- Ce premier clic relance immédiatement POSITIONS avec affichage utilisateur de l'erreur si la relance échoue.
+- En l'absence d'erreur POSITIONS mémorisée, le comportement normal ON → OFF au clic reste inchangé.
+
+3. ÉTIQUETTES TERRAINS — FRÉQUENCES ENCORE AGRANDIES
+- Nom + OACI : 14 px.
+- Fréquence/service : 15 px, graisse 900.
+- Fond, placement, absence d'interaction et référentiel léger 309/324+ conservés.
+
+4. ZOOM OUT HT + ROUTES — PANES MASQUÉS PENDANT LE GESTE
+- Quand Routes et HT sont actifs, les panes Routes/HT passent en visibility:hidden dès zoomstart.
+- WebKit n'a donc plus à redimensionner/repeindre les anciens Canvas au fil du pinch.
+- Tout nouveau zoom invalide immédiatement une ancienne séquence lourde en cours.
+
+5. ROUTES — LIBÉRATION PROGRESSIVE PARTIE PAR PARTIE
+- Sous le seuil Routes, les anciennes parties ne sont plus détruites avec un clearLayers global dans une seule tranche JavaScript.
+- Chaque partie Routes (casing + lignes) est retirée puis un frame est rendu avant la partie suivante.
+- Les sources associées sont libérées progressivement ; le clearLayers final ne s'exécute qu'une fois les groupes quasi vides.
+- Lors d'un changement de tier Routes pendant le zoom out sérialisé, la même libération progressive est utilisée avant la reconstruction.
+
+6. HT PUIS SIA — SÉRIALISATION CONSERVÉE
+- Après la fin réelle de la libération/reconstruction Routes, un frame est cédé avant de retirer/reconstruire HT.
+- Les panes ne redeviennent visibles qu'une fois la séquence Routes → HT terminée.
+- Le SIA conserve son attente sur la Promise de zoom out et ne repart qu'après Routes + HT.
+- Un nouveau geste annule la séquence précédente avant commit.
+
+7. FUEL — NON-RÉGRESSION v16.59
+- Retour Base : règle terminale 250 kg conservée.
+- Retour Pélic depuis départ Pélic : (Fuel départ Pélic - 700) / Conso rotation, sans +1.
+- Arrivée sur feu / déroutement direct : premier largage financé par 250 kg puis rotations suivantes.
+
+8. NON-RÉGRESSION
+- Moteur tuiles v16.58 conservé : aucune lecture IndexedDB active annulée, aucun trim 96 au zoomstart.
+- Référentiel fréquences aérodromes indépendant du SIA conservé, LFBD 118.305 et LFCS 119.005 prioritaires.
+- VAC, Lapradelle, overscroll calculateur, BFG/FdS/GAAR, diagnostics et mise à jour automatique conservés.
+- Aucun bouton MAJ réintroduit.
+- sia.js strictement inchangé bit pour bit.
+
+9. CONTRÔLES À LA LIVRAISON
+- node --check Script et Service Worker.
+- Scripts inline Index contrôlés.
+- manifest.json parsé.
+- Cohérence v16.60 Index / Manifest / Script / Style / SW.
+- Vérification GLR : TypeError Load failed = une seule relance POSITIONS ; premier clic relance si GLR ON en erreur ; session conservée.
+- Vérification étiquettes 14/15 px.
+- Vérification zoom out : panes masqués au zoomstart, Routes libérées par tranches, HT ensuite, SIA après résolution.
+- Tests fuel v16.59 conservés.
+- sia.js comparé bit-à-bit avec v16.59.
+
+
 VERSION TEST v16.59 — GLR + FUEL PÉLIC/DÉROUTEMENT + ZOOM OUT HT/ROUTES SÉRIALISÉ
 Date : 08/09/2026
 Base : TEST v16.58
