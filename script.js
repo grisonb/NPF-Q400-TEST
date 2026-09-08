@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v16.57';
+const NPF_SCRIPT_BUILD_VERSION = 'v16.58';
 
 
 /*
@@ -541,6 +541,13 @@ function getNpfStartupDiagnosticRuntimeInfo() {
         vacDisplayedAirportCount: typeof getNpfDisplayedAirportOaciCountForVac === 'function'
             ? getNpfDisplayedAirportOaciCountForVac()
             : 0,
+        airportFrequencyFallbackCount: airportFrequencyFallbackIndex instanceof Map
+            ? airportFrequencyFallbackIndex.size
+            : 0,
+        airportFrequencyAdditionalCount: Array.isArray(additionalAerodromes)
+            ? additionalAerodromes.reduce((count, airport) => count + (getAirportOperationalFrequency(airport?.oaci) ? 1 : 0), 0)
+            : 0,
+        airportFrequencyAdditionalTotal: Array.isArray(additionalAerodromes) ? additionalAerodromes.length : 0,
         communeCount: Array.isArray(allCommunes) ? allCommunes.length : 0,
         communeAliasCount: Array.isArray(communeAliases) ? communeAliases.length : 0,
         communeAliasSource: String(communeAliasesLoadSource || '—'),
@@ -618,6 +625,12 @@ function buildNpfStartupDiagnosticExportText() {
         + (runtime.vacManifestUnavailableCount
             ? ' | ' + runtime.vacManifestUnavailableCount + ' sans VAC publiée'
             : '')
+    );
+    lines.push(
+        'Fréquences terrains : '
+        + runtime.airportFrequencyAdditionalCount + '/' + runtime.airportFrequencyAdditionalTotal
+        + ' aérodromes complémentaires renseignés | '
+        + runtime.airportFrequencyFallbackCount + ' fréquences en référentiel léger/cache'
     );
     lines.push(
         'Recherche France : '
@@ -1709,6 +1722,17 @@ let airportOperationalLabelLayer = null;
 let airportOperationalLabelRefreshTimer = null;
 let airportOperationalFrequencyIndex = null;
 let airportOperationalFrequencyIndexDataset = null;
+/* v16.58 — fréquences des aérodromes complémentaires : référentiel léger,
+ * indépendant du chargement lourd SIA et mémorisé pour l'usage offline. */
+const AIRPORT_FREQUENCY_FALLBACK_URLS = Object.freeze([
+    'https://raw.githubusercontent.com/vmath54/xcsoar/master/waypoints/FranceVacEtUlm.cup',
+    'https://cdn.jsdelivr.net/gh/vmath54/xcsoar@master/waypoints/FranceVacEtUlm.cup'
+]);
+const AIRPORT_FREQUENCY_FALLBACK_CACHE_KEY = 'npfAirportFrequencyFallback_v1';
+const AIRPORT_FREQUENCY_FALLBACK_TIMEOUT_MS = 8000;
+let airportFrequencyFallbackIndex = null;
+let airportFrequencyFallbackLoadPromise = null;
+let airportFrequencyFallbackLastAttemptAt = 0;
 
 /*
  * Navigation automatique Feu ↔ PÉLIC.
@@ -5322,8 +5346,8 @@ async function loadCommunesAliases() {
             return null;
         }
 
-        const displayName = String(entry.nom_affiche || entry.display_name || entry.nom || '').trim();
-        const targetCode = String(entry.code_insee || entry.target_code_insee || '').trim();
+        const displayName = String(entry.nom_affiche || entry.display_name || entry.alias_nom_affiche || entry.nom_standard || entry.nom || '').trim();
+        const targetCode = String(entry.alias_target_code_insee || entry.code_insee || entry.target_code_insee || '').trim();
         if (!displayName || !targetCode) return null;
 
         const targetCommune = communesByCodeInsee.get(targetCode);
@@ -5392,6 +5416,31 @@ async function loadCommunesAliases() {
         return aliases;
     };
 
+    /* v16.58 — cache d'abord : les 6 000+ alias ne doivent plus bloquer
+     * l'affichage des PÉLIC pendant une requête réseau. Une copie locale valide
+     * est rendue immédiatement puis rafraîchie silencieusement en arrière-plan. */
+    try {
+        const cachedData = localStorage.getItem(COMMUNES_ALIASES_CACHE_KEY);
+        if (cachedData) {
+            const aliases = parseAliasPayload(JSON.parse(cachedData));
+            if (aliases.length) {
+                communeAliasesLoadSource = 'cache-local';
+                setTimeout(async () => {
+                    try {
+                        const response = await fetchWithTimeout('./communes_aliases.json', { cache: 'no-cache' }, 5000);
+                        if (!response.ok) return;
+                        const updatedAliases = storeAliases(await response.json());
+                        if (updatedAliases.length) {
+                            communeAliases = updatedAliases;
+                            communeAliasesLoadSource = 'fichier-reseau-maj';
+                        }
+                    } catch (_) {}
+                }, 1800);
+                return aliases;
+            }
+        }
+    } catch (_) {}
+
     try {
         const response = await fetchWithTimeout('./communes_aliases.json', { cache: 'no-cache' }, 5000);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -5399,15 +5448,6 @@ async function loadCommunesAliases() {
         communeAliasesLoadSource = 'fichier-reseau';
         return aliases;
     } catch (_) {
-        try {
-            const cachedData = localStorage.getItem(COMMUNES_ALIASES_CACHE_KEY);
-            if (cachedData) {
-                const aliases = parseAliasPayload(JSON.parse(cachedData));
-                communeAliasesLoadSource = 'cache-local';
-                return aliases;
-            }
-        } catch (_) {}
-
         try {
             const fallbackResponse = await fetchWithTimeout('./communes_aliases.json', { cache: 'force-cache' }, 3000);
             if (!fallbackResponse.ok) throw new Error(`HTTP ${fallbackResponse.status}`);
@@ -6984,7 +7024,15 @@ function initMap() {
     });
     map.on('zoomend', enforceOfflineZoomLimit);
     map.on('zoomend', () => {
-        try { pruneDirectOfflineNpfQueueForCurrentView('zoomend'); } catch (_) {}
+        /* v16.58 — aucune purge/éviction pendant le geste. Une fois le zoom
+         * stabilisé, le viewport courant devient prioritaire puis seule la file
+         * réellement obsolète est nettoyée après que Leaflet a fini de retenir
+         * ses nouvelles tuiles. Les lectures IndexedDB actives restent intactes. */
+        try { markDirectOfflineNpfViewportPriority('zoomend-stable'); } catch (_) {}
+        setTimeout(() => {
+            try { pruneDirectOfflineNpfQueueForCurrentView('zoomend-stable'); } catch (_) {}
+            try { trimDirectOfflineTileBlobCache(); } catch (_) {}
+        }, 140);
         scheduleBaseMapStabilityRefresh('zoomend');
         scheduleNpfOfflineZoomCleanup('zoomend');
         scheduleTrafficVisualResumeAfterMapInteraction('zoomend');
@@ -7188,12 +7236,31 @@ function initMap() {
 
     map.on('moveend zoomend', event => {
         const gpsFollowPan = event?.type === 'moveend' && isNpfGpsFollowProgrammaticPan();
+        const zoomEnded = event?.type === 'zoomend';
+
         if (showRoadOverlayLayer) {
-            if (!gpsFollowPan || !isRoadOverlayCoverageValidForCurrentView()) {
+            /* v16.58 — si le zoom final est sous le seuil d'affichage Routes,
+             * libérer immédiatement les milliers de géométries de l'ancien
+             * zoom au lieu d'attendre le refresh différé de 1,15 s. */
+            if (zoomEnded && getRoadOverlayZoomTier() === 0) {
+                roadOverlayRefreshToken += 1;
+                clearTimeout(roadOverlayRefreshTimer);
+                roadOverlayRefreshTimer = null;
+                clearRoadOverlayRenderedParts({ resetTier: false, clearSources: true });
+                roadOverlayLoadedZoomTier = 0;
+            } else if (!gpsFollowPan || !isRoadOverlayCoverageValidForCurrentView()) {
                 scheduleRoadOverlayRefresh(gpsFollowPan ? 'gps-follow-edge' : 'map-change');
             }
         }
         if (showHighVoltageLinesLayer && hasLoadedHighVoltageLines) {
+            /* Même principe pour HT : à l'échelle éloignée, ne pas conserver
+             * un ancien rendu détaillé massif pendant l'attente des tuiles. */
+            if (zoomEnded && Number(map.getZoom?.()) <= 10 && highVoltageLinesRenderedFeatureCount > 2500) {
+                highVoltageLinesRefreshToken += 1;
+                clearTimeout(highVoltageLinesRefreshTimer);
+                highVoltageLinesRefreshTimer = null;
+                clearRenderedHighVoltageLines();
+            }
             if (!gpsFollowPan || !isHighVoltageCoverageValidForCurrentView()) {
                 scheduleHighVoltageLinesRefresh(gpsFollowPan ? 'gps-follow-edge' : 'map-change');
             }
@@ -7292,14 +7359,12 @@ function beginBaseMapZoomStabilityGuard(reason = 'zoomstart') {
         && typeof isNpfOfflinePackSelection === 'function'
         && isNpfOfflinePackSelection()
     ) {
-        /*
-         * v16.46 — ne plus invalider les cinq transactions IndexedDB déjà
-         * actives à chaque pan/zoom. On augmente seulement la priorité des
-         * nouvelles demandes du viewport ; les anciennes lectures terminent
-         * normalement et peuvent encore alimenter le cache mémoire.
-         */
-        try { markDirectOfflineNpfViewportPriority(reason); } catch (_) {}
-        try { trimDirectOfflineTileBlobCache(96); } catch (_) {}
+        /* v16.58 — le début du zoom ne touche plus ni au cache blobs, ni à la
+         * priorité de file. Les tuiles de la vue précédente restent disponibles
+         * pendant le pinch/zoom et les nouvelles demandes ne provoquent plus une
+         * succession abandon -> relecture. La bascule de priorité se fait à
+         * zoomend, une seule fois sur la vue stabilisée. */
+        return;
     }
 }
 
@@ -8329,7 +8394,7 @@ let directOfflineLastRecoveryReason = '';
  * concurrence uniquement pour le groupe NPF ; OACI conserve son chemin rapide.
  */
 const DIRECT_OFFLINE_NPF_MAX_CONCURRENT_READS = 3;
-const DIRECT_OFFLINE_NPF_MAX_QUEUED_READS = 96;
+const DIRECT_OFFLINE_NPF_MAX_QUEUED_READS = 160;
 const DIRECT_OFFLINE_TILE_ABORTED = Symbol('direct-offline-tile-aborted');
 let directOfflineNpfActiveReads = 0;
 const directOfflineNpfReadQueue = [];
@@ -11228,6 +11293,28 @@ function getHighVoltageAggregationBand(feature) {
     return 'autres';
 }
 
+
+/* v16.58 — généralisation cartographique aux zooms éloignés. Afficher des
+ * milliers de tronçons 63 kV à l'échelle France n'apporte pas d'information
+ * exploitable et crée un pic Canvas/mémoire sur iPad. Les détails réapparaissent
+ * automatiquement en revenant à une échelle rapprochée. */
+function shouldRenderHighVoltageFeatureAtZoom(feature, zoom) {
+    const band = getHighVoltageAggregationBand(feature);
+    const z = Number(zoom);
+    if (Number.isFinite(z) && z <= 8) return band === '400' || band === '225';
+    if (Number.isFinite(z) && z <= 9) return band === '400' || band === '225' || band === '90';
+    if (Number.isFinite(z) && z <= 10) return band !== 'autres';
+    return true;
+}
+
+function getHighVoltageViewportPadForZoom(zoom) {
+    const z = Number(zoom);
+    if (Number.isFinite(z) && z <= 8) return 0.02;
+    if (Number.isFinite(z) && z <= 10) return 0.06;
+    if (Number.isFinite(z) && z <= 11) return 0.12;
+    return HIGH_VOLTAGE_LINES_VIEWPORT_PAD;
+}
+
 function appendHighVoltageGeometryLines(geometry, target) {
     if (!geometry || !target) return;
     const type = String(geometry.type || '');
@@ -11313,10 +11400,12 @@ async function refreshVisibleHighVoltageLines(source = 'refresh') {
         return;
     }
 
-    const bounds = map.getBounds().pad(HIGH_VOLTAGE_LINES_VIEWPORT_PAD);
+    const zoom = Number(map.getZoom?.());
+    const bounds = map.getBounds().pad(getHighVoltageViewportPadForZoom(zoom));
     const visibleFeatures = [];
 
     for (const feature of highVoltageLinesIndexedFeatures) {
+        if (!shouldRenderHighVoltageFeatureAtZoom(feature, zoom)) continue;
         if (feature?.__npfBbox && !roadOverlayBboxIntersectsBounds(feature.__npfBbox, bounds)) continue;
         visibleFeatures.push(feature);
     }
@@ -11336,6 +11425,22 @@ async function refreshVisibleHighVoltageLines(source = 'refresh') {
         return;
     }
 
+    /* v16.58 — en zoom éloigné ou sous charge combinée, libérer l'ancien
+     * Canvas AVANT de construire le nouveau. Cela évite le pic correspondant à
+     * deux jeux HT + SIA + routes simultanés pendant un zoom out. */
+    const memorySafeReplace = Number.isFinite(zoom) && zoom <= 10
+        || !!showRoadOverlayLayer
+        || !!(siaMapAirspacesVisible && hasAnyEnabledSiaFilter());
+    if (memorySafeReplace && previousLayer) {
+        try { highVoltageLinesLayer.removeLayer(previousLayer); } catch (_) {}
+        if (highVoltageLinesRenderedGeoJsonLayer === previousLayer) {
+            highVoltageLinesRenderedGeoJsonLayer = null;
+            highVoltageLinesRenderedFeatureCount = 0;
+        }
+        await new Promise(resolve => setTimeout(resolve, 0));
+        if (token !== highVoltageLinesRefreshToken || !showHighVoltageLinesLayer) return;
+    }
+
     const renderGeojson = buildHighVoltageAggregatedRenderGeojson(visibleFeatures);
     if (!renderGeojson.features.length) return;
 
@@ -11349,12 +11454,15 @@ async function refreshVisibleHighVoltageLines(source = 'refresh') {
 
     if (token !== highVoltageLinesRefreshToken || !showHighVoltageLinesLayer) return;
 
-    /* Nouveau rendu d'abord, ancien rendu ensuite : aucun trou visuel. */
+    /* Vue rapprochée légère : double-buffer visuel conservé. Vue éloignée
+     * ou combinée : l'ancien rendu a déjà été libéré ci-dessus. */
     replacementLayer.addTo(highVoltageLinesLayer);
     highVoltageLinesRenderedGeoJsonLayer = replacementLayer;
     highVoltageLinesRenderedFeatureCount = visibleFeatures.length;
     highVoltageLinesRenderedBounds = L.latLngBounds(bounds.getSouthWest(), bounds.getNorthEast());
-    try { if (previousLayer && previousLayer !== replacementLayer) highVoltageLinesLayer.removeLayer(previousLayer); } catch (_) {}
+    if (!memorySafeReplace) {
+        try { if (previousLayer && previousLayer !== replacementLayer) highVoltageLinesLayer.removeLayer(previousLayer); } catch (_) {}
+    }
 
     if (source !== 'map-change') {
         recordNpfStartupDiagnosticOverlaySnapshot(`lignes-ht rendu ${source}`);
@@ -27211,12 +27319,186 @@ function getNpfDisplayedAirportRecordsForLabels() {
     return [...byOaci.values()];
 }
 
-/* v16.57 — fréquences aérodrome vérifiées qui ne doivent pas dépendre
- * de la présence du terrain dans les services des espaces SIA. */
+/* v16.58 — fréquences aérodrome.
+ * Priorité : valeurs explicitement vérifiées > services SIA déjà en mémoire
+ * > référentiel VAC léger mis en cache. Le simple affichage des noms/fréquences
+ * ne déclenche plus le décompactage du jeu SIA. */
 const AIRPORT_OPERATIONAL_FREQUENCY_OVERRIDES = new Map([
-    ['LFBD', Object.freeze({ type: 'TWR', value: '118.305', priority: 0 })],
-    ['LFCS', Object.freeze({ type: 'A/A', value: '119.005', priority: 2 })]
+    ['LFBD', Object.freeze({ type: 'TWR', value: '118.305', priority: 0, source: 'verified' })],
+    ['LFCS', Object.freeze({ type: 'A/A', value: '119.005', priority: 2, source: 'verified' })]
 ]);
+
+function normalizeAirportOperationalFrequencyValue(raw) {
+    const match = String(raw || '').replace(',', '.').match(/(?:^|[^0-9])(1(?:1[89]|2[0-9]|3[0-6])(?:\.\d{1,3})?)(?:[^0-9]|$)/);
+    if (!match) return '';
+    const numeric = Number(match[1]);
+    if (!Number.isFinite(numeric) || numeric < 118 || numeric >= 137 || Math.abs(numeric - 121.5) < 0.0001) return '';
+    return numeric.toFixed(3);
+}
+
+function parseAirportFrequencyFallbackCup(text) {
+    const rows = [];
+    let row = [];
+    let field = '';
+    let quoted = false;
+    const input = String(text || '');
+
+    const pushField = () => {
+        row.push(field);
+        field = '';
+    };
+    const pushRow = () => {
+        pushField();
+        if (row.some(value => String(value || '').trim())) rows.push(row);
+        row = [];
+    };
+
+    for (let i = 0; i < input.length; i += 1) {
+        const ch = input[i];
+        if (ch === '"') {
+            if (quoted && input[i + 1] === '"') {
+                field += '"';
+                i += 1;
+            } else {
+                quoted = !quoted;
+            }
+            continue;
+        }
+        if (!quoted && ch === ',') {
+            pushField();
+            continue;
+        }
+        if (!quoted && (ch === '\n' || ch === '\r')) {
+            if (ch === '\r' && input[i + 1] === '\n') i += 1;
+            pushRow();
+            continue;
+        }
+        field += ch;
+    }
+    if (field.length || row.length) pushRow();
+    if (!rows.length) return new Map();
+
+    const header = rows[0].map(value => String(value || '').trim().toLowerCase());
+    const codeIndex = header.indexOf('code');
+    const freqIndex = header.indexOf('freq');
+    if (codeIndex < 0 || freqIndex < 0) return new Map();
+
+    const index = new Map();
+    for (let i = 1; i < rows.length; i += 1) {
+        const record = rows[i];
+        const code = String(record?.[codeIndex] || '').trim().toUpperCase();
+        if (!/^LF[A-Z]{2}$/.test(code)) continue;
+        const value = normalizeAirportOperationalFrequencyValue(record?.[freqIndex]);
+        if (!value) continue;
+        index.set(code, { type: '', value, priority: 9, source: 'vac-fallback' });
+    }
+    return index;
+}
+
+function serializeAirportFrequencyFallbackIndex(index) {
+    const payload = {};
+    (index instanceof Map ? index : new Map()).forEach((entry, code) => {
+        const value = normalizeAirportOperationalFrequencyValue(entry?.value);
+        if (/^LF[A-Z]{2}$/.test(String(code || '')) && value) payload[code] = value;
+    });
+    return payload;
+}
+
+function hydrateAirportFrequencyFallbackIndex(payload) {
+    const index = new Map();
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return index;
+    Object.entries(payload).forEach(([rawCode, rawValue]) => {
+        const code = String(rawCode || '').trim().toUpperCase();
+        const value = normalizeAirportOperationalFrequencyValue(rawValue);
+        if (/^LF[A-Z]{2}$/.test(code) && value) {
+            index.set(code, { type: '', value, priority: 9, source: 'vac-fallback-cache' });
+        }
+    });
+    return index;
+}
+
+function loadCachedAirportFrequencyFallbackIndex() {
+    try {
+        const raw = localStorage.getItem(AIRPORT_FREQUENCY_FALLBACK_CACHE_KEY);
+        if (!raw) return null;
+        const index = hydrateAirportFrequencyFallbackIndex(JSON.parse(raw));
+        return index.size ? index : null;
+    } catch (_) {
+        return null;
+    }
+}
+
+async function fetchAirportFrequencyFallbackIndex() {
+    let lastError = null;
+    for (const url of AIRPORT_FREQUENCY_FALLBACK_URLS) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), AIRPORT_FREQUENCY_FALLBACK_TIMEOUT_MS);
+        try {
+            const response = await fetch(url, {
+                cache: 'no-cache',
+                signal: controller.signal,
+                mode: 'cors'
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const index = parseAirportFrequencyFallbackCup(await response.text());
+            if (index.size < 100) throw new Error(`Référentiel fréquences incomplet (${index.size})`);
+            return index;
+        } catch (error) {
+            lastError = error;
+        } finally {
+            clearTimeout(timer);
+        }
+    }
+    throw lastError || new Error('Référentiel fréquences indisponible');
+}
+
+function persistAirportFrequencyFallbackIndex(index) {
+    try {
+        const payload = serializeAirportFrequencyFallbackIndex(index);
+        localStorage.setItem(AIRPORT_FREQUENCY_FALLBACK_CACHE_KEY, JSON.stringify(payload));
+    } catch (_) {}
+}
+
+function refreshAirportFrequencyFallbackInBackground() {
+    if ((Date.now() - Number(airportFrequencyFallbackLastAttemptAt || 0)) < 60000) return;
+    airportFrequencyFallbackLastAttemptAt = Date.now();
+    fetchAirportFrequencyFallbackIndex().then(index => {
+        airportFrequencyFallbackIndex = index;
+        persistAirportFrequencyFallbackIndex(index);
+        scheduleAirportOperationalLabelsRefresh(0);
+    }).catch(() => {});
+}
+
+function ensureAirportFrequencyFallbackLoaded() {
+    if (airportFrequencyFallbackIndex instanceof Map && airportFrequencyFallbackIndex.size) {
+        return Promise.resolve(airportFrequencyFallbackIndex);
+    }
+    if (airportFrequencyFallbackLoadPromise) return airportFrequencyFallbackLoadPromise;
+
+    const cached = loadCachedAirportFrequencyFallbackIndex();
+    if (cached?.size) {
+        airportFrequencyFallbackIndex = cached;
+        setTimeout(refreshAirportFrequencyFallbackInBackground, 1800);
+        return Promise.resolve(cached);
+    }
+
+    airportFrequencyFallbackLastAttemptAt = Date.now();
+    airportFrequencyFallbackLoadPromise = fetchAirportFrequencyFallbackIndex()
+        .then(index => {
+            airportFrequencyFallbackIndex = index;
+            persistAirportFrequencyFallbackIndex(index);
+            scheduleAirportOperationalLabelsRefresh(0);
+            return index;
+        })
+        .catch(error => {
+            console.warn('Référentiel fréquences aérodromes indisponible:', error);
+            return new Map();
+        })
+        .finally(() => {
+            airportFrequencyFallbackLoadPromise = null;
+        });
+    return airportFrequencyFallbackLoadPromise;
+}
 
 function buildAirportOperationalFrequencyIndex(dataset = siaDataset) {
     if (airportOperationalFrequencyIndex && airportOperationalFrequencyIndexDataset === dataset) {
@@ -27244,23 +27526,25 @@ function buildAirportOperationalFrequencyIndex(dataset = siaDataset) {
         const next = {
             type,
             value: candidate.numeric.toFixed(3),
-            priority: priorities.get(type)
+            priority: priorities.get(type),
+            source: 'sia'
         };
         const current = index.get(code);
         if (!current || next.priority < current.priority) index.set(code, next);
     };
 
-    (dataset?.airspaces || []).forEach(item => {
-        (Array.isArray(item?.sv) ? item.sv : []).forEach(service => {
-            const serviceType = String(service?.[0] || '').trim().toUpperCase();
-            const unit = String(service?.[1] || '').trim().toUpperCase();
-            const unitOaci = unit.match(/^([A-Z]{4})\b/)?.[1] || '';
-            const itemOaci = String(item?.c || '').trim().toUpperCase().match(/^([A-Z]{4})(?:\b|\d|\.|-)/)?.[1] || '';
-            consider(unitOaci || itemOaci, serviceType, service?.[2]);
+    if (dataset) {
+        (dataset?.airspaces || []).forEach(item => {
+            (Array.isArray(item?.sv) ? item.sv : []).forEach(service => {
+                const serviceType = String(service?.[0] || '').trim().toUpperCase();
+                const unit = String(service?.[1] || '').trim().toUpperCase();
+                const unitOaci = unit.match(/^([A-Z]{4})\b/)?.[1] || '';
+                const itemOaci = String(item?.c || '').trim().toUpperCase().match(/^([A-Z]{4})(?:\b|\d|\.|-)/)?.[1] || '';
+                consider(unitOaci || itemOaci, serviceType, service?.[2]);
+            });
         });
-    });
+    }
 
-    /* Les valeurs explicitement vérifiées priment sur l'index générique. */
     AIRPORT_OPERATIONAL_FREQUENCY_OVERRIDES.forEach((frequency, oaci) => {
         index.set(oaci, { ...frequency });
     });
@@ -27273,7 +27557,16 @@ function buildAirportOperationalFrequencyIndex(dataset = siaDataset) {
 function getAirportOperationalFrequency(oaci) {
     const code = String(oaci || '').trim().toUpperCase();
     if (!code) return null;
-    return buildAirportOperationalFrequencyIndex(siaDataset).get(code) || null;
+
+    const override = AIRPORT_OPERATIONAL_FREQUENCY_OVERRIDES.get(code);
+    if (override) return override;
+
+    if (siaDataset) {
+        const siaFrequency = buildAirportOperationalFrequencyIndex(siaDataset).get(code);
+        if (siaFrequency) return siaFrequency;
+    }
+
+    return airportFrequencyFallbackIndex?.get(code) || null;
 }
 
 function refreshAirportOperationalLabels() {
@@ -27297,7 +27590,7 @@ function refreshAirportOperationalLabels() {
             ? `${airportName} (${airportOaci})`
             : airportOaci;
         const frequencyHtml = freq
-            ? `<span class="airport-operational-frequency">${escapeHtml(freq.type)} ${escapeHtml(freq.value)}</span>`
+            ? `<span class="airport-operational-frequency">${freq.type ? `${escapeHtml(freq.type)} ` : ''}${escapeHtml(freq.value)}</span>`
             : '';
         L.marker(latlng, {
             interactive: false,
@@ -27312,8 +27605,11 @@ function refreshAirportOperationalLabels() {
         }).addTo(airportOperationalLabelLayer);
     });
 
-    if (!siaDataset && SIA_EMBEDDED_AVAILABLE) {
-        ensureSiaDatasetLoaded().then(() => scheduleAirportOperationalLabelsRefresh(0)).catch(() => {});
+    /* v16.58 — les libellés terrain ne chargent jamais le gros jeu SIA.
+     * Si le référentiel léger n'est pas encore en cache, il est récupéré en
+     * arrière-plan puis les libellés sont redessinés. */
+    if (!(airportFrequencyFallbackIndex instanceof Map) || !airportFrequencyFallbackIndex.size) {
+        ensureAirportFrequencyFallbackLoaded().catch(() => {});
     }
 }
 
@@ -27414,7 +27710,12 @@ function drawPermanentAirportMarkers() {
         marker.addTo(permanentAirportLayer);
         addAirportTouchHitbox(airport, popupHtml);
     });
+
+    /* v16.58 — précharge non bloquante du petit référentiel fréquence pour
+     * qu'il soit déjà mémorisé lorsque l'utilisateur atteint l'échelle 1 NM. */
+    ensureAirportFrequencyFallbackLoaded().catch(() => {});
 }
+
 
 
 function getDepartmentBoundaryStyle() {
@@ -40744,7 +41045,7 @@ function setSiaMapVrpVisible(visible) {
 
 // v15.75 — tampon de rendu et cache de géométries pour limiter les reconstructions iPad.
 const SIA_RENDER_BOUNDS_PAD_RATIO = 0.25;
-const SIA_COMBINED_HEAVY_RENDER_PAD_RATIO = 0.08;
+const SIA_COMBINED_HEAVY_RENDER_PAD_RATIO = 0.04;
 const SIA_POINT_ONLY_RENDER_BOUNDS_PAD_RATIO = 0.80;
 let siaRenderedCoverageBounds = null;
 let siaRenderedZoom = null;
@@ -40782,6 +41083,8 @@ const SIA_STARTUP_PASSIVE_MOVEEND_GUARD_MS = 2500;
 /* v16.57 — tant que startup-prefs est programmé, un moveend passif de démarrage
  * ne doit pas lancer une seconde reconstruction SIA sur la même vue. */
 let siaStartupInitialRefreshPending = false;
+/* v16.58 — empêche moveend de lancer un rendu intermédiaire pendant un zoom. */
+let siaZoomGestureActive = false;
 /* Ancien préchargement conservé pour compatibilité mais non déclenché pendant le pan. */
 let siaMovePreloadLastTriggerAt = 0;
 const SIA_MOVE_PRELOAD_MIN_INTERVAL_MS = 400;
@@ -41099,10 +41402,26 @@ function cancelAllSiaWorkForZoomStart() {
     siaDecorationProgressiveRun += 1;
     window.__npfSiaRefreshGeneration = (Number(window.__npfSiaRefreshGeneration) || 0) + 1;
 
+    /* v16.58 — ne plus transporter un ancien jeu de centaines de calques SIA
+     * pendant un zoom out. Sous charge combinée, ou dès que le rendu SIA est
+     * déjà volumineux, on libère l'ancien groupe au début du geste. Le rendu
+     * final sera reconstruit une seule fois au zoomend. */
+    const renderedZoneCount = Array.isArray(siaRenderedAirspaceFeatures)
+        ? siaRenderedAirspaceFeatures.length
+        : 0;
+    const releaseOldSiaNow = !!(
+        siaMapAirspacesVisible
+        && renderedZoneCount > 0
+        && (showRoadOverlayLayer || showHighVoltageLinesLayer || renderedZoneCount >= 120)
+    );
+    if (releaseOldSiaNow) {
+        clearSiaRenderedLayers();
+    }
+
     npfDiagSiaInteraction(
         'SIA ZOOM',
-        `raison=zoomstart · génération précédente invalidée · courant=${String(siaRefreshCurrentReason || 'aucun')}`,
-        { totalMs: 0 }
+        `raison=zoomstart · génération précédente invalidée · ancien-rendu=${releaseOldSiaNow ? 'libéré' : 'conservé'} · courant=${String(siaRefreshCurrentReason || 'aucun')}`,
+        { totalMs: 0, zonesAvant: renderedZoneCount }
     );
 }
 
@@ -43792,6 +44111,16 @@ function initializeSiaSystem() {
                 return;
             }
             const gpsFollowMoveend = sample?.source === 'gps-follow' || isNpfGpsFollowProgrammaticPan();
+            /* v16.58 — Leaflet peut émettre moveend au milieu d'un pinch/zoom.
+             * Aucun rendu SIA intermédiaire : seul zoomend reconstruira la vue. */
+            if (siaZoomGestureActive) {
+                npfDiagSiaInteraction(
+                    'SIA RAFRAÎCHISSEMENT',
+                    `raison=moveend-pendant-zoom · ignoré · zoom=${map.getZoom()}`,
+                    { totalMs: 0 }
+                );
+                return;
+            }
             if (siaStartupInitialRefreshPending && !siaRenderedCoverageBounds) {
                 npfDiagSiaInteraction(
                     'SIA RAFRAÎCHISSEMENT',
@@ -43804,11 +44133,13 @@ function initializeSiaSystem() {
         });
         map.on('zoomstart', () => {
             npfDiagZoomStartedAt = NPF_STARTUP_DIAGNOSTIC.now();
-            /* v16.57 — tout travail de l'ancien zoom est obsolète, quel que soit son motif. */
+            siaZoomGestureActive = true;
+            /* v16.58 — tout travail de l'ancien zoom est obsolète, quel que soit son motif. */
             cancelAllSiaWorkForZoomStart();
         });
         map.on('zoomend', () => {
             const now = NPF_STARTUP_DIAGNOSTIC.now();
+            siaZoomGestureActive = false;
             if (npfDiagZoomStartedAt > 0) {
                 npfDiagZoom({
                     dureeMs: Math.round(now - npfDiagZoomStartedAt),
