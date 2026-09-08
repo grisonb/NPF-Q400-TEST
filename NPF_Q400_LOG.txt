@@ -1,3 +1,69 @@
+VERSION TEST v16.62 — GLR DIAGNOSTIC 3 NIVEAUX + ZOOM OUT ROUTES/HT STABILISÉ 360 MS
+Date : 08/09/2026
+Base : TEST v16.61
+
+OBJECTIF
+- Corriger la régression de fluidité/plantage observée en v16.61 avec Routes + HT lors d'un zoom out rapide multi-niveaux.
+- Ne plus exécuter la séquence lourde Routes → HT → SIA à chaque zoomend intermédiaire du pinch.
+- Réduire le pic mémoire Routes en libérant le cache source brut lorsque HT est actif et que ce cache dépasse 12 000 tronçons.
+- Améliorer le diagnostic GLR « Load failed » : le résultat v16.61 « NAS injoignable » était ambigu car un refus CORS produit la même exception Safari.
+- Conserver les améliorations tuiles v16.61, les règles FUEL validées et les tailles d'étiquettes terrain.
+
+1. ZOOM OUT ROUTES + HT — UNE SEULE TRANSACTION APRÈS STABILISATION
+- Le premier zoomstart mémorise le niveau initial et masque immédiatement les panes Routes/HT.
+- Les zoomend intermédiaires d'un même pinch ne lancent plus runSerializedHeavyOverlayZoomOut().
+- Un timer commun de 360 ms est repoussé à chaque nouvelle étape de zoom.
+- La transaction lourde n'est exécutée qu'une seule fois, sur le zoom réellement final après 360 ms sans nouveau zoomstart.
+- Le même Promise est conservé pendant toute la série afin que le SIA attende la transaction finale au lieu d'observer plusieurs transactions successives.
+- Si le geste est inversé/annulé avant le seuil de zoom-out, la transaction différée est annulée et les panes sont rendus visibles.
+
+2. SIA — UN SEUL OBSERVATEUR DU PROMISE ROUTES/HT
+- Les zoomend intermédiaires observent désormais le même Promise de transaction lourde.
+- Un seul callback final est enregistré sur ce Promise.
+- Le verrou siaHeavyZoomFinalRefreshPending reste actif entre les zooms intermédiaires.
+- Le SIA ne lance donc qu'un seul « zoomend-after-routes-ht » lorsque Routes et HT ont réellement terminé sur la vue finale.
+
+3. ROUTES — LIBÉRATION DU CACHE SOURCE BRUT SOUS HT
+- Nouveau seuil mémoire : ROAD_OVERLAY_SOURCE_FEATURE_SOFT_LIMIT = 12000.
+- Au zoomstart Routes+HT, si le cache source brut dépasse ce seuil, il est libéré immédiatement.
+- Le rendu filtré déjà visible n'est pas supprimé par cette opération.
+- Après un nouveau rendu Routes avec HT actif, le cache brut est à nouveau libéré s'il dépasse 12 000 tronçons.
+- Les parties restent rechargeables depuis Cache Storage au prochain viewport.
+- Objectif : éviter de conserver des états comme 45 811 tronçons source alors que seuls quelques dizaines/centaines de tronçons sont effectivement utiles au rendu.
+
+4. GLR — DIAGNOSTIC « LOAD FAILED » EN TROIS TESTS
+- Le test v16.61 uniquement en mode CORS était ambigu : CORS, DNS, TLS ou endpoint pouvaient tous produire TypeError « Load failed ».
+- Après un échec POSITIONS, NPF teste maintenant successivement :
+  1) npf-global-link-api.php en CORS simple sans en-têtes sensibles ;
+  2) le même endpoint en no-cors ;
+  3) npf-docs-api.php FDS/GAAR du même NAS en no-cors.
+- États DIAG possibles :
+  - positions-auth-ou-entetes-fail : le PHP GLR répond en CORS mais la requête authentifiée/en-têtes échoue ;
+  - positions-cors-fail : l'URL GLR est joignable en no-cors mais la réponse CORS n'est pas exploitable ;
+  - positions-endpoint-glr-fail : le relais FDS/GAAR du NAS est joignable mais l'URL GLR ne l'est pas ;
+  - positions-nas-reseau-fail : même le relais FDS/GAAR n'est pas joignable depuis Safari.
+- Aucun token GLR, token NPF, mot de passe ou captcha n'est envoyé dans ces probes ni écrit au DIAG.
+- Cette livraison instrumente précisément la panne GLR ; elle ne prétend pas réparer un PHP/reverse-proxy NAS si le prochain DIAG montre que la panne est côté serveur.
+
+5. TUILES / FUEL / ÉTIQUETTES — NON-RÉGRESSION
+- Le moteur tuiles v16.61 est conservé : updateWhenIdle, debounce 240 ms, aucune annulation des lectures IndexedDB actives.
+- Calcul FUEL retour Base / départ Pélic / déroutement inchangé.
+- Nom/OACI 14 px et fréquence 15 px en gras inchangés.
+- Fréquences terrain, VAC, BFG/FdS/GAAR, Lapradelle, overscroll calculateur et mise à jour automatique conservés.
+- Aucun bouton MAJ principal réintroduit.
+- sia.js strictement inchangé bit pour bit.
+
+6. CONTRÔLES À LA LIVRAISON
+- node --check Script et Service Worker.
+- Scripts inline Index contrôlés.
+- manifest.json parsé.
+- Cohérence v16.62 Index / Manifest / Script / Style / SW.
+- Vérification du debounce lourd 360 ms et du seuil Routes source 12 000.
+- Vérification du Promise unique SIA pendant le zoom out combiné.
+- Vérification des trois probes GLR sans en-têtes sensibles.
+- sia.js comparé bit-à-bit avec v16.61.
+
+
 VERSION TEST v16.61 — GLR DIAGNOSTIC RÉSEAU + FLUIDITÉ ZOOM / SIA DÉDUPLIQUÉ
 Date : 08/09/2026
 Base : TEST v16.60
