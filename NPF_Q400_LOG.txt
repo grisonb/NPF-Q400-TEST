@@ -1,3 +1,87 @@
+VERSION TEST v16.58 — FRÉQUENCES AÉRODROMES ÉTENDUES + ZOOM OUT STABILISÉ
+Date : 07/09/2026
+Base : TEST v16.57
+
+OBJECTIF
+- Corriger la v16.57 qui n'affichait en pratique une fréquence que pour une très faible partie des aérodromes complémentaires non sélectionnables comme PÉLIC.
+- Ne plus utiliser le chargement du jeu SIA lourd comme condition pour afficher les noms/fréquences terrain.
+- Réduire les abandons de tuiles et les écrans sans fond constatés lors des zooms rapides.
+- Réduire les pics mémoire/Canvas lors des zooms out avec Zones SIA + Routes + Lignes HT.
+- Éviter qu'un rendu détaillé Routes/HT/SIA d'un ancien zoom reste présent pendant la construction de la nouvelle vue.
+- Réduire le temps de démarrage lorsque le cache des alias communes existe déjà.
+
+1. FRÉQUENCES — TOUS LES AÉRODROMES COMPLÉMENTAIRES
+- Les libellés restent affichés à partir de l'échelle 1 NM sous la forme « Nom du terrain (OACI) — service fréquence » lorsque le type de service est connu.
+- Pour les aérodromes complémentaires, un référentiel fréquence léger LFxx est désormais chargé indépendamment du moteur des espaces SIA puis mémorisé localement pour les utilisations suivantes, y compris hors connexion après mise en cache.
+- Deux chemins réseau équivalents sont prévus pour éviter qu'une indisponibilité ponctuelle d'un hôte empêche la constitution du cache.
+- Les valeurs explicitement vérifiées restent prioritaires : LFBD = TWR 118.305 ; LFCS = A/A 119.005.
+- Si le jeu SIA est déjà chargé et rattache explicitement TWR / AFIS / A/A / INFO au code OACI, ce service reste prioritaire sur le référentiel de secours.
+- Lorsqu'une fréquence du référentiel léger est disponible mais que son type de service n'est pas établi dans les données locales, NPF affiche la fréquence sans inventer TWR/AFIS/A/A.
+- Le chargement des noms/fréquences ne déclenche plus ensureSiaDatasetLoaded() : atteindre 1 NM ne doit donc plus provoquer à lui seul le décompactage des 5066 espaces SIA.
+- Le référentiel est préchargé de façon non bloquante après l'affichage des terrains et redessine automatiquement les libellés lorsqu'il devient disponible.
+
+2. DIAGNOSTIC FRÉQUENCES
+- Le DIAG ajoute une ligne « Fréquences terrains » indiquant le nombre d'aérodromes complémentaires actuellement renseignés / total ainsi que le nombre de fréquences présentes dans le référentiel léger/cache.
+- Cette ligne permettra de vérifier immédiatement sur iPad que la couverture ne se limite plus à LFCS/LFBD.
+
+3. TUILES NPF — FIN DU TRIM À 96 AU DÉBUT DE CHAQUE ZOOM
+- beginBaseMapZoomStabilityGuard() ne réduit plus le cache blobs à 96 entrées au zoomstart.
+- Le début du zoom ne change plus non plus l'epoch de priorité des demandes de tuiles : aucun abandon/reclassement n'est provoqué pendant le pinch/zoom.
+- Le cache NPF conserve sa limite normale de 160 entrées.
+- La file NPF retrouve également la limite de 160 demandes en attente au lieu de 96, conformément au comportement stabilisé antérieur.
+- Une fois zoomend atteint, le viewport stabilisé devient prioritaire ; 140 ms plus tard seulement, les demandes réellement obsolètes sont purgées et le cache est ramené à sa limite normale.
+- Les lectures IndexedDB déjà actives ne sont jamais annulées par cette opération.
+
+4. ROUTES — LIBÉRATION IMMÉDIATE APRÈS ZOOM OUT
+- Si le zoom final passe sous le seuil d'affichage du calque Routes, les géométries et sources de l'ancien niveau sont libérées immédiatement à zoomend.
+- NPF n'attend plus le refresh différé de 1,15 s avec plusieurs milliers de segments de l'ancien zoom encore en mémoire.
+- Le moteur A/N/D/M/T et ses seuils historiques restent inchangés aux échelles où le calque doit être visible.
+
+5. LIGNES HT — GÉNÉRALISATION AUX ÉCHELLES ÉLOIGNÉES
+- Le tampon HT hors écran devient dynamique : très faible aux zooms éloignés, puis augmente progressivement aux vues rapprochées.
+- Zoom <= 8 : affichage 400/225 kV ; zoom 9 : 400/225/90 kV ; zoom 10 : les niveaux identifiés sauf « autres » ; tous les niveaux réapparaissent aux vues plus rapprochées.
+- Cette généralisation évite le rendu de plus de dix mille tronçons de détail lorsque la carte couvre une grande partie de la France.
+- À zoom <= 10, ou lorsqu'une autre couche lourde est active, l'ancien Canvas HT est libéré avant la construction du nouveau au lieu de conserver deux rendus simultanés.
+- Lors d'un zoom out, un ancien rendu HT massif (> 2500 tronçons) est libéré immédiatement avant le refresh de la vue stabilisée.
+
+6. SIA — UN SEUL RENDU FINAL PAR ZOOM
+- Un état explicite siaZoomGestureActive empêche un moveend intermédiaire de déclencher une reconstruction SIA pendant un pinch/zoom.
+- Seul zoomend lance le rendu correspondant à la vue finale.
+- Au zoomstart, la génération SIA en cours reste invalidée comme en v16.57.
+- Si Zones sont visibles et qu'une couche Routes/HT est active, ou si l'ancien rendu contient déjà >= 120 zones, l'ancien groupe SIA est libéré immédiatement au début du zoom pour réduire le pic mémoire.
+- Le tampon de rendu SIA sous charge combinée Zones + Routes + HT passe de 0,08 à 0,04 autour du viewport.
+- GPS dans une couverture SIA valide = toujours zéro travail SIA ; aucun retour du timer artificiel 12 s ni de la priorité clavier abandonnée.
+
+7. RECHERCHE COMMUNES — ALIAS CACHE D'ABORD
+- Le cache local des alias est maintenant lu avant la requête réseau ; lorsqu'il est valide, la recherche est disponible immédiatement et le fichier réseau est rafraîchi silencieusement après le démarrage.
+- La relecture du cache accepte correctement les champs normalisés déjà enregistrés (alias_nom_affiche / alias_target_code_insee).
+- Cela évite de bloquer l'affichage des PÉLIC pendant plusieurs secondes uniquement pour recharger des alias déjà présents.
+- La correction directe Lapradelle (11) reste indépendante de ce chargement et est conservée.
+
+8. NON-RÉGRESSION
+- Règle carburant v16.56 conservée pour tous les calculs : résultat exprimé en nombre de largages, cycles intermédiaires sur conso rotation complète, fraction terminale sur 250 kg.
+- Fermeture de la fiche terrain lors de l'ouverture VAC conservée.
+- Nom + OACI des terrains conservés.
+- Verrouillage overscroll du calculateur conservé.
+- DIAG tuiles séparant demandes en file abandonnées et lectures réellement devenues obsolètes conservé.
+- Aucun bouton MAJ réintroduit.
+- Aucune suppression des packs Offline ni des bases IndexedDB.
+- sia.js strictement inchangé bit pour bit.
+
+9. CONTRÔLES À LA LIVRAISON
+- node --check Script et Service Worker.
+- Scripts inline de l'Index contrôlés.
+- manifest.json parsé.
+- Cohérence v16.58 Index / Manifest / Script / Style / SW.
+- Test du parseur de référentiel fréquence sur plusieurs codes OACI.
+- Vérification LFBD -> TWR 118.305 et LFCS -> A/A 119.005 prioritaires.
+- Vérification queue NPF = 160 et absence du trim blobs 96 à zoomstart.
+- Vérification SIA : moveend pendant zoom ignoré et ancien rendu lourd libérable au zoomstart.
+- Vérification généralisation HT aux zooms éloignés.
+- Vérification de l'absence de bouton MAJ.
+- sia.js comparé bit-à-bit avec v16.57.
+
+
 VERSION TEST v16.57 — STABILITÉ ZOOM OUT + LIBELLÉS TERRAINS OACI/FRÉQUENCES
 Date : 07/09/2026
 Base : TEST v16.56
