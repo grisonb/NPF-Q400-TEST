@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v16.59';
+const NPF_SCRIPT_BUILD_VERSION = 'v16.60';
 
 
 /*
@@ -2207,10 +2207,12 @@ const ROAD_OVERLAY_MANIFEST_KEY = 'npfRoadOverlayManifestV1';
 const ROAD_OVERLAY_RESOURCE_PREFIX = './__npf_road_overlay__/';
 let showRoadOverlayLayer = localStorage.getItem(ROAD_OVERLAY_LAYER_KEY) === 'true';
 let isRoadOverlayLoading = false;
-/* v16.59 — zoom out : Routes puis HT puis SIA, jamais en reconstruction simultanée. */
+/* v16.60 — zoom out iPad : masquer pendant le geste puis libérer/reconstruire
+ * Routes → HT → SIA par tranches annulables, sans gros clearLayers synchrone. */
 let npfHeavyOverlayZoomStartLevel = null;
 let npfHeavyOverlayZoomSerialToken = 0;
 let npfHeavyOverlayZoomOutPromise = null;
+let npfHeavyOverlayPanesHidden = false;
 
 const TRAFFIC_LAYER_KEY = 'showTrafficLayer';
 // v15.98 — état du masque secondaire SafeSky (compteur vert) restauré au redémarrage.
@@ -7024,6 +7026,13 @@ function initMap() {
         if (!Number.isFinite(npfHeavyOverlayZoomStartLevel)) {
             npfHeavyOverlayZoomStartLevel = Number(map.getZoom?.());
         }
+        /* v16.60 — tout nouveau geste invalide une ancienne séquence lourde.
+         * Quand Routes + HT sont actifs, masquer les panes immédiatement :
+         * WebKit ne redimensionne/repeint plus les anciens Canvas pendant le pinch. */
+        npfHeavyOverlayZoomSerialToken += 1;
+        if (showRoadOverlayLayer && showHighVoltageLinesLayer) {
+            setNpfHeavyOverlayPanesHidden(true);
+        }
         beginBaseMapZoomStabilityGuard('zoomstart');
         beginMapVisualRenderGuard('zoomstart');
         if (showRoadOverlayLayer) {
@@ -7263,14 +7272,20 @@ function initMap() {
         );
 
         if (combinedZoomOut) {
-            /* v16.59 — le zoom out HT + Routes est traité comme une transaction :
-             * détachement, Routes, HT, puis seulement SIA via son handler zoomend. */
+            /* v16.60 — le zoom out HT + Routes est traité comme une transaction
+             * annulable : panes déjà masqués au zoomstart, Routes libérées par
+             * tranches, puis HT, puis seulement SIA via son handler zoomend. */
             scheduleSerializedHeavyOverlayZoomOut(startZoom, finalZoom);
             npfHeavyOverlayZoomStartLevel = null;
             return;
         }
 
-        if (zoomEnded) npfHeavyOverlayZoomStartLevel = null;
+        if (zoomEnded) {
+            npfHeavyOverlayZoomStartLevel = null;
+            /* Pas de séquence zoom-out lourde : rendre les panes visibles après
+             * stabilisation. Un éventuel refresh normal s'exécute ensuite. */
+            setNpfHeavyOverlayPanesHidden(false);
+        }
 
         if (showRoadOverlayLayer) {
             if (roadOverlayLayer && getRoadOverlayZoomTier() > 0 && !map.hasLayer(roadOverlayLayer)) {
@@ -11512,41 +11527,63 @@ async function runSerializedHeavyOverlayZoomOut(startZoom, finalZoom) {
     roadOverlayRefreshTimer = null;
     highVoltageLinesRefreshTimer = null;
 
-    /* Détacher d'abord les deux Canvas : WebKit ne doit pas repeindre les
-     * géométries de l'ancien zoom pendant leur destruction/reconstruction. */
-    try { if (roadOverlayLayer && map?.hasLayer(roadOverlayLayer)) map.removeLayer(roadOverlayLayer); } catch (_) {}
-    try { if (highVoltageLinesLayer && map?.hasLayer(highVoltageLinesLayer)) map.removeLayer(highVoltageLinesLayer); } catch (_) {}
-    recordNpfStartupDiagnosticOverlaySnapshot(`zoom-out série · détaché z${startZoom}->${finalZoom}`);
+    /* v16.60 — les panes ont normalement déjà été masqués au zoomstart. On
+     * force l'état ici également pour les zooms programmatiques/limites. */
+    setNpfHeavyOverlayPanesHidden(true);
+    recordNpfStartupDiagnosticOverlaySnapshot(`zoom-out série · panes masqués z${startZoom}->${finalZoom}`);
 
-    await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
+    await yieldRoadOverlayRenderTurn();
     if (token !== npfHeavyOverlayZoomSerialToken || !map) return;
 
-    /* 1 — Routes. Sous le seuil : libération hors écran. Sinon reconstruction
-     * complète hors carte puis rattachement en une fois. */
+    /* 1 — Routes : aucune destruction monolithique. Sous le seuil, chaque
+     * partie Canvas est retirée sur une frame distincte. Si Routes restent
+     * visibles, refreshRoadOverlayVisibleParts applique la même libération
+     * progressive lors d'un changement de tier. */
     if (showRoadOverlayLayer) {
         const tier = getRoadOverlayZoomTier();
         if (tier === 0) {
-            clearRoadOverlayRenderedParts({ resetTier: false, clearSources: true });
+            const cleared = await clearRoadOverlayRenderedPartsProgressively(
+                { resetTier: false, clearSources: true },
+                token
+            );
+            if (!cleared || token !== npfHeavyOverlayZoomSerialToken) return;
             roadOverlayLoadedZoomTier = 0;
         } else {
             await refreshRoadOverlayVisibleParts('zoom-out-serial-routes');
             if (token !== npfHeavyOverlayZoomSerialToken) return;
-            try { if (roadOverlayLayer && !map.hasLayer(roadOverlayLayer)) roadOverlayLayer.addTo(map); } catch (_) {}
         }
     }
 
     await yieldRoadOverlayRenderTurn();
     if (token !== npfHeavyOverlayZoomSerialToken || !map) return;
 
-    /* 2 — HT seulement après Routes. L'ancien rendu est libéré hors écran,
-     * puis le nouveau est construit avant rattachement. */
+    /* 2 — HT seulement après Routes. Son ancien rendu reste caché pendant la
+     * suppression ; un frame est rendu avant la reconstruction du viewport. */
     if (showHighVoltageLinesLayer && hasLoadedHighVoltageLines) {
         clearRenderedHighVoltageLines();
+        await yieldRoadOverlayRenderTurn();
+        if (token !== npfHeavyOverlayZoomSerialToken) return;
         await refreshVisibleHighVoltageLines('zoom-out-serial-ht');
         if (token !== npfHeavyOverlayZoomSerialToken) return;
-        try { if (highVoltageLinesLayer && !map.hasLayer(highVoltageLinesLayer)) highVoltageLinesLayer.addTo(map); } catch (_) {}
     }
 
+    await yieldRoadOverlayRenderTurn();
+    if (token !== npfHeavyOverlayZoomSerialToken || !map) return;
+
+    /* Réafficher seulement les panes des calques qui doivent réellement rester
+     * visibles au zoom final. Le SIA ne repart qu'après résolution de Promise. */
+    if (roadOverlayLayer) {
+        try {
+            if (showRoadOverlayLayer && getRoadOverlayZoomTier() > 0 && !map.hasLayer(roadOverlayLayer)) roadOverlayLayer.addTo(map);
+            if ((!showRoadOverlayLayer || getRoadOverlayZoomTier() === 0) && map.hasLayer(roadOverlayLayer)) map.removeLayer(roadOverlayLayer);
+        } catch (_) {}
+    }
+    try {
+        if (showHighVoltageLinesLayer && hasLoadedHighVoltageLines && highVoltageLinesLayer && !map.hasLayer(highVoltageLinesLayer)) {
+            highVoltageLinesLayer.addTo(map);
+        }
+    } catch (_) {}
+    setNpfHeavyOverlayPanesHidden(false);
     recordNpfStartupDiagnosticOverlaySnapshot(`zoom-out série · terminé z${startZoom}->${finalZoom}`);
 }
 
@@ -12956,6 +12993,68 @@ function isRoadOverlayCoverageValidForCurrentView() {
     }
 }
 
+function setNpfHeavyOverlayPanesHidden(hidden) {
+    const shouldHide = !!hidden;
+    if (npfHeavyOverlayPanesHidden === shouldHide) return;
+    npfHeavyOverlayPanesHidden = shouldHide;
+    const visibility = shouldHide ? 'hidden' : 'visible';
+    ['roadOverlayCasingPane', 'roadOverlayLinePane', 'roadOverlayLabelPane', 'highVoltageLinesPane'].forEach(name => {
+        try {
+            const pane = map?.getPane?.(name);
+            if (pane) pane.style.visibility = visibility;
+        } catch (_) {}
+    });
+}
+
+async function clearRoadOverlayRenderedPartsProgressively(options = {}, serialToken = null) {
+    const records = [...loadedRoadOverlayParts.entries()];
+    loadedRoadOverlayParts.clear();
+
+    /* Les cartouches sont peu nombreux : les retirer d'abord évite les labels
+     * orphelins pendant la libération progressive des géométries. */
+    try { roadOverlayLabelsLayer?.clearLayers(); } catch (_) {}
+
+    for (let index = 0; index < records.length; index += 1) {
+        if (serialToken !== null && serialToken !== npfHeavyOverlayZoomSerialToken) return false;
+        const [partKey, record] = records[index];
+        try { if (record?.casing) roadOverlayCasingLayer?.removeLayer(record.casing); } catch (_) {}
+        try { if (record?.lines) roadOverlayLineLayer?.removeLayer(record.lines); } catch (_) {}
+        try {
+            if (record) {
+                record.casing = null;
+                record.lines = null;
+                record.geojson = null;
+                record.renderGeojson = null;
+            }
+        } catch (_) {}
+        if (options.clearSources === true) roadOverlaySourceParts.delete(partKey);
+
+        /* Une seule partie par frame : pas de destruction de plusieurs milliers
+         * de commandes Canvas dans la même tranche JavaScript sur iPadOS. */
+        await yieldRoadOverlayRenderTurn();
+    }
+
+    if (options.clearSources === true && roadOverlaySourceParts.size) {
+        const sourceKeys = [...roadOverlaySourceParts.keys()];
+        for (let index = 0; index < sourceKeys.length; index += 8) {
+            if (serialToken !== null && serialToken !== npfHeavyOverlayZoomSerialToken) return false;
+            sourceKeys.slice(index, index + 8).forEach(key => roadOverlaySourceParts.delete(key));
+            await yieldRoadOverlayRenderTurn();
+        }
+    }
+
+    /* Les groupes doivent maintenant être quasi vides ; ce nettoyage final ne
+     * concentre plus la destruction de toutes les parties dans un seul frame. */
+    try { roadOverlayCasingLayer?.clearLayers(); } catch (_) {}
+    try { roadOverlayLineLayer?.clearLayers(); } catch (_) {}
+    try { roadOverlayCasingRenderer?._redraw?.(); } catch (_) {}
+    try { roadOverlayLineRenderer?._redraw?.(); } catch (_) {}
+
+    resetRoadOverlayRefreshState();
+    if (options.resetTier !== false) roadOverlayLoadedZoomTier = -1;
+    return true;
+}
+
 function clearRoadOverlayRenderedParts(options = {}) {
     loadedRoadOverlayParts.clear();
 
@@ -13163,7 +13262,15 @@ async function refreshRoadOverlayVisibleParts(source = 'refresh') {
                 || loadedRoadOverlayParts.size
             ) {
                 suspendTrafficForRoadWork();
-                clearRoadOverlayRenderedParts({ resetTier: false, clearSources: true });
+                if (source === 'zoom-out-serial-routes') {
+                    const cleared = await clearRoadOverlayRenderedPartsProgressively(
+                        { resetTier: false, clearSources: true },
+                        npfHeavyOverlayZoomSerialToken
+                    );
+                    if (!cleared) return;
+                } else {
+                    clearRoadOverlayRenderedParts({ resetTier: false, clearSources: true });
+                }
             } else if (roadOverlaySourceParts.size) {
                 clearRoadOverlaySourceParts();
             }
@@ -13175,7 +13282,15 @@ async function refreshRoadOverlayVisibleParts(source = 'refresh') {
         const tierChanged = roadOverlayLoadedZoomTier !== currentTier;
         if (tierChanged) {
             suspendTrafficForRoadWork();
-            clearRoadOverlayRenderedParts({ resetTier: false });
+            if (source === 'zoom-out-serial-routes') {
+                const cleared = await clearRoadOverlayRenderedPartsProgressively(
+                    { resetTier: false },
+                    npfHeavyOverlayZoomSerialToken
+                );
+                if (!cleared) return;
+            } else {
+                clearRoadOverlayRenderedParts({ resetTier: false });
+            }
             roadOverlayLoadedZoomTier = currentTier;
         }
 
@@ -22852,7 +22967,7 @@ function rememberGlobalLinkRequestState(action, response = null, error = '') {
 
 function isGlobalLinkTemporaryLoadFail(value) {
     const text = String(value?.message || value?.error || value || '');
-    return /\bload\s*fail\b/i.test(text);
+    return /\bload\s*fail(?:ed)?\b/i.test(text);
 }
 
 /*
@@ -22976,6 +23091,23 @@ function isGlobalLinkAbortError(error) {
     const name = String(error?.name || '');
     const message = String(error?.message || error || '');
     return name === 'AbortError' || /fetch\s+is\s+aborted|aborted|aborterror/i.test(message);
+}
+
+
+function isGlobalLinkTemporaryNetworkError(errorOrMessage) {
+    if (isGlobalLinkAbortError(errorOrMessage)) return false;
+    const message = String(errorOrMessage?.message || errorOrMessage || '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    return /load\s*fail(?:ed)?|failed\s+to\s+fetch|network\s*(?:error|request\s+failed)|connexion\s+(?:réseau\s+)?(?:échouée|impossible)/i.test(message);
+}
+
+function shouldRetryGlobalLinkFromEnabledButton() {
+    const lastAction = String(npfGlobalLinkLastAction || '').toLowerCase();
+    const lastError = String(npfGlobalLinkLastError || '');
+    const state = String(npfGlobalLinkLastAuthState || '').toLowerCase();
+    return lastAction === 'positions'
+        && (isGlobalLinkTemporaryNetworkError(lastError) || /positions-.*(?:fail|erreur)/.test(state));
 }
 
 function setGlobalLinkPasswordStatus(message = '', type = '') {
@@ -24129,27 +24261,42 @@ async function refreshGlobalLinkPositions(options = {}) {
         let payload = null;
         let lastMessage = '';
 
-        /* v16.59 — « Load Fail » vient du relais/amont GLR et est temporaire.
-         * Pour les positions seulement, une unique seconde tentative est faite.
-         * Une session valide n'est jamais supprimée sur ce message. */
+        /* v16.60 — Safari peut échouer AVANT toute réponse HTTP avec
+         * TypeError('Load failed'). Cette exception doit entrer elle aussi dans
+         * l'unique relance POSITIONS ; elle ne doit jamais invalider la session. */
         for (let attemptIndex = 0; attemptIndex < 2; attemptIndex += 1) {
-            response = await fetchGlobalLinkNas('positions', {
-                method: 'GET',
-                headers: globalLinkAuthHeaders(docsSession, globalSession)
-            }, 20000);
-            payload = await response.json().catch(() => null);
-            lastMessage = payload?.message || payload?.error || (!response.ok ? `Positions Global Link indisponibles (${response.status})` : '');
-            rememberGlobalLinkRequestState('positions', response, lastMessage);
+            try {
+                response = await fetchGlobalLinkNas('positions', {
+                    method: 'GET',
+                    headers: globalLinkAuthHeaders(docsSession, globalSession)
+                }, 20000);
+                payload = await response.json().catch(() => null);
+                lastMessage = payload?.message || payload?.error || (!response.ok ? `Positions Global Link indisponibles (${response.status})` : '');
+                rememberGlobalLinkRequestState('positions', response, lastMessage);
 
-            if (response.ok && payload && payload.ok === true) break;
+                if (response.ok && payload && payload.ok === true) break;
 
-            const temporaryLoadFail = isGlobalLinkTemporaryLoadFail(lastMessage);
-            if (temporaryLoadFail && attemptIndex === 0) {
-                npfGlobalLinkLastAuthState = 'positions-load-fail-retry';
-                await new Promise(resolve => setTimeout(resolve, 650));
-                continue;
+                const temporaryLoadFail = isGlobalLinkTemporaryLoadFail(lastMessage);
+                if (temporaryLoadFail && attemptIndex === 0) {
+                    npfGlobalLinkLastAuthState = 'positions-load-fail-retry';
+                    await new Promise(resolve => setTimeout(resolve, 650));
+                    continue;
+                }
+                break;
+            } catch (requestError) {
+                lastMessage = String(requestError?.message || requestError || '');
+                rememberGlobalLinkRequestState('positions', { status: 0 }, lastMessage);
+                if (isGlobalLinkTemporaryNetworkError(requestError)) {
+                    npfGlobalLinkLastAuthState = attemptIndex === 0
+                        ? 'positions-network-retry'
+                        : 'positions-network-fail-temporaire';
+                    if (attemptIndex === 0) {
+                        await new Promise(resolve => setTimeout(resolve, 650));
+                        continue;
+                    }
+                }
+                throw requestError;
             }
-            break;
         }
 
         if (!response?.ok || !payload || payload.ok !== true) {
@@ -24211,6 +24358,13 @@ function setGlobalLinkEnabled(enabled, options = {}) {
 
 async function handleGlobalLinkButtonClick() {
     if (npfGlobalLinkEnabled) {
+        /* v16.60 — si GLR est resté ON après un échec silencieux POSITIONS,
+         * le premier clic doit RELANCER et afficher l'erreur éventuelle ; il ne
+         * doit plus simplement passer le calque OFF et obliger à cliquer deux fois. */
+        if (shouldRetryGlobalLinkFromEnabledButton()) {
+            await refreshGlobalLinkPositions({ silent: false });
+            return;
+        }
         setGlobalLinkEnabled(false);
         return;
     }
@@ -44392,7 +44546,7 @@ function initializeSiaSystem() {
             }
             const heavyZoomPromise = npfHeavyOverlayZoomOutPromise;
             if (heavyZoomPromise) {
-                /* v16.59 — sous HT + Routes en zoom out, le SIA attend la fin
+                /* v16.60 — sous HT + Routes en zoom out, le SIA attend la fin
                  * des deux reconstructions lourdes pour éviter un troisième pic. */
                 heavyZoomPromise.finally(() => {
                     if (!siaZoomGestureActive) scheduleSiaLayerRefresh('zoomend-after-routes-ht');
