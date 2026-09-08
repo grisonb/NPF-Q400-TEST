@@ -1,4 +1,4 @@
-/* NPF_STYLE_BUILD_VERSION: v16.59 */
+/* NPF_STYLE_BUILD_VERSION: v16.60 */
 /* v14.83 — nettoyage des références techniques et limitation des cartouches routiers. */
 /* v14.81 — recherche phonétique nationale élargie aux fragments sur deux lettres. */
 /* v14.80 — Brive conservé uniquement sous LFSL. */
@@ -17997,7 +17997,7 @@ body.npf-waypoint-search-open {
     border-radius: 4px;
     background: rgba(255,255,255,.82);
     color: #111827;
-    font: 800 13px/1.08 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font: 800 14px/1.08 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     white-space: nowrap;
     text-shadow: 0 0 2px #fff, 0 0 2px #fff;
     box-shadow: 0 1px 3px rgba(0,0,0,.12);
@@ -18007,7 +18007,7 @@ body.npf-waypoint-search-open {
 }
 .airport-operational-label .airport-operational-frequency {
     color: #0b4f8a;
-    font-size: 12px;
+    font-size: 15px;
     font-weight: 900;
 }
 
