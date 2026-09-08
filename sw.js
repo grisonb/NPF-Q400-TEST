@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v16-59_glr_fuel_zoom_serial';
-const APP_VERSION = 'v16.59';
+const SW_VERSION = 'sw-v16-60_glr_retry_zoom_chunked';
+const APP_VERSION = 'v16.60';
 const SIA_DATA_REVISION = '15.69';
 const SIA_DATA_URL = './sia.js';
 const SIA_DATA_CACHE = `npf-q400-sia-data-${SIA_DATA_REVISION}`;
