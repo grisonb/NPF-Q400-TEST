@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v16.62';
+const NPF_SCRIPT_BUILD_VERSION = 'v16.63';
 
 
 /*
@@ -1739,6 +1739,19 @@ const AIRPORT_FREQUENCY_FALLBACK_TIMEOUT_MS = 8000;
 let airportFrequencyFallbackIndex = null;
 let airportFrequencyFallbackLoadPromise = null;
 let airportFrequencyFallbackLastAttemptAt = 0;
+
+/* v16.63 — complément léger pour le TYPE de service terrain (AFIS, TWR,
+ * A/A, INFO). Il ne remplace jamais la fréquence retenue par NPF : un type
+ * n'est appliqué que s'il correspond exactement à la même fréquence. */
+const AIRPORT_SERVICE_SUPPLEMENT_URLS = Object.freeze([
+    'https://raw.githubusercontent.com/laegsgaardTroels/whatisflying-db/master/data/airports_frequencies.csv',
+    'https://cdn.jsdelivr.net/gh/laegsgaardTroels/whatisflying-db@master/data/airports_frequencies.csv'
+]);
+const AIRPORT_SERVICE_SUPPLEMENT_CACHE_KEY = 'npfAirportServiceSupplement_v1';
+const AIRPORT_SERVICE_SUPPLEMENT_TIMEOUT_MS = 9000;
+let airportServiceSupplementIndex = null;
+let airportServiceSupplementLoadPromise = null;
+let airportServiceSupplementLastAttemptAt = 0;
 
 /*
  * Navigation automatique Feu ↔ PÉLIC.
@@ -22427,15 +22440,28 @@ function closeBriefingDocsPasswordModal() {
     npfBriefingDocsBfgPairingOnly = false;
 }
 
+function getBriefingDocsBfgAuthorizationUnavailableMessage() {
+    return 'BFG est associé à cet iPad mais l’autorisation FdS/GAAR n’est pas disponible. Ouvre ou actualise BFG puis réessaie. Aucun mot de passe NPF n’est demandé tant que BFG est associé.';
+}
+
 function openBriefingDocsPasswordModal(type) {
     const safeType = String(type || '').toLowerCase();
     if (!NPF_BRIEFING_DOC_TYPES.includes(safeType)) return false;
+
+    /* v16.63 — un iPad associé à BFG ne doit jamais retomber sur le mot de
+     * passe NPF. Ce garde-fou couvre aussi un éventuel ancien appel résiduel. */
+    if (getStoredNpfBfgBridgeCredentials()) {
+        alert(getBriefingDocsBfgAuthorizationUnavailableMessage());
+        return false;
+    }
+
     const modal = document.getElementById('briefing-docs-password-modal');
     const title = document.getElementById('briefing-docs-password-title');
     const help = document.getElementById('briefing-docs-password-help');
     const input = document.getElementById('briefing-docs-password-input');
     const bfgCodeInput = document.getElementById('briefing-docs-bfg-code-input');
     const authorizeButton = document.getElementById('briefing-docs-authorize-button');
+    const bfgCodeButton = document.getElementById('briefing-docs-bfg-code-button');
     const separator = modal?.querySelector('.briefing-docs-bfg-pairing-separator');
     const status = document.getElementById('briefing-docs-password-status');
     if (!modal) return false;
@@ -22444,16 +22470,15 @@ function openBriefingDocsPasswordModal(type) {
     npfBriefingDocsPendingType = safeType;
     const label = safeType === 'gaar' ? 'GAAR' : 'FdS';
     if (title) title.textContent = `Accès ${label}`;
-    const paired = Boolean(getStoredNpfBfgBridgeCredentials());
-    if (help) {
-        help.textContent = paired
-            ? `L’association BFG de cet iPad est conservée. Si l’autorisation automatique n’est momentanément pas disponible, utilise seulement le mot de passe NPF.`
-            : `Utilise le mot de passe NPF. Pour associer BFG à cet iPad, ferme cette fenêtre puis utilise le bouton BFG dédié.`;
-    }
+    if (help) help.textContent = `Utilise le mot de passe NPF. Pour associer BFG à cet iPad, ferme cette fenêtre puis utilise le bouton BFG dédié.`;
     if (input) { input.value = ''; input.style.display = ''; }
     if (authorizeButton) authorizeButton.style.display = '';
     if (separator) separator.style.display = 'none';
     if (bfgCodeInput) { bfgCodeInput.value = ''; bfgCodeInput.style.display = 'none'; }
+    /* v16.63 — correction des deux boutons collés : le bouton d'association
+     * BFG restait visible dans la fenêtre mot de passe alors que son champ
+     * était masqué. */
+    if (bfgCodeButton) bfgCodeButton.style.display = 'none';
     if (status) status.textContent = '';
     modal.style.display = 'flex';
     modal.setAttribute('aria-hidden', 'false');
@@ -22471,6 +22496,7 @@ function openBriefingDocsBfgPairingModal() {
     const authorizeButton = document.getElementById('briefing-docs-authorize-button');
     const separator = modal?.querySelector('.briefing-docs-bfg-pairing-separator');
     const bfgCodeInput = document.getElementById('briefing-docs-bfg-code-input');
+    const bfgCodeButton = document.getElementById('briefing-docs-bfg-code-button');
     const status = document.getElementById('briefing-docs-password-status');
     if (!modal) return false;
 
@@ -22482,6 +22508,7 @@ function openBriefingDocsBfgPairingModal() {
     if (authorizeButton) authorizeButton.style.display = 'none';
     if (separator) separator.style.display = 'none';
     if (bfgCodeInput) { bfgCodeInput.value = ''; bfgCodeInput.style.display = ''; }
+    if (bfgCodeButton) bfgCodeButton.style.display = '';
     if (status) status.textContent = getStoredNpfBfgBridgeCredentials()
         ? 'BFG est déjà associé. Un nouveau code permet de refaire l’association.'
         : '';
@@ -22743,18 +22770,29 @@ async function refreshSingleBriefingDocFromNas(type, options = {}) {
     }
 }
 
+async function ensureBriefingDocsInteractiveAuthorization(type, options = {}) {
+    if (getStoredBriefingDocsSession()) return true;
+
+    const paired = Boolean(getStoredNpfBfgBridgeCredentials());
+    if (paired) {
+        await tryAuthorizeBriefingDocsFromBfgBridge({ silent: true });
+        if (getStoredBriefingDocsSession()) return true;
+        const message = getBriefingDocsBfgAuthorizationUnavailableMessage();
+        if (options.viewer === true) setBriefingDocViewerStatus(message, { error: true });
+        else alert(message);
+        return false;
+    }
+
+    openBriefingDocsPasswordModal(type);
+    return false;
+}
+
 async function handleBriefingDocMapButtonClick(type) {
     const safeType = String(type || '').toLowerCase();
     if (!NPF_BRIEFING_DOC_TYPES.includes(safeType)) return false;
 
-    if (!getStoredBriefingDocsSession()) {
-        await tryAuthorizeBriefingDocsFromBfgBridge({ silent: true });
-    }
-    if (!getStoredBriefingDocsSession()) {
-        openBriefingDocsPasswordModal(safeType);
-        return false;
-    }
-
+    /* v16.63 — une FdS/GAAR du jour déjà stockée est consultable immédiatement,
+     * sans autorisation réseau. L'autorisation ne sert qu'à télécharger/mettre à jour. */
     const localRecord = await getBriefingDocRecord(safeType).catch(() => null);
     if (isBriefingDocRecordForToday(localRecord)) {
         return await displayBriefingDocInViewer(safeType, localRecord);
@@ -22764,6 +22802,8 @@ async function handleBriefingDocMapButtonClick(type) {
         alert(`${getBriefingDocLabel(safeType)} du jour non téléchargée. Une connexion Internet est nécessaire pour la récupérer.`);
         return false;
     }
+
+    if (!await ensureBriefingDocsInteractiveAuthorization(safeType)) return false;
 
     try {
         const result = await refreshSingleBriefingDocFromNas(safeType);
@@ -22848,13 +22888,7 @@ function initializeBriefingDocsUi() {
             const type = npfBriefingDocViewerType;
             if (!type) return;
 
-            if (!getStoredBriefingDocsSession()) {
-                await tryAuthorizeBriefingDocsFromBfgBridge({ silent: true });
-            }
-            if (!getStoredBriefingDocsSession()) {
-                openBriefingDocsPasswordModal(type);
-                return;
-            }
+            if (!await ensureBriefingDocsInteractiveAuthorization(type, { viewer: true })) return;
             if (!navigator.onLine) {
                 setBriefingDocViewerStatus('Hors ligne : impossible de vérifier une mise à jour.', { error: true });
                 return;
@@ -22872,9 +22906,11 @@ function initializeBriefingDocsUi() {
                     { success: true }
                 );
             } catch (error) {
-                if (!getStoredBriefingDocsSession()) {
+                if (!getStoredBriefingDocsSession() && getStoredNpfBfgBridgeCredentials()) {
+                    setBriefingDocViewerStatus(getBriefingDocsBfgAuthorizationUnavailableMessage(), { error: true });
+                } else if (!getStoredBriefingDocsSession()) {
                     openBriefingDocsPasswordModal(type);
-                    setBriefingDocViewerStatus('Autorisation expirée : saisis à nouveau le mot de passe.', { error: true });
+                    setBriefingDocViewerStatus('Autorisation expirée : saisis à nouveau le mot de passe NPF.', { error: true });
                 } else {
                     setBriefingDocViewerStatus(error.message || String(error), { error: true });
                 }
@@ -27798,6 +27834,43 @@ window.openPelicNotams = openNpfPelicNotams;
 
 
 /* ========================================================================== 
+   v16.63 — TRACE : YUL RESTE L'ENREGISTREUR GPS NATIF EN ARRIÈRE-PLAN
+   ========================================================================== */
+const NPF_YUL_TRACE_SHORTCUT_NAME = 'NPF Trace';
+
+function launchNpfYulTraceShortcut() {
+    /* Apple documente shortcuts://run-shortcut pour lancer un raccourci depuis
+     * une autre app / un navigateur. Le raccourci "NPF Trace" doit être créé
+     * une fois sur l'iPad et utiliser les actions YUL (Is Recording +
+     * démarrage/arrêt). NPF ne duplique aucun logger GPS. */
+    const shortcutUrl = `shortcuts://run-shortcut?name=${encodeURIComponent(NPF_YUL_TRACE_SHORTCUT_NAME)}`;
+    try {
+        window.location.href = shortcutUrl;
+        return true;
+    } catch (error) {
+        alert('Impossible de lancer le raccourci « NPF Trace ». Vérifie qu’il existe dans l’app Raccourcis et que YUL est installé.');
+        return false;
+    }
+}
+
+function initializeNpfYulTraceButton() {
+    const button = document.getElementById('yul-trace-button');
+    if (!button || button.dataset.bound === '1') return;
+    button.dataset.bound = '1';
+    button.addEventListener('click', event => {
+        event.preventDefault();
+        event.stopPropagation();
+        launchNpfYulTraceShortcut();
+    });
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeNpfYulTraceButton, { once: true });
+} else {
+    setTimeout(initializeNpfYulTraceButton, 0);
+}
+
+/* ========================================================================== 
    v16.56 — noms + fréquence opérationnelle des terrains à l'échelle 1 NM
    ========================================================================== */
 function getNpfDisplayedAirportRecordsForLabels() {
@@ -27996,6 +28069,207 @@ function ensureAirportFrequencyFallbackLoaded() {
     return airportFrequencyFallbackLoadPromise;
 }
 
+function normalizeAirportServiceSupplementType(rawType, rawDescription) {
+    const type = String(rawType || '').trim().toUpperCase();
+    const description = String(rawDescription || '').trim().toUpperCase();
+    if (type === 'TWR') return 'TWR';
+    if (type === 'AFIS') return 'AFIS';
+    if (type === 'INFO') return 'INFO';
+    const explicitAirToAir = `${type} ${description}`;
+    if (/\bA\s*\/\s*A\b|\bAIR\s*\/\s*AIR\b|\bAUTO[-\s]?INFO\b|\bSELF[-\s]?INFO\b/.test(explicitAirToAir)) return 'A/A';
+    return '';
+}
+
+function normalizeAirportServiceSupplementFrequency(raw) {
+    let numeric = Number(String(raw ?? '').trim().replace(',', '.'));
+    if (!Number.isFinite(numeric)) return '';
+    if (numeric >= 1000) numeric /= 1000;
+    if (numeric < 118 || numeric >= 137 || Math.abs(numeric - 121.5) < 0.0001) return '';
+    return numeric.toFixed(3);
+}
+
+function parseAirportServiceSupplementCsv(text) {
+    const rows = [];
+    let row = [], field = '', quoted = false;
+    const input = String(text || '');
+    const pushField = () => { row.push(field); field = ''; };
+    const pushRow = () => {
+        pushField();
+        if (row.some(value => String(value || '').trim())) rows.push(row);
+        row = [];
+    };
+    for (let i = 0; i < input.length; i += 1) {
+        const ch = input[i];
+        if (ch === '"') {
+            if (quoted && input[i + 1] === '"') { field += '"'; i += 1; }
+            else quoted = !quoted;
+            continue;
+        }
+        if (!quoted && ch === ',') { pushField(); continue; }
+        if (!quoted && (ch === '\n' || ch === '\r')) {
+            if (ch === '\r' && input[i + 1] === '\n') i += 1;
+            pushRow();
+            continue;
+        }
+        field += ch;
+    }
+    if (field.length || row.length) pushRow();
+    if (!rows.length) return new Map();
+
+    const header = rows[0].map(value => String(value || '').trim().toLowerCase());
+    const airportIndex = header.indexOf('airport');
+    const descriptionIndex = header.indexOf('description');
+    const frequencyIndex = header.indexOf('frequency');
+    const typeIndex = header.indexOf('type');
+    if ([airportIndex, frequencyIndex, typeIndex].some(index => index < 0)) return new Map();
+
+    const grouped = new Map();
+    for (let i = 1; i < rows.length; i += 1) {
+        const record = rows[i];
+        const code = String(record?.[airportIndex] || '').trim().toUpperCase();
+        if (!/^LF[A-Z]{2}$/.test(code)) continue;
+        const frequency = normalizeAirportServiceSupplementFrequency(record?.[frequencyIndex]);
+        if (!frequency) continue;
+        const serviceType = normalizeAirportServiceSupplementType(
+            record?.[typeIndex],
+            descriptionIndex >= 0 ? record?.[descriptionIndex] : ''
+        );
+        if (!serviceType) continue;
+        const key = `${code}|${frequency}`;
+        if (!grouped.has(key)) grouped.set(key, new Set());
+        grouped.get(key).add(serviceType);
+    }
+
+    const order = new Map([['TWR', 0], ['AFIS', 1], ['A/A', 2], ['INFO', 3]]);
+    const index = new Map();
+    grouped.forEach((types, key) => {
+        const label = [...types]
+            .sort((a, b) => (order.get(a) ?? 99) - (order.get(b) ?? 99))
+            .join(' / ');
+        if (label) index.set(key, label);
+    });
+    return index;
+}
+
+function serializeAirportServiceSupplementIndex(index) {
+    const payload = {};
+    (index instanceof Map ? index : new Map()).forEach((label, key) => {
+        if (/^LF[A-Z]{2}\|1\d{2}\.\d{3}$/.test(String(key || '')) && String(label || '').trim()) {
+            payload[key] = String(label).trim();
+        }
+    });
+    return payload;
+}
+
+function hydrateAirportServiceSupplementIndex(payload) {
+    const index = new Map();
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return index;
+    Object.entries(payload).forEach(([key, label]) => {
+        if (/^LF[A-Z]{2}\|1\d{2}\.\d{3}$/.test(String(key || '')) && String(label || '').trim()) {
+            index.set(key, String(label).trim());
+        }
+    });
+    return index;
+}
+
+function loadCachedAirportServiceSupplementIndex() {
+    try {
+        const raw = localStorage.getItem(AIRPORT_SERVICE_SUPPLEMENT_CACHE_KEY);
+        if (!raw) return null;
+        const index = hydrateAirportServiceSupplementIndex(JSON.parse(raw));
+        return index.size ? index : null;
+    } catch (_) { return null; }
+}
+
+function persistAirportServiceSupplementIndex(index) {
+    try {
+        localStorage.setItem(
+            AIRPORT_SERVICE_SUPPLEMENT_CACHE_KEY,
+            JSON.stringify(serializeAirportServiceSupplementIndex(index))
+        );
+    } catch (_) {}
+}
+
+async function fetchAirportServiceSupplementIndex() {
+    let lastError = null;
+    for (const url of AIRPORT_SERVICE_SUPPLEMENT_URLS) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), AIRPORT_SERVICE_SUPPLEMENT_TIMEOUT_MS);
+        try {
+            const response = await fetch(url, { cache: 'no-cache', signal: controller.signal, mode: 'cors' });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const index = parseAirportServiceSupplementCsv(await response.text());
+            if (index.size < 50) throw new Error(`Référentiel services terrain incomplet (${index.size})`);
+            return index;
+        } catch (error) {
+            lastError = error;
+        } finally { clearTimeout(timer); }
+    }
+    throw lastError || new Error('Référentiel services terrain indisponible');
+}
+
+function refreshAirportServiceSupplementInBackground() {
+    if ((Date.now() - Number(airportServiceSupplementLastAttemptAt || 0)) < 60000) return;
+    airportServiceSupplementLastAttemptAt = Date.now();
+    fetchAirportServiceSupplementIndex().then(index => {
+        airportServiceSupplementIndex = index;
+        persistAirportServiceSupplementIndex(index);
+        scheduleAirportOperationalLabelsRefresh(0);
+    }).catch(() => {});
+}
+
+function ensureAirportServiceSupplementLoaded() {
+    if (airportServiceSupplementIndex instanceof Map && airportServiceSupplementIndex.size) {
+        return Promise.resolve(airportServiceSupplementIndex);
+    }
+    if (airportServiceSupplementLoadPromise) return airportServiceSupplementLoadPromise;
+
+    const cached = loadCachedAirportServiceSupplementIndex();
+    if (cached?.size) {
+        airportServiceSupplementIndex = cached;
+        setTimeout(refreshAirportServiceSupplementInBackground, 2200);
+        return Promise.resolve(cached);
+    }
+
+    airportServiceSupplementLastAttemptAt = Date.now();
+    airportServiceSupplementLoadPromise = fetchAirportServiceSupplementIndex()
+        .then(index => {
+            airportServiceSupplementIndex = index;
+            persistAirportServiceSupplementIndex(index);
+            scheduleAirportOperationalLabelsRefresh(0);
+            return index;
+        })
+        .catch(error => {
+            console.warn('Référentiel types de services aérodromes indisponible:', error);
+            return new Map();
+        })
+        .finally(() => { airportServiceSupplementLoadPromise = null; });
+    return airportServiceSupplementLoadPromise;
+}
+
+function mergeAirportServiceTypeLabels(...labels) {
+    const order = new Map([['TWR', 0], ['AFIS', 1], ['A/A', 2], ['INFO', 3]]);
+    const values = [];
+    labels.forEach(label => {
+        String(label || '').split('/').map(value => value.trim()).forEach(value => {
+            /* préserver le séparateur interne A/A */
+            if (value === 'A' && String(label || '').includes('A/A')) return;
+            if (value && !values.includes(value)) values.push(value);
+        });
+    });
+    /* split('/') casserait A/A : reconstruire depuis des correspondances connues. */
+    const source = labels.map(label => String(label || '').toUpperCase()).join(' | ');
+    const known = ['TWR', 'AFIS', 'A/A', 'INFO'].filter(type => source.includes(type));
+    return known.sort((a, b) => (order.get(a) ?? 99) - (order.get(b) ?? 99)).join(' / ');
+}
+
+function getAirportServiceSupplementLabel(oaci, frequencyValue) {
+    const code = String(oaci || '').trim().toUpperCase();
+    const frequency = normalizeAirportOperationalFrequencyValue(frequencyValue);
+    if (!/^LF[A-Z]{2}$/.test(code) || !frequency) return '';
+    return airportServiceSupplementIndex?.get(`${code}|${frequency}`) || '';
+}
+
 function buildAirportOperationalFrequencyIndex(dataset = siaDataset) {
     if (airportOperationalFrequencyIndex && airportOperationalFrequencyIndexDataset === dataset) {
         return airportOperationalFrequencyIndex;
@@ -28026,7 +28300,14 @@ function buildAirportOperationalFrequencyIndex(dataset = siaDataset) {
             source: 'sia'
         };
         const current = index.get(code);
-        if (!current || next.priority < current.priority) index.set(code, next);
+        if (!current || next.priority < current.priority) {
+            if (current && current.value === next.value) {
+                next.type = mergeAirportServiceTypeLabels(next.type, current.type);
+            }
+            index.set(code, next);
+        } else if (current.value === next.value) {
+            current.type = mergeAirportServiceTypeLabels(current.type, next.type);
+        }
     };
 
     if (dataset) {
@@ -28057,12 +28338,21 @@ function getAirportOperationalFrequency(oaci) {
     const override = AIRPORT_OPERATIONAL_FREQUENCY_OVERRIDES.get(code);
     if (override) return override;
 
+    let selected = null;
     if (siaDataset) {
-        const siaFrequency = buildAirportOperationalFrequencyIndex(siaDataset).get(code);
-        if (siaFrequency) return siaFrequency;
+        selected = buildAirportOperationalFrequencyIndex(siaDataset).get(code) || null;
     }
+    if (!selected) selected = airportFrequencyFallbackIndex?.get(code) || null;
+    if (!selected) return null;
 
-    return airportFrequencyFallbackIndex?.get(code) || null;
+    /* v16.63 — le référentiel complémentaire n'a le droit que d'ajouter le
+     * libellé de service pour EXACTEMENT la fréquence déjà retenue par NPF. */
+    const supplementaryType = getAirportServiceSupplementLabel(code, selected.value);
+    if (!supplementaryType) return selected;
+    const mergedType = mergeAirportServiceTypeLabels(selected.type, supplementaryType);
+    return mergedType && mergedType !== selected.type
+        ? { ...selected, type: mergedType, serviceTypeSupplemented: true }
+        : selected;
 }
 
 function refreshAirportOperationalLabels() {
@@ -28106,6 +28396,9 @@ function refreshAirportOperationalLabels() {
      * arrière-plan puis les libellés sont redessinés. */
     if (!(airportFrequencyFallbackIndex instanceof Map) || !airportFrequencyFallbackIndex.size) {
         ensureAirportFrequencyFallbackLoaded().catch(() => {});
+    }
+    if (!(airportServiceSupplementIndex instanceof Map) || !airportServiceSupplementIndex.size) {
+        ensureAirportServiceSupplementLoaded().catch(() => {});
     }
 }
 
@@ -45714,40 +46007,37 @@ function getSiaAirspaceBoundaryLabelText(item) {
     const primaryName = name || code;
     const base = [displayType, primaryName].filter(Boolean).join(' ');
 
-    /*
-     * v15.62 — les zones R utilisent le format opérationnel demandé :
-     * "R 108 B / CAMARGUE / 127.925".
-     * Le suffixe APP/TWR/CONTROL n'est pas répété dans ce libellé.
-     */
+    /* v16.63 — ligne 1 = nom uniquement. */
     if (type === 'R') {
         const restrictedInfo = getSiaRestrictedRemarkInfo(item);
-        return [
-            base,
-            String(restrictedInfo?.operationalName || '').trim(),
-            String(restrictedInfo?.frequency || '').trim()
-        ].filter(Boolean).join(' / ');
+        return [base, String(restrictedInfo?.operationalName || '').trim()]
+            .filter(Boolean).join(' / ');
     }
-
     if (type === 'P') {
-        return [
-            base,
-            getSiaProhibitedOfficialName(item)
-        ].filter(Boolean).join(' / ');
+        return [base, getSiaProhibitedOfficialName(item)].filter(Boolean).join(' / ');
+    }
+    return base;
+}
+
+function getSiaAirspaceBoundaryFrequencyText(item) {
+    const type = String(item?.t || '').trim().toUpperCase();
+    if (type === 'P') return '';
+
+    if (type === 'R') {
+        const restrictedInfo = getSiaRestrictedRemarkInfo(item);
+        const value = String(restrictedInfo?.frequency || '').trim();
+        if (!value) return '';
+        const serviceType = String(restrictedInfo?.serviceType || '').trim();
+        return [serviceType, value].filter(Boolean).join(' ');
     }
 
     const firstFrequency = getSiaFirstAssignedFrequency(item);
-    if (!firstFrequency) return base;
-
+    if (!firstFrequency) return '';
     const frequencyPrefix = firstFrequency.inferredFromRemark
-        ? ''
+        ? String(firstFrequency.serviceType || '').trim()
         : String(firstFrequency.serviceType || '').trim();
-
-    const frequencyText = [
-        frequencyPrefix,
-        firstFrequency.value
-    ].filter(Boolean).join(' ');
-
-    return `${base} · ${frequencyText}${firstFrequency.supplementary ? ' (s)' : ''}`;
+    const frequencyText = [frequencyPrefix, firstFrequency.value].filter(Boolean).join(' ');
+    return `${frequencyText}${firstFrequency.supplementary ? ' (s)' : ''}`;
 }
 
 function getSiaAirspaceBoundaryVerticalText(item) {
@@ -46413,6 +46703,7 @@ function addSiaAirspaceBoundaryLabel(item, geometry, labelState) {
 
     const text = getSiaAirspaceBoundaryLabelText(item);
     if (!text) return null;
+    const frequencyText = getSiaAirspaceBoundaryFrequencyText(item);
     const verticalText = getSiaAirspaceBoundaryVerticalText(item);
 
     const placements = findSiaBoundaryLabelPlacements(item, geometry);
@@ -46433,7 +46724,7 @@ function addSiaAirspaceBoundaryLabel(item, geometry, labelState) {
         keyboard: false,
         icon: L.divIcon({
             className: 'sia-boundary-label-icon',
-            html: `<div class="sia-boundary-label-text${String(item?.t || '').trim().toUpperCase() === 'P' ? ' sia-prohibited-label' : ''}${isSiv ? ' sia-siv-label' : ''}${nearFiveNm ? ' sia-zone-label-near' : ''}" style="transform:translate(-50%,-50%) rotate(${placement.angle.toFixed(1)}deg)"><div class="sia-boundary-label-main">${escapeHtml(text)}</div>${verticalText ? `<div class="sia-boundary-label-altitude">${escapeHtml(verticalText)}</div>` : ''}</div>`,
+            html: `<div class="sia-boundary-label-text${String(item?.t || '').trim().toUpperCase() === 'P' ? ' sia-prohibited-label' : ''}${isSiv ? ' sia-siv-label' : ''}${nearFiveNm ? ' sia-zone-label-near' : ''}" style="transform:translate(-50%,-50%) rotate(${placement.angle.toFixed(1)}deg)"><div class="sia-boundary-label-main">${escapeHtml(text)}</div>${frequencyText ? `<div class="sia-boundary-label-frequency">${escapeHtml(frequencyText)}</div>` : ''}${verticalText ? `<div class="sia-boundary-label-altitude">${escapeHtml(verticalText)}</div>` : ''}</div>`,
             iconSize: [1, 1],
             iconAnchor: [0, 0]
         })
