@@ -7,8 +7,8 @@
     <title>NPF-Q400</title>
     <link rel="stylesheet" href="leaflet.css">
     <link rel="preload" href="communes_aliases.json" as="fetch" crossorigin="anonymous">
-    <link rel="stylesheet" href="style.css?appv=v16.62">
-    <link rel="manifest" href="manifest.json?appv=v16.62">
+    <link rel="stylesheet" href="style.css?appv=v16.63">
+    <link rel="manifest" href="manifest.json?appv=v16.63">
     <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192x192.png?appv=v13.92">
     <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512x512.png?appv=v13.92">
     <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png?appv=v13.92">
@@ -56,7 +56,7 @@
     </style>
 
     <script>
-        const APP_VERSION = 'v16.62';
+        const APP_VERSION = 'v16.63';
         const SERVICE_WORKER_URL = `./sw.js?appv=${encodeURIComponent(APP_VERSION)}`;
         const APP_VERSION_STORAGE_KEY = 'appVersion';
         const SW_CONTROLLER_RELOAD_GUARD_KEY = 'swControllerReloadGuard';
@@ -685,6 +685,14 @@
             <span id="global-link-off-button-count" class="global-link-off-button-count" style="display:none;">0</span>
             <span id="global-link-button-count" class="global-link-button-count" style="display:none;">0</span>
         </button>
+        <button id="yul-trace-button"
+                class="left-map-action-button yul-trace-map-button"
+                type="button"
+                title="TRACE — démarrer ou arrêter l’enregistrement YUL via le raccourci NPF Trace"
+                aria-label="TRACE — démarrer ou arrêter l’enregistrement YUL">
+            <span class="yul-trace-main">TRACE</span>
+            <span class="yul-trace-sub">YUL</span>
+        </button>
         <button id="traffic-layer-button" class="left-map-action-button traffic-map-button" title="SafeSky — afficher/masquer le trafic aérien indicatif — appui long : filtres" aria-label="SafeSky — afficher ou masquer le trafic aérien indicatif">
             <span class="traffic-icon traffic-safesky-icon" aria-hidden="true"></span>
             <span id="traffic-tracked-button-count" class="traffic-tracked-button-count" style="display:none;">0</span>
@@ -1101,7 +1109,7 @@
     <script src="suncalc.js"></script>
     <script src="jszip.min.js"></script>
     <script src="sia.js?siav=15.69"></script>
-    <script src="script.js?appv=v16.62"></script>
+    <script src="script.js?appv=v16.63"></script>
     
     <div id="fuel-split-modal" class="fuel-split-modal" style="display: none;">
         <div class="fuel-split-modal-content">
