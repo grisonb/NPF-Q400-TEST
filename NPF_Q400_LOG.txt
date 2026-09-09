@@ -1,3 +1,70 @@
+VERSION TEST v16.63 — BFG SANS MOT DE PASSE + SERVICES TERRAIN + ZONES 3 LIGNES + TRACE YUL
+Date : 09/09/2026
+Base : TEST v16.62
+
+OBJECTIF
+- Conserver GLR v16.62 désormais validé fonctionnel (positions HTTP 200), sans modifier sa logique.
+- Quand BFG est associé à l'iPad, ne jamais demander le mot de passe NPF pour FdS/GAAR : l'autorisation doit venir du pont BFG.
+- Corriger la fenêtre de mot de passe FdS où le bouton « Associer avec le code BFG » restait visible et collé au bouton d'autorisation.
+- Compléter les libellés terrain avec AFIS/TWR/A/A/INFO lorsque le type est disponible pour exactement la fréquence déjà retenue par NPF ; centrer le texte et agrandir la fréquence.
+- Tester des libellés de zones SIA en trois lignes « nom / fréquence / tranche d'altitude », en texte noir seul sans halo/fond.
+- Intégrer un bouton TRACE qui délègue l'enregistrement à l'app native YUL via Apple Raccourcis afin que la trace puisse continuer lorsque NPF passe au second plan.
+
+1. GLR — VALIDÉ / INCHANGÉ
+- Aucune modification du flux Global Link de v16.62.
+- Le diagnostic v16.62 a confirmé « positions-ok » avec HTTP 200.
+- Les probes GLR restent disponibles uniquement pour le diagnostic d'un futur échec.
+
+2. FdS / GAAR — BFG ASSOCIÉ = AUCUN MOT DE PASSE NPF
+- Une FdS/GAAR du jour déjà téléchargée est ouverte immédiatement depuis IndexedDB, avant toute tentative d'authentification réseau.
+- Si aucun document local du jour n'est disponible et que BFG est associé, NPF tente l'autorisation automatique par le pont BFG.
+- Si cette autorisation BFG est momentanément indisponible, NPF affiche un message demandant d'ouvrir/actualiser BFG puis de réessayer ; il n'ouvre plus la fenêtre de mot de passe NPF.
+- Le même comportement est appliqué au bouton « Maj » du viewer FdS/GAAR.
+- Le mot de passe NPF reste disponible uniquement lorsque l'iPad n'est pas associé à BFG.
+- Garde-fou supplémentaire : openBriefingDocsPasswordModal() refuse elle-même de s'ouvrir si une association BFG est présente.
+
+3. FENÊTRE MOT DE PASSE FdS — DEUX BOUTONS COLLÉS CORRIGÉS
+- Le défaut n'était pas l'espacement des gros boutons FdS/GAAR de la fenêtre principale.
+- Dans le mode mot de passe, le champ/code BFG était masqué mais le bouton « Associer avec le code BFG » restait visible sous « Autoriser jusqu'à minuit ».
+- Ce bouton est maintenant explicitement masqué dans le mode mot de passe.
+- Il est réaffiché uniquement dans la fenêtre dédiée « Association BFG ↔ NPF ».
+- Aucun changement d'espacement des boutons FdS/GAAR de la fenêtre principale.
+
+4. AÉRODROMES — TYPE DE SERVICE + CENTRAGE + FRÉQUENCE 18 PX
+- Nom/OACI et ligne fréquence/service sont centrés dans l'étiquette.
+- La fréquence passe de 15 px à 18 px, graisse 950.
+- Le référentiel SIA déjà chargé regroupe désormais plusieurs services de même fréquence : TWR / AFIS / A/A / INFO.
+- Nouveau référentiel léger complémentaire de types de services basé sur airports_frequencies.csv de whatisflying-db, chargé uniquement lorsque les libellés terrain à l'échelle 1 NM sont nécessaires et mis en cache localement.
+- Ce complément ne peut JAMAIS remplacer la fréquence NPF : il ajoute seulement AFIS/TWR/A/A/INFO si l'OACI ET la fréquence correspondent exactement à la fréquence déjà retenue par NPF.
+- Les valeurs explicitement vérifiées LFBD/LFCS gardent priorité et ne sont pas enrichies par une donnée contradictoire.
+- Le complément reconnaît A/A uniquement lorsqu'il est explicitement indiqué dans le type/description ; aucune déduction à partir du nombre de la fréquence.
+
+5. ZONES SIA — NOM / FRÉQUENCE / ALTITUDE SUR TROIS LIGNES
+- Ligne 1 : nom/type de zone.
+- Ligne 2 : service + fréquence lorsqu'ils existent.
+- Ligne 3 : tranche verticale (limite basse – limite haute).
+- Les zones R conservent leur nom opérationnel mais leur fréquence est déplacée sur la deuxième ligne.
+- Premier test graphique demandé : texte noir uniquement, centré, sans fond blanc et sans halo/text-shadow blanc.
+- Les SIV sont également forcés en noir pour ce test afin de comparer la lisibilité sans traitement particulier jaune/noir.
+- Placement/collision et orientation des étiquettes le long des limites restent inchangés.
+
+6. TRACE — YUL ENREGISTRE, NPF DÉCLENCHE
+- Nouveau bouton « TRACE / YUL » dans la pile gauche, entre GLR et SafeSky.
+- NPF n'enregistre pas lui-même un second flux GPS.
+- Un appui lance le raccourci Apple nommé exactement « NPF Trace » via le schéma officiel shortcuts://run-shortcut.
+- Le raccourci doit être créé une seule fois sur l'iPad avec les actions YUL : « Is Recording » puis arrêt si YUL enregistre, démarrage sinon.
+- YUL reste l'enregistreur natif : son autorisation de localisation permet l'enregistrement lorsque l'app n'est pas ouverte/au premier plan, contrairement à une PWA dont l'exécution peut être suspendue par iOS.
+- NPF ne prétend pas connaître l'état interne YUL : le bouton reste un lanceur neutre et ne simule pas un voyant ON/OFF.
+- Aucun retour automatique forcé vers la PWA après Raccourcis : iOS ne garantit pas qu'un callback HTTPS rouvre l'instance standalone de NPF.
+
+7. NON-RÉGRESSION / CONTRÔLES
+- GLR v16.62, zoom Routes/HT 360 ms, tuiles v16.61/v16.62, calculs FUEL, VAC, Lapradelle et mise à jour automatique conservés.
+- Aucun bouton MAJ principal réintroduit.
+- sia.js strictement inchangé bit pour bit.
+- Syntaxe Script/SW, scripts inline Index, Manifest JSON et cohérence v16.63 contrôlés.
+- Test parser services terrain : TWR + AFIS + A/A sur la même fréquence regroupés ; une fréquence différente n'est pas utilisée pour enrichir la fréquence NPF.
+
+
 VERSION TEST v16.62 — GLR DIAGNOSTIC 3 NIVEAUX + ZOOM OUT ROUTES/HT STABILISÉ 360 MS
 Date : 08/09/2026
 Base : TEST v16.61
