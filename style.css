@@ -1,4 +1,4 @@
-/* NPF_STYLE_BUILD_VERSION: v16.62 */
+/* NPF_STYLE_BUILD_VERSION: v16.63 */
 /* v14.83 — nettoyage des références techniques et limitation des cartouches routiers. */
 /* v14.81 — recherche phonétique nationale élargie aux fragments sur deux lettres. */
 /* v14.80 — Brive conservé uniquement sous LFSL. */
@@ -18027,4 +18027,102 @@ body.npf-waypoint-search-open {
 body.npf-calculator-modal-open {
     overflow: hidden !important;
     overscroll-behavior: none !important;
+}
+
+
+/* ========================================================================== 
+   v16.63 — BFG/FdS, ÉTIQUETTES TERRAIN, ZONES 3 LIGNES, TRACE YUL
+   ========================================================================== */
+
+/* TRACE délègue l'enregistrement GPS natif/arrière-plan à YUL via Raccourcis. */
+.yul-trace-map-button {
+    display: flex !important;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    background: #ffffff !important;
+    border-color: #6b7280 !important;
+    color: #111827 !important;
+    font-family: inherit;
+    line-height: 1;
+}
+.yul-trace-map-button .yul-trace-main {
+    font-size: 12px;
+    font-weight: 950;
+    letter-spacing: .02em;
+    pointer-events: none;
+}
+.yul-trace-map-button .yul-trace-sub {
+    margin-top: 2px;
+    font-size: 9px;
+    font-weight: 900;
+    color: #374151;
+    pointer-events: none;
+}
+
+/* Libellés terrain : deux lignes centrées ; fréquence volontairement renforcée. */
+.airport-operational-label {
+    align-items: center !important;
+    text-align: center !important;
+}
+.airport-operational-label .airport-operational-name {
+    text-align: center !important;
+}
+.airport-operational-label .airport-operational-frequency {
+    width: 100%;
+    text-align: center !important;
+    font-size: 18px !important;
+    line-height: 1.05 !important;
+    font-weight: 950 !important;
+}
+
+/* Test demandé : zones en texte noir seul, sans fond ni halo blanc.
+ * Ordre vertical : nom / fréquence / tranche d'altitude. */
+.sia-boundary-label-text,
+.sia-boundary-label-text.sia-siv-label,
+.sia-boundary-label-icon .sia-boundary-label-text.sia-prohibited-label {
+    color: #000000 !important;
+    background: transparent !important;
+    text-shadow: none !important;
+    text-align: center !important;
+    font-weight: 900 !important;
+    line-height: 1.05 !important;
+}
+.sia-boundary-label-main,
+.sia-boundary-label-frequency,
+.sia-boundary-label-altitude {
+    display: block;
+    white-space: nowrap;
+    color: #000000 !important;
+    text-shadow: none !important;
+    text-align: center !important;
+}
+.sia-boundary-label-frequency {
+    margin-top: 2px;
+    font-size: 12px;
+    line-height: 1.05;
+    font-weight: 950;
+}
+.sia-boundary-label-altitude,
+.sia-boundary-label-text.sia-siv-label .sia-boundary-label-altitude {
+    margin-top: 2px;
+    font-size: 10px !important;
+    line-height: 1.05 !important;
+    font-weight: 900 !important;
+}
+.sia-boundary-label-text.sia-siv-label,
+.sia-boundary-label-text.sia-siv-label.sia-zone-label-near {
+    font-size: 14px !important;
+}
+.sia-boundary-label-text.sia-zone-label-near {
+    font-size: 14px !important;
+}
+.sia-boundary-label-text.sia-zone-label-near .sia-boundary-label-frequency,
+.sia-boundary-label-text.sia-siv-label.sia-zone-label-near .sia-boundary-label-frequency {
+    font-size: 14px !important;
+}
+.sia-boundary-label-text.sia-zone-label-near .sia-boundary-label-altitude,
+.sia-boundary-label-text.sia-siv-label.sia-zone-label-near .sia-boundary-label-altitude {
+    font-size: 12px !important;
 }
