@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v16.65';
+const NPF_SCRIPT_BUILD_VERSION = 'v16.66';
 
 
 /*
@@ -544,6 +544,11 @@ function getNpfStartupDiagnosticRuntimeInfo() {
         airportFrequencyFallbackCount: airportFrequencyFallbackIndex instanceof Map
             ? airportFrequencyFallbackIndex.size
             : 0,
+        airportServiceSupplementCount: airportServiceSupplementIndex instanceof Map
+            ? airportServiceSupplementIndex.size
+            : 0,
+        airportServiceAfisCount: countAirportServiceSupplementTypeEntries('AFIS'),
+        airportServiceAirToAirCount: countAirportServiceSupplementTypeEntries('A/A'),
         airportFrequencyAdditionalCount: Array.isArray(additionalAerodromes)
             ? additionalAerodromes.reduce((count, airport) => count + (getAirportOperationalFrequency(airport?.oaci) ? 1 : 0), 0)
             : 0,
@@ -633,7 +638,9 @@ function buildNpfStartupDiagnosticExportText() {
         'Fréquences terrains : '
         + runtime.airportFrequencyAdditionalCount + '/' + runtime.airportFrequencyAdditionalTotal
         + ' aérodromes complémentaires renseignés | '
-        + runtime.airportFrequencyFallbackCount + ' fréquences en référentiel léger/cache'
+        + runtime.airportFrequencyFallbackCount + ' fréquences en référentiel léger/cache | '
+        + runtime.airportServiceSupplementCount + ' services fréquence/OACI | '
+        + 'AFIS=' + runtime.airportServiceAfisCount + ' | A/A=' + runtime.airportServiceAirToAirCount
     );
     lines.push(
         'Recherche France : '
@@ -1750,6 +1757,7 @@ const AIRPORT_SERVICE_SUPPLEMENT_URLS = Object.freeze([
 const AIRPORT_SERVICE_SUPPLEMENT_CACHE_KEY = 'npfAirportServiceSupplement_v1';
 const AIRPORT_SERVICE_SUPPLEMENT_TIMEOUT_MS = 9000;
 let airportServiceSupplementIndex = null;
+let airportServiceSupplementByOaciIndex = new Map();
 let airportServiceSupplementLoadPromise = null;
 let airportServiceSupplementLastAttemptAt = 0;
 
@@ -2095,7 +2103,7 @@ const OFFLINE_ACTIVE_PACK_DATABASES_KEY = 'offlineActivePackDatabases';
 const OFFLINE_ACTIVE_PACK_ALIASES_KEY = 'offlineActivePackAliases';
 const OFFLINE_MAP_DATABASE_PREFIX = 'OfflineMap_';
 const COMMUNES_CACHE_KEY = 'communesDataCacheV1';
-const COMMUNES_ALIASES_CACHE_KEY = 'communesAliasesCacheV2';
+const COMMUNES_ALIASES_CACHE_KEY = 'communesAliasesCacheV3';
 const AIRPORT_PDF_STORE_NAME = 'airportPdfs';
 const AIRPORT_PDF_DB_NAME = 'AirportPdfsDB';
 const AIRPORT_PDF_DB_VERSION = 1;
@@ -5060,8 +5068,14 @@ async function initializeApp() {
                 .filter(([code]) => code)
         );
 
-        communeAliases = await loadCommunesAliases();
-        npfStartupDiagMark('communes_aliases_ready', 'Alias communes prêts', `${communeAliases.length} alias`);
+        /* v16.66 — les alias ne bloquent plus le démarrage principal.
+         * Le DIAG v16.65 a montré un blocage JavaScript d'environ 2,7 s au
+         * moment de leur chargement/normalisation. La recherche des 34 935
+         * communes reste disponible immédiatement ; les alias sont chargés
+         * après l'affichage PÉLIC, au repos. */
+        communeAliases = [];
+        communeAliasesLoadSource = 'differe-apres-demarrage';
+        npfStartupDiagMark('communes_aliases_deferred', 'Alias communes — chargement différé', 'après démarrage principal');
     } catch (error) {
         communesLoadError = error;
         allCommunes = [];
@@ -5103,6 +5117,33 @@ async function initializeApp() {
     try {
         window.dispatchEvent(new CustomEvent('npf-startup-core-ready'));
     } catch (_) {}
+
+    /* v16.66 — charger les alias seulement lorsque la carte et les PÉLIC sont
+     * déjà opérationnels. requestIdleCallback est utilisé s'il existe ; le
+     * fallback temporisé évite de remettre une grosse tâche juste derrière
+     * le premier rendu. */
+    const startDeferredCommuneAliasesLoad = async () => {
+        try {
+            communeAliases = await loadCommunesAliases();
+            npfStartupDiagMark(
+                'communes_aliases_ready',
+                'Alias communes prêts',
+                `${communeAliases.length} alias`
+            );
+        } catch (error) {
+            communeAliases = [];
+            communeAliasesLoadSource = 'indisponible';
+            npfStartupDiagMark('communes_aliases_error', 'Alias communes en erreur', error?.message || error);
+        }
+    };
+    if (typeof window.requestIdleCallback === 'function') {
+        window.requestIdleCallback(
+            () => { startDeferredCommuneAliasesLoad(); },
+            { timeout: 5000 }
+        );
+    } else {
+        setTimeout(() => { startDeferredCommuneAliasesLoad(); }, 2500);
+    }
 
     /*
      * Toutes les tâches suivantes sont explicitement postérieures aux trois
@@ -5418,37 +5459,66 @@ async function loadCommunesAliases() {
         };
     };
 
-    const parseAliasPayload = (payload) => {
+    const yieldAliasBuildToUi = () => new Promise(resolve => {
+        if (typeof requestAnimationFrame === 'function') {
+            requestAnimationFrame(() => resolve());
+        } else {
+            setTimeout(resolve, 0);
+        }
+    });
+
+    const parseAliasPayload = async (payload) => {
         if (!payload) return [];
 
+        const sourceEntries = [];
         if (Array.isArray(payload.aliases)) {
-            return payload.aliases.map((entry) => buildAliasEntry(entry)).filter(Boolean);
+            payload.aliases.forEach(entry => sourceEntries.push([null, entry]));
+        } else if (payload.aliases && typeof payload.aliases === 'object') {
+            Object.entries(payload.aliases).forEach(entry => sourceEntries.push(entry));
+        } else {
+            return [];
         }
 
-        if (payload.aliases && typeof payload.aliases === 'object') {
-            return Object.entries(payload.aliases)
-                .map(([key, value]) => {
-                    if (typeof value === 'string') {
-                        const targetCommune = communesByCodeInsee.get(String(value).trim());
-                        if (!targetCommune) return null;
-                        return buildAliasEntry({
-                            nom_affiche: key.replace(/-/g, ' '),
-                            code_insee: value,
-                            nom_commune_actuelle: targetCommune.nom_standard
-                        }, key);
-                    }
-                    return buildAliasEntry(value, key);
-                })
-                .filter(Boolean);
+        const aliases = [];
+        for (let index = 0; index < sourceEntries.length; index += 1) {
+            const [key, value] = sourceEntries[index];
+            let normalizedValue = value;
+
+            if (typeof value === 'string') {
+                const targetCommune = communesByCodeInsee.get(String(value).trim());
+                if (targetCommune) {
+                    normalizedValue = {
+                        nom_affiche: String(key || '').replace(/-/g, ' '),
+                        code_insee: value,
+                        nom_commune_actuelle: targetCommune.nom_standard
+                    };
+                } else {
+                    normalizedValue = null;
+                }
+            }
+
+            const built = buildAliasEntry(normalizedValue, key);
+            if (built) aliases.push(built);
+
+            /* v16.66 — fractionner aussi la normalisation CPU des 6 000+ alias.
+             * Même sur un cache compact, Safari ne doit plus garder le thread
+             * principal plusieurs centaines de ms d'affilée. */
+            if ((index + 1) % 192 === 0) {
+                await yieldAliasBuildToUi();
+            }
         }
 
-        return [];
+        return aliases;
     };
 
-    const storeAliases = (payload) => {
-        const aliases = parseAliasPayload(payload);
+    const storeAliases = async (payload) => {
+        const aliases = await parseAliasPayload(payload);
         try {
-            localStorage.setItem(COMMUNES_ALIASES_CACHE_KEY, JSON.stringify({ aliases }));
+            /* v16.66 — stocker le payload compact d'origine, pas les objets
+             * alias déjà enrichis avec toute la commune cible. L'ancien cache
+             * expansé pouvait devenir très volumineux et bloquer Safari lors
+             * du JSON.stringify/localStorage. */
+            localStorage.setItem(COMMUNES_ALIASES_CACHE_KEY, JSON.stringify(payload));
         } catch (_) {}
         return aliases;
     };
@@ -5459,14 +5529,14 @@ async function loadCommunesAliases() {
     try {
         const cachedData = localStorage.getItem(COMMUNES_ALIASES_CACHE_KEY);
         if (cachedData) {
-            const aliases = parseAliasPayload(JSON.parse(cachedData));
+            const aliases = await parseAliasPayload(JSON.parse(cachedData));
             if (aliases.length) {
                 communeAliasesLoadSource = 'cache-local';
                 setTimeout(async () => {
                     try {
                         const response = await fetchWithTimeout('./communes_aliases.json', { cache: 'no-cache' }, 5000);
                         if (!response.ok) return;
-                        const updatedAliases = storeAliases(await response.json());
+                        const updatedAliases = await storeAliases(await response.json());
                         if (updatedAliases.length) {
                             communeAliases = updatedAliases;
                             communeAliasesLoadSource = 'fichier-reseau-maj';
@@ -5481,7 +5551,7 @@ async function loadCommunesAliases() {
     try {
         const response = await fetchWithTimeout('./communes_aliases.json', { cache: 'no-cache' }, 5000);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const aliases = storeAliases(await response.json());
+        const aliases = await storeAliases(await response.json());
         communeAliasesLoadSource = 'fichier-reseau';
         return aliases;
     } catch (_) {
@@ -27930,7 +28000,7 @@ if (document.readyState === 'loading') {
 
 
 /* ========================================================================== 
-   v16.56 — noms + fréquence opérationnelle des terrains à l'échelle 1 NM
+   v16.66 — noms + fréquence opérationnelle des terrains à partir de 2 NM
    ========================================================================== */
 function getNpfDisplayedAirportRecordsForLabels() {
     const byOaci = new Map();
@@ -28281,6 +28351,110 @@ function ensureAirportFrequencyFallbackLoaded() {
     return airportFrequencyFallbackLoadPromise;
 }
 
+function buildAirportServiceSupplementByOaciIndex(index = airportServiceSupplementIndex) {
+    const byOaci = new Map();
+
+    const add = (key, label, source = 'supplement') => {
+        const match = String(key || '').match(/^(LF[A-Z]{2})\|(1\d{2}\.\d{3})$/);
+        const normalizedLabel = mergeAirportServiceTypeLabels(label);
+        if (!match || !normalizedLabel) return;
+        const [, oaci, frequency] = match;
+        if (!byOaci.has(oaci)) byOaci.set(oaci, []);
+        const list = byOaci.get(oaci);
+        const existing = list.find(row => row.frequency === frequency);
+        if (existing) {
+            existing.type = mergeAirportServiceTypeLabels(existing.type, normalizedLabel);
+            return;
+        }
+        list.push({ frequency, type: normalizedLabel, source });
+    };
+
+    AIRPORT_SERVICE_BUILTIN_EXACT.forEach((label, key) => add(key, label, 'builtin'));
+    (index instanceof Map ? index : new Map()).forEach((label, key) => add(key, label, 'supplement'));
+
+    byOaci.forEach(list => {
+        list.sort((a, b) => Number(a.frequency) - Number(b.frequency));
+    });
+
+    airportServiceSupplementByOaciIndex = byOaci;
+    return byOaci;
+}
+
+function ensureAirportServiceSupplementByOaciIndex() {
+    if (!(airportServiceSupplementByOaciIndex instanceof Map) || !airportServiceSupplementByOaciIndex.size) {
+        return buildAirportServiceSupplementByOaciIndex();
+    }
+    return airportServiceSupplementByOaciIndex;
+}
+
+function countAirportServiceSupplementTypeEntries(type) {
+    const wanted = String(type || '').trim().toUpperCase();
+    if (!wanted) return 0;
+    let count = 0;
+    ensureAirportServiceSupplementByOaciIndex().forEach(rows => {
+        (rows || []).forEach(row => {
+            if (mergeAirportServiceTypeLabels(row?.type).includes(wanted)) count += 1;
+        });
+    });
+    return count;
+}
+
+function getAirportServiceFrequencyEquivalentKeys(oaci, frequencyValue) {
+    const code = String(oaci || '').trim().toUpperCase();
+    const frequency = normalizeAirportOperationalFrequencyValue(frequencyValue);
+    if (!/^LF[A-Z]{2}$/.test(code) || !frequency) return [];
+
+    const khz = Math.round(Number(frequency) * 1000);
+    const values = new Set([khz]);
+
+    /* Correspondance stricte fréquence porteuse 25 kHz <-> désignateur de
+     * canal 8,33 kHz : les désignateurs finissant à +5 kHz utilisent la
+     * porteuse 5 kHz plus bas. On ajoute aussi l'autre sens pour les données
+     * qui stockent la porteuse alors que le libellé de service stocke le canal. */
+    if (Number.isFinite(khz)) {
+        const modulo25 = ((khz % 25) + 25) % 25;
+        if (modulo25 === 5) values.add(khz - 5);
+        if (modulo25 === 0) values.add(khz + 5);
+    }
+
+    return [...values]
+        .filter(value => value >= 118000 && value < 137000)
+        .map(value => `${code}|${(value / 1000).toFixed(3)}`);
+}
+
+function getAirportServiceFromOaciIndex(oaci, frequencyValue, currentType = '') {
+    const code = String(oaci || '').trim().toUpperCase();
+    if (!/^LF[A-Z]{2}$/.test(code)) return '';
+
+    const byOaci = ensureAirportServiceSupplementByOaciIndex();
+    const rows = byOaci.get(code) || [];
+    const wantedKeys = new Set(getAirportServiceFrequencyEquivalentKeys(code, frequencyValue));
+
+    let matched = '';
+    rows.forEach(row => {
+        if (wantedKeys.has(`${code}|${row.frequency}`)) {
+            matched = mergeAirportServiceTypeLabels(matched, row.type);
+        }
+    });
+    if (matched) return matched;
+
+    /* Si aucune fréquence ne correspond, n'utiliser un secours OACI que
+     * lorsqu'il est non ambigu : tous les services opérationnels connus de ce
+     * terrain appartiennent alors à la même famille. On ne remplace jamais un
+     * TWR déjà établi par un AFIS/A/A déduit. */
+    if (String(currentType || '').toUpperCase().includes('TWR')) return '';
+
+    const knownTypes = new Set();
+    rows.forEach(row => {
+        ['TWR', 'AFIS', 'A/A', 'INFO'].forEach(type => {
+            if (String(row?.type || '').toUpperCase().includes(type)) knownTypes.add(type);
+        });
+    });
+    if (knownTypes.size === 1) return [...knownTypes][0];
+
+    return AIRPORT_SERVICE_BUILTIN_OACI_FALLBACK.get(code) || '';
+}
+
 function normalizeAirportServiceSupplementType(rawType, rawDescription) {
     const type = String(rawType || '').trim().toUpperCase();
     const description = String(rawDescription || '').trim().toUpperCase();
@@ -28383,6 +28557,7 @@ function hydrateAirportServiceSupplementIndex(payload) {
             index.set(key, String(label).trim());
         }
     });
+    buildAirportServiceSupplementByOaciIndex(index);
     return index;
 }
 
@@ -28414,6 +28589,7 @@ async function fetchAirportServiceSupplementIndex() {
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const index = parseAirportServiceSupplementCsv(await response.text());
             if (index.size < 50) throw new Error(`Référentiel services terrain incomplet (${index.size})`);
+            buildAirportServiceSupplementByOaciIndex(index);
             return index;
         } catch (error) {
             lastError = error;
@@ -28427,6 +28603,7 @@ function refreshAirportServiceSupplementInBackground() {
     airportServiceSupplementLastAttemptAt = Date.now();
     fetchAirportServiceSupplementIndex().then(index => {
         airportServiceSupplementIndex = index;
+        buildAirportServiceSupplementByOaciIndex(index);
         persistAirportServiceSupplementIndex(index);
         scheduleAirportOperationalLabelsRefresh(0);
     }).catch(() => {});
@@ -28441,6 +28618,7 @@ function ensureAirportServiceSupplementLoaded() {
     const cached = loadCachedAirportServiceSupplementIndex();
     if (cached?.size) {
         airportServiceSupplementIndex = cached;
+        buildAirportServiceSupplementByOaciIndex(cached);
         setTimeout(refreshAirportServiceSupplementInBackground, 2200);
         return Promise.resolve(cached);
     }
@@ -28449,6 +28627,7 @@ function ensureAirportServiceSupplementLoaded() {
     airportServiceSupplementLoadPromise = fetchAirportServiceSupplementIndex()
         .then(index => {
             airportServiceSupplementIndex = index;
+            buildAirportServiceSupplementByOaciIndex(index);
             persistAirportServiceSupplementIndex(index);
             scheduleAirportOperationalLabelsRefresh(0);
             return index;
@@ -28478,33 +28657,13 @@ function mergeAirportServiceTypeLabels(...labels) {
 }
 
 function getAirportServiceSupplementFrequencyKeys(oaci, frequencyValue) {
-    const code = String(oaci || '').trim().toUpperCase();
-    const frequency = normalizeAirportOperationalFrequencyValue(frequencyValue);
-    if (!/^LF[A-Z]{2}$/.test(code) || !frequency) return [];
-
-    const keys = [`${code}|${frequency}`];
-    const frequencyKhz = Math.round(Number(frequency) * 1000);
-
-    /* v16.65 — certains référentiels donnent la fréquence porteuse 25 kHz
-     * (ex. 122.600), alors que la VAC/NPF affiche le désignateur de canal
-     * 8,33 kHz correspondant (ex. 122.605). Ce n'est pas une tolérance
-     * approximative : uniquement la conversion déterministe +5 kHz du
-     * désignateur dont le reste modulo 25 kHz vaut 5. */
-    if (Number.isFinite(frequencyKhz) && ((frequencyKhz % 25) + 25) % 25 === 5) {
-        const carrierFrequency = ((frequencyKhz - 5) / 1000).toFixed(3);
-        keys.push(`${code}|${carrierFrequency}`);
-    }
-
-    return keys;
+    return getAirportServiceFrequencyEquivalentKeys(oaci, frequencyValue);
 }
 
-function getAirportServiceSupplementLabel(oaci, frequencyValue) {
-    const keys = getAirportServiceSupplementFrequencyKeys(oaci, frequencyValue);
+function getAirportServiceSupplementLabel(oaci, frequencyValue, currentType = '') {
+    const keys = getAirportServiceFrequencyEquivalentKeys(oaci, frequencyValue);
     if (!keys.length) return '';
 
-    /* Référentiel embarqué prioritaire, puis complément réseau/cache.
-     * Plusieurs libellés éventuels sont fusionnés sans jamais modifier la
-     * fréquence opérationnelle déjà retenue par NPF. */
     let label = '';
     keys.forEach(key => {
         label = mergeAirportServiceTypeLabels(
@@ -28513,7 +28672,11 @@ function getAirportServiceSupplementLabel(oaci, frequencyValue) {
             airportServiceSupplementIndex?.get(key) || ''
         );
     });
-    return label;
+
+    return mergeAirportServiceTypeLabels(
+        label,
+        getAirportServiceFromOaciIndex(oaci, frequencyValue, currentType)
+    );
 }
 
 function buildAirportOperationalFrequencyIndex(dataset = siaDataset) {
@@ -28593,12 +28756,16 @@ function getAirportOperationalFrequency(oaci) {
 
     /* v16.63 — le référentiel complémentaire n'a le droit que d'ajouter le
      * libellé de service pour EXACTEMENT la fréquence déjà retenue par NPF. */
-    let supplementaryType = getAirportServiceSupplementLabel(code, selected.value);
+    let supplementaryType = getAirportServiceSupplementLabel(
+        code,
+        selected.value,
+        selected.type
+    );
 
-    /* v16.64 — si la fréquence NPF est connue mais n'a aucun type, utiliser
-     * uniquement le secours OACI des terrains non-TWR identifiés. La fréquence
-     * affichée reste STRICTEMENT celle de NPF ; ce secours n'en injecte aucune. */
-    if (!supplementaryType && !String(selected.type || '').trim()) {
+    /* v16.66 — dernier secours explicite par OACI pour les terrains AFIS/A/A
+     * non ambigus. Ne jamais substituer la fréquence NPF et ne jamais convertir
+     * un TWR déjà identifié en AFIS/A/A. */
+    if (!supplementaryType && !String(selected.type || '').toUpperCase().includes('TWR')) {
         supplementaryType = AIRPORT_SERVICE_BUILTIN_OACI_FALLBACK.get(code) || '';
     }
 
@@ -28613,7 +28780,7 @@ function refreshAirportOperationalLabels() {
     if (!map) return;
     if (!airportOperationalLabelLayer) airportOperationalLabelLayer = L.layerGroup().addTo(map);
     const scaleNm = getCurrentNpfScaleNm();
-    if (!Number.isFinite(scaleNm) || scaleNm > 1.000001) {
+    if (!Number.isFinite(scaleNm) || scaleNm > 2.000001) {
         airportOperationalLabelLayer.clearLayers();
         return;
     }
@@ -28755,7 +28922,7 @@ function drawPermanentAirportMarkers() {
     });
 
     /* v16.58 — précharge non bloquante du petit référentiel fréquence pour
-     * qu'il soit déjà mémorisé lorsque l'utilisateur atteint l'échelle 1 NM. */
+     * qu'il soit déjà mémorisé lorsque l'utilisateur atteint l'échelle 2 NM. */
     ensureAirportFrequencyFallbackLoaded().catch(() => {});
 }
 
@@ -42197,10 +42364,10 @@ let siaRefreshScheduledReason = null;
  * seulement après la fin du geste et après une courte période d'inactivité.
  */
 let siaMoveDecorationRefreshTimer = null;
-const SIA_MOVE_DECORATION_IDLE_MS = 420;
+const SIA_MOVE_DECORATION_IDLE_MS = 560;
 /* v16.32 — décorations SIA construites par petits lots pour ne plus figer WebKit. */
 /* v16.33 — lots encore plus courts + décorations limitées à la vue utile. */
-const SIA_DECORATION_BATCH_SIZE = 6;
+const SIA_DECORATION_BATCH_SIZE = 2;
 const SIA_DECORATION_VIEW_PAD_RATIO = 0.015;
 const SIA_DECORATION_LIGHTWEIGHT_SCALE_NM = 10;
 const SIA_TOUCH_SURFACE_BATCH_SIZE = 24;
@@ -42619,10 +42786,11 @@ function scheduleSiaCoverageRefresh(reason = 'moveend') {
     }
 
     if (contained) {
-        /* v16.64 — couverture/zoom/filtres inchangés : ZERO recalcul SIA.
-         * Les calques Leaflet suivent naturellement le pan. Le DIAG v16.63
-         * montrait jusqu'à 2,2 s perdus à redécorer une couverture encore valide. */
-        cancelObsoleteSiaMapMotionWork('moveend-contained-v16.64');
+        /* v16.66 — pendant le pan : zéro calcul. Une fois le geste terminé,
+         * redécorer seulement la petite vue courante, en différé et par lots
+         * courts. Cela garde les bordures intérieures sans bloquer le geste. */
+        cancelObsoleteSiaMapMotionWork('moveend-contained-v16.66');
+        scheduleSiaMoveDecorationRefresh('moveend-contained-idle-v16.66');
         return;
     }
 
@@ -48095,21 +48263,15 @@ async function refreshSiaLayers(reason = 'manual') {
             && siaRenderedPointLabelsEnabled === pointLabelsEnabledNow
             && Array.isArray(siaRenderedAirspaceFeatures)
         ) {
-            const npfDiagDecorStart = NPF_STARTUP_DIAGNOSTIC.now();
-            await renderSiaZoomDependentDecorationsProgressive(
-                siaRenderedAirspaceFeatures,
-                refreshGeneration
-            );
-            npfDiagTouchDecorMs += NPF_STARTUP_DIAGNOSTIC.now() - npfDiagDecorStart;
+            /* v16.66 — ne plus calculer bandes/libellés dans la transaction
+             * zoomend. Le zoom rend la main immédiatement ; la décoration est
+             * recalculée après stabilisation de la vue. */
             siaRenderedZoom = zoom;
-            scheduleSiaProfileRefresh('sia-zoomend-decorations');
+            scheduleSiaMoveDecorationRefresh('zoomend-idle-v16.66');
             npfDiagSiaInteraction(
                 'SIA RAFRAÎCHISSEMENT',
-                `raison=${reason} · décorations seules · zones=${siaRenderedAirspaceFeatures.length} · zoom=${zoom}`,
-                {
-                    totalMs: Math.round(NPF_STARTUP_DIAGNOSTIC.now() - npfDiagRefreshStartedAt),
-                    decorationsMs: Math.round(npfDiagTouchDecorMs)
-                }
+                `raison=${reason} · décorations différées · zones=${siaRenderedAirspaceFeatures.length} · zoom=${zoom}`,
+                { totalMs: Math.round(NPF_STARTUP_DIAGNOSTIC.now() - npfDiagRefreshStartedAt) }
             );
             return;
         }
@@ -48125,7 +48287,8 @@ async function refreshSiaLayers(reason = 'manual') {
             && siaRenderedSignature === signature
             && siaBoundsFullyContains(siaRenderedCoverageBounds, currentBounds)
         ) {
-            cancelObsoleteSiaMapMotionWork('moveend-refresh-contained-v16.64');
+            cancelObsoleteSiaMapMotionWork('moveend-refresh-contained-v16.66');
+            scheduleSiaMoveDecorationRefresh('moveend-refresh-contained-idle-v16.66');
             npfDiagSiaInteraction(
                 'SIA RAFRAÎCHISSEMENT',
                 `raison=${reason} · couverture valide · zéro recalcul · zones=${Array.isArray(siaRenderedAirspaceFeatures) ? siaRenderedAirspaceFeatures.length : 0} · zoom=${zoom}`,
@@ -48279,10 +48442,9 @@ async function refreshSiaLayers(reason = 'manual') {
                 }
             }
 
-            await renderSiaZoomDependentDecorationsProgressive(
-                visibleAirspaceFeatures,
-                refreshGeneration
-            );
+            /* v16.66 — ne pas bloquer le rendu principal avec les bandes
+             * intérieures et libellés. Ici on termine uniquement les surfaces
+             * tactiles ; les décorations sont programmées après le commit. */
             npfDiagTouchDecorMs = NPF_STARTUP_DIAGNOSTIC.now() - npfDiagTouchStart;
             rendered += visibleAirspaceFeatures.length;
         }
@@ -48407,6 +48569,13 @@ async function refreshSiaLayers(reason = 'manual') {
         siaRenderedAirspaceFeatures = visibleAirspaceFeatures;
         siaRenderedShowDesignatedPoints = showSiaDesignatedPointsNow;
         siaRenderedPointLabelsEnabled = pointLabelsEnabledNow;
+
+        /* v16.66 — contours/points sont maintenant engagés ; bandes
+         * intérieures et libellés suivent au repos, sans retarder ce commit. */
+        if (siaMapAirspacesVisible && visibleAirspaceFeatures.length) {
+            scheduleSiaMoveDecorationRefresh(`sia-${reason}-idle-v16.66`);
+        }
+
         if (reason === 'startup-prefs') {
             armSiaStartupPassiveMoveendGuard();
         }
