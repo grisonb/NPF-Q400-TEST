@@ -1,3 +1,78 @@
+VERSION TEST v16.67 — RADIO AÉRODROMES SIA OFFICIEL AIRAC 10/26
+Date : 10/09/2026
+Base : TEST v16.66
+Source fournie : export_xml_bd_sia_2026-10-01-v02.zip
+
+OBJECTIF
+- Remplacer l'autorité tierce utilisée pour déterminer TWR / AFIS / A/A par les données officielles SIA.
+- Intégrer en avance de phase les données radio aérodromes AIRAC 10/26, effet 01/10/2026, conformément à la demande utilisateur.
+- Conserver le seuil d'affichage des étiquettes aérodromes à partir de 2 NM.
+- Regrouper les services d'un même terrain lorsqu'ils utilisent la même fréquence, par exemple TWR-AFIS-A/A.
+
+1. SOURCE SIA OFFICIELLE
+- Croisement de `XML_SIA_2026-10-01.xml` et `AIXM4.5_all_FR_OM_2026-10-01.xml`.
+- XML-SIA apporte notamment les services explicites AFIS / A/A, les horaires et remarques.
+- AIXM 4.5 apporte les fréquences TWR avec indicatif TOUR/TOWER, afin de ne pas confondre TWR avec SOL/GROUND.
+- Les données utiles sont pré-calculées et embarquées directement dans `sia.js`.
+- Elles sont accessibles sans décompresser à chaque affichage le payload des 5 066 espaces aériens.
+
+2. CONTENU RADIO EMBARQUÉ
+- 326 aérodromes LF disposent d'au moins un service opérationnel SIA exploitable.
+- Terrains OACI uniques : TWR = 95 ; AFIS = 69 ; A/A = 228.
+- 482 lignes canoniques sont conservées avec service, fréquence, caractère supplétif, horaires, remarque, indicatif et source.
+- La table d'affichage opérationnelle est pré-calculée par OACI et ne retient que les fréquences VHF aéronautiques exploitables pour les étiquettes.
+
+3. RÈGLE D'AFFICHAGE
+- Ordre des services : TWR, AFIS, A/A.
+- Les services partageant exactement la même fréquence sont regroupés avec un tiret.
+- Exemples vérifiés :
+  - LFBD : TWR 118.305
+  - LFCS : A/A 119.005
+  - LFAV : AFIS-A/A 122.605
+  - LFLX : TWR-AFIS 125.880
+  - LFAQ : TWR-AFIS-A/A 136.360
+- Si un même terrain possède plusieurs groupes de fréquences, ils restent sur des lignes/groupes distincts : aucune fréquence n'est attribuée artificiellement à un autre service.
+- Seuil d'affichage conservé : étiquettes nom/OACI + service/fréquence à partir de 2 NM.
+
+4. FIN DU RÉFÉRENTIEL TIERS COMME AUTORITÉ
+- Le référentiel tiers historique n'est plus consulté pour déterminer TWR / AFIS / A/A.
+- L'ancien référentiel léger ne peut servir qu'en secours pour obtenir une fréquence lorsqu'aucun service officiel SIA exploitable n'est disponible ; dans ce cas il ne fournit aucun type de service.
+- Les anciens tableaux restent provisoirement présents dans le code pour compatibilité de cache, mais ne sont plus l'autorité d'affichage.
+
+5. DIAGNOSTIC
+- Le DIAG compte désormais des aérodromes OACI uniques issus du SIA officiel.
+- Il affiche l'AIRAC radio et sa date d'effet.
+- Il affiche le nombre de terrains radio officiels, le nombre de lignes officielles et les comptes uniques TWR / AFIS / A/A.
+- Les anciens compteurs d'entrées du référentiel tiers ne sont plus utilisés comme nombre de terrains français.
+
+6. DONNÉES SIA / VERSION
+- Données radio aérodromes : AIRAC 10/26, effet 01/10/2026.
+- Géométries et espaces SIA : restent sur le payload existant AIRAC 08/26 / révision NPF 15.69 dans cette livraison.
+- Cette livraison ne prétend donc pas basculer l'ensemble des géométries de zones sur AIRAC 10/26.
+- `sia.js` est modifié par rapport à v16.66 afin d'embarquer la table radio officielle.
+- Index, Manifest, Script et Style alignés sur v16.67.
+- Nouveau Service Worker : `sw-v16-67_sia_official_airport_radio_airac10`.
+
+7. PÉRIMÈTRE INCHANGÉ
+- TRACE MyTracks + état supposé localStorage conservé.
+- BFG/FdS/GAAR, GLR, SafeSky, Routes/HT, VAC, calculs FUEL, PÉLIC, communes et mise à jour automatique conservés.
+- Les corrections de performance SIA de v16.66 sont conservées telles quelles.
+- Les ralentissements SIA encore observés dans le DIAG v16.66 ne sont pas déclarés résolus par cette livraison radio.
+- Aucun bouton MAJ principal réintroduit.
+
+VALIDATION STATIQUE À LA LIVRAISON
+- Syntaxe JavaScript principal vérifiée.
+- Syntaxe `sia.js` vérifiée.
+- Syntaxe Service Worker vérifiée.
+- Scripts inline de l'Index vérifiés.
+- Manifest JSON vérifié.
+- Cohérence des références actives v16.67 vérifiée.
+- Table officielle contrôlée : 326 OACI ; TWR 95 ; AFIS 69 ; A/A 228.
+- Exemples LFBD / LFCS / LFAV / LFLX / LFAQ vérifiés.
+- Seuil d'étiquettes aérodromes 2 NM vérifié.
+
+HISTORIQUE PRÉCÉDENT CONSERVÉ INTÉGRALEMENT
+
 VERSION TEST v16.66 — ÉTIQUETTES 2 NM + SERVICES AFIS/A/A ROBUSTES + SIA DIFFÉRÉ + DÉMARRAGE ALLÉGÉ
 Date : 10/09/2026
 Base : TEST v16.65
