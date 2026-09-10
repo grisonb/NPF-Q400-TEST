@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v16-64_bfg_pairing_airport_services_sia_perf_trace_icon';
-const APP_VERSION = 'v16.64';
+const SW_VERSION = 'sw-v16-65_trace_state_airport_833_sia_inner_bands';
+const APP_VERSION = 'v16.65';
 const SIA_DATA_REVISION = '15.69';
 const SIA_DATA_URL = './sia.js';
 const SIA_DATA_CACHE = `npf-q400-sia-data-${SIA_DATA_REVISION}`;
