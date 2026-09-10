@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v16.63';
+const NPF_SCRIPT_BUILD_VERSION = 'v16.64';
 
 
 /*
@@ -684,7 +684,7 @@ function buildNpfStartupDiagnosticExportText() {
         + 'temps total ' + Math.round(runtime.diagPersistTotalMs || 0) + ' ms'
     );
     lines.push(
-        'Authentification : BFG associé ' + (runtime.bfgPaired ? 'OUI' : 'NON')
+        'Authentification : BFG↔NPF associé ' + (runtime.bfgPaired ? 'OUI' : 'NON')
         + ' | session FdS/GAAR ' + (runtime.briefingSessionActive ? 'ACTIVE' : 'ABSENTE/EXPIRÉE')
         + ' | pont BFG ' + (runtime.bfgBridgeLastStatus || '—')
         + (runtime.bfgBridgeLastError ? ' (' + runtime.bfgBridgeLastError + ')' : '')
@@ -22462,6 +22462,7 @@ function openBriefingDocsPasswordModal(type) {
     const bfgCodeInput = document.getElementById('briefing-docs-bfg-code-input');
     const authorizeButton = document.getElementById('briefing-docs-authorize-button');
     const bfgCodeButton = document.getElementById('briefing-docs-bfg-code-button');
+    const passwordFallbackButton = document.getElementById('briefing-docs-password-fallback-button');
     const separator = modal?.querySelector('.briefing-docs-bfg-pairing-separator');
     const status = document.getElementById('briefing-docs-password-status');
     if (!modal) return false;
@@ -22479,6 +22480,7 @@ function openBriefingDocsPasswordModal(type) {
      * BFG restait visible dans la fenêtre mot de passe alors que son champ
      * était masqué. */
     if (bfgCodeButton) bfgCodeButton.style.display = 'none';
+    if (passwordFallbackButton) passwordFallbackButton.style.display = 'none';
     if (status) status.textContent = '';
     modal.style.display = 'flex';
     modal.setAttribute('aria-hidden', 'false');
@@ -22488,7 +22490,7 @@ function openBriefingDocsPasswordModal(type) {
     return true;
 }
 
-function openBriefingDocsBfgPairingModal() {
+function openBriefingDocsBfgPairingModal(targetType = null) {
     const modal = document.getElementById('briefing-docs-password-modal');
     const title = document.getElementById('briefing-docs-password-title');
     const help = document.getElementById('briefing-docs-password-help');
@@ -22497,18 +22499,27 @@ function openBriefingDocsBfgPairingModal() {
     const separator = modal?.querySelector('.briefing-docs-bfg-pairing-separator');
     const bfgCodeInput = document.getElementById('briefing-docs-bfg-code-input');
     const bfgCodeButton = document.getElementById('briefing-docs-bfg-code-button');
+    const passwordFallbackButton = document.getElementById('briefing-docs-password-fallback-button');
     const status = document.getElementById('briefing-docs-password-status');
     if (!modal) return false;
 
-    npfBriefingDocsBfgPairingOnly = true;
-    npfBriefingDocsPendingType = null;
-    if (title) title.textContent = 'Association BFG ↔ NPF';
-    if (help) help.textContent = 'Saisis le code à 8 chiffres affiché dans BFG. Cette association n’est nécessaire qu’une seule fois sur cet iPad.';
+    const safeTargetType = NPF_BRIEFING_DOC_TYPES.includes(String(targetType || '').toLowerCase())
+        ? String(targetType).toLowerCase()
+        : null;
+    npfBriefingDocsBfgPairingOnly = !safeTargetType;
+    npfBriefingDocsPendingType = safeTargetType;
+    if (title) title.textContent = safeTargetType
+        ? `Association BFG ↔ NPF — ${getBriefingDocLabel(safeTargetType)}`
+        : 'Association BFG ↔ NPF';
+    if (help) help.textContent = safeTargetType
+        ? `BFG n’est pas encore associé à NPF sur cet iPad. Saisis le code à 8 chiffres affiché dans BFG ; cette association n’est nécessaire qu’une seule fois.`
+        : 'Saisis le code à 8 chiffres affiché dans BFG. Cette association n’est nécessaire qu’une seule fois sur cet iPad.';
     if (input) { input.value = ''; input.style.display = 'none'; }
     if (authorizeButton) authorizeButton.style.display = 'none';
     if (separator) separator.style.display = 'none';
     if (bfgCodeInput) { bfgCodeInput.value = ''; bfgCodeInput.style.display = ''; }
     if (bfgCodeButton) bfgCodeButton.style.display = '';
+    if (passwordFallbackButton) passwordFallbackButton.style.display = safeTargetType ? '' : 'none';
     if (status) status.textContent = getStoredNpfBfgBridgeCredentials()
         ? 'BFG est déjà associé. Un nouveau code permet de refaire l’association.'
         : '';
@@ -22783,7 +22794,11 @@ async function ensureBriefingDocsInteractiveAuthorization(type, options = {}) {
         return false;
     }
 
-    openBriefingDocsPasswordModal(type);
+    /* v16.64 — FdS/GAAR privilégie BFG : si cet iPad n'est pas encore
+     * associé, ouvrir directement l'association BFG plutôt que demander
+     * immédiatement le mot de passe NPF. Le mot de passe reste disponible
+     * comme secours depuis cette fenêtre. */
+    openBriefingDocsBfgPairingModal(type);
     return false;
 }
 
@@ -22836,6 +22851,7 @@ function initializeBriefingDocsUi() {
     const authorizeButton = document.getElementById('briefing-docs-authorize-button');
     const bfgCodeInput = document.getElementById('briefing-docs-bfg-code-input');
     const bfgCodeButton = document.getElementById('briefing-docs-bfg-code-button');
+    const passwordFallbackButton = document.getElementById('briefing-docs-password-fallback-button');
     const passwordStatus = document.getElementById('briefing-docs-password-status');
     const viewerCloseButton = document.getElementById('briefing-doc-viewer-close');
     const viewerRefreshButton = document.getElementById('briefing-doc-viewer-refresh');
@@ -22918,6 +22934,14 @@ function initializeBriefingDocsUi() {
                 viewerRefreshButton.disabled = false;
                 viewerRefreshButton.textContent = originalText;
             }
+        });
+    }
+
+    if (passwordFallbackButton && passwordFallbackButton.dataset.bound !== '1') {
+        passwordFallbackButton.dataset.bound = '1';
+        passwordFallbackButton.addEventListener('click', () => {
+            const targetType = npfBriefingDocsPendingType || 'fds';
+            openBriefingDocsPasswordModal(targetType);
         });
     }
 
@@ -27834,41 +27858,42 @@ window.openPelicNotams = openNpfPelicNotams;
 
 
 /* ========================================================================== 
-   v16.63 — TRACE : YUL RESTE L'ENREGISTREUR GPS NATIF EN ARRIÈRE-PLAN
+   v16.64 — TRACE : RACCOURCI NPF TRACE, ENREGISTREUR GPS EXTERNE
    ========================================================================== */
-const NPF_YUL_TRACE_SHORTCUT_NAME = 'NPF Trace';
+const NPF_TRACE_SHORTCUT_NAME = 'NPF Trace';
 
-function launchNpfYulTraceShortcut() {
-    /* Apple documente shortcuts://run-shortcut pour lancer un raccourci depuis
-     * une autre app / un navigateur. Le raccourci "NPF Trace" doit être créé
-     * une fois sur l'iPad et utiliser les actions YUL (Is Recording +
-     * démarrage/arrêt). NPF ne duplique aucun logger GPS. */
-    const shortcutUrl = `shortcuts://run-shortcut?name=${encodeURIComponent(NPF_YUL_TRACE_SHORTCUT_NAME)}`;
+function launchNpfTraceShortcut() {
+    /* NPF garde un simple déclencheur synchrone vers Apple Raccourcis.
+     * Le raccourci "NPF Trace" pilote l'enregistreur GPS choisi sur l'iPad
+     * (YUL, m9ch DriveBook ou autre action compatible Raccourcis).
+     * L'enregistrement reste natif iPad et continue en arrière-plan. */
+    const shortcutUrl = `shortcuts://run-shortcut?name=${encodeURIComponent(NPF_TRACE_SHORTCUT_NAME)}`;
     try {
         window.location.href = shortcutUrl;
         return true;
     } catch (error) {
-        alert('Impossible de lancer le raccourci « NPF Trace ». Vérifie qu’il existe dans l’app Raccourcis et que YUL est installé.');
+        alert('Impossible de lancer le raccourci « NPF Trace ». Vérifie qu’il existe dans l’app Raccourcis.');
         return false;
     }
 }
 
-function initializeNpfYulTraceButton() {
+function initializeNpfTraceButton() {
     const button = document.getElementById('yul-trace-button');
     if (!button || button.dataset.bound === '1') return;
     button.dataset.bound = '1';
     button.addEventListener('click', event => {
         event.preventDefault();
         event.stopPropagation();
-        launchNpfYulTraceShortcut();
+        launchNpfTraceShortcut();
     });
 }
 
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initializeNpfYulTraceButton, { once: true });
+    document.addEventListener('DOMContentLoaded', initializeNpfTraceButton, { once: true });
 } else {
-    setTimeout(initializeNpfYulTraceButton, 0);
+    setTimeout(initializeNpfTraceButton, 0);
 }
+
 
 /* ========================================================================== 
    v16.56 — noms + fréquence opérationnelle des terrains à l'échelle 1 NM
@@ -27896,6 +27921,159 @@ const AIRPORT_OPERATIONAL_FREQUENCY_OVERRIDES = new Map([
     ['LFBD', Object.freeze({ type: 'TWR', value: '118.305', priority: 0, source: 'verified' })],
     ['LFCS', Object.freeze({ type: 'A/A', value: '119.005', priority: 2, source: 'verified' })]
 ]);
+
+/* v16.64 — référentiel local minimal des services opérationnels français.
+ * Objectif : AFIS / A/A / INFO restent disponibles hors ligne et ne dépendent
+ * plus d'un fetch GitHub au moment de l'affichage. La fréquence NPF reste
+ * toujours la valeur affichée et prioritaire. */
+const AIRPORT_SERVICE_BUILTIN_EXACT = new Map([
+    ['LFAD|122.300', 'A/A'],
+    ['LFAV|122.600', 'AFIS'],
+    ['LFBD|120.575', 'INFO'],
+    ['LFBF|121.250', 'AFIS'],
+    ['LFBI|120.775', 'INFO'],
+    ['LFBK|118.400', 'AFIS'],
+    ['LFBL|124.050', 'INFO'],
+    ['LFBN|119.100', 'AFIS'],
+    ['LFBO|121.250', 'AFIS'],
+    ['LFBU|118.200', 'AFIS'],
+    ['LFBX|118.775', 'AFIS'],
+    ['LFCC|119.225', 'AFIS'],
+    ['LFCI|118.950', 'AFIS'],
+    ['LFCK|118.500', 'AFIS'],
+    ['LFCM|120.800', 'AFIS'],
+    ['LFCY|118.800', 'AFIS'],
+    ['LFDH|123.000', 'AFIS'],
+    ['LFDJ|118.175', 'AFIS'],
+    ['LFDN|119.300', 'AFIS'],
+    ['LFEY|118.900', 'AFIS'],
+    ['LFFH|120.375', 'A/A'],
+    ['LFFI|118.200', 'AFIS'],
+    ['LFGF|123.500', 'A/A'],
+    ['LFGJ|130.775', 'INFO'],
+    ['LFHA|118.150', 'A/A'],
+    ['LFHN|123.500', 'A/A'],
+    ['LFHO|119.850', 'A/A'],
+    ['LFHP|118.000', 'INFO'],
+    ['LFHQ|120.050', 'AFIS'],
+    ['LFHS|118.450', 'AFIS'],
+    ['LFHY|125.200', 'AFIS'],
+    ['LFJR|119.000', 'AFIS'],
+    ['LFJS|120.375', 'A/A'],
+    ['LFKB|124.725', 'AFIS'],
+    ['LFKJ|119.825', 'AFIS'],
+    ['LFKO|118.500', 'AFIS'],
+    ['LFLA|129.800', 'INFO'],
+    ['LFLD|119.600', 'AFIS'],
+    ['LFLH|118.600', 'AFIS'],
+    ['LFLI|126.350', 'INFO'],
+    ['LFLM|119.000', 'AFIS'],
+    ['LFLO|120.900', 'AFIS'],
+    ['LFLP|118.200', 'AFIS'],
+    ['LFLV|121.400', 'AFIS'],
+    ['LFLW|118.325', 'AFIS'],
+    ['LFLX|125.875', 'AFIS'],
+    ['LFML|118.850', 'INFO'],
+    ['LFMQ|119.000', 'AFIS'],
+    ['LFMS|130.200', 'AFIS'],
+    ['LFMZ|121.200', 'INFO'],
+    ['LFNB|119.600', 'AFIS'],
+    ['LFOD|120.600', 'AFIS'],
+    ['LFOI|123.500', 'A/A'],
+    ['LFOK|119.400', 'AFIS'],
+    ['LFOQ|118.450', 'AFIS'],
+    ['LFOT|118.300', 'AFIS'],
+    ['LFOU|120.400', 'INFO'],
+    ['LFOV|119.300', 'AFIS'],
+    ['LFOZ|122.400', 'AFIS'],
+    ['LFPP|120.400', 'A/A'],
+    ['LFPQ|120.225', 'A/A'],
+    ['LFQA|134.925', 'AFIS'],
+    ['LFQB|123.725', 'AFIS'],
+    ['LFQG|120.600', 'INFO'],
+    ['LFQM|122.200', 'INFO'],
+    ['LFQQ|134.825', 'AFIS'],
+    ['LFQV|119.000', 'AFIS'],
+    ['LFRE|121.400', 'AFIS'],
+    ['LFRG|119.825', 'INFO'],
+    ['LFRI|119.900', 'AFIS'],
+    ['LFRS|129.875', 'INFO'],
+    ['LFRT|119.400', 'AFIS'],
+    ['LFSB|121.250', 'INFO'],
+    ['LFSD|118.325', 'AFIS'],
+    ['LFSG|120.200', 'AFIS'],
+    ['LFSL|121.125', 'TWR / AFIS'],
+    ['LFSM|132.025', 'AFIS'],
+    ['LFSN|119.600', 'AFIS'],
+    ['LFTZ|118.125', 'AFIS'],
+]);
+
+/* Secours par OACI limité aux terrains dont le référentiel ne présente pas
+ * simultanément un service TWR distinct. Il n'est utilisé que si NPF possède
+ * déjà une fréquence mais aucun type de service. */
+const AIRPORT_SERVICE_BUILTIN_OACI_FALLBACK = new Map([
+    ['LFAD', 'A/A'],
+    ['LFAV', 'AFIS'],
+    ['LFBK', 'AFIS'],
+    ['LFBN', 'AFIS'],
+    ['LFBU', 'AFIS'],
+    ['LFBX', 'AFIS'],
+    ['LFCC', 'AFIS'],
+    ['LFCI', 'AFIS'],
+    ['LFCK', 'AFIS'],
+    ['LFCM', 'AFIS'],
+    ['LFCY', 'AFIS'],
+    ['LFDH', 'AFIS'],
+    ['LFDJ', 'AFIS'],
+    ['LFEY', 'AFIS'],
+    ['LFFH', 'A/A'],
+    ['LFFI', 'AFIS'],
+    ['LFGF', 'A/A'],
+    ['LFHA', 'A/A'],
+    ['LFHN', 'A/A'],
+    ['LFHO', 'A/A'],
+    ['LFHP', 'INFO'],
+    ['LFHQ', 'AFIS'],
+    ['LFHS', 'AFIS'],
+    ['LFHY', 'AFIS'],
+    ['LFJR', 'AFIS'],
+    ['LFJS', 'A/A'],
+    ['LFKO', 'AFIS'],
+    ['LFLA', 'INFO'],
+    ['LFLD', 'AFIS'],
+    ['LFLH', 'AFIS'],
+    ['LFLI', 'INFO'],
+    ['LFLM', 'AFIS'],
+    ['LFLO', 'AFIS'],
+    ['LFLV', 'AFIS'],
+    ['LFLW', 'AFIS'],
+    ['LFMQ', 'AFIS'],
+    ['LFMS', 'AFIS'],
+    ['LFMZ', 'INFO'],
+    ['LFNB', 'AFIS'],
+    ['LFOD', 'AFIS'],
+    ['LFOI', 'A/A'],
+    ['LFOQ', 'AFIS'],
+    ['LFOU', 'INFO'],
+    ['LFOV', 'AFIS'],
+    ['LFOZ', 'AFIS'],
+    ['LFPP', 'A/A'],
+    ['LFPQ', 'A/A'],
+    ['LFQA', 'AFIS'],
+    ['LFQB', 'AFIS'],
+    ['LFQG', 'INFO'],
+    ['LFQM', 'INFO'],
+    ['LFQQ', 'AFIS'],
+    ['LFQV', 'AFIS'],
+    ['LFRE', 'AFIS'],
+    ['LFRI', 'AFIS'],
+    ['LFRT', 'AFIS'],
+    ['LFSG', 'AFIS'],
+    ['LFSM', 'AFIS'],
+    ['LFSN', 'AFIS'],
+    ['LFTZ', 'AFIS'],
+]);
+
 
 function normalizeAirportOperationalFrequencyValue(raw) {
     const match = String(raw || '').replace(',', '.').match(/(?:^|[^0-9])(1(?:1[89]|2[0-9]|3[0-6])(?:\.\d{1,3})?)(?:[^0-9]|$)/);
@@ -28072,10 +28250,12 @@ function ensureAirportFrequencyFallbackLoaded() {
 function normalizeAirportServiceSupplementType(rawType, rawDescription) {
     const type = String(rawType || '').trim().toUpperCase();
     const description = String(rawDescription || '').trim().toUpperCase();
+    const combined = `${type} ${description}`;
+    if ((/TWR/.test(combined) || /TOWER/.test(combined)) && /AFIS/.test(combined)) return 'TWR / AFIS';
     if (type === 'TWR') return 'TWR';
     if (type === 'AFIS') return 'AFIS';
     if (type === 'INFO') return 'INFO';
-    const explicitAirToAir = `${type} ${description}`;
+    const explicitAirToAir = combined;
     if (/\bA\s*\/\s*A\b|\bAIR\s*\/\s*AIR\b|\bAUTO[-\s]?INFO\b|\bSELF[-\s]?INFO\b/.test(explicitAirToAir)) return 'A/A';
     return '';
 }
@@ -28267,7 +28447,14 @@ function getAirportServiceSupplementLabel(oaci, frequencyValue) {
     const code = String(oaci || '').trim().toUpperCase();
     const frequency = normalizeAirportOperationalFrequencyValue(frequencyValue);
     if (!/^LF[A-Z]{2}$/.test(code) || !frequency) return '';
-    return airportServiceSupplementIndex?.get(`${code}|${frequency}`) || '';
+
+    /* v16.64 — le référentiel embarqué est consulté en premier : il fonctionne
+     * hors ligne et évite qu'AFIS/A/A/INFO disparaissent si le fetch complémentaire
+     * est lent ou indisponible. */
+    const key = `${code}|${frequency}`;
+    return AIRPORT_SERVICE_BUILTIN_EXACT.get(key)
+        || airportServiceSupplementIndex?.get(key)
+        || '';
 }
 
 function buildAirportOperationalFrequencyIndex(dataset = siaDataset) {
@@ -28347,7 +28534,15 @@ function getAirportOperationalFrequency(oaci) {
 
     /* v16.63 — le référentiel complémentaire n'a le droit que d'ajouter le
      * libellé de service pour EXACTEMENT la fréquence déjà retenue par NPF. */
-    const supplementaryType = getAirportServiceSupplementLabel(code, selected.value);
+    let supplementaryType = getAirportServiceSupplementLabel(code, selected.value);
+
+    /* v16.64 — si la fréquence NPF est connue mais n'a aucun type, utiliser
+     * uniquement le secours OACI des terrains non-TWR identifiés. La fréquence
+     * affichée reste STRICTEMENT celle de NPF ; ce secours n'en injecte aucune. */
+    if (!supplementaryType && !String(selected.type || '').trim()) {
+        supplementaryType = AIRPORT_SERVICE_BUILTIN_OACI_FALLBACK.get(code) || '';
+    }
+
     if (!supplementaryType) return selected;
     const mergedType = mergeAirportServiceTypeLabels(selected.type, supplementaryType);
     return mergedType && mergedType !== selected.type
@@ -42365,8 +42560,10 @@ function scheduleSiaCoverageRefresh(reason = 'moveend') {
     }
 
     if (contained) {
-        scheduleSiaMoveDecorationRefresh('moveend-contained');
-        scheduleSiaProfileRefresh('sia-moveend-contained');
+        /* v16.64 — couverture/zoom/filtres inchangés : ZERO recalcul SIA.
+         * Les calques Leaflet suivent naturellement le pan. Le DIAG v16.63
+         * montrait jusqu'à 2,2 s perdus à redécorer une couverture encore valide. */
+        cancelObsoleteSiaMapMotionWork('moveend-contained-v16.64');
         return;
     }
 
@@ -47588,6 +47785,15 @@ async function renderSiaZoomDependentDecorationsProgressive(features, refreshGen
     const decorationFeatures = getSiaDecorationFeaturesForCurrentView(features);
     const labelState = { points: [], count: 0 };
 
+    /* v16.64 — les bandes intérieures sont la partie la plus coûteuse du rendu
+     * écran. À 5 NM et au-delà, ou lorsqu'une couche lourde HT/Routes est active,
+     * garder contours + libellés mais omettre uniquement ces bandes décoratives. */
+    const skipInnerBands = (
+        (Number.isFinite(scaleNm) && scaleNm >= 5)
+        || showRoadOverlayLayer
+        || showHighVoltageLinesLayer
+    );
+
     for (let index = 0; index < decorationFeatures.length; index += 1) {
         throwIfSiaRefreshObsolete(refreshGeneration);
         if (runId !== siaDecorationProgressiveRun) {
@@ -47597,7 +47803,7 @@ async function renderSiaZoomDependentDecorationsProgressive(features, refreshGen
         }
         const feature = decorationFeatures[index];
         const item = feature?.properties?.siaItem;
-        if (item && Number(item?.co || 0) !== 1) {
+        if (!skipInnerBands && item && Number(item?.co || 0) !== 1) {
             const itemStyle = getSiaAirspaceStyle(item);
             const layers = addSiaCtrInnerBand(feature.geometry, itemStyle.color);
             if (Array.isArray(layers)) siaZoomDependentLayers.push(...layers);
@@ -47635,7 +47841,7 @@ async function renderSiaZoomDependentDecorationsProgressive(features, refreshGen
 
     npfDiagSiaInteraction(
         'SIA DÉCORATIONS',
-        `zones=${decorationFeatures.length}/${features.length} · labels=${labelState.count} · zoom=${map?.getZoom?.() ?? '—'} · progressif=oui`,
+        `zones=${decorationFeatures.length}/${features.length} · labels=${labelState.count} · zoom=${map?.getZoom?.() ?? '—'} · progressif=oui · bandes=${skipInnerBands ? 'non' : 'oui'}`,
         { dureeMs: Math.round(NPF_STARTUP_DIAGNOSTIC.now() - npfDiagStartedAt) }
     );
 }
@@ -47851,8 +48057,10 @@ async function refreshSiaLayers(reason = 'manual') {
             return;
         }
 
-        // Pan dans une couverture déjà dessinée : aucune reconstruction immédiate.
-        // Les volumes/points suivent Leaflet ; les décorations sont recalculées après repos.
+        // v16.64 — pan dans une couverture déjà dessinée : aucun recalcul.
+        // Les volumes, points, bandes et libellés sont des calques Leaflet et
+        // suivent la carte ; on ne redécore qu'après une vraie reconstruction
+        // de couverture, un zoom ou un changement de filtre.
         if (
             reason === 'moveend'
             && siaRenderedCoverageBounds
@@ -47860,11 +48068,10 @@ async function refreshSiaLayers(reason = 'manual') {
             && siaRenderedSignature === signature
             && siaBoundsFullyContains(siaRenderedCoverageBounds, currentBounds)
         ) {
-            scheduleSiaMoveDecorationRefresh('moveend-refresh-contained');
-            scheduleSiaProfileRefresh('sia-moveend-contained');
+            cancelObsoleteSiaMapMotionWork('moveend-refresh-contained-v16.64');
             npfDiagSiaInteraction(
                 'SIA RAFRAÎCHISSEMENT',
-                `raison=${reason} · rendu conservé · décorations différées · zones=${Array.isArray(siaRenderedAirspaceFeatures) ? siaRenderedAirspaceFeatures.length : 0} · zoom=${zoom}`,
+                `raison=${reason} · couverture valide · zéro recalcul · zones=${Array.isArray(siaRenderedAirspaceFeatures) ? siaRenderedAirspaceFeatures.length : 0} · zoom=${zoom}`,
                 { totalMs: Math.round(NPF_STARTUP_DIAGNOSTIC.now() - npfDiagRefreshStartedAt) }
             );
             return;
