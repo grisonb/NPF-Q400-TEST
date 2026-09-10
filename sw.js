@@ -1,6 +1,6 @@
-const SW_VERSION = 'sw-v16-67_sia_official_airport_radio_airac10';
-const APP_VERSION = 'v16.67';
-const SIA_DATA_REVISION = '15.69';
+const SW_VERSION = 'sw-v16-68_sia_resource_cache_bust_radio1026';
+const APP_VERSION = 'v16.68';
+const SIA_DATA_REVISION = '15.69-radio1026-1';
 const SIA_DATA_URL = './sia.js';
 const SIA_DATA_CACHE = `npf-q400-sia-data-${SIA_DATA_REVISION}`;
 
@@ -300,7 +300,7 @@ self.addEventListener('install', event => {
 
         /*
          * v16.44 — aucune opération SIA ni APP_DATA pendant `install`.
-         * - sia.js reste dans le cache indépendant de révision 15.69 ;
+         * - sia.js reste dans le cache indépendant de ressource 15.69-radio1026-1 ;
          * - les données communes/HT/icônes restent dans APP_DATA_CACHE ;
          * - les handlers fetch les servent cache-first et les régénèrent à la
          *   demande si nécessaire.
@@ -833,21 +833,29 @@ async function handleAppShellRequest(request) {
 
 async function handleSiaDataRequest(request) {
     const siaCache = await caches.open(SIA_DATA_CACHE);
-    const cached = await siaCache.match(SIA_DATA_URL, { ignoreSearch: true })
-        || await siaCache.match(request, { ignoreSearch: true })
-        || await caches.match(request, { ignoreSearch: true });
 
     /*
-     * La base SIA est immuable pour une révision donnée. Cache d'abord : une
-     * petite évolution de NPF ne doit ni retélécharger ni remplacer ce fichier.
+     * v16.68 — cache SIA strictement isolé par révision de ressource.
+     * Ne jamais rechercher `sia.js` dans les anciens caches via un
+     * caches.match() global avec ignoreSearch : c'était la cause du recyclage
+     * du sia.js 15.69 historique après l'intégration radio AIRAC 10/26.
      */
+    const cached = await siaCache.match(SIA_DATA_URL, { ignoreSearch: true })
+        || await siaCache.match(request, { ignoreSearch: true });
+
     if (cached) {
         try {
-            if (!(await siaCache.match(SIA_DATA_URL, { ignoreSearch: true }))) {
-                await siaCache.put(SIA_DATA_URL, cached.clone());
+            const cachedText = await cached.clone().text();
+            if (cachedText.includes(`const NPF_SIA_DATA_REVISION = '${SIA_DATA_REVISION}'`)) {
+                if (!(await siaCache.match(SIA_DATA_URL, { ignoreSearch: true }))) {
+                    await siaCache.put(SIA_DATA_URL, cached.clone());
+                }
+                return cached;
             }
+
+            await siaCache.delete(SIA_DATA_URL, { ignoreSearch: true }).catch(() => false);
+            await siaCache.delete(request, { ignoreSearch: true }).catch(() => false);
         } catch (_) {}
-        return cached;
     }
 
     try {
