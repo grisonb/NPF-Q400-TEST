@@ -1,3 +1,67 @@
+VERSION TEST v16.68 — CORRECTION CACHE SIA / RESTAURATION TWR-AFIS-A/A
+Date : 10/09/2026
+Base : TEST v16.67
+
+OBJECTIF
+- Corriger la disparition simultanée des libellés TWR / AFIS / A/A après l'intégration de la radio aérodromes SIA officielle AIRAC 10/26.
+- Forcer le chargement réel du nouveau `sia.js` contenant la table radio officielle.
+- Conserver la géométrie des zones sur la révision interne NPF 15.69.
+
+1. CAUSE IDENTIFIÉE
+- v16.67 avait ajouté la table radio officielle dans `sia.js`, mais l'URL restait `sia.js?siav=15.69`.
+- Le Service Worker utilisait également `SIA_DATA_REVISION = '15.69'`.
+- Le handler SIA utilisait en dernier recours `caches.match(request, { ignoreSearch: true })` sur tous les caches.
+- Un ancien `sia.js` 15.69 pouvait donc être repris depuis un cache précédent puis recopié dans le cache courant.
+- Le Script v16.67 ne voyait alors pas la nouvelle table radio et les types TWR / AFIS / A/A disparaissaient.
+
+2. RÉVISION DE RESSOURCE SIA DISTINCTE
+- Nouvelle révision de ressource/cache : `15.69-radio1026-1`.
+- Index : `sia.js?siav=15.69-radio1026-1`.
+- `NPF_SIA_DATA_REVISION` du fichier `sia.js` : `15.69-radio1026-1`.
+- Cache Service Worker dédié : `npf-q400-sia-data-15.69-radio1026-1`.
+- La métadonnée géométrique `npfDatasetRevision` reste strictement `15.69`.
+- Il n'y a donc pas de changement de géométrie des 5 066 espaces dans cette livraison.
+
+3. SERVICE WORKER
+- Suppression du fallback global vers les anciens caches SIA dans `handleSiaDataRequest()`.
+- Le SW ne consulte désormais que le cache correspondant à la révision de ressource courante.
+- Toute réponse SIA en cache doit contenir exactement la révision `15.69-radio1026-1`.
+- Une réponse incohérente est supprimée du cache SIA courant puis rechargée depuis le réseau.
+- Les cartes Offline et les bases IndexedDB ne sont pas modifiées.
+
+4. RADIO SIA OFFICIELLE CONSERVÉE
+- Table AIRAC 10/26 de v16.67 conservée intégralement.
+- 326 aérodromes LF.
+- Terrains OACI uniques : TWR = 95 ; AFIS = 69 ; A/A = 228.
+- Exemples attendus :
+  - LFBD : TWR 118.305
+  - LFCS : A/A 119.005
+  - LFAV : AFIS-A/A 122.605
+  - LFLX : TWR-AFIS 125.880
+  - LFAQ : TWR-AFIS-A/A 136.360
+- Seuil d'affichage des étiquettes conservé à partir de 2 NM.
+
+5. VERSION
+- Index / Manifest / Script / Style : v16.68.
+- Service Worker : `sw-v16-68_sia_resource_cache_bust_radio1026`.
+- Ressource `sia.js` : `15.69-radio1026-1`.
+- Géométries des zones : révision interne 15.69 inchangée.
+- Données radio aérodromes : AIRAC 10/26 conservées.
+- Les ralentissements SIA restent un problème séparé ; cette livraison ne les déclare pas résolus.
+
+VALIDATION STATIQUE EFFECTUÉE
+- Syntaxe JavaScript Script / sia.js / Service Worker vérifiée.
+- Script inline de l'Index vérifié.
+- Manifest JSON vérifié.
+- Cohérence v16.68 vérifiée.
+- Révision `15.69-radio1026-1` vérifiée dans Index / sia.js / Service Worker.
+- Absence du fallback global vers un ancien cache SIA vérifiée.
+- `npfDatasetRevision: '15.69'` vérifiée inchangée.
+- Table radio : 326 OACI ; TWR 95 ; AFIS 69 ; A/A 228.
+- LFBD / LFCS / LFAV / LFLX / LFAQ vérifiés.
+
+HISTORIQUE PRÉCÉDENT CONSERVÉ INTÉGRALEMENT
+
 VERSION TEST v16.67 — RADIO AÉRODROMES SIA OFFICIEL AIRAC 10/26
 Date : 10/09/2026
 Base : TEST v16.66
