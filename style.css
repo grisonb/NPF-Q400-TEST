@@ -1,4 +1,4 @@
-/* NPF_STYLE_BUILD_VERSION: v16.63 */
+/* NPF_STYLE_BUILD_VERSION: v16.64 */
 /* v14.83 — nettoyage des références techniques et limitation des cartouches routiers. */
 /* v14.81 — recherche phonétique nationale élargie aux fragments sur deux lettres. */
 /* v14.80 — Brive conservé uniquement sous LFSL. */
@@ -13579,6 +13579,21 @@ body.gaar-point-search-open .gaar-editing-banner {
     cursor: wait;
 }
 
+.briefing-docs-password-fallback-button {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 44px;
+    margin-top: 10px;
+    padding: 0 14px;
+    border: 1px solid #94a3b8;
+    border-radius: 10px;
+    background: #ffffff;
+    color: #334155;
+    font-size: 14px;
+    font-weight: 800;
+    cursor: pointer;
+}
+
 .briefing-docs-password-status {
     min-height: 20px;
     margin-top: 10px;
@@ -18031,34 +18046,52 @@ body.npf-calculator-modal-open {
 
 
 /* ========================================================================== 
-   v16.63 — BFG/FdS, ÉTIQUETTES TERRAIN, ZONES 3 LIGNES, TRACE YUL
+   v16.64 — BFG/FdS, SERVICES TERRAIN, PERF SIA, TRACE
    ========================================================================== */
 
-/* TRACE délègue l'enregistrement GPS natif/arrière-plan à YUL via Raccourcis. */
-.yul-trace-map-button {
+/* v16.64 — TRACE : bouton enregistrement indépendant, à droite de DIAG. */
+.npf-trace-record-button {
+    position: fixed !important;
+    left: calc(var(--npf-diag-left, calc(env(safe-area-inset-left, 0px) + 265px)) + 74px) !important;
+    right: auto !important;
+    top: auto !important;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 0px) !important;
+    transform: none !important;
+    z-index: 1800 !important;
+    width: 64px !important;
+    height: 46px !important;
+    padding: 0 !important;
+    border: 2px solid rgba(185, 28, 28, .45) !important;
+    border-radius: 12px !important;
+    background: rgba(255, 255, 255, .96) !important;
+    box-shadow: 0 3px 10px rgba(0,0,0,.22) !important;
     display: flex !important;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 0;
-    background: #ffffff !important;
-    border-color: #6b7280 !important;
-    color: #111827 !important;
-    font-family: inherit;
-    line-height: 1;
+    align-items: center !important;
+    justify-content: center !important;
+    cursor: pointer;
+    touch-action: manipulation;
 }
-.yul-trace-map-button .yul-trace-main {
-    font-size: 12px;
-    font-weight: 950;
-    letter-spacing: .02em;
+.npf-trace-record-icon {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #dc2626;
+    box-shadow: 0 0 0 2px rgba(127, 29, 29, .12);
     pointer-events: none;
 }
-.yul-trace-map-button .yul-trace-sub {
-    margin-top: 2px;
-    font-size: 9px;
-    font-weight: 900;
-    color: #374151;
-    pointer-events: none;
+.npf-trace-record-button:active .npf-trace-record-icon {
+    transform: scale(.90);
+}
+@media (max-width: 760px) {
+    .npf-trace-record-button {
+        left: calc(var(--npf-diag-left, calc(env(safe-area-inset-left, 0px) + 212px)) + 66px) !important;
+        width: 58px !important;
+        height: 42px !important;
+    }
+    .npf-trace-record-icon {
+        width: 20px;
+        height: 20px;
+    }
 }
 
 /* Libellés terrain : deux lignes centrées ; fréquence volontairement renforcée. */
