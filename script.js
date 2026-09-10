@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v16.66';
+const NPF_SCRIPT_BUILD_VERSION = 'v16.67';
 
 
 /*
@@ -544,11 +544,13 @@ function getNpfStartupDiagnosticRuntimeInfo() {
         airportFrequencyFallbackCount: airportFrequencyFallbackIndex instanceof Map
             ? airportFrequencyFallbackIndex.size
             : 0,
-        airportServiceSupplementCount: airportServiceSupplementIndex instanceof Map
-            ? airportServiceSupplementIndex.size
-            : 0,
-        airportServiceAfisCount: countAirportServiceSupplementTypeEntries('AFIS'),
-        airportServiceAirToAirCount: countAirportServiceSupplementTypeEntries('A/A'),
+        airportServiceSupplementCount: SIA_OFFICIAL_AIRPORT_SERVICE_ROWS.length,
+        airportServiceOfficialOaciCount: buildSiaOfficialAirportOperationalIndex().size,
+        airportServiceTwrCount: countSiaOfficialAirportType('TWR'),
+        airportServiceAfisCount: countSiaOfficialAirportType('AFIS'),
+        airportServiceAirToAirCount: countSiaOfficialAirportType('A/A'),
+        airportServiceAirac: String(SIA_OFFICIAL_AIRPORT_RADIO_META?.airac || '—'),
+        airportServiceEffectiveDate: String(SIA_OFFICIAL_AIRPORT_RADIO_META?.effectiveDate || '—'),
         airportFrequencyAdditionalCount: Array.isArray(additionalAerodromes)
             ? additionalAerodromes.reduce((count, airport) => count + (getAirportOperationalFrequency(airport?.oaci) ? 1 : 0), 0)
             : 0,
@@ -638,9 +640,13 @@ function buildNpfStartupDiagnosticExportText() {
         'Fréquences terrains : '
         + runtime.airportFrequencyAdditionalCount + '/' + runtime.airportFrequencyAdditionalTotal
         + ' aérodromes complémentaires renseignés | '
-        + runtime.airportFrequencyFallbackCount + ' fréquences en référentiel léger/cache | '
-        + runtime.airportServiceSupplementCount + ' services fréquence/OACI | '
-        + 'AFIS=' + runtime.airportServiceAfisCount + ' | A/A=' + runtime.airportServiceAirToAirCount
+        + runtime.airportFrequencyFallbackCount + ' fréquences de secours | '
+        + 'SIA AIRAC ' + runtime.airportServiceAirac + ' (' + runtime.airportServiceEffectiveDate + ') | '
+        + runtime.airportServiceOfficialOaciCount + ' terrains radio | '
+        + runtime.airportServiceSupplementCount + ' lignes officielles | '
+        + 'TWR=' + runtime.airportServiceTwrCount
+        + ' | AFIS=' + runtime.airportServiceAfisCount
+        + ' | A/A=' + runtime.airportServiceAirToAirCount
     );
     lines.push(
         'Recherche France : '
@@ -1747,6 +1753,23 @@ let airportFrequencyFallbackIndex = null;
 let airportFrequencyFallbackLoadPromise = null;
 let airportFrequencyFallbackLastAttemptAt = 0;
 
+/* v16.67 — SIA officiel AIRAC 10/26 : données radio aérodromes directement embarquées
+ * dans sia.js. Elles sont disponibles sans décompresser le gros jeu des espaces. */
+const SIA_OFFICIAL_AIRPORT_RADIO_META =
+    (window.NPF_SIA_EMBEDDED && window.NPF_SIA_EMBEDDED.airportRadioMeta)
+        ? window.NPF_SIA_EMBEDDED.airportRadioMeta
+        : Object.freeze({});
+const SIA_OFFICIAL_AIRPORT_SERVICE_ROWS =
+    (window.NPF_SIA_EMBEDDED && Array.isArray(window.NPF_SIA_EMBEDDED.airportServiceRows))
+        ? window.NPF_SIA_EMBEDDED.airportServiceRows
+        : [];
+const SIA_OFFICIAL_AIRPORT_OPERATIONAL_GROUP_ROWS =
+    (window.NPF_SIA_EMBEDDED && Array.isArray(window.NPF_SIA_EMBEDDED.airportOperationalGroups))
+        ? window.NPF_SIA_EMBEDDED.airportOperationalGroups
+        : [];
+
+/* Ancien complément tiers conservé momentanément dans le code uniquement pour
+ * compatibilité de cache. Il n'est plus consulté pour déterminer TWR/AFIS/A/A. */
 /* v16.63 — complément léger pour le TYPE de service terrain (AFIS, TWR,
  * A/A, INFO). Il ne remplace jamais la fréquence retenue par NPF : un type
  * n'est appliqué que s'il correspond exactement à la même fréquence. */
@@ -28351,6 +28374,56 @@ function ensureAirportFrequencyFallbackLoaded() {
     return airportFrequencyFallbackLoadPromise;
 }
 
+
+let siaOfficialAirportOperationalIndex = null;
+
+function buildSiaOfficialAirportOperationalIndex() {
+    if (siaOfficialAirportOperationalIndex instanceof Map) {
+        return siaOfficialAirportOperationalIndex;
+    }
+    const index = new Map();
+    SIA_OFFICIAL_AIRPORT_OPERATIONAL_GROUP_ROWS.forEach(row => {
+        const oaci = String(row?.[0] || '').trim().toUpperCase();
+        const groups = Array.isArray(row?.[1]) ? row[1] : [];
+        const allTypes = String(row?.[2] || '').trim().toUpperCase();
+        if (!/^LF[A-Z]{2}$/.test(oaci) || !groups.length) return;
+        const normalizedGroups = groups.map(group => {
+            const value = normalizeAirportOperationalFrequencyValue(group?.[0]);
+            const type = String(group?.[1] || '').trim().toUpperCase();
+            return value && type ? { value, type } : null;
+        }).filter(Boolean);
+        if (!normalizedGroups.length) return;
+        index.set(oaci, {
+            type: normalizedGroups[0].type,
+            value: normalizedGroups[0].value,
+            groups: normalizedGroups,
+            allTypes,
+            source: 'sia-official-airport-radio',
+            priority: 0
+        });
+    });
+    siaOfficialAirportOperationalIndex = index;
+    return index;
+}
+
+function getSiaOfficialAirportOperationalFrequency(oaci) {
+    const code = String(oaci || '').trim().toUpperCase();
+    if (!/^LF[A-Z]{2}$/.test(code)) return null;
+    return buildSiaOfficialAirportOperationalIndex().get(code) || null;
+}
+
+function countSiaOfficialAirportType(type) {
+    const wanted = String(type || '').trim().toUpperCase();
+    if (!wanted) return 0;
+    let count = 0;
+    buildSiaOfficialAirportOperationalIndex().forEach(entry => {
+        const allTypes = String(entry?.allTypes || entry?.type || '').toUpperCase();
+        const known = ['TWR', 'AFIS', 'A/A'];
+        if (known.filter(value => allTypes.includes(value)).includes(wanted)) count += 1;
+    });
+    return count;
+}
+
 function buildAirportServiceSupplementByOaciIndex(index = airportServiceSupplementIndex) {
     const byOaci = new Map();
 
@@ -28641,19 +28714,9 @@ function ensureAirportServiceSupplementLoaded() {
 }
 
 function mergeAirportServiceTypeLabels(...labels) {
-    const order = new Map([['TWR', 0], ['AFIS', 1], ['A/A', 2], ['INFO', 3]]);
-    const values = [];
-    labels.forEach(label => {
-        String(label || '').split('/').map(value => value.trim()).forEach(value => {
-            /* préserver le séparateur interne A/A */
-            if (value === 'A' && String(label || '').includes('A/A')) return;
-            if (value && !values.includes(value)) values.push(value);
-        });
-    });
-    /* split('/') casserait A/A : reconstruire depuis des correspondances connues. */
+    const order = ['TWR', 'AFIS', 'A/A', 'INFO'];
     const source = labels.map(label => String(label || '').toUpperCase()).join(' | ');
-    const known = ['TWR', 'AFIS', 'A/A', 'INFO'].filter(type => source.includes(type));
-    return known.sort((a, b) => (order.get(a) ?? 99) - (order.get(b) ?? 99)).join(' / ');
+    return order.filter(type => source.includes(type)).join('-');
 }
 
 function getAirportServiceSupplementFrequencyKeys(oaci, frequencyValue) {
@@ -28744,36 +28807,21 @@ function getAirportOperationalFrequency(oaci) {
     const code = String(oaci || '').trim().toUpperCase();
     if (!code) return null;
 
-    const override = AIRPORT_OPERATIONAL_FREQUENCY_OVERRIDES.get(code);
-    if (override) return override;
+    /* Autorité unique pour TWR / AFIS / A/A : SIA officiel.
+     * Le résumé embarqué provient conjointement de XML-SIA (dont A/A) et
+     * d'AIXM 4.5 (fréquences TWR avec indicatif TOUR/TOWER). */
+    const official = getSiaOfficialAirportOperationalFrequency(code);
+    if (official) return official;
 
-    let selected = null;
-    if (siaDataset) {
-        selected = buildAirportOperationalFrequencyIndex(siaDataset).get(code) || null;
-    }
-    if (!selected) selected = airportFrequencyFallbackIndex?.get(code) || null;
-    if (!selected) return null;
-
-    /* v16.63 — le référentiel complémentaire n'a le droit que d'ajouter le
-     * libellé de service pour EXACTEMENT la fréquence déjà retenue par NPF. */
-    let supplementaryType = getAirportServiceSupplementLabel(
-        code,
-        selected.value,
-        selected.type
-    );
-
-    /* v16.66 — dernier secours explicite par OACI pour les terrains AFIS/A/A
-     * non ambigus. Ne jamais substituer la fréquence NPF et ne jamais convertir
-     * un TWR déjà identifié en AFIS/A/A. */
-    if (!supplementaryType && !String(selected.type || '').toUpperCase().includes('TWR')) {
-        supplementaryType = AIRPORT_SERVICE_BUILTIN_OACI_FALLBACK.get(code) || '';
-    }
-
-    if (!supplementaryType) return selected;
-    const mergedType = mergeAirportServiceTypeLabels(selected.type, supplementaryType);
-    return mergedType && mergedType !== selected.type
-        ? { ...selected, type: mergedType, serviceTypeSupplemented: true }
-        : selected;
+    /* Pour un terrain sans service opérationnel SIA exploitable, l'ancien
+     * référentiel léger peut encore fournir une fréquence, mais JAMAIS un type. */
+    const fallback = airportFrequencyFallbackIndex?.get(code) || null;
+    if (!fallback) return null;
+    return {
+        ...fallback,
+        type: '',
+        source: 'frequency-only-fallback'
+    };
 }
 
 function refreshAirportOperationalLabels() {
@@ -28797,7 +28845,13 @@ function refreshAirportOperationalLabels() {
             ? `${airportName} (${airportOaci})`
             : airportOaci;
         const frequencyHtml = freq
-            ? `<span class="airport-operational-frequency">${freq.type ? `${escapeHtml(freq.type)} ` : ''}${escapeHtml(freq.value)}</span>`
+            ? (
+                Array.isArray(freq.groups) && freq.groups.length
+                    ? freq.groups.map(group =>
+                        `<span class="airport-operational-frequency">${group.type ? `${escapeHtml(group.type)} ` : ''}${escapeHtml(group.value)}</span>`
+                    ).join('')
+                    : `<span class="airport-operational-frequency">${freq.type ? `${escapeHtml(freq.type)} ` : ''}${escapeHtml(freq.value)}</span>`
+            )
             : '';
         L.marker(latlng, {
             interactive: false,
@@ -28817,9 +28871,6 @@ function refreshAirportOperationalLabels() {
      * arrière-plan puis les libellés sont redessinés. */
     if (!(airportFrequencyFallbackIndex instanceof Map) || !airportFrequencyFallbackIndex.size) {
         ensureAirportFrequencyFallbackLoaded().catch(() => {});
-    }
-    if (!(airportServiceSupplementIndex instanceof Map) || !airportServiceSupplementIndex.size) {
-        ensureAirportServiceSupplementLoaded().catch(() => {});
     }
 }
 
