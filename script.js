@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v16.64';
+const NPF_SCRIPT_BUILD_VERSION = 'v16.65';
 
 
 /*
@@ -27858,20 +27858,51 @@ window.openPelicNotams = openNpfPelicNotams;
 
 
 /* ========================================================================== 
-   v16.64 — TRACE : RACCOURCI NPF TRACE, ENREGISTREUR GPS EXTERNE
+   v16.65 — TRACE : RACCOURCI NPF TRACE + ÉTAT SUPPOSÉ MÉMORISÉ
    ========================================================================== */
 const NPF_TRACE_SHORTCUT_NAME = 'NPF Trace';
+const NPF_TRACE_ASSUMED_ACTIVE_KEY = 'npfTraceAssumedActive_v1';
 
-function launchNpfTraceShortcut() {
-    /* NPF garde un simple déclencheur synchrone vers Apple Raccourcis.
-     * Le raccourci "NPF Trace" pilote l'enregistreur GPS choisi sur l'iPad
-     * (YUL, m9ch DriveBook ou autre action compatible Raccourcis).
-     * L'enregistrement reste natif iPad et continue en arrière-plan. */
+function getNpfTraceAssumedActive() {
+    try {
+        return localStorage.getItem(NPF_TRACE_ASSUMED_ACTIVE_KEY) === '1';
+    } catch (_) {
+        return false;
+    }
+}
+
+function renderNpfTraceAssumedState(active = getNpfTraceAssumedActive()) {
+    const button = document.getElementById('yul-trace-button');
+    if (!button) return;
+    const isActive = !!active;
+    button.classList.toggle('npf-trace-assumed-active', isActive);
+    button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    const label = isActive
+        ? 'TRACE supposée en cours — appuyer pour arrêter'
+        : 'TRACE arrêtée — appuyer pour démarrer';
+    button.title = label;
+    button.setAttribute('aria-label', label);
+}
+
+function setNpfTraceAssumedActive(active) {
+    const isActive = !!active;
+    try {
+        localStorage.setItem(NPF_TRACE_ASSUMED_ACTIVE_KEY, isActive ? '1' : '0');
+    } catch (_) {}
+    renderNpfTraceAssumedState(isActive);
+}
+
+function launchNpfTraceShortcut(nextAssumedState) {
+    /* NPF ne peut pas lire l'état interne de MyTracks. Il mémorise donc
+     * uniquement l'état qu'il suppose après l'appui. Le raccourci "NPF Trace"
+     * reste l'interface native qui décide réellement Start/Stop. */
     const shortcutUrl = `shortcuts://run-shortcut?name=${encodeURIComponent(NPF_TRACE_SHORTCUT_NAME)}`;
     try {
+        setNpfTraceAssumedActive(nextAssumedState);
         window.location.href = shortcutUrl;
         return true;
     } catch (error) {
+        setNpfTraceAssumedActive(!nextAssumedState);
         alert('Impossible de lancer le raccourci « NPF Trace ». Vérifie qu’il existe dans l’app Raccourcis.');
         return false;
     }
@@ -27879,12 +27910,15 @@ function launchNpfTraceShortcut() {
 
 function initializeNpfTraceButton() {
     const button = document.getElementById('yul-trace-button');
-    if (!button || button.dataset.bound === '1') return;
+    if (!button) return;
+    renderNpfTraceAssumedState();
+    if (button.dataset.bound === '1') return;
     button.dataset.bound = '1';
     button.addEventListener('click', event => {
         event.preventDefault();
         event.stopPropagation();
-        launchNpfTraceShortcut();
+        const nextAssumedState = !getNpfTraceAssumedActive();
+        launchNpfTraceShortcut(nextAssumedState);
     });
 }
 
@@ -28443,18 +28477,43 @@ function mergeAirportServiceTypeLabels(...labels) {
     return known.sort((a, b) => (order.get(a) ?? 99) - (order.get(b) ?? 99)).join(' / ');
 }
 
-function getAirportServiceSupplementLabel(oaci, frequencyValue) {
+function getAirportServiceSupplementFrequencyKeys(oaci, frequencyValue) {
     const code = String(oaci || '').trim().toUpperCase();
     const frequency = normalizeAirportOperationalFrequencyValue(frequencyValue);
-    if (!/^LF[A-Z]{2}$/.test(code) || !frequency) return '';
+    if (!/^LF[A-Z]{2}$/.test(code) || !frequency) return [];
 
-    /* v16.64 — le référentiel embarqué est consulté en premier : il fonctionne
-     * hors ligne et évite qu'AFIS/A/A/INFO disparaissent si le fetch complémentaire
-     * est lent ou indisponible. */
-    const key = `${code}|${frequency}`;
-    return AIRPORT_SERVICE_BUILTIN_EXACT.get(key)
-        || airportServiceSupplementIndex?.get(key)
-        || '';
+    const keys = [`${code}|${frequency}`];
+    const frequencyKhz = Math.round(Number(frequency) * 1000);
+
+    /* v16.65 — certains référentiels donnent la fréquence porteuse 25 kHz
+     * (ex. 122.600), alors que la VAC/NPF affiche le désignateur de canal
+     * 8,33 kHz correspondant (ex. 122.605). Ce n'est pas une tolérance
+     * approximative : uniquement la conversion déterministe +5 kHz du
+     * désignateur dont le reste modulo 25 kHz vaut 5. */
+    if (Number.isFinite(frequencyKhz) && ((frequencyKhz % 25) + 25) % 25 === 5) {
+        const carrierFrequency = ((frequencyKhz - 5) / 1000).toFixed(3);
+        keys.push(`${code}|${carrierFrequency}`);
+    }
+
+    return keys;
+}
+
+function getAirportServiceSupplementLabel(oaci, frequencyValue) {
+    const keys = getAirportServiceSupplementFrequencyKeys(oaci, frequencyValue);
+    if (!keys.length) return '';
+
+    /* Référentiel embarqué prioritaire, puis complément réseau/cache.
+     * Plusieurs libellés éventuels sont fusionnés sans jamais modifier la
+     * fréquence opérationnelle déjà retenue par NPF. */
+    let label = '';
+    keys.forEach(key => {
+        label = mergeAirportServiceTypeLabels(
+            label,
+            AIRPORT_SERVICE_BUILTIN_EXACT.get(key) || '',
+            airportServiceSupplementIndex?.get(key) || ''
+        );
+    });
+    return label;
 }
 
 function buildAirportOperationalFrequencyIndex(dataset = siaDataset) {
@@ -47785,14 +47844,12 @@ async function renderSiaZoomDependentDecorationsProgressive(features, refreshGen
     const decorationFeatures = getSiaDecorationFeaturesForCurrentView(features);
     const labelState = { points: [], count: 0 };
 
-    /* v16.64 — les bandes intérieures sont la partie la plus coûteuse du rendu
-     * écran. À 5 NM et au-delà, ou lorsqu'une couche lourde HT/Routes est active,
-     * garder contours + libellés mais omettre uniquement ces bandes décoratives. */
-    const skipInnerBands = (
-        (Number.isFinite(scaleNm) && scaleNm >= 5)
-        || showRoadOverlayLayer
-        || showHighVoltageLinesLayer
-    );
+    /* v16.65 — correction de régression : si les décorations SIA sont rendues,
+     * les bordures/bandes intérieures le sont elles aussi. La v16.64 les
+     * supprimait dès 5 NM (ou avec HT/Routes), alors que les libellés restaient
+     * visibles. Le mode global allégé >= 10 NM / charge combinée reste géré
+     * plus haut et continue, lui, à omettre toutes les décorations. */
+    const skipInnerBands = false;
 
     for (let index = 0; index < decorationFeatures.length; index += 1) {
         throwIfSiaRefreshObsolete(refreshGeneration);
