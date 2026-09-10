@@ -1,3 +1,50 @@
+VERSION TEST v16.69 — RADIO AÉRODROMES SIA DÉCOUPLÉE DE sia.js
+Date : 10/09/2026
+Base : TEST v16.68
+
+OBJECTIF
+- Corriger le cas observé en DIAG où la base des zones SIA est disponible mais où les compteurs radio restent à 0.
+- Rendre la table radio aérodromes officielle disponible dès l'exécution de script.js, indépendamment du chargement, du cache ou de l'état de sia.js.
+- Ne modifier ni les zones SIA, ni leur révision de ressource, ni le seuil d'affichage aérodrome de 2 NM.
+
+1. CORRECTION STRUCTURELLE
+- Les trois constantes utilisées par le moteur radio ne sont plus initialisées par copie instantanée de window.NPF_SIA_EMBEDDED.
+- airportRadioMeta, airportServiceRows et airportOperationalGroups sont désormais embarqués directement dans script.js à partir de la table officielle SIA déjà validée en v16.67/v16.68.
+- Le moteur radio ne peut donc plus se figer sur {} / [] si window.NPF_SIA_EMBEDDED n'est pas disponible à l'instant précis où script.js s'initialise.
+
+2. DONNÉES RADIO CONSERVÉES
+- Source : SIA officiel — XML-SIA + AIXM 4.5.
+- AIRAC : 10/26, effet 01/10/2026.
+- 326 aérodromes LF avec au moins un service opérationnel exploitable.
+- Terrains OACI uniques : TWR = 95 ; AFIS = 69 ; A/A = 228.
+- 482 lignes canoniques de service.
+- Exemples de contrôle conservés : LFBD TWR 118.305 ; LFCS A/A 119.005 ; LFAV AFIS/A/A 122.605.
+- Les regroupements de services sur une même fréquence restent conservés.
+
+3. sia.js
+- Contenu géométrique et radio de 5_SIA inchangé par rapport à v16.68.
+- Révision SIA conservée : 15.69-radio1026-1.
+- La copie radio présente dans sia.js est conservée pour compatibilité, mais script.js n'en dépend plus pour construire l'index radio.
+
+4. VERSION / CACHE
+- Index / Manifest / Script / Style / Service Worker : passage à v16.69.
+- start_url du Manifest : ./index.html?appv=v16.69
+- Révision de ressource SIA inchangée : 15.69-radio1026-1.
+- Aucun fallback global vers un ancien cache SIA n'est réintroduit.
+- Le bouton MAJ reste absent ; mise à jour automatique à l'ouverture/rechargement de la PWA.
+
+VALIDATION STATIQUE EFFECTUÉE
+- Syntaxe JavaScript Script / sia.js / Service Worker vérifiée.
+- Script inline de l'Index vérifié.
+- Manifest JSON vérifié.
+- Cohérence v16.69 vérifiée.
+- Table radio directement embarquée dans script.js : 326 OACI ; TWR 95 ; AFIS 69 ; A/A 228.
+- LFBD / LFCS / LFAV vérifiés dans la table embarquée.
+- Dépendance d'initialisation à window.NPF_SIA_EMBEDDED supprimée pour les constantes radio.
+- Révision 15.69-radio1026-1 conservée dans Index / sia.js / Service Worker.
+
+HISTORIQUE PRÉCÉDENT CONSERVÉ INTÉGRALEMENT
+
 VERSION TEST v16.68 — CORRECTION CACHE SIA / RESTAURATION TWR-AFIS-A/A
 Date : 10/09/2026
 Base : TEST v16.67
