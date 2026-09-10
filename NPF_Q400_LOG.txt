@@ -1,3 +1,61 @@
+VERSION TEST v16.65 — TRACE ÉTAT SUPPOSÉ + AFIS/A/A 8,33 + BORDURES SIA 5 NM
+Date : 10/09/2026
+Base : TEST v16.64
+
+OBJECTIFS
+- Mémoriser dans NPF l'état supposé de l'enregistrement lancé par le raccourci Apple « NPF Trace » et faire varier l'icône selon cet état.
+- Corriger le défaut persistant des libellés AFIS / A/A lorsque la fréquence NPF est exprimée comme désignateur de canal 8,33 kHz mais que le référentiel de service fournit la fréquence porteuse 25 kHz correspondante.
+- Rétablir les bordures intérieures des zones SIA à l'échelle 5 NM : leur disparition en v16.64 est traitée comme une régression, pas comme un nouveau comportement.
+- Conserver l'apparition des étiquettes aérodromes à partir de l'échelle 1 NM.
+
+1. TRACE — ÉTAT SUPPOSÉ MÉMORISÉ
+- Le bouton NPF continue de lancer exactement le raccourci Apple « NPF Trace ».
+- Le raccourci reste responsable du Start/Stop réel dans MyTracks ; NPF ne tente pas d'interroger l'état interne de MyTracks.
+- À chaque appui NPF, l'état supposé est inversé et mémorisé dans localStorage (`npfTraceAssumedActive_v1`).
+- Cet état est restauré au rechargement / redémarrage de la PWA.
+- État supposé ARRÊT : icône cercle rouge creux.
+- État supposé EN COURS : icône cercle rouge plein, bouton légèrement rouge et `aria-pressed=true`.
+- Les infobulles / libellés d'accessibilité indiquent « TRACE arrêtée » ou « TRACE supposée en cours ».
+- Limite assumée : si MyTracks est démarré/arrêté hors de NPF, l'indication peut être désynchronisée.
+
+2. AÉRODROMES — AFIS / A/A ET CANAUX 8,33 kHz
+- Cause corrigée : certains référentiels de service utilisent la fréquence porteuse 25 kHz (ex. 122.600), alors que la VAC/NPF peut afficher le désignateur de canal 8,33 correspondant (ex. 122.605).
+- L'ancienne comparaison strictement textuelle pouvait donc ne pas reconnaître le type AFIS / A/A malgré une fréquence opérationnelle correcte.
+- NPF recherche désormais d'abord la correspondance exacte puis, uniquement pour un désignateur dont le reste modulo 25 kHz vaut 5, la porteuse déterministe située 5 kHz plus bas.
+- Il ne s'agit pas d'une tolérance générale : aucun rapprochement arbitraire de fréquences voisines n'est effectué.
+- La fréquence affichée par NPF n'est jamais remplacée par le référentiel de service.
+- Les types TWR / AFIS / A/A / INFO restent fusionnables lorsqu'ils concernent la même fréquence/canal.
+- Le secours OACI v16.64 reste conservé.
+- Les étiquettes nom/OACI + fréquence/service restent centrées, fréquence 18 px.
+- Seuil conservé : les étiquettes opérationnelles apparaissent à l'échelle 1 NM et aux zooms plus rapprochés.
+
+3. SIA — BORDURES INTÉRIEURES À 5 NM
+- Régression identifiée dans v16.64 : `skipInnerBands` supprimait les bandes/bordures intérieures dès l'échelle 5 NM alors que les libellés de zones restaient visibles.
+- Cette suppression conditionnelle est retirée.
+- Lorsque le moteur de décorations SIA est actif, les bordures intérieures sont de nouveau générées avec les libellés, y compris à 5 NM.
+- Le mode global allégé déjà existant à très grande échelle (>= 10 NM) reste inchangé.
+- Le mode global de charge combinée Routes + HT reste inchangé ; cette correction ne modifie pas les données SIA ni les contours principaux.
+
+4. NON-RÉGRESSION / LIVRAISON
+- BFG / FdS / GAAR de v16.64 conservés.
+- GLR, SafeSky, Routes/HT, VAC, calculs FUEL, pélicandromes, communes et mise à jour automatique inchangés hors corrections décrites ci-dessus.
+- Aucun bouton MAJ principal réintroduit.
+- `sia.js` est strictement inchangé par rapport à v16.64.
+- `npfDatasetRevision` / `SIA_DATA_REVISION` reste 15.69.
+- Index, Manifest, Script, Style et Service Worker alignés sur v16.65.
+- Nouveau Service Worker : `sw-v16-65_trace_state_airport_833_sia_inner_bands`.
+
+VALIDATION STATIQUE À LA LIVRAISON
+- Syntaxe JavaScript principal vérifiée.
+- Syntaxe Service Worker vérifiée.
+- Scripts inline de l'Index vérifiés.
+- Manifest JSON vérifié.
+- Cohérence des références actives v16.65 vérifiée.
+- `5_SIA_v16.65.txt` comparé bit à bit avec v16.64.
+- Vérifications ciblées prévues : alias 8,33 +5 kHz -> porteuse 25 kHz ; seuil terrain 1 NM ; `skipInnerBands=false` dans le rendu progressif ; état TRACE localStorage + classe visuelle.
+
+HISTORIQUE PRÉCÉDENT CONSERVÉ INTÉGRALEMENT
+
 VERSION TEST v16.64 — BFG ASSOCIATION PRIORITAIRE + AFIS/A/A LOCAL + SIA PLUS FLUIDE + TRACE ICÔNE
 Date : 10/09/2026
 Base : TEST v16.63
