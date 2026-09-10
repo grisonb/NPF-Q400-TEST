@@ -1,3 +1,67 @@
+VERSION TEST v16.66 — ÉTIQUETTES 2 NM + SERVICES AFIS/A/A ROBUSTES + SIA DIFFÉRÉ + DÉMARRAGE ALLÉGÉ
+Date : 10/09/2026
+Base : TEST v16.65
+
+OBJECTIFS
+- Faire apparaître les étiquettes aérodromes à partir de l'échelle 2 NM.
+- Corriger le défaut persistant où AFIS et A/A n'apparaissaient toujours pas sur certains libellés malgré la présence des fréquences.
+- Réduire les ralentissements SIA observés en v16.65 sans supprimer les bordures intérieures des zones.
+- Supprimer le gros blocage JavaScript observé au démarrage autour du chargement des alias de communes.
+
+1. AÉRODROMES — SEUIL 2 NM
+- Le seuil des étiquettes nom/OACI + fréquence/service passe de 1 NM à 2 NM.
+- À 5 NM et au-delà, les étiquettes opérationnelles terrain restent masquées.
+- Le référentiel léger fréquence/service est préchargé avant l'arrivée au seuil 2 NM.
+
+2. AÉRODROMES — AFIS / A/A / INFO
+- Ajout d'un index secondaire service + fréquence regroupé par OACI.
+- Cet index fusionne le référentiel embarqué et le référentiel léger/cache.
+- La correspondance fréquence accepte les deux sens stricts porteuse 25 kHz <-> désignateur de canal 8,33 kHz (+/- 5 kHz uniquement pour les canaux concernés).
+- Si aucune fréquence ne correspond exactement, un secours par OACI n'est utilisé que lorsque le terrain n'est pas ambigu.
+- Un TWR déjà identifié n'est jamais transformé en AFIS/A/A par ce secours.
+- La fréquence opérationnelle affichée par NPF reste toujours prioritaire et n'est jamais remplacée par le référentiel de service.
+- Le DIAG indique maintenant le nombre d'entrées service/OACI chargées et les compteurs AFIS et A/A afin de vérifier directement la présence des données.
+
+3. SIA — BORDURES INTÉRIEURES CONSERVÉES, CALCUL DIFFÉRÉ
+- Le DIAG v16.65 a montré des décorations SIA de plusieurs centaines de millisecondes alors que Routes et HT étaient désactivées.
+- Les contours principaux, surfaces tactiles et points sont désormais engagés sans attendre le calcul des bandes intérieures/libellés.
+- Après zoom ou reconstruction, les bandes intérieures + libellés sont recalculés après stabilisation de la vue.
+- Après pan dans une couverture déjà valide, aucun calcul n'est fait pendant le geste ; une redécoration limitée à la vue courante est programmée après l'arrêt.
+- Tout nouveau movestart/zoomstart annule immédiatement la décoration différée/progressive devenue obsolète.
+- Le lot de décoration passe de 6 à 2 zones avant restitution de la main à Safari.
+- Délai de stabilisation porté à 560 ms.
+- Les bordures intérieures à 5 NM restent bien présentes : elles ne sont pas supprimées pour gagner en fluidité.
+- Le mode allégé déjà existant à partir de 10 NM reste inchangé.
+
+4. DÉMARRAGE — ALIAS COMMUNES
+- Le chargement des 6 000+ alias n'est plus bloquant avant l'affichage des PÉLIC.
+- Les 34 935 communes principales restent indexées immédiatement.
+- Les alias sont chargés après le démarrage principal, via requestIdleCallback lorsque disponible ou avec temporisation de secours.
+- Leur normalisation est fractionnée par lots de 192 entrées avec restitution de la main à Safari entre les lots.
+- Nouvelle clé de cache `communesAliasesCacheV3`.
+- Le cache stocke le payload compact d'origine au lieu de réécrire les alias déjà enrichis avec toute la commune cible.
+- Objectif : éviter le blocage JavaScript d'environ 2,7 s observé dans le DIAG v16.65.
+
+5. NON-RÉGRESSION / LIVRAISON
+- TRACE MyTracks + état supposé localStorage de v16.65 conservé.
+- BFG/FdS/GAAR, GLR, SafeSky, Routes/HT, VAC, calculs FUEL, PÉLIC et mises à jour automatiques conservés.
+- Aucun bouton MAJ principal réintroduit.
+- `sia.js` strictement inchangé par rapport à v16.65.
+- `SIA_DATA_REVISION` reste 15.69.
+- Index, Manifest, Script, Style et Service Worker alignés sur v16.66.
+- Nouveau Service Worker : `sw-v16-66_airport_services_2nm_sia_idle_alias_perf`.
+
+VALIDATION STATIQUE À LA LIVRAISON
+- Syntaxe du JavaScript principal vérifiée.
+- Syntaxe du Service Worker vérifiée.
+- Scripts inline de l'Index vérifiés.
+- Manifest JSON vérifié.
+- Cohérence des références actives v16.66 vérifiée.
+- `5_SIA_v16.66.txt` comparé bit à bit avec v16.65.
+- Vérifications ciblées : seuil 2 NM, index OACI service, compteurs DIAG AFIS/A/A, correspondance 25 kHz/8,33, décorations SIA différées, lot=2, cache alias V3 compact.
+
+HISTORIQUE PRÉCÉDENT CONSERVÉ INTÉGRALEMENT
+
 VERSION TEST v16.65 — TRACE ÉTAT SUPPOSÉ + AFIS/A/A 8,33 + BORDURES SIA 5 NM
 Date : 10/09/2026
 Base : TEST v16.64
