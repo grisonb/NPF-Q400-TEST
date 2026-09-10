@@ -1,3 +1,61 @@
+VERSION TEST v16.64 — BFG ASSOCIATION PRIORITAIRE + AFIS/A/A LOCAL + SIA PLUS FLUIDE + TRACE ICÔNE
+Date : 10/09/2026
+Base : TEST v16.63
+
+OBJECTIF
+- Corriger le cas observé où NPF demandait encore le mot de passe FdS alors que l'utilisateur travaille avec BFG, mais que l'association BFG ↔ NPF n'avait pas encore été enregistrée sur l'iPad.
+- Faire apparaître réellement AFIS / A/A / INFO sur les étiquettes aérodromes, y compris hors ligne et sans dépendre d'un téléchargement GitHub au moment de l'affichage.
+- Réduire les lenteurs SIA mesurées en v16.63, notamment les recalculs « moveend-contained » pouvant dépasser 2 secondes alors que la couverture restait valide.
+- Déplacer TRACE à droite de DIAG et remplacer « TRACE / YUL » par une icône d'enregistrement.
+- Conserver le raccourci Apple « NPF Trace » comme interface générique : YUL ou m9ch DriveBook peuvent être utilisés derrière le raccourci sans modifier NPF.
+
+1. FdS / GAAR — BFG PROPOSÉ AVANT LE MOT DE PASSE
+- Une FdS/GAAR du jour déjà téléchargée reste consultable immédiatement sans authentification réseau.
+- Si aucune session FdS/GAAR n'existe et que l'iPad possède déjà une association BFG ↔ NPF, NPF tente toujours le pont BFG automatiquement et ne demande pas le mot de passe en cas de panne temporaire.
+- Si aucune association BFG ↔ NPF n'est encore enregistrée, un clic sur FdS/GAAR ouvre maintenant directement la fenêtre d'association BFG avec le code à 8 chiffres, au lieu d'afficher immédiatement le mot de passe NPF.
+- Lorsque cette association est lancée depuis FdS ou GAAR, la cible est mémorisée : après association réussie, NPF poursuit directement le téléchargement/ouverture du document demandé.
+- Un bouton secondaire « Utiliser le mot de passe NPF » reste disponible dans cette fenêtre pour conserver le mode de secours.
+- Le bouton BFG doit afficher « BFG ✓ » dès que l'association locale BFG ↔ NPF est réellement enregistrée.
+- Le DIAG précise désormais « BFG↔NPF associé OUI/NON » afin d'éviter de confondre connexion dans BFG et association avec NPF.
+
+2. AÉRODROMES — AFIS / A/A / INFO EMBARQUÉS
+- Ajout dans Script d'un petit référentiel local français OACI + fréquence + type de service pour AFIS / A/A / INFO et quelques cas mixtes TWR/AFIS.
+- Ce référentiel local est consulté avant le complément réseau : les types restent donc disponibles hors ligne et en cas d'échec du fetch externe.
+- La fréquence affichée reste TOUJOURS la fréquence déjà retenue par NPF ; le référentiel de service n'a jamais le droit de remplacer cette fréquence.
+- Si OACI + fréquence correspondent exactement, le type local est appliqué immédiatement.
+- Pour les terrains non-TWR identifiés, un secours OACI peut compléter le type lorsque NPF connaît déjà la fréquence mais que son type est vide.
+- Aucun secours OACI n'est appliqué aux terrains connus comme mixtes/contrôlés afin d'éviter d'étiqueter une fréquence TWR comme AFIS ou INFO.
+- Le complément réseau existant reste disponible comme mise à jour/enrichissement secondaire.
+- Le parser reconnaît également les cas explicites TWR/AFIS.
+
+3. SIA — SUPPRESSION DES RECALCULS SUR PAN DANS UNE COUVERTURE VALIDE
+- Si couverture SIA, zoom et filtres sont inchangés et que le nouveau viewport reste entièrement dans la couverture rendue, un moveend ne lance plus ni reconstruction, ni redécoration, ni recalcul de profil.
+- Les calques Leaflet existants suivent naturellement le pan ; NPF conserve donc le rendu tel quel jusqu'à une vraie sortie de couverture, un zoom ou un changement de filtre.
+- Les anciens chemins « moveend-contained » et « moveend-refresh-contained » sont neutralisés en zéro travail SIA.
+- Objectif direct : supprimer les redécorations répétées mesurées en v16.63 à 2239 ms, 1153 ms et 675 ms sur une couverture encore valide.
+
+4. SIA — BANDES INTÉRIEURES ALLÉGÉES SOUS CHARGE
+- Les contours principaux et les libellés SIA restent affichés.
+- À l'échelle 5 NM et au-delà, ou lorsqu'une couche lourde HT/Routes est active, les seules bandes intérieures décoratives sont omises.
+- Les étiquettes de zones restent rendues ; ce changement cible uniquement la partie graphique la plus coûteuse.
+- Le DIAG indique désormais « bandes=oui/non » dans le rendu progressif.
+
+5. TRACE — À DROITE DE DIAG, ICÔNE ENREGISTREMENT
+- Le bouton TRACE est retiré de la pile verticale gauche.
+- Il est placé immédiatement à droite du bouton DIAG, en bas de l'écran.
+- Plus de texte « TRACE / YUL » : le bouton affiche uniquement un cercle rouge d'enregistrement.
+- L'appel reste volontairement `shortcuts://run-shortcut?name=NPF%20Trace` car le passage visible par Raccourcis observé sur l'iPad est déjà très bref.
+- NPF n'est plus lié dans son code à YUL : « NPF Trace » est un raccourci générique pouvant piloter YUL, m9ch DriveBook ou un autre enregistreur exposant des actions Raccourcis.
+- Aucun enregistreur GPS PWA n'est ajouté : l'enregistrement de fond reste confié à une app native iPad.
+
+6. NON-RÉGRESSION / CONTRÔLES
+- GLR v16.62/v16.63 conservé sans modification.
+- Calculs FUEL validés, Routes/HT, VAC, Lapradelle, commune, trafic et mise à jour automatique conservés.
+- Aucun bouton MAJ principal réintroduit.
+- sia.js reste strictement inchangé bit pour bit.
+- Les 7 fichiers portent la version v16.64 ; Manifest, Script, Style et SW sont cohérents.
+
+
 VERSION TEST v16.63 — BFG SANS MOT DE PASSE + SERVICES TERRAIN + ZONES 3 LIGNES + TRACE YUL
 Date : 09/09/2026
 Base : TEST v16.62
