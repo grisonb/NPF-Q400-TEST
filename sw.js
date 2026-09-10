@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v16-66_airport_services_2nm_sia_idle_alias_perf';
-const APP_VERSION = 'v16.66';
+const SW_VERSION = 'sw-v16-67_sia_official_airport_radio_airac10';
+const APP_VERSION = 'v16.67';
 const SIA_DATA_REVISION = '15.69';
 const SIA_DATA_URL = './sia.js';
 const SIA_DATA_CACHE = `npf-q400-sia-data-${SIA_DATA_REVISION}`;
