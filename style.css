@@ -1,4 +1,4 @@
-/* NPF_STYLE_BUILD_VERSION: v16.64 */
+/* NPF_STYLE_BUILD_VERSION: v16.65 */
 /* v14.83 — nettoyage des références techniques et limitation des cartouches routiers. */
 /* v14.81 — recherche phonétique nationale élargie aux fragments sur deux lettres. */
 /* v14.80 — Brive conservé uniquement sous LFSL. */
@@ -18074,10 +18074,21 @@ body.npf-calculator-modal-open {
 .npf-trace-record-icon {
     width: 22px;
     height: 22px;
+    box-sizing: border-box;
+    border: 3px solid #dc2626;
     border-radius: 50%;
-    background: #dc2626;
-    box-shadow: 0 0 0 2px rgba(127, 29, 29, .12);
+    background: transparent;
+    box-shadow: none;
     pointer-events: none;
+}
+.npf-trace-record-button.npf-trace-assumed-active {
+    border-color: rgba(185, 28, 28, .90) !important;
+    background: rgba(254, 226, 226, .98) !important;
+}
+.npf-trace-record-button.npf-trace-assumed-active .npf-trace-record-icon {
+    border-color: #dc2626;
+    background: #dc2626;
+    box-shadow: 0 0 0 4px rgba(220, 38, 38, .16);
 }
 .npf-trace-record-button:active .npf-trace-record-icon {
     transform: scale(.90);
