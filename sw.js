@@ -1,6 +1,6 @@
-const SW_VERSION = 'sw-v16-72_offline_grid_v1650';
-const APP_VERSION = 'v16.72';
-const SIA_DATA_REVISION = '15.69-radio1026-1';
+const SW_VERSION = 'sw-v16-73_sia_maplite';
+const APP_VERSION = 'v16.73';
+const SIA_DATA_REVISION = '15.69-radio1026-1-maplite1';
 const SIA_DATA_URL = './sia.js';
 const SIA_DATA_CACHE = `npf-q400-sia-data-${SIA_DATA_REVISION}`;
 
