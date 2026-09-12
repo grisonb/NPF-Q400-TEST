@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v16.76';
+const NPF_SCRIPT_BUILD_VERSION = 'v16.77';
 
 
 /*
@@ -2070,6 +2070,19 @@ const ROAD_OVERLAY_VIEWPORT_PAD_TIER_1 = 0.10;
 const ROAD_OVERLAY_VIEWPORT_PAD_TIER_2 = 0.12;
 const ROAD_OVERLAY_FEATURE_PAD_TIER_1 = 0.18;
 const ROAD_OVERLAY_FEATURE_PAD_TIER_2 = 0.12;
+
+/*
+ * v16.77 — cache source compact autour du viewport.
+ *
+ * Les fichiers installés restent inchangés dans Cache Storage, mais après
+ * lecture d'une partie NPF ne conserve plus en RAM ses dizaines de milliers
+ * de tronçons. Il garde uniquement un working-set spatial autour de la vue.
+ *
+ * Tier 1 = autoroutes seulement : on peut conserver une marge un peu plus
+ * large. Tier 2 = toutes classes : marge plus serrée pour limiter WebKit.
+ */
+const ROAD_OVERLAY_SOURCE_WORKSET_PAD_TIER_1 = 0.50;
+const ROAD_OVERLAY_SOURCE_WORKSET_PAD_TIER_2 = 0.35;
 const ROAD_OVERLAY_FILTER_YIELD_EVERY = 1200;
 const ROAD_OVERLAY_TILE_PRIORITY_QUEUE_LIMIT = 0;
 const ROAD_OVERLAY_TILE_PRIORITY_ACTIVE_LIMIT = 0;
@@ -13366,6 +13379,24 @@ function cloneRoadOverlayBounds(bounds) {
     }
 }
 
+function roadOverlaySourceRecordCoversBounds(record, tier, bounds) {
+    if (!record || !bounds) return false;
+    if (Number(record.tier) !== Number(tier)) return false;
+    return roadOverlayBoundsContainBounds(record.coverageBounds, bounds);
+}
+
+function buildRoadOverlaySourceWorksetBounds(renderBounds, tier) {
+    if (!renderBounds?.pad) return renderBounds || null;
+    const ratio = tier === 1
+        ? ROAD_OVERLAY_SOURCE_WORKSET_PAD_TIER_1
+        : ROAD_OVERLAY_SOURCE_WORKSET_PAD_TIER_2;
+    try {
+        return renderBounds.pad(ratio);
+    } catch (_) {
+        return renderBounds;
+    }
+}
+
 function isRoadOverlayCoverageValidForCurrentView() {
     if (!map || !roadOverlayRenderedBounds || roadOverlayLoadedZoomTier !== getRoadOverlayZoomTier()) return false;
     try {
@@ -13474,9 +13505,16 @@ function yieldRoadOverlayRenderTurn() {
     });
 }
 
-async function getRoadOverlaySourcePart(part, token, tier) {
+async function getRoadOverlaySourcePart(part, token, tier, renderBounds) {
     const cached = roadOverlaySourceParts.get(part.key);
-    if (cached) return cached;
+
+    /*
+     * v16.77 — réutiliser le working-set tant qu'il couvre encore la zone
+     * de rendu. On évite ainsi de relire/reparser la partie à chaque petit pan.
+     */
+    if (roadOverlaySourceRecordCoversBounds(cached, tier, renderBounds)) {
+        return cached;
+    }
 
     const cache = await caches.open(ROAD_OVERLAY_CACHE_NAME);
     const response = await cache.match(buildRoadOverlayCacheRequest(part.key));
@@ -13484,17 +13522,13 @@ async function getRoadOverlaySourcePart(part, token, tier) {
         throw new Error(`Partie routière absente : ${part.name}`);
     }
 
+    const startedAt = NPF_STARTUP_DIAGNOSTIC.now();
     const storedGeojson = await response.json();
     const sourceFeatures = Array.isArray(storedGeojson?.features)
         ? storedGeojson.features
         : [];
+    const rawFeatureCount = sourceFeatures.length;
 
-    /*
-     * v16.44 — ne plus pré-calculer les bbox des dizaines de milliers de
-     * tronçons juste après le JSON.parse(). Le filtrage viewport les calcule
-     * paresseusement, et seulement pour les classes réellement visibles au
-     * niveau de zoom courant. On supprime ainsi un parcours complet en double.
-     */
     if (
         token !== roadOverlayRefreshToken
         || !showRoadOverlayLayer
@@ -13503,16 +13537,64 @@ async function getRoadOverlaySourcePart(part, token, tier) {
         return null;
     }
 
+    /*
+     * v16.77 — compaction RAM immédiatement après JSON.parse().
+     *
+     * Auparavant le record conservait par exemple 36 753 tronçons alors que
+     * ~100 seulement étaient utiles à l'écran. On filtre une première fois sur
+     * une zone plus large que le rendu, puis la grosse FeatureCollection locale
+     * devient libérable dès la sortie de cette fonction.
+     */
+    const coverageBounds = buildRoadOverlaySourceWorksetBounds(renderBounds, tier);
+    const compactGeojson = await buildRoadOverlayGeojsonForTierAndBounds(
+        storedGeojson,
+        tier,
+        coverageBounds,
+        token
+    );
+    if (!compactGeojson) return null;
+
+    if (
+        token !== roadOverlayRefreshToken
+        || !showRoadOverlayLayer
+        || tier !== roadOverlayLoadedZoomTier
+    ) {
+        return null;
+    }
+
+    const retainedFeatureCount = Array.isArray(compactGeojson.features)
+        ? compactGeojson.features.length
+        : 0;
+
     const record = {
-        geojson: storedGeojson,
-        featureCount: sourceFeatures.length
+        geojson: compactGeojson,
+        featureCount: retainedFeatureCount,
+        rawFeatureCount,
+        tier,
+        coverageBounds: cloneRoadOverlayBounds(coverageBounds)
     };
     roadOverlaySourceParts.set(part.key, record);
+
+    npfDiagSiaInteraction(
+        'ROUTES SOURCE',
+        `partie=${part.name} · tier=${tier} · brut=${rawFeatureCount} · retenu=${retainedFeatureCount}`,
+        {
+            totalMs: Math.round(NPF_STARTUP_DIAGNOSTIC.now() - startedAt),
+            rawFeatures: rawFeatureCount,
+            retainedFeatures: retainedFeatureCount
+        }
+    );
+
     return record;
 }
 
 async function loadRoadOverlayPart(part, token, tier, renderBounds) {
-    const sourceRecord = await getRoadOverlaySourcePart(part, token, tier);
+    const sourceRecord = await getRoadOverlaySourcePart(
+        part,
+        token,
+        tier,
+        renderBounds
+    );
     if (!sourceRecord) return null;
 
     if (
@@ -13537,7 +13619,8 @@ async function loadRoadOverlayPart(part, token, tier, renderBounds) {
             lines: null,
             geojson,
             tier,
-            sourceFeatureCount: sourceRecord.featureCount
+            sourceFeatureCount: sourceRecord.featureCount,
+            rawSourceFeatureCount: sourceRecord.rawFeatureCount
         };
         loadedRoadOverlayParts.set(part.key, emptyRecord);
         return emptyRecord;
@@ -13567,6 +13650,7 @@ async function loadRoadOverlayPart(part, token, tier, renderBounds) {
         renderGeojson,
         tier,
         sourceFeatureCount: sourceRecord.featureCount,
+        rawSourceFeatureCount: sourceRecord.rawFeatureCount,
         renderGroupCount: renderGeojson.features.length
     };
     loadedRoadOverlayParts.set(part.key, record);
@@ -13697,10 +13781,20 @@ async function refreshRoadOverlayVisibleParts(source = 'refresh') {
             currentTier
         );
 
+        const sourceCoverageStillValid = visibleParts.every(part => {
+            const cachedSource = roadOverlaySourceParts.get(part.key);
+            return roadOverlaySourceRecordCoversBounds(
+                cachedSource,
+                currentTier,
+                renderBounds
+            );
+        });
+
         const coverageStillValid = (
             !tierChanged
             && roadOverlayRenderedPartSignature === visibleSignature
             && roadOverlayBoundsContainBounds(roadOverlayRenderedBounds, currentBounds)
+            && sourceCoverageStillValid
         );
         const featureSelectionChanged = forceRefresh || !coverageStillValid;
         const styleChanged = currentStyleBand !== roadOverlayLastStyleBand;
@@ -13736,6 +13830,25 @@ async function refreshRoadOverlayVisibleParts(source = 'refresh') {
             clearRoadOverlayRenderedParts({ resetTier: false });
             roadOverlayLoadedZoomTier = currentTier;
             pruneRoadOverlaySourceParts(visibleKeys);
+
+            /*
+             * v16.77 — une partie peut rester géographiquement "visible" dans
+             * le manifeste alors que son working-set compact ne couvre plus la
+             * nouvelle vue. La supprimer ici force une recharge compacte.
+             */
+            visibleParts.forEach(part => {
+                const cachedSource = roadOverlaySourceParts.get(part.key);
+                if (
+                    cachedSource
+                    && !roadOverlaySourceRecordCoversBounds(
+                        cachedSource,
+                        currentTier,
+                        renderBounds
+                    )
+                ) {
+                    roadOverlaySourceParts.delete(part.key);
+                }
+            });
 
             for (const part of visibleParts) {
                 if (
