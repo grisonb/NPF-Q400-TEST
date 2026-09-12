@@ -1,3 +1,71 @@
+VERSION TEST v16.75 — DÉPARTEMENTS À LA DEMANDE
+Date : 12/09/2026
+Base : TEST v16.74
+
+CONSTat
+- La v16.74 confirme la correction SIA :
+  - jeu léger 877 terrains / 1899 points ;
+  - plus de chargement initial des 5 066 espaces ;
+  - refresh SIA startup ~109 ms.
+- Le principal blocage restant au démarrage correspond au chargement des
+  départements alors que leur calque est masqué.
+- Le DIAG v16.74 mesurait environ 1,58 s entre
+  `Départements — données` et `Départements — données prêtes`.
+
+1. DÉPARTEMENTS À LA DEMANDE
+- Suppression du préchargement départemental automatique à +900 ms.
+- Si le calque Départements est OFF :
+  aucun index polygonal ni aucun GeoJSON Leaflet départemental n'est construit.
+- Nouveau jalon DIAG :
+  `Départements — chargement à la demande`.
+
+2. COMMUNE SURVOLÉE
+- Le bandeau "Commune survolée" ne force plus le chargement du calque
+  Départements.
+- Tant que la géométrie n'est pas chargée, le code département provient de la
+  base communes via le secours existant `formatCommuneDepartment()`.
+- L'affichage de la commune reste donc disponible sans coût départemental.
+
+3. PREMIÈRE ACTIVATION DU CALQUE
+- Si l'utilisateur active Départements :
+  - chargement de la géométrie ;
+  - DIAG `Départements — données` puis `Départements — données prêtes` ;
+  - recalcul de la commune survolée ;
+  - réparation des libellés de feux manuels.
+- Si le calque était mémorisé ON avant le lancement, le comportement historique
+  est conservé : scheduleStartupAuxiliaryLayers() déclenche son chargement.
+
+4. DIAGNOSTIC
+- Les snapshots internes exposent désormais :
+  - departmentsLoaded=OUI/NON
+  - departmentsVisible=OUI/NON
+- Cela permet de vérifier qu'aucun chargement caché ne revient.
+
+5. CARTE / SIA
+- Moteur carte v16.74 inchangé :
+  updateWhenIdle=false, 60 ms, 5 lectures IndexedDB.
+- Verrou du dataset SIA complet v16.74 inchangé.
+- Révision SIA inchangée : `15.69-radio1026-1-maplite1`.
+- Radio inchangée : 326 terrains / TWR=95 / AFIS=69 / A/A=228.
+
+6. VERSION
+- App : v16.75.
+- Service Worker : `sw-v16-75_departments_lazy`.
+- Packs OFFLINE et bases IndexedDB inchangés.
+
+VALIDATION STATIQUE EFFECTUÉE
+- Syntaxe JavaScript Script / SIA / Service Worker vérifiée.
+- Script inline de l'Index vérifié.
+- Manifest JSON vérifié.
+- Cohérence v16.75 vérifiée.
+- Plus aucun préchargement départements à +900 ms.
+- Plus aucun chargement départements provoqué par "Commune survolée".
+- Chargement au premier ON du calque vérifié.
+- Carte v16.74 et verrou SIA v16.74 conservés.
+- Radio 326 / 95 / 69 / 228 vérifiée.
+
+HISTORIQUE PRÉCÉDENT CONSERVÉ INTÉGRALEMENT
+
 VERSION TEST v16.74 — VERROU DU DATASET SIA COMPLET
 Date : 12/09/2026
 Base : TEST v16.73
