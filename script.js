@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v16.70';
+const NPF_SCRIPT_BUILD_VERSION = 'v16.71';
 
 
 /*
@@ -7123,6 +7123,7 @@ function initMap() {
             return;
         }
 
+        beginBaseMapZoomStabilityGuard('movestart');
         beginMapVisualRenderGuard('movestart');
         if (showRoadOverlayLayer) {
             roadOverlayRefreshToken += 1;
@@ -7175,28 +7176,23 @@ function initMap() {
     });
     map.on('zoomend', enforceOfflineZoomLimit);
     map.on('zoomend', () => {
-        /* v16.58 — aucune purge/éviction pendant le geste. Une fois le zoom
-         * stabilisé, le viewport courant devient prioritaire puis seule la file
-         * réellement obsolète est nettoyée après que Leaflet a fini de retenir
-         * ses nouvelles tuiles. Les lectures IndexedDB actives restent intactes. */
-        if (directOfflineNpfZoomSettleTimer) clearTimeout(directOfflineNpfZoomSettleTimer);
-        directOfflineNpfZoomSettleTimer = setTimeout(() => {
+        /*
+         * v16.71 — retour ciblé au scheduling v16.50 : nettoyage immédiat de la
+         * file pour la vue finale, sans délai de stabilisation de 240 ms.
+         */
+        if (directOfflineNpfZoomSettleTimer) {
+            clearTimeout(directOfflineNpfZoomSettleTimer);
             directOfflineNpfZoomSettleTimer = null;
-            try { markDirectOfflineNpfViewportPriority('zoomend-stable'); } catch (_) {}
-            try { pruneDirectOfflineNpfQueueForCurrentView('zoomend-stable'); } catch (_) {}
-            try { trimDirectOfflineTileBlobCache(); } catch (_) {}
-        }, DIRECT_OFFLINE_NPF_ZOOM_SETTLE_MS);
+        }
+        try { pruneDirectOfflineNpfQueueForCurrentView('zoomend'); } catch (_) {}
+        try { trimDirectOfflineTileBlobCache(); } catch (_) {}
         scheduleBaseMapStabilityRefresh('zoomend');
         scheduleNpfOfflineZoomCleanup('zoomend');
         scheduleTrafficVisualResumeAfterMapInteraction('zoomend');
     });
     map.on('moveend', () => {
         if (isNpfGpsFollowProgrammaticPan()) return;
-        /* Un moveend émis entre deux étapes d'un pinch ne doit pas purger la
-         * file du zoom qui va immédiatement suivre. */
-        if (!directOfflineNpfZoomSettleTimer) {
-            try { pruneDirectOfflineNpfQueueForCurrentView('moveend'); } catch (_) {}
-        }
+        try { pruneDirectOfflineNpfQueueForCurrentView('moveend'); } catch (_) {}
         scheduleTrafficVisualResumeAfterMapInteraction('moveend');
     });
     L.control.zoom({ position: 'bottomleft' }).addTo(map);
@@ -7427,14 +7423,19 @@ function initMap() {
              * tuiles du zoom final suffit ; le reste peut continuer en fond.
              */
             const overlayResumeToken = npfHeavyOverlayZoomSerialToken;
-            waitForNpfFinalZoomFirstTiles({
-                timeoutMs: 1600,
-                isCancelled: () => overlayResumeToken !== npfHeavyOverlayZoomSerialToken || !map
-            }).finally(() => {
-                if (overlayResumeToken === npfHeavyOverlayZoomSerialToken) {
-                    setNpfHeavyOverlayPanesHidden(false);
-                }
-            });
+            if (showRoadOverlayLayer || showHighVoltageLinesLayer) {
+                waitForNpfFinalZoomFirstTiles({
+                    timeoutMs: 1600,
+                    isCancelled: () => overlayResumeToken !== npfHeavyOverlayZoomSerialToken || !map
+                }).finally(() => {
+                    if (overlayResumeToken === npfHeavyOverlayZoomSerialToken) {
+                        setNpfHeavyOverlayPanesHidden(false);
+                    }
+                });
+            } else {
+                /* v16.71 — carte seule : aucun polling des tuiles finales. */
+                setNpfHeavyOverlayPanesHidden(false);
+            }
         }
 
         if (showRoadOverlayLayer) {
@@ -7557,12 +7558,13 @@ function beginBaseMapZoomStabilityGuard(reason = 'zoomstart') {
         && typeof isNpfOfflinePackSelection === 'function'
         && isNpfOfflinePackSelection()
     ) {
-        /* v16.58 — le début du zoom ne touche plus ni au cache blobs, ni à la
-         * priorité de file. Les tuiles de la vue précédente restent disponibles
-         * pendant le pinch/zoom et les nouvelles demandes ne provoquent plus une
-         * succession abandon -> relecture. La bascule de priorité se fait à
-         * zoomend, une seule fois sur la vue stabilisée. */
-        return;
+        /*
+         * v16.71 — retour au comportement v16.50 : le nouveau viewport devient
+         * prioritaire dès le début du geste. Les transactions déjà actives ne
+         * sont pas annulées.
+         */
+        try { markDirectOfflineNpfViewportPriority(reason); } catch (_) {}
+        try { trimDirectOfflineTileBlobCache(96); } catch (_) {}
     }
 }
 
@@ -8591,23 +8593,15 @@ let directOfflineLastRecoveryReason = '';
  * rafale de transactions parallèles au premier affichage. On limite donc la
  * concurrence uniquement pour le groupe NPF ; OACI conserve son chemin rapide.
  */
-const DIRECT_OFFLINE_NPF_MAX_CONCURRENT_READS_COLD = 3;
-const DIRECT_OFFLINE_NPF_MAX_CONCURRENT_READS_WARM = 6;
+/*
+ * v16.71 — retour ciblé au comportement de carte de v16.50 :
+ * 5 lectures IndexedDB simultanées fixes.
+ */
+const DIRECT_OFFLINE_NPF_MAX_CONCURRENT_READS = 5;
 const DIRECT_OFFLINE_NPF_MAX_QUEUED_READS = 160;
 
 function getDirectOfflineNpfMaxConcurrentReads() {
-    /*
-     * v16.70 — Safari/iPad reste prudent avant le premier accès IndexedDB
-     * réussi, puis la vue finale d'un zoom peut utiliser davantage de lectures
-     * parallèles. Cela réduit les périodes tilesVisible=0 observées avec
-     * 20–33 tuiles en file, sans déclencher une rafale à froid.
-     */
-    return (
-        directOfflineTileHitCount > 0
-        || !!directOfflineNpfLastSuccessfulLookup?.dbName
-    )
-        ? DIRECT_OFFLINE_NPF_MAX_CONCURRENT_READS_WARM
-        : DIRECT_OFFLINE_NPF_MAX_CONCURRENT_READS_COLD;
+    return DIRECT_OFFLINE_NPF_MAX_CONCURRENT_READS;
 }
 const DIRECT_OFFLINE_TILE_ABORTED = Symbol('direct-offline-tile-aborted');
 let directOfflineNpfActiveReads = 0;
@@ -9416,9 +9410,8 @@ window.getNpfTilePerformanceStatus = function getNpfTilePerformanceStatus() {
         npfSelected: isNpfOfflinePackSelection(),
         activeReads: directOfflineNpfActiveReads,
         queuedReads: directOfflineNpfReadQueue.length,
-        maxConcurrentReads: getDirectOfflineNpfMaxConcurrentReads(),
-        maxConcurrentReadsCold: DIRECT_OFFLINE_NPF_MAX_CONCURRENT_READS_COLD,
-        maxConcurrentReadsWarm: DIRECT_OFFLINE_NPF_MAX_CONCURRENT_READS_WARM,
+        maxConcurrentReads: DIRECT_OFFLINE_NPF_MAX_CONCURRENT_READS,
+        schedulerMode: 'v16.50-priority-immediate',
         viewPriorityEpoch: directOfflineTileViewPriorityEpoch,
         abortedReads: directOfflineNpfAbortedReadCount,
         tileRetries: directOfflineNpfTileRetryCount,
