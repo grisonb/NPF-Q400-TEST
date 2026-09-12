@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v16.77';
+const NPF_SCRIPT_BUILD_VERSION = 'v16.78';
 
 
 /*
@@ -2083,6 +2083,23 @@ const ROAD_OVERLAY_FEATURE_PAD_TIER_2 = 0.12;
  */
 const ROAD_OVERLAY_SOURCE_WORKSET_PAD_TIER_1 = 0.50;
 const ROAD_OVERLAY_SOURCE_WORKSET_PAD_TIER_2 = 0.35;
+
+/*
+ * v16.78 — index spatial dérivé des parties Routes.
+ *
+ * Le pack installé n'est pas modifié. Au premier accès à une partie, NPF crée
+ * paresseusement dans un cache séparé de petites cellules GeoJSON. Les pans
+ * suivants relisent uniquement les cellules proches du viewport au lieu de
+ * reparcourir/reparser le gros fichier départemental.
+ */
+const ROAD_OVERLAY_SPATIAL_CACHE_NAME = 'npf-road-overlay-spatial-v1';
+const ROAD_OVERLAY_SPATIAL_RESOURCE_PREFIX = './__npf_road_overlay_spatial_v1__/';
+const ROAD_OVERLAY_SPATIAL_INDEX_VERSION = 1;
+const ROAD_OVERLAY_SPATIAL_CELL_DEG = 0.15;
+const ROAD_OVERLAY_SPATIAL_MAX_CELLS_PER_FEATURE = 64;
+const ROAD_OVERLAY_SPATIAL_BUILD_YIELD_EVERY = 600;
+const roadOverlaySpatialBuildStates = new Map();
+
 const ROAD_OVERLAY_FILTER_YIELD_EVERY = 1200;
 const ROAD_OVERLAY_TILE_PRIORITY_QUEUE_LIMIT = 0;
 const ROAD_OVERLAY_TILE_PRIORITY_ACTIVE_LIMIT = 0;
@@ -12417,8 +12434,12 @@ function buildRoadOverlayCacheRequest(key) {
 }
 
 async function clearRoadOverlayCacheAndManifest() {
+    cancelRoadOverlaySpatialBuilds('clear-road-pack');
     try {
         await caches.delete(ROAD_OVERLAY_CACHE_NAME);
+    } catch (_) {}
+    try {
+        await caches.delete(ROAD_OVERLAY_SPATIAL_CACHE_NAME);
     } catch (_) {}
     localStorage.removeItem(ROAD_OVERLAY_MANIFEST_KEY);
 }
@@ -12634,6 +12655,506 @@ function refreshRoadOverlayButtonState() {
                 ? 'Afficher/Masquer le calque routier A / N / D / M / T'
                 : 'Aucun calque routier installé — ouvrir Gestion des Cartes'
         );
+}
+
+function buildRoadOverlaySpatialManifestRequest(partKey) {
+    const safePartKey = encodeURIComponent(String(partKey || 'routes'));
+    return new Request(
+        `${ROAD_OVERLAY_SPATIAL_RESOURCE_PREFIX}${safePartKey}/manifest.json`
+    );
+}
+
+function buildRoadOverlaySpatialCellRequest(partKey, tier, cellKey) {
+    const safePartKey = encodeURIComponent(String(partKey || 'routes'));
+    const safeCellKey = encodeURIComponent(String(cellKey || '0_0'));
+    return new Request(
+        `${ROAD_OVERLAY_SPATIAL_RESOURCE_PREFIX}${safePartKey}/t${Number(tier)}/${safeCellKey}.json`
+    );
+}
+
+function getRoadOverlaySpatialCellCoord(value) {
+    return Math.floor(Number(value) / ROAD_OVERLAY_SPATIAL_CELL_DEG);
+}
+
+function getRoadOverlaySpatialCellKey(x, y) {
+    return `${Number(x)}_${Number(y)}`;
+}
+
+function getRoadOverlaySpatialCellRangeFromBbox(bbox) {
+    if (!Array.isArray(bbox) || bbox.length !== 4) return null;
+    const [minLon, minLat, maxLon, maxLat] = bbox.map(Number);
+    if (![minLon, minLat, maxLon, maxLat].every(Number.isFinite)) return null;
+
+    return {
+        minX: getRoadOverlaySpatialCellCoord(minLon),
+        maxX: getRoadOverlaySpatialCellCoord(maxLon),
+        minY: getRoadOverlaySpatialCellCoord(minLat),
+        maxY: getRoadOverlaySpatialCellCoord(maxLat)
+    };
+}
+
+function getRoadOverlaySpatialCellKeysForBounds(bounds) {
+    if (!bounds) return [];
+    let bbox;
+    try {
+        bbox = [
+            bounds.getWest(),
+            bounds.getSouth(),
+            bounds.getEast(),
+            bounds.getNorth()
+        ];
+    } catch (_) {
+        return [];
+    }
+
+    const range = getRoadOverlaySpatialCellRangeFromBbox(bbox);
+    if (!range) return [];
+
+    const keys = [];
+    for (let x = range.minX; x <= range.maxX; x += 1) {
+        for (let y = range.minY; y <= range.maxY; y += 1) {
+            keys.push(getRoadOverlaySpatialCellKey(x, y));
+        }
+    }
+    return keys;
+}
+
+function getRoadOverlaySpatialTierBucket(state, tier) {
+    return state?.buckets?.get?.(Number(tier)) || null;
+}
+
+async function yieldRoadOverlaySpatialBuildTurn() {
+    if (typeof requestIdleCallback === 'function') {
+        await new Promise(resolve => {
+            requestIdleCallback(() => resolve(), { timeout: 80 });
+        });
+        return;
+    }
+    await new Promise(resolve => setTimeout(resolve, 0));
+}
+
+function cancelRoadOverlaySpatialBuilds(reason = '') {
+    roadOverlaySpatialBuildStates.forEach(state => {
+        if (!state) return;
+        state.cancelled = true;
+        state.cancelReason = String(reason || 'cancelled');
+        state.rawGeojson = null;
+        state.buckets = null;
+        state.overflow = null;
+    });
+    roadOverlaySpatialBuildStates.clear();
+}
+
+function addRoadOverlaySpatialEntry(bucketMap, cellKey, entry) {
+    if (!bucketMap.has(cellKey)) bucketMap.set(cellKey, []);
+    bucketMap.get(cellKey).push(entry);
+}
+
+async function buildRoadOverlaySpatialBuckets(part, rawGeojson, state) {
+    const sourceFeatures = Array.isArray(rawGeojson?.features)
+        ? rawGeojson.features
+        : [];
+
+    const bucketsByTier = new Map([
+        [1, new Map()],
+        [2, new Map()]
+    ]);
+    const overflowByTier = new Map([
+        [1, []],
+        [2, []]
+    ]);
+
+    for (let index = 0; index < sourceFeatures.length; index += 1) {
+        if (state.cancelled) return null;
+
+        const feature = sourceFeatures[index];
+        const roadClass = String(feature?.properties?.roadClass || '').toUpperCase();
+        const tiers = roadClass === 'A'
+            ? [1, 2]
+            : (
+                roadClass === 'N'
+                || roadClass === 'D'
+                || roadClass === 'M'
+                || roadClass === 'T'
+                    ? [2]
+                    : []
+            );
+        if (!tiers.length) continue;
+
+        const bbox = getRoadOverlayFeatureBbox(feature);
+        const range = getRoadOverlaySpatialCellRangeFromBbox(bbox);
+        if (!range) continue;
+
+        const cellCount = (
+            (range.maxX - range.minX + 1)
+            * (range.maxY - range.minY + 1)
+        );
+        const entry = [index, bbox, feature];
+
+        for (const tier of tiers) {
+            if (cellCount > ROAD_OVERLAY_SPATIAL_MAX_CELLS_PER_FEATURE) {
+                overflowByTier.get(tier).push(entry);
+                continue;
+            }
+            const tierBuckets = bucketsByTier.get(tier);
+            for (let x = range.minX; x <= range.maxX; x += 1) {
+                for (let y = range.minY; y <= range.maxY; y += 1) {
+                    addRoadOverlaySpatialEntry(
+                        tierBuckets,
+                        getRoadOverlaySpatialCellKey(x, y),
+                        entry
+                    );
+                }
+            }
+        }
+
+        if (
+            index > 0
+            && index % ROAD_OVERLAY_SPATIAL_BUILD_YIELD_EVERY === 0
+        ) {
+            await yieldRoadOverlaySpatialBuildTurn();
+        }
+    }
+
+    if (state.cancelled) return null;
+
+    state.rawGeojson = null;
+    state.buckets = bucketsByTier;
+    state.overflow = overflowByTier;
+    state.bucketReady = true;
+    return state;
+}
+
+async function persistRoadOverlaySpatialBuckets(part, state) {
+    if (state.cancelled || !state.bucketReady) return false;
+
+    const cache = await caches.open(ROAD_OVERLAY_SPATIAL_CACHE_NAME);
+    const startedAt = NPF_STARTUP_DIAGNOSTIC.now();
+    const tiersManifest = {};
+
+    for (const tier of [1, 2]) {
+        if (state.cancelled) return false;
+
+        const tierBuckets = getRoadOverlaySpatialTierBucket(state, tier) || new Map();
+        const cellKeys = [...tierBuckets.keys()];
+        const overflowEntries = state.overflow?.get?.(tier) || [];
+
+        for (let index = 0; index < cellKeys.length; index += 1) {
+            if (state.cancelled) return false;
+            const cellKey = cellKeys[index];
+            const entries = tierBuckets.get(cellKey) || [];
+            await cache.put(
+                buildRoadOverlaySpatialCellRequest(part.key, tier, cellKey),
+                new Response(
+                    JSON.stringify({
+                        v: ROAD_OVERLAY_SPATIAL_INDEX_VERSION,
+                        p: part.key,
+                        t: tier,
+                        c: cellKey,
+                        e: entries
+                    }),
+                    { headers: { 'Content-Type': 'application/json; charset=utf-8' } }
+                )
+            );
+
+            if (index > 0 && index % 4 === 0) {
+                await yieldRoadOverlaySpatialBuildTurn();
+            }
+        }
+
+        if (overflowEntries.length) {
+            await cache.put(
+                buildRoadOverlaySpatialCellRequest(part.key, tier, '__overflow__'),
+                new Response(
+                    JSON.stringify({
+                        v: ROAD_OVERLAY_SPATIAL_INDEX_VERSION,
+                        p: part.key,
+                        t: tier,
+                        c: '__overflow__',
+                        e: overflowEntries
+                    }),
+                    { headers: { 'Content-Type': 'application/json; charset=utf-8' } }
+                )
+            );
+        }
+
+        tiersManifest[String(tier)] = {
+            cells: cellKeys,
+            overflow: overflowEntries.length > 0
+        };
+    }
+
+    if (state.cancelled) return false;
+
+    const spatialManifest = {
+        v: ROAD_OVERLAY_SPATIAL_INDEX_VERSION,
+        p: part.key,
+        n: part.name,
+        rawFeatureCount: Number(state.rawFeatureCount || 0),
+        cellDeg: ROAD_OVERLAY_SPATIAL_CELL_DEG,
+        tiers: tiersManifest
+    };
+
+    await cache.put(
+        buildRoadOverlaySpatialManifestRequest(part.key),
+        new Response(
+            JSON.stringify(spatialManifest),
+            { headers: { 'Content-Type': 'application/json; charset=utf-8' } }
+        )
+    );
+
+    state.persisted = true;
+
+    npfDiagSiaInteraction(
+        'ROUTES INDEX',
+        `partie=${part.name} · brut=${Number(state.rawFeatureCount || 0)} · cellules1=${tiersManifest['1']?.cells?.length || 0} · cellules2=${tiersManifest['2']?.cells?.length || 0}`,
+        {
+            totalMs: Math.round(NPF_STARTUP_DIAGNOSTIC.now() - startedAt),
+            rawFeatures: Number(state.rawFeatureCount || 0),
+            tier1Cells: tiersManifest['1']?.cells?.length || 0,
+            tier2Cells: tiersManifest['2']?.cells?.length || 0
+        }
+    );
+
+    return true;
+}
+
+function scheduleRoadOverlaySpatialIndexBuild(part, rawGeojson, rawFeatureCount) {
+    const existing = roadOverlaySpatialBuildStates.get(part.key);
+    if (existing) return existing;
+
+    const state = {
+        partKey: part.key,
+        partName: part.name,
+        rawGeojson,
+        rawFeatureCount: Number(rawFeatureCount || 0),
+        buckets: null,
+        overflow: null,
+        bucketReady: false,
+        persisted: false,
+        cancelled: false,
+        cancelReason: '',
+        promise: null
+    };
+    roadOverlaySpatialBuildStates.set(part.key, state);
+
+    state.promise = (async () => {
+        await yieldRoadOverlaySpatialBuildTurn();
+        if (state.cancelled) return false;
+
+        const built = await buildRoadOverlaySpatialBuckets(
+            part,
+            rawGeojson,
+            state
+        );
+        if (!built || state.cancelled) return false;
+
+        return persistRoadOverlaySpatialBuckets(part, state);
+    })()
+        .catch(error => {
+            if (!state.cancelled) {
+                console.warn(
+                    'Index spatial Routes non créé:',
+                    part.name,
+                    error
+                );
+            }
+            return false;
+        })
+        .finally(() => {
+            state.rawGeojson = null;
+            state.buckets = null;
+            state.overflow = null;
+            if (roadOverlaySpatialBuildStates.get(part.key) === state) {
+                roadOverlaySpatialBuildStates.delete(part.key);
+            }
+        });
+
+    return state;
+}
+
+async function loadRoadOverlaySpatialManifest(cache, part) {
+    try {
+        const response = await cache.match(
+            buildRoadOverlaySpatialManifestRequest(part.key)
+        );
+        if (!response || !response.ok) return null;
+        const manifest = await response.json();
+        if (
+            Number(manifest?.v) !== ROAD_OVERLAY_SPATIAL_INDEX_VERSION
+            || String(manifest?.p || '') !== String(part.key)
+            || Number(manifest?.cellDeg) !== ROAD_OVERLAY_SPATIAL_CELL_DEG
+        ) {
+            return null;
+        }
+        return manifest;
+    } catch (_) {
+        return null;
+    }
+}
+
+async function collectRoadOverlaySpatialEntries(
+    entries,
+    bounds,
+    token,
+    tier,
+    seenIndexes,
+    features
+) {
+    if (!Array.isArray(entries)) return true;
+
+    for (let index = 0; index < entries.length; index += 1) {
+        if (
+            token !== roadOverlayRefreshToken
+            || !showRoadOverlayLayer
+            || tier !== roadOverlayLoadedZoomTier
+        ) {
+            return false;
+        }
+
+        const entry = entries[index];
+        const sourceIndex = Number(entry?.[0]);
+        const bbox = entry?.[1];
+        const feature = entry?.[2];
+
+        if (
+            !Number.isFinite(sourceIndex)
+            || seenIndexes.has(sourceIndex)
+            || !feature
+            || !roadOverlayBboxIntersectsBounds(bbox, bounds)
+            || !shouldLoadRoadOverlayFeatureForTier(feature, tier)
+        ) {
+            continue;
+        }
+
+        seenIndexes.add(sourceIndex);
+        try {
+            Object.defineProperty(feature, '__npfRoadBbox', {
+                value: bbox,
+                writable: true,
+                configurable: true,
+                enumerable: false
+            });
+        } catch (_) {}
+
+        features.push(feature);
+
+        if (
+            index > 0
+            && index % ROAD_OVERLAY_FILTER_YIELD_EVERY === 0
+        ) {
+            await yieldRoadOverlayRenderTurn();
+        }
+    }
+
+    return true;
+}
+
+async function buildRoadOverlayGeojsonFromSpatialState(
+    state,
+    tier,
+    bounds,
+    token
+) {
+    if (!state?.bucketReady) return null;
+    const tierBuckets = getRoadOverlaySpatialTierBucket(state, tier);
+    if (!tierBuckets) return null;
+
+    const features = [];
+    const seenIndexes = new Set();
+    const requestedKeys = getRoadOverlaySpatialCellKeysForBounds(bounds);
+
+    for (const cellKey of requestedKeys) {
+        const ok = await collectRoadOverlaySpatialEntries(
+            tierBuckets.get(cellKey),
+            bounds,
+            token,
+            tier,
+            seenIndexes,
+            features
+        );
+        if (!ok) return null;
+    }
+
+    const overflowEntries = state.overflow?.get?.(tier) || [];
+    const overflowOk = await collectRoadOverlaySpatialEntries(
+        overflowEntries,
+        bounds,
+        token,
+        tier,
+        seenIndexes,
+        features
+    );
+    if (!overflowOk) return null;
+
+    return {
+        type: 'FeatureCollection',
+        features
+    };
+}
+
+async function buildRoadOverlayGeojsonFromSpatialCache(
+    cache,
+    part,
+    spatialManifest,
+    tier,
+    bounds,
+    token
+) {
+    const tierManifest = spatialManifest?.tiers?.[String(tier)];
+    if (!tierManifest) return null;
+
+    const availableCells = new Set(
+        Array.isArray(tierManifest.cells) ? tierManifest.cells : []
+    );
+    const requestedKeys = getRoadOverlaySpatialCellKeysForBounds(bounds)
+        .filter(key => availableCells.has(key));
+
+    const features = [];
+    const seenIndexes = new Set();
+
+    const loadCell = async cellKey => {
+        const response = await cache.match(
+            buildRoadOverlaySpatialCellRequest(part.key, tier, cellKey)
+        );
+        if (!response || !response.ok) {
+            throw new Error(`Cellule Routes absente : ${part.name} ${cellKey}`);
+        }
+        const payload = await response.json();
+        if (
+            Number(payload?.v) !== ROAD_OVERLAY_SPATIAL_INDEX_VERSION
+            || String(payload?.p || '') !== String(part.key)
+            || Number(payload?.t) !== Number(tier)
+        ) {
+            throw new Error(`Cellule Routes invalide : ${part.name} ${cellKey}`);
+        }
+        return collectRoadOverlaySpatialEntries(
+            payload.e,
+            bounds,
+            token,
+            tier,
+            seenIndexes,
+            features
+        );
+    };
+
+    for (let index = 0; index < requestedKeys.length; index += 1) {
+        const ok = await loadCell(requestedKeys[index]);
+        if (!ok) return null;
+        if (index > 0 && index % 3 === 0) {
+            await yieldRoadOverlayRenderTurn();
+        }
+    }
+
+    if (tierManifest.overflow) {
+        const ok = await loadCell('__overflow__');
+        if (!ok) return null;
+    }
+
+    return {
+        type: 'FeatureCollection',
+        features
+    };
 }
 
 function roadOverlayBboxIntersectsBounds(bbox, bounds) {
@@ -13508,26 +14029,52 @@ function yieldRoadOverlayRenderTurn() {
 async function getRoadOverlaySourcePart(part, token, tier, renderBounds) {
     const cached = roadOverlaySourceParts.get(part.key);
 
-    /*
-     * v16.77 — réutiliser le working-set tant qu'il couvre encore la zone
-     * de rendu. On évite ainsi de relire/reparser la partie à chaque petit pan.
-     */
     if (roadOverlaySourceRecordCoversBounds(cached, tier, renderBounds)) {
         return cached;
     }
 
-    const cache = await caches.open(ROAD_OVERLAY_CACHE_NAME);
-    const response = await cache.match(buildRoadOverlayCacheRequest(part.key));
-    if (!response || !response.ok) {
-        throw new Error(`Partie routière absente : ${part.name}`);
-    }
-
     const startedAt = NPF_STARTUP_DIAGNOSTIC.now();
-    const storedGeojson = await response.json();
-    const sourceFeatures = Array.isArray(storedGeojson?.features)
-        ? storedGeojson.features
-        : [];
-    const rawFeatureCount = sourceFeatures.length;
+    const coverageBounds = buildRoadOverlaySourceWorksetBounds(
+        renderBounds,
+        tier
+    );
+
+    let compactGeojson = null;
+    let rawFeatureCount = Number(part?.featureCount || 0);
+    let sourceKind = 'inconnu';
+
+    const spatialCache = await caches.open(ROAD_OVERLAY_SPATIAL_CACHE_NAME);
+    const spatialManifest = await loadRoadOverlaySpatialManifest(
+        spatialCache,
+        part
+    );
+
+    if (spatialManifest) {
+        try {
+            compactGeojson = await buildRoadOverlayGeojsonFromSpatialCache(
+                spatialCache,
+                part,
+                spatialManifest,
+                tier,
+                coverageBounds,
+                token
+            );
+            rawFeatureCount = Number(
+                spatialManifest.rawFeatureCount
+                || rawFeatureCount
+                || 0
+            );
+            sourceKind = 'cellules-cache';
+        } catch (error) {
+            console.warn('Index spatial Routes ignoré:', part.name, error);
+            try {
+                await spatialCache.delete(
+                    buildRoadOverlaySpatialManifestRequest(part.key)
+                );
+            } catch (_) {}
+            compactGeojson = null;
+        }
+    }
 
     if (
         token !== roadOverlayRefreshToken
@@ -13537,21 +14084,78 @@ async function getRoadOverlaySourcePart(part, token, tier, renderBounds) {
         return null;
     }
 
-    /*
-     * v16.77 — compaction RAM immédiatement après JSON.parse().
-     *
-     * Auparavant le record conservait par exemple 36 753 tronçons alors que
-     * ~100 seulement étaient utiles à l'écran. On filtre une première fois sur
-     * une zone plus large que le rendu, puis la grosse FeatureCollection locale
-     * devient libérable dès la sortie de cette fonction.
-     */
-    const coverageBounds = buildRoadOverlaySourceWorksetBounds(renderBounds, tier);
-    const compactGeojson = await buildRoadOverlayGeojsonForTierAndBounds(
-        storedGeojson,
-        tier,
-        coverageBounds,
-        token
-    );
+    if (!compactGeojson) {
+        const buildState = roadOverlaySpatialBuildStates.get(part.key);
+
+        if (buildState?.bucketReady) {
+            compactGeojson = await buildRoadOverlayGeojsonFromSpatialState(
+                buildState,
+                tier,
+                coverageBounds,
+                token
+            );
+            rawFeatureCount = Number(
+                buildState.rawFeatureCount
+                || rawFeatureCount
+                || 0
+            );
+            sourceKind = 'cellules-memoire';
+        } else if (buildState?.rawGeojson) {
+            compactGeojson = await buildRoadOverlayGeojsonForTierAndBounds(
+                buildState.rawGeojson,
+                tier,
+                coverageBounds,
+                token
+            );
+            rawFeatureCount = Number(
+                buildState.rawFeatureCount
+                || rawFeatureCount
+                || 0
+            );
+            sourceKind = 'brut-memoire';
+        }
+    }
+
+    if (!compactGeojson) {
+        const sourceCache = await caches.open(ROAD_OVERLAY_CACHE_NAME);
+        const response = await sourceCache.match(
+            buildRoadOverlayCacheRequest(part.key)
+        );
+        if (!response || !response.ok) {
+            throw new Error(`Partie routière absente : ${part.name}`);
+        }
+
+        const storedGeojson = await response.json();
+        const sourceFeatures = Array.isArray(storedGeojson?.features)
+            ? storedGeojson.features
+            : [];
+        rawFeatureCount = sourceFeatures.length;
+
+        if (
+            token !== roadOverlayRefreshToken
+            || !showRoadOverlayLayer
+            || tier !== roadOverlayLoadedZoomTier
+        ) {
+            return null;
+        }
+
+        compactGeojson = await buildRoadOverlayGeojsonForTierAndBounds(
+            storedGeojson,
+            tier,
+            coverageBounds,
+            token
+        );
+        if (!compactGeojson) return null;
+
+        sourceKind = 'brut-initial';
+
+        scheduleRoadOverlaySpatialIndexBuild(
+            part,
+            storedGeojson,
+            rawFeatureCount
+        );
+    }
+
     if (!compactGeojson) return null;
 
     if (
@@ -13571,13 +14175,14 @@ async function getRoadOverlaySourcePart(part, token, tier, renderBounds) {
         featureCount: retainedFeatureCount,
         rawFeatureCount,
         tier,
+        sourceKind,
         coverageBounds: cloneRoadOverlayBounds(coverageBounds)
     };
     roadOverlaySourceParts.set(part.key, record);
 
     npfDiagSiaInteraction(
         'ROUTES SOURCE',
-        `partie=${part.name} · tier=${tier} · brut=${rawFeatureCount} · retenu=${retainedFeatureCount}`,
+        `partie=${part.name} · tier=${tier} · source=${sourceKind} · brut=${rawFeatureCount} · retenu=${retainedFeatureCount}`,
         {
             totalMs: Math.round(NPF_STARTUP_DIAGNOSTIC.now() - startedAt),
             rawFeatures: rawFeatureCount,
@@ -13723,6 +14328,8 @@ async function refreshRoadOverlayVisibleParts(source = 'refresh') {
 
     try {
         if (currentTier === 0) {
+            cancelRoadOverlaySpatialBuilds('routes-tier0');
+
             if (
                 roadOverlayLoadedZoomTier !== 0
                 || loadedRoadOverlayParts.size
@@ -14064,6 +14671,7 @@ async function toggleRoadOverlayLayer(forceState = null, options = {}) {
         isRoadOverlayLoading = false;
 
         cancelNpfHeavyOverlayWaitsForRoadStateChange('routes-off');
+        cancelRoadOverlaySpatialBuilds('routes-off');
 
         if (roadOverlayLayer && map.hasLayer(roadOverlayLayer)) {
             map.removeLayer(roadOverlayLayer);
