@@ -1,3 +1,70 @@
+VERSION TEST v16.70 — ZOOM-OUT OFFLINE / SIA / FLUIDITÉ CARTE
+Date : 12/09/2026
+Base : TEST v16.69
+Diagnostics analysés : 11/09 07:55, 11/09 10:01, 12/09 10:01
+Capture analysée : « Pbm zoom out.png »
+
+OBJECTIF
+- Corriger le rectangle de fond de carte réduit au centre pendant certains zooms arrière OFFLINE.
+- Empêcher les anciens libellés/bandes SIA de se tasser au centre pendant le changement d'échelle.
+- Réduire les reconstructions SIA inutiles lors des pans contenus.
+- Accélérer le chargement des tuiles finales sans augmenter la concurrence IndexedDB au démarrage à froid.
+- Corriger le compteur radio SIA 325/227 vers 326/228.
+
+1. ZOOM-OUT — DÉCORATIONS SIA
+- Dès `zoomstart`, les bandes intérieures et libellés SIA dépendants des pixels écran sont supprimés immédiatement.
+- Les contours principaux peuvent rester en double-buffer lorsqu'ils sont suffisamment légers.
+- Les libellés/bandes sont reconstruits uniquement pour la projection finale.
+
+2. PAN CONTENU — ZÉRO TRAVAIL SIA
+- Si la vue reste dans `siaRenderedCoverageBounds`, avec même zoom et mêmes filtres :
+  - aucune reconstruction des volumes ;
+  - aucune reconstruction des points ;
+  - aucune redécoration différée.
+- Les calques Leaflet existants suivent nativement le déplacement.
+- Suppression des relances différées qui pouvaient reprendre 0,5 à 1,3 s.
+
+3. DÉCORATIONS SIA — BUDGET TEMPOREL
+- Remplacement du lot fixe de 2 zones par un budget d'environ 9 ms.
+- DIAG enrichi avec `bandMs` et `labelMs`.
+
+4. TUILES OFFLINE NPF — CONCURRENCE ADAPTATIVE
+- À froid : 3 lectures IndexedDB simultanées.
+- Après le premier accès NPF réussi : jusqu'à 6 lectures simultanées.
+- Objectif : résorber plus vite les files de 20 à 33 tuiles observées après zoom arrière.
+- Aucun pack Offline ni aucune base IndexedDB n'est modifié.
+
+5. RÉAFFICHAGE DES COUCHES LOURDES
+- Routes/HT sont masquées pendant le pinch dès qu'au moins l'une des deux couches est active.
+- À la fin du zoom OFFLINE, elles ne sont plus réaffichées au-dessus d'un fond encore vide.
+- NPF attend un premier noyau de tuiles du zoom final : environ 25 %, minimum 1, maximum 8, avec délai borné.
+- Nouveau DIAG `TUILES ZOOM FINAL`.
+
+6. RADIO SIA — COMPTEUR 326 / 228
+- La table officielle contenait `LF04`, rejeté par l'ancien filtre strict `LF[A-Z]{2}`.
+- Le référentiel officiel accepte désormais `LF[A-Z0-9]{2}`.
+- Compteurs attendus : 326 terrains ; TWR=95 ; AFIS=69 ; A/A=228.
+
+7. VERSION / DONNÉES
+- Index / Manifest / Script / Style : v16.70.
+- Service Worker : `sw-v16-70_zoomout_tiles_sia_perf`.
+- `5_SIA` inchangé fonctionnellement : ressource 15.69-radio1026-1 ; géométrie 15.69 ; AIRAC radio 10/26.
+- Seuil des étiquettes aérodromes maintenu à 2 NM.
+
+VALIDATION STATIQUE EFFECTUÉE
+- Syntaxe JavaScript Script / SIA / Service Worker vérifiée.
+- Script inline de l'Index vérifié.
+- Manifest JSON vérifié.
+- Cohérence v16.70 vérifiée.
+- Pan contenu sans redécoration différée vérifié.
+- Suppression des décorations SIA au `zoomstart` vérifiée.
+- Concurrence NPF adaptative 3 -> 6 vérifiée.
+- Garde `TUILES ZOOM FINAL` vérifiée.
+- Index radio officiel : 326 terrains ; TWR=95 ; AFIS=69 ; A/A=228.
+- Seuil 2 NM conservé.
+
+HISTORIQUE PRÉCÉDENT CONSERVÉ INTÉGRALEMENT
+
 VERSION TEST v16.69 — RADIO AÉRODROMES SIA DÉCOUPLÉE DE sia.js
 Date : 10/09/2026
 Base : TEST v16.68
