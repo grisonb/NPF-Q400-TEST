@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v16.69';
+const NPF_SCRIPT_BUILD_VERSION = 'v16.70';
 
 
 /*
@@ -7145,12 +7145,18 @@ function initMap() {
             clearTimeout(npfHeavyOverlayZoomSettleTimer);
             npfHeavyOverlayZoomSettleTimer = null;
         }
-        if (showRoadOverlayLayer && showHighVoltageLinesLayer) {
+        if (showRoadOverlayLayer || showHighVoltageLinesLayer) {
+            /*
+             * v16.70 — masquer tout gros overlay actif pendant le pinch, même
+             * si Routes et HT ne sont pas actifs ensemble. Ils seront rendus à
+             * nouveau seulement après apparition des premières tuiles finales.
+             */
             setNpfHeavyOverlayPanesHidden(true);
-            /* v16.62 — ne pas conserver des dizaines de milliers de tronçons
-             * bruts Routes pendant le pinch avec HT actif. Le rendu filtré déjà
-             * visible reste intact ; seul le cache source rechargeable est libéré. */
-            releaseRoadOverlaySourceCacheIfHeavy('zoomstart-ht-routes');
+            if (showRoadOverlayLayer && showHighVoltageLinesLayer) {
+                /* v16.62 — ne pas conserver des dizaines de milliers de tronçons
+                 * bruts Routes pendant le pinch avec HT actif. */
+                releaseRoadOverlaySourceCacheIfHeavy('zoomstart-ht-routes');
+            }
         }
         if (directOfflineNpfZoomSettleTimer) {
             clearTimeout(directOfflineNpfZoomSettleTimer);
@@ -7415,9 +7421,20 @@ function initMap() {
                 cancelPendingSerializedHeavyOverlayZoomOut('zoomend-non-combine');
             }
             npfHeavyOverlayZoomStartLevel = null;
-            /* Pas de séquence zoom-out lourde : rendre les panes visibles après
-             * stabilisation. Un éventuel refresh normal s'exécute ensuite. */
-            setNpfHeavyOverlayPanesHidden(false);
+            /*
+             * v16.70 — même sans combinaison Routes+HT, ne pas réafficher les
+             * panes au-dessus d'un fond OFFLINE encore vide. Un petit noyau de
+             * tuiles du zoom final suffit ; le reste peut continuer en fond.
+             */
+            const overlayResumeToken = npfHeavyOverlayZoomSerialToken;
+            waitForNpfFinalZoomFirstTiles({
+                timeoutMs: 1600,
+                isCancelled: () => overlayResumeToken !== npfHeavyOverlayZoomSerialToken || !map
+            }).finally(() => {
+                if (overlayResumeToken === npfHeavyOverlayZoomSerialToken) {
+                    setNpfHeavyOverlayPanesHidden(false);
+                }
+            });
         }
 
         if (showRoadOverlayLayer) {
@@ -8574,8 +8591,24 @@ let directOfflineLastRecoveryReason = '';
  * rafale de transactions parallèles au premier affichage. On limite donc la
  * concurrence uniquement pour le groupe NPF ; OACI conserve son chemin rapide.
  */
-const DIRECT_OFFLINE_NPF_MAX_CONCURRENT_READS = 3;
+const DIRECT_OFFLINE_NPF_MAX_CONCURRENT_READS_COLD = 3;
+const DIRECT_OFFLINE_NPF_MAX_CONCURRENT_READS_WARM = 6;
 const DIRECT_OFFLINE_NPF_MAX_QUEUED_READS = 160;
+
+function getDirectOfflineNpfMaxConcurrentReads() {
+    /*
+     * v16.70 — Safari/iPad reste prudent avant le premier accès IndexedDB
+     * réussi, puis la vue finale d'un zoom peut utiliser davantage de lectures
+     * parallèles. Cela réduit les périodes tilesVisible=0 observées avec
+     * 20–33 tuiles en file, sans déclencher une rafale à froid.
+     */
+    return (
+        directOfflineTileHitCount > 0
+        || !!directOfflineNpfLastSuccessfulLookup?.dbName
+    )
+        ? DIRECT_OFFLINE_NPF_MAX_CONCURRENT_READS_WARM
+        : DIRECT_OFFLINE_NPF_MAX_CONCURRENT_READS_COLD;
+}
 const DIRECT_OFFLINE_TILE_ABORTED = Symbol('direct-offline-tile-aborted');
 let directOfflineNpfActiveReads = 0;
 const directOfflineNpfReadQueue = [];
@@ -8680,7 +8713,7 @@ function isNpfOfflinePackSelection(packs = activeOfflinePacks) {
 
 function runNextDirectOfflineNpfRead() {
     while (
-        directOfflineNpfActiveReads < DIRECT_OFFLINE_NPF_MAX_CONCURRENT_READS
+        directOfflineNpfActiveReads < getDirectOfflineNpfMaxConcurrentReads()
         && directOfflineNpfReadQueue.length
     ) {
         /*
@@ -9383,7 +9416,9 @@ window.getNpfTilePerformanceStatus = function getNpfTilePerformanceStatus() {
         npfSelected: isNpfOfflinePackSelection(),
         activeReads: directOfflineNpfActiveReads,
         queuedReads: directOfflineNpfReadQueue.length,
-        maxConcurrentReads: DIRECT_OFFLINE_NPF_MAX_CONCURRENT_READS,
+        maxConcurrentReads: getDirectOfflineNpfMaxConcurrentReads(),
+        maxConcurrentReadsCold: DIRECT_OFFLINE_NPF_MAX_CONCURRENT_READS_COLD,
+        maxConcurrentReadsWarm: DIRECT_OFFLINE_NPF_MAX_CONCURRENT_READS_WARM,
         viewPriorityEpoch: directOfflineTileViewPriorityEpoch,
         abortedReads: directOfflineNpfAbortedReadCount,
         tileRetries: directOfflineNpfTileRetryCount,
@@ -11653,6 +11688,75 @@ async function refreshVisibleHighVoltageLines(source = 'refresh') {
     }
 }
 
+async function waitForNpfFinalZoomFirstTiles(options = {}) {
+    /*
+     * v16.70 — pendant un zoom arrière OFFLINE NPF, ne pas remettre les gros
+     * calques vectoriels au-dessus d'un fond encore vide. On attend seulement
+     * un premier noyau de tuiles du zoom final, pas la totalité de la file.
+     */
+    if (
+        !offlineTilesMode
+        || !isNpfOfflinePackSelection()
+        || !map
+        || !baseTileLayer
+    ) {
+        return true;
+    }
+
+    const startedAt = NPF_STARTUP_DIAGNOSTIC.now();
+    const timeoutMs = Number.isFinite(Number(options.timeoutMs))
+        ? Math.max(300, Number(options.timeoutMs))
+        : 2200;
+    const isCancelled = typeof options.isCancelled === 'function'
+        ? options.isCancelled
+        : () => false;
+    let maxQueued = 0;
+    let maxActive = 0;
+
+    while ((NPF_STARTUP_DIAGNOSTIC.now() - startedAt) < timeoutMs) {
+        if (isCancelled()) return false;
+
+        const retained = Math.max(0, getNpfRetainedBaseTileCount());
+        const visible = Math.max(0, countVisibleLoadedBaseTiles());
+        const queued = Math.max(0, Number(directOfflineNpfReadQueue?.length || 0));
+        const active = Math.max(0, Number(directOfflineNpfActiveReads || 0));
+        maxQueued = Math.max(maxQueued, queued);
+        maxActive = Math.max(maxActive, active);
+
+        const targetVisible = retained > 0
+            ? Math.max(1, Math.min(8, Math.ceil(retained * 0.25)))
+            : 1;
+
+        if (visible >= targetVisible) {
+            npfDiagSiaInteraction(
+                'TUILES ZOOM FINAL',
+                `état=premier-noyau-prêt · zoom=${map.getZoom()} · visibles=${visible}/${retained}`,
+                {
+                    waitMs: Math.round(NPF_STARTUP_DIAGNOSTIC.now() - startedAt),
+                    maxQueued,
+                    maxActive,
+                    concurrency: getDirectOfflineNpfMaxConcurrentReads()
+                }
+            );
+            return true;
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 55));
+    }
+
+    npfDiagSiaInteraction(
+        'TUILES ZOOM FINAL',
+        `état=timeout · zoom=${map?.getZoom?.() ?? '—'} · visibles=${countVisibleLoadedBaseTiles()}/${getNpfRetainedBaseTileCount()}`,
+        {
+            waitMs: Math.round(NPF_STARTUP_DIAGNOSTIC.now() - startedAt),
+            maxQueued,
+            maxActive,
+            concurrency: getDirectOfflineNpfMaxConcurrentReads()
+        }
+    );
+    return false;
+}
+
 async function runSerializedHeavyOverlayZoomOut(startZoom, finalZoom) {
     const token = ++npfHeavyOverlayZoomSerialToken;
 
@@ -11720,6 +11824,12 @@ async function runSerializedHeavyOverlayZoomOut(startZoom, finalZoom) {
             highVoltageLinesLayer.addTo(map);
         }
     } catch (_) {}
+    await waitForNpfFinalZoomFirstTiles({
+        timeoutMs: 2200,
+        isCancelled: () => token !== npfHeavyOverlayZoomSerialToken || !map
+    });
+    if (token !== npfHeavyOverlayZoomSerialToken || !map) return;
+
     setNpfHeavyOverlayPanesHidden(false);
     recordNpfStartupDiagnosticOverlaySnapshot(`zoom-out série · terminé z${startZoom}->${finalZoom}`);
 }
@@ -28379,7 +28489,7 @@ function buildSiaOfficialAirportOperationalIndex() {
         const oaci = String(row?.[0] || '').trim().toUpperCase();
         const groups = Array.isArray(row?.[1]) ? row[1] : [];
         const allTypes = String(row?.[2] || '').trim().toUpperCase();
-        if (!/^LF[A-Z]{2}$/.test(oaci) || !groups.length) return;
+        if (!/^LF[A-Z0-9]{2}$/.test(oaci) || !groups.length) return;
         const normalizedGroups = groups.map(group => {
             const value = normalizeAirportOperationalFrequencyValue(group?.[0]);
             const type = String(group?.[1] || '').trim().toUpperCase();
@@ -28401,7 +28511,7 @@ function buildSiaOfficialAirportOperationalIndex() {
 
 function getSiaOfficialAirportOperationalFrequency(oaci) {
     const code = String(oaci || '').trim().toUpperCase();
-    if (!/^LF[A-Z]{2}$/.test(code)) return null;
+    if (!/^LF[A-Z0-9]{2}$/.test(code)) return null;
     return buildSiaOfficialAirportOperationalIndex().get(code) || null;
 }
 
@@ -42410,8 +42520,9 @@ let siaRefreshScheduledReason = null;
 let siaMoveDecorationRefreshTimer = null;
 const SIA_MOVE_DECORATION_IDLE_MS = 560;
 /* v16.32 — décorations SIA construites par petits lots pour ne plus figer WebKit. */
-/* v16.33 — lots encore plus courts + décorations limitées à la vue utile. */
-const SIA_DECORATION_BATCH_SIZE = 2;
+/* v16.70 — budget temporel plutôt qu'un nombre fixe de zones : une géométrie
+ * complexe peut coûter beaucoup plus cher que deux géométries simples. */
+const SIA_DECORATION_TIME_BUDGET_MS = 9;
 const SIA_DECORATION_VIEW_PAD_RATIO = 0.015;
 const SIA_DECORATION_LIGHTWEIGHT_SCALE_NM = 10;
 const SIA_TOUCH_SURFACE_BATCH_SIZE = 24;
@@ -42750,6 +42861,14 @@ function cancelAllSiaWorkForZoomStart() {
     siaDecorationProgressiveRun += 1;
     window.__npfSiaRefreshGeneration = (Number(window.__npfSiaRefreshGeneration) || 0) + 1;
 
+    /*
+     * v16.70 — bandes intérieures et libellés dépendent directement de la
+     * projection écran. Ils ne doivent jamais survivre au début d'un zoom :
+     * lors d'un zoom-out ils se tassent sinon au centre avant la reconstruction
+     * finale. Les contours principaux peuvent, eux, rester en double-buffer.
+     */
+    clearSiaZoomDependentLayers();
+
     /* v16.58 — ne plus transporter un ancien jeu de centaines de calques SIA
      * pendant un zoom out. Sous charge combinée, ou dès que le rendu SIA est
      * déjà volumineux, on libère l'ancien groupe au début du geste. Le rendu
@@ -42830,11 +42949,13 @@ function scheduleSiaCoverageRefresh(reason = 'moveend') {
     }
 
     if (contained) {
-        /* v16.66 — pendant le pan : zéro calcul. Une fois le geste terminé,
-         * redécorer seulement la petite vue courante, en différé et par lots
-         * courts. Cela garde les bordures intérieures sans bloquer le geste. */
-        cancelObsoleteSiaMapMotionWork('moveend-contained-v16.66');
-        scheduleSiaMoveDecorationRefresh('moveend-contained-idle-v16.66');
+        /*
+         * v16.70 — couverture, zoom et filtres inchangés : ZÉRO recalcul.
+         * Les contours, bandes et libellés sont déjà des calques Leaflet et
+         * suivent nativement le pan. Ne plus lancer la redécoration différée
+         * qui pouvait reprendre 0,5–1,3 s après chaque déplacement contenu.
+         */
+        cancelObsoleteSiaMapMotionWork('moveend-contained-v16.70-zero-work');
         return;
     }
 
@@ -48031,6 +48152,8 @@ function renderSiaZoomDependentDecorations(features) {
 async function renderSiaZoomDependentDecorationsProgressive(features, refreshGeneration) {
     const npfDiagStartedAt = NPF_STARTUP_DIAGNOSTIC.now();
     const runId = ++siaDecorationProgressiveRun;
+    let bandMs = 0;
+    let labelMs = 0;
     clearSiaZoomDependentLayers();
     if (!siaMapAirspacesVisible || !Array.isArray(features) || !features.length) return;
 
@@ -48063,6 +48186,8 @@ async function renderSiaZoomDependentDecorationsProgressive(features, refreshGen
      * plus haut et continue, lui, à omettre toutes les décorations. */
     const skipInnerBands = false;
 
+    let phaseBudgetStartedAt = NPF_STARTUP_DIAGNOSTIC.now();
+    const bandStartedAt = phaseBudgetStartedAt;
     for (let index = 0; index < decorationFeatures.length; index += 1) {
         throwIfSiaRefreshObsolete(refreshGeneration);
         if (runId !== siaDecorationProgressiveRun) {
@@ -48077,10 +48202,15 @@ async function renderSiaZoomDependentDecorationsProgressive(features, refreshGen
             const layers = addSiaCtrInnerBand(feature.geometry, itemStyle.color);
             if (Array.isArray(layers)) siaZoomDependentLayers.push(...layers);
         }
-        if ((index + 1) % SIA_DECORATION_BATCH_SIZE === 0) {
+        if (
+            NPF_STARTUP_DIAGNOSTIC.now() - phaseBudgetStartedAt
+            >= SIA_DECORATION_TIME_BUDGET_MS
+        ) {
             await yieldSiaRefreshToMap(refreshGeneration);
+            phaseBudgetStartedAt = NPF_STARTUP_DIAGNOSTIC.now();
         }
     }
+    bandMs = NPF_STARTUP_DIAGNOSTIC.now() - bandStartedAt;
 
     const labelFeatures = decorationFeatures
         .filter(feature => Number(feature?.properties?.siaItem?.co || 0) !== 1)
@@ -48089,6 +48219,8 @@ async function renderSiaZoomDependentDecorationsProgressive(features, refreshGen
             - getSiaBoundaryLabelPriority(b.properties.siaItem)
         );
 
+    phaseBudgetStartedAt = NPF_STARTUP_DIAGNOSTIC.now();
+    const labelStartedAt = phaseBudgetStartedAt;
     for (let index = 0; index < labelFeatures.length; index += 1) {
         throwIfSiaRefreshObsolete(refreshGeneration);
         if (runId !== siaDecorationProgressiveRun) {
@@ -48103,15 +48235,24 @@ async function renderSiaZoomDependentDecorationsProgressive(features, refreshGen
             labelState
         );
         if (marker) siaZoomDependentLayers.push(marker);
-        if ((index + 1) % SIA_DECORATION_BATCH_SIZE === 0) {
+        if (
+            NPF_STARTUP_DIAGNOSTIC.now() - phaseBudgetStartedAt
+            >= SIA_DECORATION_TIME_BUDGET_MS
+        ) {
             await yieldSiaRefreshToMap(refreshGeneration);
+            phaseBudgetStartedAt = NPF_STARTUP_DIAGNOSTIC.now();
         }
     }
+    labelMs = NPF_STARTUP_DIAGNOSTIC.now() - labelStartedAt;
 
     npfDiagSiaInteraction(
         'SIA DÉCORATIONS',
         `zones=${decorationFeatures.length}/${features.length} · labels=${labelState.count} · zoom=${map?.getZoom?.() ?? '—'} · progressif=oui · bandes=${skipInnerBands ? 'non' : 'oui'}`,
-        { dureeMs: Math.round(NPF_STARTUP_DIAGNOSTIC.now() - npfDiagStartedAt) }
+        {
+            dureeMs: Math.round(NPF_STARTUP_DIAGNOSTIC.now() - npfDiagStartedAt),
+            bandMs: Math.round(bandMs),
+            labelMs: Math.round(labelMs)
+        }
     );
 }
 
@@ -48320,10 +48461,8 @@ async function refreshSiaLayers(reason = 'manual') {
             return;
         }
 
-        // v16.64 — pan dans une couverture déjà dessinée : aucun recalcul.
-        // Les volumes, points, bandes et libellés sont des calques Leaflet et
-        // suivent la carte ; on ne redécore qu'après une vraie reconstruction
-        // de couverture, un zoom ou un changement de filtre.
+        // v16.70 — pan contenu : zéro reconstruction, y compris décorations.
+        // Les calques Leaflet existants suivent déjà la carte.
         if (
             reason === 'moveend'
             && siaRenderedCoverageBounds
@@ -48331,11 +48470,10 @@ async function refreshSiaLayers(reason = 'manual') {
             && siaRenderedSignature === signature
             && siaBoundsFullyContains(siaRenderedCoverageBounds, currentBounds)
         ) {
-            cancelObsoleteSiaMapMotionWork('moveend-refresh-contained-v16.66');
-            scheduleSiaMoveDecorationRefresh('moveend-refresh-contained-idle-v16.66');
+            cancelObsoleteSiaMapMotionWork('moveend-refresh-contained-v16.70-zero-work');
             npfDiagSiaInteraction(
                 'SIA RAFRAÎCHISSEMENT',
-                `raison=${reason} · couverture valide · zéro recalcul · zones=${Array.isArray(siaRenderedAirspaceFeatures) ? siaRenderedAirspaceFeatures.length : 0} · zoom=${zoom}`,
+                `raison=${reason} · couverture valide · zéro recalcul total · zones=${Array.isArray(siaRenderedAirspaceFeatures) ? siaRenderedAirspaceFeatures.length : 0} · zoom=${zoom}`,
                 { totalMs: Math.round(NPF_STARTUP_DIAGNOSTIC.now() - npfDiagRefreshStartedAt) }
             );
             return;
