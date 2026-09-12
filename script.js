@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v16.74';
+const NPF_SCRIPT_BUILD_VERSION = 'v16.75';
 
 
 /*
@@ -480,7 +480,9 @@ function getNpfStartupDiagnosticOverlaySnapshot() {
         npfViewEpoch: Number(directOfflineTileViewPriorityEpoch || 0),
         tileBlobCache: Number(directOfflineTileBlobCache?.size || 0),
         runwayLayers: Number(npfRunwayMapLayer?.getLayers?.().length || 0),
-        siaLayers: Number(siaLayerGroup?.getLayers?.().length || 0)
+        siaLayers: Number(siaLayerGroup?.getLayers?.().length || 0),
+        departmentsLoaded: hasLoadedDepartments ? 'OUI' : 'NON',
+        departmentsVisible: areDepartmentsVisible ? 'OUI' : 'NON'
     };
 }
 
@@ -5297,20 +5299,20 @@ async function initializeApp() {
         'Localités hors ligne — chargement à la demande'
     );
 
-    setTimeout(() => {
-        npfStartupDiagMark('departments_data_start', 'Départements — données');
-        ensureDepartmentsLayerDataLoaded()
-            .then(() => {
-                npfStartupDiagMark('departments_data_ready', 'Départements — données prêtes');
-                if (typeof refreshNearestCommuneDisplayFromKnownGps === 'function') {
-                    refreshNearestCommuneDisplayFromKnownGps();
-                }
-                repairManualFireCommuneLabelsFromPolygons();
-            })
-            .catch((error) => {
-                console.warn('Préchargement calque départements impossible:', error);
-            });
-    }, 900);
+    /*
+     * v16.75 — les départements ne sont plus préchargés lorsque leur calque est
+     * masqué. La base communes fournit déjà le code département nécessaire au
+     * bandeau "Commune survolée".
+     *
+     * Si le calque était mémorisé ON, scheduleStartupAuxiliaryLayers() appellera
+     * toggleDepartmentsLayer(true), qui déclenchera alors le chargement réel.
+     */
+    if (!areDepartmentsVisible) {
+        npfStartupDiagMark(
+            'departments_data_deferred',
+            'Départements — chargement à la demande'
+        );
+    }
 
     primeGpsFromStoredPosition();
 
@@ -29321,7 +29323,14 @@ async function toggleDepartmentsLayer(shouldShow) {
 
     if (shouldShow && !hasLoadedDepartments) {
         try {
+            npfStartupDiagMark('departments_data_start', 'Départements — données');
             await ensureDepartmentsLayerDataLoaded();
+            npfStartupDiagMark('departments_data_ready', 'Départements — données prêtes');
+
+            if (typeof refreshNearestCommuneDisplayFromKnownGps === 'function') {
+                refreshNearestCommuneDisplayFromKnownGps();
+            }
+            repairManualFireCommuneLabelsFromPolygons();
         } catch (error) {
             console.error('Erreur de chargement du calque départements:', error);
             alert("Impossible de charger le calque des départements.");
@@ -31298,18 +31307,12 @@ function updateNearestCommuneDisplay(lat, lon) {
     if (containedCommune) {
         showDisplay(buildLabel(containedCommune, 'Survolée'));
 
-        if (!hasLoadedDepartments) {
-            ensureDepartmentsLayerDataLoaded()
-                .then(() => {
-                    const display = document.getElementById('nearest-commune-display');
-                    if (!display) return;
-                    const refreshedCommune = findCommuneContainingPoint(numericLat, numericLon) || containedCommune;
-                    display.style.display = 'flex';
-                    display.className = 'nearest-commune-display';
-                    display.innerHTML = buildLabel(refreshedCommune, 'Survolée');
-                })
-                .catch((error) => console.warn('Chargement calque départements pour commune survolée impossible:', error));
-        }
+        /*
+         * v16.75 — ne plus charger les géométries départementales uniquement
+         * pour compléter le bandeau. Tant que le calque Départements n'est pas
+         * chargé, buildLabel() utilise formatCommuneDepartment(displayCommune),
+         * déjà disponible depuis la base communes.
+         */
         return;
     }
 
