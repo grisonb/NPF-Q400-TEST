@@ -1,3 +1,64 @@
+VERSION TEST v16.72 — RESTAURATION GRID NPF v16.50
+Date : 12/09/2026
+Base : TEST v16.71
+Référence comparée : 4_Script_v16.50.txt
+
+CONSTat
+- La v16.71 améliore nettement la carte seule :
+  - première tuile beaucoup plus rapide ;
+  - file maximale réduite ;
+  - 11 zooms / 0 zoom classé lent.
+- Mais certains `zoomend` arrivent encore avec 0 tuile visible.
+- La comparaison directe avec la v16.50 montre qu'une différence importante
+  subsistait dans le GridLayer NPF :
+  - v16.50 : `updateWhenIdle: !isNpfDirectOfflineLayer`
+  - v16.71 : `updateWhenIdle: true`
+
+CORRECTION
+- Pour la carte NPF directe uniquement :
+  - `updateWhenIdle = false`
+  - `updateInterval = 60 ms`
+  - `updateWhenZooming = false` conservé
+  - `keepBuffer` inchangé.
+- Leaflet peut donc demander les tuiles utiles pendant le déplacement/pan,
+  comme dans la v16.50, au lieu de commencer après la fin du geste.
+- Les autres cartes Offline conservent `updateWhenIdle = true`.
+
+CONSERVÉ DE v16.71
+- 5 lectures IndexedDB simultanées fixes.
+- Priorité immédiate au viewport courant dès zoomstart/movestart.
+- Purge ciblée immédiate à zoomend/moveend.
+- Aucun polling `TUILES ZOOM FINAL` lorsque Routes et HT sont OFF.
+
+SIA / RADIO
+- Aucun changement fonctionnel.
+- Pan contenu = zéro travail SIA conservé.
+- Décorations SIA dépendantes du zoom supprimées au zoomstart.
+- Radio officielle conservée :
+  - 326 terrains ;
+  - TWR=95 ;
+  - AFIS=69 ;
+  - A/A=228.
+- Seuil des étiquettes aérodromes conservé à 2 NM.
+
+VERSION
+- Index / Manifest / Script / Style : v16.72.
+- Service Worker : `sw-v16-72_offline_grid_v1650`.
+- `5_SIA` inchangé fonctionnellement.
+- Packs OFFLINE et bases IndexedDB inchangés.
+
+VALIDATION STATIQUE EFFECTUÉE
+- Syntaxe JavaScript Script / SIA / Service Worker vérifiée.
+- Script inline de l'Index vérifié.
+- Manifest JSON vérifié.
+- Cohérence v16.72 vérifiée.
+- `updateWhenIdle = false` pour NPF direct vérifié.
+- `updateInterval = 60 ms` vérifié.
+- 5 lectures IndexedDB fixes conservées.
+- Corrections SIA et radio conservées.
+
+HISTORIQUE PRÉCÉDENT CONSERVÉ INTÉGRALEMENT
+
 VERSION TEST v16.71 — RETOUR DU MOTEUR TUILES OFFLINE AU COMPORTEMENT v16.50
 Date : 12/09/2026
 Base : TEST v16.70
