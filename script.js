@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v16.72';
+const NPF_SCRIPT_BUILD_VERSION = 'v16.73';
 
 
 /*
@@ -42393,10 +42393,24 @@ const SIA_EMBEDDED_GZIP_BASE64 = (
 );
 const SIA_EMBEDDED_AVAILABLE = SIA_EMBEDDED_GZIP_BASE64.length > 0;
 
+/*
+ * v16.73 — payload carte léger : terrains + points/VRP uniquement.
+ * Il évite de lire/décompresser les 5 066 volumes SIA lorsque l'utilisateur
+ * a masqué les zones de la carte.
+ */
+const SIA_EMBEDDED_MAP_LITE_GZIP_BASE64 = (
+    SIA_EMBEDDED_RESOURCE
+    && typeof SIA_EMBEDDED_RESOURCE.mapLiteGzipBase64 === 'string'
+        ? SIA_EMBEDDED_RESOURCE.mapLiteGzipBase64
+        : ''
+);
+const SIA_EMBEDDED_MAP_LITE_AVAILABLE = SIA_EMBEDDED_MAP_LITE_GZIP_BASE64.length > 0;
 
 let siaDbPromise = null;
 let siaDataset = null;
 let siaDatasetLoadPromise = null;
+let siaMapLiteDataset = null;
+let siaMapLiteDatasetLoadPromise = null;
 let siaLayerGroup = null;
 let siaAirspaceRenderer = null;
 let siaCtrTouchRenderer = null;
@@ -42618,15 +42632,15 @@ function siaMetaMatchesEmbedded(meta) {
         && String(meta.npfDatasetRevision || '') === SIA_EMBEDDED_META.npfDatasetRevision;
 }
 
-async function decodeEmbeddedSiaDataset() {
-    if (!SIA_EMBEDDED_AVAILABLE) {
-        throw new Error("Données SIA intégrées indisponibles : le fichier sia.js est absent ou invalide.");
+async function decodeEmbeddedSiaGzipBase64(gzipBase64, invalidMessage) {
+    if (!gzipBase64) {
+        throw new Error(invalidMessage || 'Données SIA intégrées indisponibles.');
     }
     if (typeof DecompressionStream !== 'function') {
         throw new Error("Cette version d'iPadOS/Safari ne fournit pas DecompressionStream nécessaire au jeu SIA compressé.");
     }
 
-    const binary = atob(SIA_EMBEDDED_GZIP_BASE64);
+    const binary = atob(gzipBase64);
     const bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i += 1) {
         bytes[i] = binary.charCodeAt(i);
@@ -42640,9 +42654,69 @@ async function decodeEmbeddedSiaDataset() {
 
     if (!parsed || !parsed.meta || !Array.isArray(parsed.airspaces)
         || !Array.isArray(parsed.terrain) || !Array.isArray(parsed.points)) {
-        throw new Error('Jeu SIA intégré invalide.');
+        throw new Error(invalidMessage || 'Jeu SIA intégré invalide.');
     }
     return parsed;
+}
+
+async function decodeEmbeddedSiaDataset() {
+    if (!SIA_EMBEDDED_AVAILABLE) {
+        throw new Error("Données SIA intégrées indisponibles : le fichier sia.js est absent ou invalide.");
+    }
+    return decodeEmbeddedSiaGzipBase64(
+        SIA_EMBEDDED_GZIP_BASE64,
+        'Jeu SIA intégré invalide.'
+    );
+}
+
+async function ensureSiaMapLiteDatasetLoaded() {
+    if (siaDataset) return siaDataset;
+    if (siaMapLiteDataset) return siaMapLiteDataset;
+    if (siaMapLiteDatasetLoadPromise) return siaMapLiteDatasetLoadPromise;
+
+    if (!SIA_EMBEDDED_MAP_LITE_AVAILABLE) {
+        // Compatibilité de secours : si le payload léger manque, revenir au jeu complet.
+        return ensureSiaDatasetLoaded();
+    }
+
+    npfStartupDiagMark('sia_map_lite_start', 'SIA — carte légère');
+    siaMapLiteDatasetLoadPromise = (async () => {
+        const parsed = await decodeEmbeddedSiaGzipBase64(
+            SIA_EMBEDDED_MAP_LITE_GZIP_BASE64,
+            'Jeu SIA carte légère invalide.'
+        );
+        if (parsed.airspaces.length !== 0) {
+            throw new Error('Jeu SIA carte légère invalide : volumes inattendus.');
+        }
+        siaMapLiteDataset = parsed;
+        return siaMapLiteDataset;
+    })();
+
+    try {
+        const loaded = await siaMapLiteDatasetLoadPromise;
+        npfStartupDiagMark(
+            'sia_map_lite_ready',
+            'SIA — carte légère prête',
+            `${Array.isArray(loaded?.terrain) ? loaded.terrain.length : 0} terrains · ${Array.isArray(loaded?.points) ? loaded.points.length : 0} points`
+        );
+        return loaded;
+    } catch (error) {
+        npfStartupDiagMark('sia_map_lite_error', 'SIA — carte légère en erreur', error?.message || error);
+        throw error;
+    } finally {
+        siaMapLiteDatasetLoadPromise = null;
+    }
+}
+
+async function ensureSiaDatasetForMapRefresh() {
+    /*
+     * v16.73 — zones masquées : le rendu carte n'a besoin que des terrains
+     * et points. Le dataset complet est réservé aux volumes/profils.
+     */
+    if (!siaMapAirspacesVisible && !siaDataset) {
+        return ensureSiaMapLiteDatasetLoaded();
+    }
+    return ensureSiaDatasetLoaded();
 }
 
 async function ensureSiaDatasetLoaded(options = {}) {
@@ -42677,6 +42751,8 @@ async function ensureSiaDatasetLoaded(options = {}) {
 
     try {
         const loaded = await siaDatasetLoadPromise;
+        /* v16.73 — le dataset complet remplace le cache carte léger en mémoire. */
+        siaMapLiteDataset = null;
         npfStartupDiagMark(
             'sia_dataset_ready',
             'SIA — données prêtes',
@@ -43002,6 +43078,15 @@ function setSiaMapAirspacesVisible(visible) {
     }
     siaMapAirspacesVisible = next;
     updateSiaProfileMapZonesToggleButton();
+
+    if (next && !siaDataset && !siaDatasetLoadPromise) {
+        npfDiagSiaInteraction(
+            'SIA RAFRAÎCHISSEMENT',
+            'raison=profile-show-map-zones · dataset complet demandé à la demande',
+            { totalMs: 0 }
+        );
+    }
+
     // Les cases du filtre principal et celles du profil ne sont jamais modifiées ici.
     if (!next) {
         clearTimeout(siaMoveDecorationRefreshTimer);
@@ -48483,7 +48568,7 @@ async function refreshSiaLayers(reason = 'manual') {
         siaMoveDecorationRefreshTimer = null;
 
         const npfDiagDatasetStart = NPF_STARTUP_DIAGNOSTIC.now();
-        const dataset = await ensureSiaDatasetLoaded();
+        const dataset = await ensureSiaDatasetForMapRefresh();
         npfDiagDatasetMs = NPF_STARTUP_DIAGNOSTIC.now() - npfDiagDatasetStart;
         throwIfSiaRefreshObsolete(refreshGeneration);
         // v15.83 — inutile de scanner les familles TMA lorsque les volumes sont masqués.
