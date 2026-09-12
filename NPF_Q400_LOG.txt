@@ -1,3 +1,83 @@
+VERSION TEST v16.74 — VERROU DU DATASET SIA COMPLET
+Date : 12/09/2026
+Base : TEST v16.73
+
+CONSTat
+- La v16.73 améliore nettement la carte et réduit les blocages.
+- Cependant le DIAG 18:09 montre encore :
+  `SIA — données` puis `SIA — données prêtes | 5066 espaces`
+  au démarrage alors que `carteZones=OFF`.
+- Le payload carte léger existe et fonctionne, mais un chemin secondaire peut
+  encore appeler `ensureSiaDatasetLoaded()` sans indiquer qu'il a réellement
+  besoin des volumes complets.
+
+1. VERROU ANTI-CHARGEMENT PASSIF
+- `ensureSiaDatasetLoaded()` distingue maintenant :
+  - demande complète explicite (`full: true`) ;
+  - appel non qualifié/passif.
+- Si zones SIA=OFF et profil SIA fermé :
+  - un appel passif ne peut plus charger les 5 066 espaces ;
+  - il est automatiquement redirigé vers le dataset carte léger.
+- Nouveau jalon DIAG :
+  `SIA — dataset complet différé`.
+
+2. APPELS COMPLETS EXPLICITES
+Les fonctions qui ont réellement besoin des volumes demandent maintenant
+explicitement le dataset complet avec un motif :
+- carte avec zones visibles ;
+- appui long / sélection de zone ;
+- dialogue des filtres SIA ;
+- vérification / réinitialisation SIA ;
+- ouverture et rendu du profil SIA.
+Le DIAG `SIA — données` indique désormais `raison=...`.
+
+3. FILET DE SÉCURITÉ CARTE LÉGÈRE
+- Le payload léger v16.73 (0 espace / 877 terrains / 1899 points) reste dans
+  `sia.js`.
+- Une copie compressée de secours est maintenant aussi intégrée à `script.js`.
+- Même pendant une transition de Service Worker ou si un ancien `sia.js`
+  reste momentanément servi, NPF dispose donc du jeu carte léger et n'a plus
+  besoin de retomber silencieusement sur les 5 066 espaces.
+- Taille base64 du fallback léger : 117076 caractères.
+
+4. CARTE OFFLINE
+- Aucun changement du moteur v16.72/v16.73 :
+  - updateWhenIdle=false pour NPF direct ;
+  - updateInterval=60 ms ;
+  - 5 lectures IndexedDB fixes ;
+  - priorité viewport immédiate ;
+  - purge zoomend/moveend ;
+  - aucun polling tuiles finales avec carte seule.
+
+5. SIA / RADIO
+- Dataset carte léger conservé.
+- Dataset complet toujours disponible immédiatement lorsqu'une fonction le
+  demande explicitement.
+- Pan contenu = zéro travail SIA conservé.
+- Radio officielle conservée :
+  326 terrains / TWR=95 / AFIS=69 / A/A=228.
+- Étiquettes aérodromes à partir de 2 NM conservées.
+
+6. VERSION
+- App : v16.74.
+- Service Worker : `sw-v16-74_sia_full_guard`.
+- Révision SIA inchangée : `15.69-radio1026-1-maplite1`.
+- Packs OFFLINE et bases IndexedDB inchangés.
+
+VALIDATION STATIQUE EFFECTUÉE
+- Syntaxe JavaScript Script / SIA / Service Worker vérifiée.
+- Script inline de l'Index vérifié.
+- Manifest JSON vérifié.
+- Cohérence v16.74 vérifiée.
+- Aucun appel opérationnel non qualifié au dataset complet conservé.
+- Verrou passif zones OFF + profil fermé vérifié.
+- Fallback carte léger décompressé et validé :
+  0 espace / 877 terrains / 1899 points.
+- Scheduler carte v16.73 conservé.
+- Radio 326 / 95 / 69 / 228 vérifiée.
+
+HISTORIQUE PRÉCÉDENT CONSERVÉ INTÉGRALEMENT
+
 VERSION TEST v16.73 — SIA CARTE LÉGÈRE AU DÉMARRAGE
 Date : 12/09/2026
 Base : TEST v16.72
