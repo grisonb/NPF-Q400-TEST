@@ -1,3 +1,86 @@
+VERSION TEST v16.73 — SIA CARTE LÉGÈRE AU DÉMARRAGE
+Date : 12/09/2026
+Base : TEST v16.72
+
+CONSTat
+- La v16.72 est conservée pour le moteur de carte OFFLINE : c'est la meilleure
+  des dernières versions sur le fond de carte seul.
+- Le blocage restant au démarrage vient du chargement du dataset SIA complet :
+  5 066 espaces, alors que les zones carte peuvent être masquées.
+- Le DIAG du 12/09 17:16 a mesuré jusqu'à ~2,66 s pour le dataset SIA complet.
+
+1. NOUVEAU PAYLOAD SIA « CARTE LÉGÈRE »
+- Ajout dans `sia.js` d'un payload compressé séparé contenant uniquement :
+  - 877 terrains ;
+  - 1 899 points / VRP ;
+  - 0 volume aérien.
+- Taille compressée du payload léger : 87806 octets
+  (base64 : 117076 caractères).
+- Les 5 066 espaces restent uniquement dans le payload complet existant.
+
+2. DÉMARRAGE AVEC ZONES SIA MASQUÉES
+- `refreshSiaLayer()` utilise désormais le payload léger lorsque
+  `siaMapAirspacesVisible = false`.
+- NPF n'ouvre donc plus le gros dataset des 5 066 volumes simplement pour
+  afficher terrains/points lorsque les zones sont masquées.
+- Les fonctions de carte restent disponibles : terrains et points/VRP sont
+  conservés, contrairement à une simple suppression du chargement SIA.
+
+3. CHARGEMENT COMPLET À LA DEMANDE
+- Le dataset complet est chargé automatiquement dès qu'il devient nécessaire :
+  - réactivation des zones SIA ;
+  - profil / dialogue / fonction qui appelle `ensureSiaDatasetLoaded()`.
+- Dès que le dataset complet est chargé, le petit cache carte est libéré.
+
+4. DIAGNOSTIC
+- Nouveaux jalons :
+  - `SIA — carte légère`
+  - `SIA — carte légère prête`
+- Le jalon `SIA — données` reste réservé au dataset complet des 5 066 espaces.
+- Activation des zones sans dataset complet :
+  `dataset complet demandé à la demande`.
+
+5. CARTE OFFLINE
+- Aucun changement par rapport à v16.72 :
+  - `updateWhenIdle=false` pour NPF direct ;
+  - updateInterval=60 ms ;
+  - 5 lectures IndexedDB fixes ;
+  - priorité immédiate au viewport ;
+  - purge ciblée zoomend/moveend ;
+  - aucun polling de tuiles finales avec carte seule.
+- Le comportement de carte qui a amélioré les 18 zooms / 0 zoom lent est donc
+  volontairement laissé intact.
+
+6. SIA / RADIO
+- Radio officielle conservée :
+  - 326 terrains ;
+  - TWR=95 ;
+  - AFIS=69 ;
+  - A/A=228.
+- Seuil des étiquettes aérodromes conservé à 2 NM.
+- Pan contenu = zéro travail SIA conservé.
+- Décorations dépendantes du zoom conservées selon v16.70+.
+
+7. RÉVISION SIA / VERSION
+- App : v16.73.
+- Révision ressource SIA : `15.69-radio1026-1-maplite1`.
+- Révision géométrique interne inchangée : 15.69.
+- Service Worker : `sw-v16-73_sia_maplite`.
+- Packs OFFLINE et bases de tuiles inchangés.
+
+VALIDATION STATIQUE EFFECTUÉE
+- Syntaxe JavaScript Script / SIA / Service Worker vérifiée.
+- Script inline de l'Index vérifié.
+- Manifest JSON vérifié.
+- Cohérence v16.73 vérifiée.
+- Révision SIA cohérente Index / SIA / SW vérifiée.
+- Payload léger décompressé et validé :
+  0 espace / 877 terrains / 1899 points.
+- Scheduler carte v16.72 conservé.
+- Radio 326 / 95 / 69 / 228 vérifiée.
+
+HISTORIQUE PRÉCÉDENT CONSERVÉ INTÉGRALEMENT
+
 VERSION TEST v16.72 — RESTAURATION GRID NPF v16.50
 Date : 12/09/2026
 Base : TEST v16.71
