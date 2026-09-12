@@ -1,3 +1,85 @@
+VERSION TEST v16.78 — ROUTES : CACHE SPATIAL PAR CELLULES
+Date : 12/09/2026
+Base : TEST v16.77
+Référence fluidité carte seule : v16.75
+
+CONSTat DIAG v16.77
+- La compaction v16.77 réduit correctement la RAM :
+  ex. 20 956 tronçons bruts -> 4 973 retenus.
+- Mais lors de déplacements importants, les mêmes gros fichiers sont relus et
+  reparsés plusieurs fois :
+  10 000 à 15 000+ tronçons bruts, souvent ~130 à 225 ms par fichier.
+- Le goulot d'étranglement restant est donc le reparsing répété.
+
+1. CACHE SPATIAL DÉRIVÉ
+- Nouveau cache séparé : `npf-road-overlay-spatial-v1`.
+- Aucun changement des 53 parties Routes installées.
+- Aucune réimportation demandée.
+- Au premier accès à une partie :
+  1. lecture du GeoJSON original ;
+  2. rendu immédiat du working-set courant ;
+  3. construction coopérative d'un index par cellules de 0,15° ;
+  4. stockage des cellules dans Cache Storage ;
+  5. écriture du manifeste spatial seulement en dernier.
+
+2. PANS SUIVANTS
+- Si l'index spatial existe, NPF ne reparsse plus le gros fichier départemental.
+- Il lit uniquement les cellules qui croisent le viewport + marge.
+- Les features présentes dans plusieurs cellules sont dédupliquées par leur
+  index source, puis contrôlées par bbox exacte.
+
+3. PENDANT LA PREMIÈRE INDEXATION
+- Le premier JSON déjà parsé reste temporairement disponible.
+- Avant que les cellules soient prêtes : réutilisation de ce JSON mémoire.
+- Dès que les buckets sont prêts : lecture directe des cellules mémoire.
+- Après persistance : JSON brut et buckets temporaires sont libérés.
+
+4. TIERS
+- Tier 1 : cellules autoroutes uniquement.
+- Tier 2 : cellules A/N/D/M/T.
+- Une feature couvrant plus de 64 cellules va dans `__overflow__` au lieu d'être
+  dupliquée excessivement.
+
+5. PRIORITÉ FLUIDITÉ
+- Indexation par tranches avec `requestIdleCallback` si disponible.
+- Yields réguliers pendant indexation et stockage.
+- Routes OFF ou retour tier 0 : construction en arrière-plan annulée.
+
+6. DIAGNOSTIC
+- `ROUTES SOURCE` indique `source=brut-initial`, `brut-memoire`,
+  `cellules-memoire` ou `cellules-cache`.
+- Nouveau `ROUTES INDEX` avec nombre brut et nombre de cellules créées.
+
+7. CONSERVÉ
+- v16.75 = référence officielle carte seule.
+- v16.76 : tier 0 inerte, Routes OFF, couleurs VFR.
+- v16.77 : working-set compact autour du viewport.
+- Moteur tuiles 60 ms / 5 lectures IndexedDB inchangé.
+- SIA léger, départements à la demande et radio inchangés.
+- Style graphique Routes inchangé ; masquage des noms de villes toujours à
+  traiter après validation de la fluidité.
+- Révision SIA inchangée : `15.69-radio1026-1-maplite1`.
+
+8. VERSION
+- App : v16.78.
+- Service Worker : `sw-v16-78_routes_spatial_cells`.
+- Packs Routes existants compatibles, aucune réimportation.
+- Packs OFFLINE / IndexedDB inchangés.
+
+VALIDATION STATIQUE EFFECTUÉE
+- Syntaxe JavaScript Script / SIA / Service Worker vérifiée.
+- Script inline Index et Manifest JSON vérifiés.
+- Cohérence v16.78 vérifiée.
+- Cache spatial séparé supprimé avec un nouvel import Routes.
+- Manifeste spatial écrit en dernier.
+- Déduplication multi-cellules présente.
+- Fallback vers le GeoJSON original si index incomplet/invalide.
+- Annulation de construction sur tier 0 / Routes OFF.
+- v16.76/v16.77 et moteur carte v16.75 conservés.
+- Radio : 326 terrains / TWR=95 / AFIS=69 / A/A=228.
+
+HISTORIQUE PRÉCÉDENT CONSERVÉ INTÉGRALEMENT
+
 VERSION TEST v16.77 — ROUTES : WORKING-SET SOURCE COMPACT
 Date : 12/09/2026
 Base : TEST v16.76
