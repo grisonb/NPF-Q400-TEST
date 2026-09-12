@@ -1,3 +1,112 @@
+VERSION TEST v16.76 — ROUTES TIER 0 INERTE + COULEURS VFR
+Date : 12/09/2026
+Base / référence fluidité carte seule : TEST v16.75
+
+RÉFÉRENCE
+- v16.75 devient la référence officielle de fluidité "carte seule".
+- Le DIAG de référence montre notamment :
+  - 17 zooms / 0 zoom lent ;
+  - fonctionnement OFFLINE stable avec Routes/HT OFF.
+- Toutes les corrections ci-dessous sont conçues pour ne pas modifier ce moteur
+  de carte de référence.
+
+1. ROUTES ON À 5 NM / TIER 0
+CONSTat :
+- `getRoadOverlayZoomTier() === 0` signifie qu'aucune route n'est affichée.
+- Pourtant v16.75 considérait encore `showRoadOverlayLayer=true` comme un
+  overlay lourd et lançait :
+  - masquage des panes ;
+  - attente `TUILES ZOOM FINAL` ;
+  - parfois des timeouts ~1,6 s ;
+  - refresh Routes sur moveend alors que 0 segment devait être rendu.
+
+CORRECTION :
+- Ajout de `isRoadOverlayEffectiveAtCurrentZoom()`.
+- Routes n'est considéré lourd que si :
+  `showRoadOverlayLayer === true && getRoadOverlayZoomTier() > 0`.
+- En tier 0 :
+  - aucun `waitForNpfFinalZoomFirstTiles()` à cause de Routes ;
+  - aucun `scheduleRoadOverlayRefresh()` sur moveend/zoomend ;
+  - aucun ajout du parent Routes à la carte ;
+  - aucun chargement de parties GeoJSON ;
+  - les anciennes géométries sont libérées progressivement si nécessaire.
+- Le bouton Routes reste ON et mémorisé ; les routes réapparaissent
+  automatiquement en entrant dans tier 1/2.
+
+2. ACTIVATION ROUTES EN TIER 0
+- Appuyer sur Routes à 5 NM ou plus loin ne déclenche plus
+  `waitForNpfLayerActivationTileWindow()`.
+- Nouveau DIAG :
+  `FILTRE CARTE | couche=Routes · tier0-inerte`.
+- Le fond de carte doit donc conserver la fluidité de v16.75 carte seule.
+
+3. DÉSACTIVATION ROUTES
+- Toute attente lourde encore en cours est invalidée immédiatement :
+  - séquence sérialisée ;
+  - attente `TUILES ZOOM FINAL`.
+- Les panes lourdes sont rendues immédiatement.
+- La priorité est redonnée au viewport courant :
+  - `beginBaseMapZoomStabilityGuard('routes-off')`
+  - purge de la file hors vue ;
+  - trim du cache blobs.
+- Le parent Routes est retiré immédiatement.
+- Les géométries et caches source sont ensuite libérés progressivement,
+  une partie par frame, afin d'éviter un gros nettoyage Canvas synchrone.
+
+4. COULEURS DES POINTS VFR / VRP
+RÉGRESSION IDENTIFIÉE :
+- depuis le dataset SIA léger v16.73, les VRP sont rendus depuis
+  `siaMapLiteDataset`;
+- les fonctions de couleurs continuaient à utiliser par défaut `siaDataset`;
+- avec zones SIA OFF, `siaDataset` reste volontairement null ;
+- la table de couleurs était donc vide et tous les VRP tombaient sur la couleur
+  de secours magenta.
+
+CORRECTION :
+- ajout de `getSiaVrpVisualDataset()`;
+- priorité :
+  1. dataset SIA complet s'il est chargé ;
+  2. sinon dataset carte léger.
+- Le rattachement VRP/terrain et la palette utilisent désormais ce dataset
+  réellement actif.
+- Le dataset léger contient 1094 VRP, dont 129 terrains associés officiellement ;
+  la palette par terrain peut donc fonctionner sans charger les 5 066 espaces.
+
+5. NON MODIFIÉ
+- Moteur de tuiles v16.75 inchangé :
+  updateWhenIdle=false / 60 ms / 5 lectures IndexedDB.
+- SIA léger / verrou dataset complet inchangés.
+- Départements à la demande inchangés.
+- Seuil routes inchangé :
+  - tier 0 avant 2 NM ;
+  - tier 1 autoroutes à partir de 2 NM ;
+  - tier 2 A/N/D/M/T à partir de 1 NM.
+- Style graphique des routes inchangé dans cette version.
+  Le problème de masquage des noms de villes sera traité séparément après
+  validation de la fluidité.
+- Révision SIA inchangée : `15.69-radio1026-1-maplite1`.
+
+6. VERSION
+- App : v16.76.
+- Service Worker : `sw-v16-76_routes_tier0_vfr_colors`.
+- Packs OFFLINE et bases IndexedDB inchangés.
+
+VALIDATION STATIQUE EFFECTUÉE
+- Syntaxe JavaScript Script / SIA / Service Worker vérifiée.
+- Script inline Index vérifié.
+- Manifest JSON vérifié.
+- Cohérence v16.76 vérifiée.
+- Routes tier 0 ne déclenche plus le mode heavy vérifié.
+- Routes tier 0 ne déclenche plus le polling final vérifié.
+- Routes tier 0 ne déclenche plus de refresh map-change vérifié.
+- Routes OFF invalide les attentes lourdes et utilise le nettoyage progressif.
+- Couleurs VRP basculées sur full-or-map-lite dataset vérifiées.
+- Dataset léger : 1094 VRP / 129 terrains associés.
+- Carte/SIA/Départements de v16.75 conservés.
+- Radio conservée : 326 terrains / TWR=95 / AFIS=69 / A/A=228.
+
+HISTORIQUE PRÉCÉDENT CONSERVÉ INTÉGRALEMENT
+
 VERSION TEST v16.75 — DÉPARTEMENTS À LA DEMANDE
 Date : 12/09/2026
 Base : TEST v16.74
