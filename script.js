@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v16.71';
+const NPF_SCRIPT_BUILD_VERSION = 'v16.72';
 
 
 /*
@@ -9796,10 +9796,17 @@ function setupBaseTileLayer() {
          * pendant le déplacement, au lieu d'attendre obligatoirement moveend.
          * Les autres packs conservent le comportement précédent.
          */
-        /* Travail après v16.60 — en OFFLINE NPF, attendre la fin du geste évite
-         * de créer des dizaines de demandes transitoires à chaque niveau d'un
-         * pinch. Les anciennes tuiles restent retenues par keepBuffer. */
-        updateWhenIdle: true,
+        /*
+         * v16.72 — restauration du comportement v16.50 pour la carte NPF :
+         * les tuiles utiles sont demandées pendant le déplacement au lieu
+         * d'attendre systématiquement la fin du geste.
+         *
+         * Le scheduling v16.71 reste en place :
+         * - 5 lectures IndexedDB fixes ;
+         * - priorité immédiate au viewport courant ;
+         * - purge ciblée à zoomend/moveend.
+         */
+        updateWhenIdle: !isNpfDirectOfflineLayer,
         updateInterval: isNpfDirectOfflineLayer
             ? 60
             : OFFLINE_TILE_UPDATE_INTERVAL_MS,
