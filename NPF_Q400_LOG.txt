@@ -1,3 +1,82 @@
+VERSION TEST v16.77 — ROUTES : WORKING-SET SOURCE COMPACT
+Date : 12/09/2026
+Base : TEST v16.76
+Référence fluidité carte seule : v16.75
+
+CONSTat DIAG v16.76
+- Le tier 0 Routes est maintenant validé :
+  aucun chargement ni polling lourd à 5 NM.
+- Le problème restant apparaît lorsque les routes sont réellement visibles.
+- Exemple mesuré à zoom 12 :
+  - 36 753 segments source chargés ;
+  - seulement 122 segments retenus pour le rendu.
+- Le coût principal devient donc la quantité de géométrie brute conservée en RAM.
+
+1. WORKING-SET SPATIAL COMPACT
+- Les fichiers Routes installés dans Cache Storage ne changent pas.
+- Lorsqu'une partie GeoJSON est lue :
+  1. NPF parse la partie comme auparavant ;
+  2. il filtre immédiatement les classes + la zone utile autour du viewport ;
+  3. il ne conserve en RAM que ce sous-ensemble compact ;
+  4. la grosse FeatureCollection temporaire peut ensuite être libérée par JS/WebKit.
+- `roadOverlaySourceParts` ne contient donc plus systématiquement les dizaines de
+  milliers de tronçons de la partie départementale complète.
+
+2. MARGE DE TRAVAIL
+- Tier 1 (autoroutes) : working-set = zone de rendu + 50 %.
+- Tier 2 (A/N/D/M/T) : working-set = zone de rendu + 35 %.
+- Cette marge permet plusieurs petits déplacements sans relire le fichier source.
+- Si la nouvelle vue sort du working-set :
+  la partie compacte est invalidée puis reconstruite depuis Cache Storage.
+
+3. DOUBLE FILTRAGE VOLONTAIRE
+- Premier filtrage : grosse partie -> working-set spatial compact.
+- Deuxième filtrage : working-set -> zone exacte de rendu.
+- Le premier parcours est exécuté par tranches avec `yield` comme auparavant.
+- Le deuxième devient très léger car il ne porte plus que sur le working-set.
+
+4. DIAGNOSTIC ROUTES
+- Nouveau type d'événement :
+  `ROUTES SOURCE`
+- Exemple attendu :
+  `partie=... · tier=2 · brut=36753 · retenu=...`
+- Le compteur `segments source chargés` représente maintenant les géométries
+  effectivement conservées en RAM, et non le nombre brut du fichier parsé.
+- Le nombre brut reste disponible dans l'événement `ROUTES SOURCE`.
+
+5. V16.76 CONSERVÉE
+- Routes tier 0 inerte conservé.
+- Routes OFF :
+  annulation des attentes lourdes + nettoyage progressif conservés.
+- Correction des couleurs VFR/VRP conservée.
+- Carte seule v16.75 inchangée.
+- SIA léger / verrou dataset complet inchangés.
+- Départements à la demande inchangés.
+- Style graphique Routes inchangé pour l'instant.
+- Révision SIA inchangée : `15.69-radio1026-1-maplite1`.
+
+6. VERSION
+- App : v16.77.
+- Service Worker : `sw-v16-77_routes_compact_workset`.
+- Packs Routes existants compatibles, aucune réimportation demandée.
+- Packs OFFLINE et bases IndexedDB inchangés.
+
+VALIDATION STATIQUE EFFECTUÉE
+- Syntaxe JavaScript Script / SIA / Service Worker vérifiée.
+- Script inline Index vérifié.
+- Manifest JSON vérifié.
+- Cohérence v16.77 vérifiée.
+- Cache source compact conditionné par tier + couverture vérifié.
+- Reconstruction automatique hors couverture vérifiée.
+- Le fichier Cache Storage original n'est pas modifié.
+- Routes tier 0 v16.76 conservé.
+- Routes OFF v16.76 conservé.
+- Couleurs VFR v16.76 conservées.
+- Moteur carte v16.75 conservé.
+- Radio conservée : 326 terrains / TWR=95 / AFIS=69 / A/A=228.
+
+HISTORIQUE PRÉCÉDENT CONSERVÉ INTÉGRALEMENT
+
 VERSION TEST v16.76 — ROUTES TIER 0 INERTE + COULEURS VFR
 Date : 12/09/2026
 Base / référence fluidité carte seule : TEST v16.75
