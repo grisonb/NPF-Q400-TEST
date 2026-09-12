@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v16-75_departments_lazy';
-const APP_VERSION = 'v16.75';
+const SW_VERSION = 'sw-v16-76_routes_tier0_vfr_colors';
+const APP_VERSION = 'v16.76';
 const SIA_DATA_REVISION = '15.69-radio1026-1-maplite1';
 const SIA_DATA_URL = './sia.js';
 const SIA_DATA_CACHE = `npf-q400-sia-data-${SIA_DATA_REVISION}`;
