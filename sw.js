@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v16-77_routes_compact_workset';
-const APP_VERSION = 'v16.77';
+const SW_VERSION = 'sw-v16-78_routes_spatial_cells';
+const APP_VERSION = 'v16.78';
 const SIA_DATA_REVISION = '15.69-radio1026-1-maplite1';
 const SIA_DATA_URL = './sia.js';
 const SIA_DATA_CACHE = `npf-q400-sia-data-${SIA_DATA_REVISION}`;
