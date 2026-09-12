@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v16-68_sia_resource_cache_bust_radio1026';
-const APP_VERSION = 'v16.69';
+const SW_VERSION = 'sw-v16-70_zoomout_tiles_sia_perf';
+const APP_VERSION = 'v16.70';
 const SIA_DATA_REVISION = '15.69-radio1026-1';
 const SIA_DATA_URL = './sia.js';
 const SIA_DATA_CACHE = `npf-q400-sia-data-${SIA_DATA_REVISION}`;
