@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v16.75';
+const NPF_SCRIPT_BUILD_VERSION = 'v16.76';
 
 
 /*
@@ -7148,14 +7148,14 @@ function initMap() {
             clearTimeout(npfHeavyOverlayZoomSettleTimer);
             npfHeavyOverlayZoomSettleTimer = null;
         }
-        if (showRoadOverlayLayer || showHighVoltageLinesLayer) {
+        if (hasEffectiveHeavyOverlayAtCurrentZoom()) {
             /*
-             * v16.70 — masquer tout gros overlay actif pendant le pinch, même
-             * si Routes et HT ne sont pas actifs ensemble. Ils seront rendus à
-             * nouveau seulement après apparition des premières tuiles finales.
+             * v16.76 — Routes ON en tier 0 est volontairement inerte : à 5 NM
+             * et au-delà, aucune route n'est affichée et le zoom doit rester
+             * identique à la carte seule de référence v16.75.
              */
             setNpfHeavyOverlayPanesHidden(true);
-            if (showRoadOverlayLayer && showHighVoltageLinesLayer) {
+            if (isRoadOverlayEffectiveAtCurrentZoom() && showHighVoltageLinesLayer) {
                 /* v16.62 — ne pas conserver des dizaines de milliers de tronçons
                  * bruts Routes pendant le pinch avec HT actif. */
                 releaseRoadOverlaySourceCacheIfHeavy('zoomstart-ht-routes');
@@ -7425,7 +7425,7 @@ function initMap() {
              * tuiles du zoom final suffit ; le reste peut continuer en fond.
              */
             const overlayResumeToken = npfHeavyOverlayZoomSerialToken;
-            if (showRoadOverlayLayer || showHighVoltageLinesLayer) {
+            if (hasEffectiveHeavyOverlayAtCurrentZoom()) {
                 waitForNpfFinalZoomFirstTiles({
                     timeoutMs: 1600,
                     isCancelled: () => overlayResumeToken !== npfHeavyOverlayZoomSerialToken || !map
@@ -7435,29 +7435,51 @@ function initMap() {
                     }
                 });
             } else {
-                /* v16.71 — carte seule : aucun polling des tuiles finales. */
+                /*
+                 * v16.76 — carte seule OU Routes ON mais tier 0 :
+                 * aucun polling des tuiles finales.
+                 */
                 setNpfHeavyOverlayPanesHidden(false);
             }
         }
 
         if (showRoadOverlayLayer) {
-            if (roadOverlayLayer && getRoadOverlayZoomTier() > 0 && !map.hasLayer(roadOverlayLayer)) {
-                roadOverlayLayer.addTo(map);
-            }
-            if (zoomEnded && getRoadOverlayZoomTier() === 0) {
+            const roadTier = getRoadOverlayZoomTier();
+
+            if (roadTier > 0) {
+                if (roadOverlayLayer && !map.hasLayer(roadOverlayLayer)) {
+                    roadOverlayLayer.addTo(map);
+                }
+                if (!gpsFollowPan || !isRoadOverlayCoverageValidForCurrentView()) {
+                    scheduleRoadOverlayRefresh(gpsFollowPan ? 'gps-follow-edge' : 'map-change');
+                }
+            } else {
+                /*
+                 * v16.76 — tier 0 : Routes est un état mémorisé, pas un calque
+                 * actif. Aucun scheduleRoadOverlayRefresh() n'est lancé sur
+                 * moveend/zoomend. Le parent est retiré immédiatement et les
+                 * anciennes géométries sont libérées progressivement.
+                 */
                 roadOverlayRefreshToken += 1;
                 clearTimeout(roadOverlayRefreshTimer);
                 roadOverlayRefreshTimer = null;
-                /* Hors combinaison HT : le nettoyage peut rester différé d'un tour
-                 * pour ne pas bloquer le même frame que zoomend. */
-                try { if (roadOverlayLayer && map.hasLayer(roadOverlayLayer)) map.removeLayer(roadOverlayLayer); } catch (_) {}
-                setTimeout(() => {
-                    if (!showRoadOverlayLayer || getRoadOverlayZoomTier() !== 0) return;
-                    clearRoadOverlayRenderedParts({ resetTier: false, clearSources: true });
-                    roadOverlayLoadedZoomTier = 0;
-                }, 180);
-            } else if (!gpsFollowPan || !isRoadOverlayCoverageValidForCurrentView()) {
-                scheduleRoadOverlayRefresh(gpsFollowPan ? 'gps-follow-edge' : 'map-change');
+                try {
+                    if (roadOverlayLayer && map.hasLayer(roadOverlayLayer)) {
+                        map.removeLayer(roadOverlayLayer);
+                    }
+                } catch (_) {}
+
+                roadOverlayLoadedZoomTier = 0;
+
+                if (loadedRoadOverlayParts.size || roadOverlaySourceParts.size) {
+                    const cleanupToken = npfHeavyOverlayZoomSerialToken;
+                    clearRoadOverlayRenderedPartsProgressively(
+                        { resetTier: false, clearSources: true },
+                        cleanupToken
+                    ).catch(error => {
+                        console.warn('Nettoyage progressif Routes tier 0 impossible:', error);
+                    });
+                }
             }
         }
         if (showHighVoltageLinesLayer && hasLoadedHighVoltageLines) {
@@ -11859,6 +11881,25 @@ function cancelPendingSerializedHeavyOverlayZoomOut(reason = 'annulé') {
     if (reason) recordNpfStartupDiagnosticOverlaySnapshot(`zoom-out différé · ${reason}`);
 }
 
+function cancelNpfHeavyOverlayWaitsForRoadStateChange(reason = 'routes-state-change') {
+    const hasSerializedPending = !!(
+        npfHeavyOverlayZoomOutPromise
+        || npfHeavyOverlayZoomSettleTimer
+    );
+
+    if (hasSerializedPending) {
+        cancelPendingSerializedHeavyOverlayZoomOut(reason);
+    } else {
+        /*
+         * Invalide notamment un waitForNpfFinalZoomFirstTiles() déjà lancé.
+         * Sa boucle verra immédiatement un token différent.
+         */
+        npfHeavyOverlayZoomSerialToken += 1;
+        npfHeavyOverlayZoomStartLevel = null;
+        try { setNpfHeavyOverlayPanesHidden(false); } catch (_) {}
+    }
+}
+
 function scheduleSerializedHeavyOverlayZoomOut(startZoom, finalZoom) {
     if (!Number.isFinite(npfHeavyOverlayPendingStartZoom)) {
         npfHeavyOverlayPendingStartZoom = Number(startZoom);
@@ -12606,6 +12647,23 @@ function getRoadOverlayZoomTier() {
     if (zoom >= 12) return 2;
     if (zoom >= 11) return 1;
     return 0;
+}
+
+/*
+ * v16.76 — le bouton Routes peut rester ON à une échelle où aucune route
+ * n'est dessinée. Dans ce cas, le calque ne doit PAS faire basculer NPF dans
+ * le mode "overlay lourd" : pas de masquage de pane, pas d'attente
+ * TUILES ZOOM FINAL, pas de rafraîchissement routier sur moveend.
+ */
+function isRoadOverlayEffectiveAtCurrentZoom() {
+    return !!(showRoadOverlayLayer && getRoadOverlayZoomTier() > 0);
+}
+
+function hasEffectiveHeavyOverlayAtCurrentZoom() {
+    return !!(
+        showHighVoltageLinesLayer
+        || isRoadOverlayEffectiveAtCurrentZoom()
+    );
 }
 
 function shouldLoadRoadOverlayFeatureForTier(feature, tier) {
@@ -13814,38 +13872,99 @@ async function toggleRoadOverlayLayer(forceState = null, options = {}) {
     refreshRoadOverlayButtonState();
 
     if (showRoadOverlayLayer) {
-        if (roadOverlayLayer && !map.hasLayer(roadOverlayLayer)) {
-            roadOverlayLayer.addTo(map);
-        }
+        const roadTier = getRoadOverlayZoomTier();
 
-        const ready = await waitForNpfLayerActivationTileWindow('Routes', {
-            maxWaitMs: 12000,
-            isCancelled: () => !showRoadOverlayLayer
-        });
-        if (!ready || !showRoadOverlayLayer) {
-            scheduleRoadOverlayRefresh('tile-priority-retry');
-            recordNpfStartupDiagnosticOverlaySnapshot(`routes ON · ${options.source || 'toggle'} · attente tuiles`);
-            return;
-        }
+        if (roadTier === 0) {
+            /*
+             * v16.76 — activer le bouton Routes à 5 NM ou plus loin ne lance
+             * aucune attente de tuiles et aucun rendu. L'état reste mémorisé :
+             * les routes apparaîtront automatiquement en entrant dans tier 1/2.
+             */
+            roadOverlayRefreshToken += 1;
+            clearTimeout(roadOverlayRefreshTimer);
+            roadOverlayRefreshTimer = null;
+            isRoadOverlayLoading = false;
+            roadOverlayLoadedZoomTier = 0;
 
-        const renderStartedAt = NPF_STARTUP_DIAGNOSTIC.now();
-        await refreshRoadOverlayVisibleParts(options.source || 'toggle');
-        npfDiagSiaInteraction('FILTRE CARTE', 'couche=Routes · rendu-prêt', {
-            layerMs: Math.round(NPF_STARTUP_DIAGNOSTIC.now() - renderStartedAt),
-            routesSource: getNpfRoadSourceFeatureCount(),
-            routesRendered: getNpfRenderedRoadFeatureCount(),
-            tilesVisible: countVisibleLoadedBaseTiles(),
-            npfReadsQueued: Number(directOfflineNpfReadQueue?.length || 0),
-            npfReadsActive: Number(directOfflineNpfActiveReads || 0)
-        });
+            try {
+                if (roadOverlayLayer && map.hasLayer(roadOverlayLayer)) {
+                    map.removeLayer(roadOverlayLayer);
+                }
+            } catch (_) {}
+
+            if (loadedRoadOverlayParts.size || roadOverlaySourceParts.size) {
+                const cleanupToken = npfHeavyOverlayZoomSerialToken;
+                await clearRoadOverlayRenderedPartsProgressively(
+                    { resetTier: false, clearSources: true },
+                    cleanupToken
+                );
+            }
+
+            npfDiagSiaInteraction(
+                'FILTRE CARTE',
+                'couche=Routes · tier0-inerte',
+                {
+                    zoom: Number(map?.getZoom?.() ?? 0),
+                    routesSource: getNpfRoadSourceFeatureCount(),
+                    routesRendered: getNpfRenderedRoadFeatureCount(),
+                    tilesVisible: countVisibleLoadedBaseTiles()
+                }
+            );
+        } else {
+            if (roadOverlayLayer && !map.hasLayer(roadOverlayLayer)) {
+                roadOverlayLayer.addTo(map);
+            }
+
+            const ready = await waitForNpfLayerActivationTileWindow('Routes', {
+                maxWaitMs: 12000,
+                isCancelled: () => !showRoadOverlayLayer || getRoadOverlayZoomTier() === 0
+            });
+            if (!ready || !showRoadOverlayLayer || getRoadOverlayZoomTier() === 0) {
+                if (showRoadOverlayLayer && getRoadOverlayZoomTier() > 0) {
+                    scheduleRoadOverlayRefresh('tile-priority-retry');
+                }
+                recordNpfStartupDiagnosticOverlaySnapshot(`routes ON · ${options.source || 'toggle'} · attente tuiles`);
+                return;
+            }
+
+            const renderStartedAt = NPF_STARTUP_DIAGNOSTIC.now();
+            await refreshRoadOverlayVisibleParts(options.source || 'toggle');
+            npfDiagSiaInteraction('FILTRE CARTE', 'couche=Routes · rendu-prêt', {
+                layerMs: Math.round(NPF_STARTUP_DIAGNOSTIC.now() - renderStartedAt),
+                routesSource: getNpfRoadSourceFeatureCount(),
+                routesRendered: getNpfRenderedRoadFeatureCount(),
+                tilesVisible: countVisibleLoadedBaseTiles(),
+                npfReadsQueued: Number(directOfflineNpfReadQueue?.length || 0),
+                npfReadsActive: Number(directOfflineNpfActiveReads || 0)
+            });
+        }
     } else {
+        /*
+         * v16.76 — retour immédiat au comportement "carte seule".
+         * On invalide toute attente TUILES ZOOM FINAL encore en cours,
+         * retire le parent Routes, rend les panes, puis libère les géométries
+         * progressivement afin de ne pas concentrer le nettoyage sur un frame.
+         */
         roadOverlayRefreshToken += 1;
         clearTimeout(roadOverlayRefreshTimer);
+        roadOverlayRefreshTimer = null;
         isRoadOverlayLoading = false;
-        clearRoadOverlayRenderedParts({ clearSources: true });
+
+        cancelNpfHeavyOverlayWaitsForRoadStateChange('routes-off');
+
         if (roadOverlayLayer && map.hasLayer(roadOverlayLayer)) {
             map.removeLayer(roadOverlayLayer);
         }
+
+        try { beginBaseMapZoomStabilityGuard('routes-off'); } catch (_) {}
+        try { pruneDirectOfflineNpfQueueForCurrentView('routes-off'); } catch (_) {}
+        try { trimDirectOfflineTileBlobCache(); } catch (_) {}
+
+        const cleanupToken = npfHeavyOverlayZoomSerialToken;
+        await clearRoadOverlayRenderedPartsProgressively(
+            { clearSources: true },
+            cleanupToken
+        );
     }
 
     refreshRoadOverlayButtonState();
@@ -44624,6 +44743,16 @@ const SIA_VRP_INFERRED_AIRPORT_OVERRIDES = Object.freeze({
 let siaVrpInferredAirportMap = null;
 let siaVrpInferredAirportDataset = null;
 
+/*
+ * v16.76 — depuis v16.73 les points/VRP peuvent être rendus depuis
+ * siaMapLiteDataset alors que siaDataset (5 066 espaces) reste volontairement
+ * non chargé. Les couleurs par terrain doivent donc utiliser le dataset SIA
+ * réellement disponible, et non uniquement siaDataset.
+ */
+function getSiaVrpVisualDataset() {
+    return siaDataset || siaMapLiteDataset || null;
+}
+
 function getSiaVrpInferenceKey(item) {
     return [
         String(item?.c || '').trim().toUpperCase(),
@@ -44699,7 +44828,7 @@ function buildSiaVrpInferredAirportMap(dataset) {
     return inferred;
 }
 
-function ensureSiaVrpInferredAirportMap(dataset = siaDataset) {
+function ensureSiaVrpInferredAirportMap(dataset = getSiaVrpVisualDataset()) {
     if (siaVrpInferredAirportMap && siaVrpInferredAirportDataset === dataset) {
         return siaVrpInferredAirportMap;
     }
@@ -44708,11 +44837,11 @@ function ensureSiaVrpInferredAirportMap(dataset = siaDataset) {
     return siaVrpInferredAirportMap;
 }
 
-function getSiaVrpAirportCode(item) {
+function getSiaVrpAirportCode(item, dataset = getSiaVrpVisualDataset()) {
     const officialAirport = String(item?.a || '').trim().toUpperCase();
     if (officialAirport) return officialAirport;
     if (item?.k !== 'dpn:VRP') return '';
-    return ensureSiaVrpInferredAirportMap().get(getSiaVrpInferenceKey(item)) || '';
+    return ensureSiaVrpInferredAirportMap(dataset).get(getSiaVrpInferenceKey(item)) || '';
 }
 
 function getSiaVrpReadableTextColor(background) {
@@ -44871,19 +45000,19 @@ function buildSiaVrpAirportColorMap(dataset) {
     return mapByAirport;
 }
 
-function ensureSiaVrpAirportColorMap(dataset = siaDataset) {
+function ensureSiaVrpAirportColorMap(dataset = getSiaVrpVisualDataset()) {
     if (siaVrpAirportColorMap && siaVrpAirportColorDataset === dataset) return siaVrpAirportColorMap;
     siaVrpAirportColorDataset = dataset || null;
     siaVrpAirportColorMap = buildSiaVrpAirportColorMap(dataset);
     return siaVrpAirportColorMap;
 }
 
-function getSiaVrpAirportVisual(item) {
-    const airport = getSiaVrpAirportCode(item);
+function getSiaVrpAirportVisual(item, dataset = getSiaVrpVisualDataset()) {
+    const airport = getSiaVrpAirportCode(item, dataset);
     if (!airport) {
         return { background: '#ff00ff', foreground: '#ffffff' };
     }
-    const mapByAirport = ensureSiaVrpAirportColorMap();
+    const mapByAirport = ensureSiaVrpAirportColorMap(dataset);
     return mapByAirport.get(airport) || { background: '#ff00ff', foreground: '#ffffff' };
 }
 
