@@ -1,3 +1,74 @@
+VERSION TEST v16.71 — RETOUR DU MOTEUR TUILES OFFLINE AU COMPORTEMENT v16.50
+Date : 12/09/2026
+Base : TEST v16.70
+Référence comparée : 4_Script_v16.50.txt
+
+CONSTATS
+- La carte seule reste lente en v16.70 alors que Routes=OFF et HT=OFF.
+- Le DIAG 12/09 15:03 montre jusqu'à 44 tuiles en file, 6 lectures actives et plusieurs zooms avec 0 tuile visible pendant ~1,6 s.
+- Le moteur de lecture IndexedDB de fond est pratiquement identique à celui de v16.50.
+- Les changements importants apparus ensuite concernent surtout le scheduling :
+  - v16.50 : 5 lectures fixes ;
+  - priorité du nouveau viewport dès `zoomstart` / `movestart` ;
+  - purge immédiate à `zoomend` ;
+  - pas de délai de stabilisation 240 ms ;
+  - pas de polling `TUILES ZOOM FINAL` pour la carte seule.
+
+1. CONCURRENCE INDEXEDDB
+- Suppression du mode adaptatif 3 -> 6 de v16.70.
+- Retour à 5 lectures simultanées fixes, comme v16.50.
+- File maximale conservée à 160.
+
+2. PRIORITÉ IMMÉDIATE
+- `zoomstart` : le nouveau viewport devient prioritaire immédiatement.
+- `movestart` manuel : même comportement.
+- Les transactions déjà actives ne sont pas annulées.
+- Le suivi GPS programmatique conserve son chemin spécial.
+
+3. FIN DE ZOOM / PAN
+- Suppression du délai effectif de stabilisation de 240 ms.
+- `zoomend` : purge ciblée immédiate des demandes obsolètes.
+- `moveend` manuel : purge ciblée immédiate.
+- Cache blobs retaillé directement après zoom.
+
+4. CARTE SEULE
+- Lorsque Routes=OFF et HT=OFF, aucun `waitForNpfFinalZoomFirstTiles()`.
+- Suppression de la boucle de polling toutes les 55 ms pendant 1,6 s.
+- Le fond OFFLINE se peint directement selon les résultats IndexedDB.
+
+5. COUCHES LOURDES
+- Le garde `TUILES ZOOM FINAL` reste réservé aux cas où Routes ou HT doivent être réaffichés.
+- Les protections v16.70 des couches lourdes sont conservées.
+
+6. SIA / RADIO
+- Toutes les corrections v16.70 sont conservées :
+  - pan contenu = zéro travail SIA ;
+  - suppression des décorations dépendantes du zoom au `zoomstart` ;
+  - budget temporel des décorations ;
+  - 326 terrains radio ;
+  - TWR=95 ; AFIS=69 ; A/A=228 ;
+  - seuil d'étiquettes aérodromes = 2 NM.
+
+7. VERSION
+- Index / Manifest / Script / Style : v16.71.
+- Service Worker : `sw-v16-71_offline_tile_scheduler_v1650`.
+- `5_SIA` inchangé fonctionnellement.
+- Packs OFFLINE et bases IndexedDB inchangés.
+
+VALIDATION STATIQUE EFFECTUÉE
+- Syntaxe JavaScript Script / SIA / Service Worker vérifiée.
+- Script inline de l'Index vérifié.
+- Manifest JSON vérifié.
+- Cohérence v16.71 vérifiée.
+- 5 lectures OFFLINE fixes vérifiées.
+- Priorité immédiate zoom/pan manuel vérifiée.
+- Purge immédiate à zoomend/moveend vérifiée.
+- Aucun polling de tuiles finales en carte seule vérifié.
+- Corrections SIA v16.70 conservées.
+- Radio officielle 326 / 95 / 69 / 228 vérifiée.
+
+HISTORIQUE PRÉCÉDENT CONSERVÉ INTÉGRALEMENT
+
 VERSION TEST v16.70 — ZOOM-OUT OFFLINE / SIA / FLUIDITÉ CARTE
 Date : 12/09/2026
 Base : TEST v16.69
