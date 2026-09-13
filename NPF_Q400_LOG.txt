@@ -1,3 +1,104 @@
+VERSION TEST v16.79 — ROUTES : CELLULES RAM + LECTURES PARALLÈLES
+Date : 12/09/2026
+Base : TEST v16.78
+Référence fluidité carte seule : v16.75
+
+CONSTat DIAG v16.78
+- Le cache spatial v16.78 fonctionne :
+  les parties passent bien de `source=brut-initial` à `source=cellules-cache`.
+- Mais un cas a montré :
+  `source=cellules-cache · retenu=615 · totalMs=1203`.
+- Le nouveau goulot d'étranglement est donc l'enchaînement séquentiel :
+  `Cache.match()` + `response.json()` cellule par cellule.
+
+1. CACHE RAM DES MANIFESTES
+- Le manifeste spatial d'une partie n'est plus relu dans Cache Storage à chaque
+  rafraîchissement.
+- Premier accès :
+  lecture/persist du manifeste puis mémorisation en RAM.
+- Accès suivants tant que Routes reste actif :
+  lecture directe depuis `roadOverlaySpatialManifestRam`.
+
+2. CACHE RAM DES CELLULES DÉCODÉES
+- Ajout d'un petit LRU RAM :
+  `roadOverlaySpatialCellRam`.
+- Limite : 96 cellules décodées.
+- Si une cellule est réutilisée lors d'un pan :
+  - aucun `Cache.match()`;
+  - aucun `response.json()`;
+  - réutilisation directe du payload déjà décodé.
+- Les cellules les plus anciennes sont évincées automatiquement au-delà de 96.
+
+3. LECTURE PAR PETITS LOTS PARALLÈLES
+- Les nouvelles cellules ne sont plus lues strictement une par une.
+- Concurrence limitée à 4 :
+  `ROAD_OVERLAY_SPATIAL_CELL_READ_CONCURRENCY = 4`.
+- Chaque lot exécute en parallèle :
+  - `Cache.match()`;
+  - décodage JSON.
+- Entre deux lots, un yield est conservé pour laisser respirer l'UI.
+- Objectif : supprimer la latence cumulée qui avait produit le pic à 1,2 s,
+  sans créer un pic mémoire/CPU sur Safari iPad.
+
+4. DÉDUPLICATION ET SÉCURITÉ CONSERVÉES
+- Les payloads peuvent être chargés en parallèle, mais l'intégration des
+  features reste séquentielle.
+- Déduplication par index source conservée.
+- Contrôle bbox exacte conservé.
+- Annulation par token Routes conservée.
+
+5. NOUVEAU DIAGNOSTIC
+- `ROUTES SOURCE` affiche maintenant, pour `cellules-cache` :
+  - `cellules=N`
+  - `ram=N`
+  - `storage=N`
+- Exemple attendu après un petit pan chaud :
+  `source=cellules-cache ... cellules=8 · ram=6 · storage=2`.
+- Sur un pan dans une zone déjà vue, `ram` doit augmenter et `storage` diminuer.
+
+6. RETOUR CARTE SEULE
+- Routes OFF :
+  - annulation des builds spatiaux ;
+  - vidage manifeste RAM ;
+  - vidage cellules RAM ;
+  - nettoyage Routes v16.76 conservé.
+- Retour tier 0 :
+  même vidage RAM.
+- Le cache spatial persistant reste stocké pour la prochaine activation.
+- Objectif : conserver le comportement de référence v16.75 quand Routes est OFF.
+
+7. CONSERVÉ
+- v16.75 = référence officielle carte seule.
+- v16.76 = tier 0 inerte, Routes OFF, couleurs VFR.
+- v16.77 = working-set compact.
+- v16.78 = index spatial persistant 0,15°.
+- Style graphique Routes inchangé.
+- SIA léger, départements à la demande, radio et moteur de tuiles inchangés.
+- Révision SIA : `15.69-radio1026-1-maplite1`.
+
+8. VERSION
+- App : v16.79.
+- Service Worker : `sw-v16-79_routes_spatial_ram_parallel`.
+- Packs Routes existants compatibles.
+- Aucune réimportation.
+- Packs OFFLINE / IndexedDB inchangés.
+
+VALIDATION STATIQUE EFFECTUÉE
+- Syntaxe JavaScript Script / SIA / Service Worker vérifiée.
+- Script inline Index vérifié.
+- Manifest JSON vérifié.
+- Cohérence v16.79 vérifiée.
+- Cache manifeste RAM présent.
+- Cache cellules RAM LRU 96 présent.
+- Lecture cellules par lots parallèles de 4 présente.
+- Intégration features séquentielle conservée.
+- Vidage RAM sur tier 0 / Routes OFF / reset pack vérifié.
+- v16.76/v16.77/v16.78 conservées.
+- Moteur carte v16.75 conservé.
+- Radio conservée : 326 terrains / TWR=95 / AFIS=69 / A/A=228.
+
+HISTORIQUE PRÉCÉDENT CONSERVÉ INTÉGRALEMENT
+
 VERSION TEST v16.78 — ROUTES : CACHE SPATIAL PAR CELLULES
 Date : 12/09/2026
 Base : TEST v16.77
