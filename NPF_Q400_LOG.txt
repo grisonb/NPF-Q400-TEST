@@ -1,3 +1,83 @@
+VERSION TEST v16.84 — ROUTES + HT : SUPPRESSION DE LA DERNIÈRE ATTENTE TUILES FINALES
+Date : 13/09/2026
+Base : TEST v16.83
+Référence fluidité carte seule : v16.75
+
+CONSTat DIAG v16.83
+- HT seul : suppression de l'attente zoomend validée.
+- Routes seul : suppression déjà validée en v16.81.
+- Le dernier blocage volontaire restant est dans la transaction sérialisée
+  Routes+HT.
+- Mesure observée :
+  `TUILES ZOOM FINAL | mode=routes+ht-sérialisé`
+  avec timeout ~2242 ms pour seulement 1 tuile visible sur 35.
+- Quand les tuiles sont déjà prêtes, la même attente tombe à 0 ms.
+
+1. ROUTES + HT : PLUS D'ATTENTE `TUILES ZOOM FINAL`
+- La reconstruction reste sérialisée :
+  1. traitement Routes ;
+  2. traitement HT ;
+  3. réaffichage des panes.
+- L'étape d'attente des tuiles finales est supprimée.
+- Dès que Routes et HT ont terminé leur reconstruction, les panes sont
+  réaffichés immédiatement.
+- Le fond OFFLINE continue à charger ses tuiles indépendamment.
+
+2. ROUTES SEUL / HT SEUL
+- Routes seul : aucune attente finale, comportement v16.81 conservé.
+- HT seul : aucune attente finale, comportement v16.83 conservé.
+- Aucun cas de calque lourd ne doit désormais produire une attente
+  `TUILES ZOOM FINAL` au zoomend.
+
+3. MOTEUR TUILES
+- AUCUNE modification du moteur de référence v16.75 :
+  - `updateWhenIdle: !isNpfDirectOfflineLayer`
+  - intervalle direct 60 ms
+  - `updateWhenZooming: false`
+  - 5 lectures IndexedDB simultanées.
+- Aucune modification IndexedDB / packs OFFLINE.
+
+4. ROUTES
+- Cache spatial persistant v16.78 conservé.
+- Cache RAM LRU 96 + lectures parallèles x4 v16.79 conservés.
+- Cache RAM conservé au tier 0 v16.80 conservé.
+- Rendu graphique v16.82 conservé.
+- Aucune réimportation Routes.
+
+5. HT
+- Données HT existantes inchangées.
+- Chargement initial HT inchangé.
+- Seule la dépendance finale au fond de carte est supprimée.
+
+6. DIAGNOSTIC ATTENDU
+- Routes ON / HT OFF : aucune ligne `TUILES ZOOM FINAL`.
+- Routes OFF / HT ON : aucune ligne `TUILES ZOOM FINAL`.
+- Routes ON / HT ON : aucune ligne `TUILES ZOOM FINAL`.
+- La séquence `zoom-out série` peut toujours apparaître, mais sans attente
+  `mode=routes+ht-sérialisé`.
+- Les zooms doivent rester fluides.
+
+7. VERSION
+- App : v16.84.
+- Service Worker : `sw-v16-84_routes_ht_no_final_tile_wait`.
+- Packs Routes/HT existants compatibles.
+- Aucune réimportation nécessaire.
+- Révision SIA inchangée : `15.69-radio1026-1-maplite1`.
+
+VALIDATION STATIQUE EFFECTUÉE
+- Syntaxe JavaScript Script / SIA / Service Worker vérifiée.
+- Index inline et Manifest JSON vérifiés.
+- Cohérence v16.84 vérifiée.
+- Appel `waitForNpfFinalZoomFirstTiles()` supprimé de Routes+HT.
+- Aucun appel actif à cette fonction ne subsiste.
+- Sérialisation Routes puis HT conservée.
+- Moteur tuiles v16.75 inchangé.
+- Cache Routes inchangé.
+- Style Routes v16.82 conservé.
+- Radio conservée : 326 terrains / TWR=95 / AFIS=69 / A/A=228.
+
+HISTORIQUE PRÉCÉDENT CONSERVÉ INTÉGRALEMENT
+
 VERSION TEST v16.83 — HT : SUPPRESSION DE L'ATTENTE TUILES FINALES
 Date : 13/09/2026
 Base : TEST v16.82
