@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v16.80';
+const NPF_SCRIPT_BUILD_VERSION = 'v16.81';
 
 
 /*
@@ -7466,29 +7466,22 @@ function initMap() {
              * tuiles du zoom final suffit ; le reste peut continuer en fond.
              */
             const overlayResumeToken = npfHeavyOverlayZoomSerialToken;
-            if (hasEffectiveHeavyOverlayAtCurrentZoom()) {
-                /*
-                 * v16.80 — Routes seule est désormais assez légère pour ne plus
-                 * justifier une attente pouvant atteindre 1,6 s. On conserve un
-                 * très court garde-fou visuel (360 ms / 2 tuiles) afin d'éviter
-                 * autant que possible d'afficher les routes sur un fond vide.
-                 *
-                 * Dès que HT est actif, conserver la politique lourde existante.
-                 */
-                const roadOnlyResume = !!(
-                    isRoadOverlayEffectiveAtCurrentZoom()
-                    && !showHighVoltageLinesLayer
-                );
 
+            /*
+             * v16.81 — Routes seule ne dépend plus du chargement du fond
+             * OFFLINE. Le pane Routes est réaffiché immédiatement à zoomend et
+             * le moteur de tuiles v16.75 poursuit son travail indépendamment.
+             *
+             * HT reste un overlay lourd : conserver pour lui l'attente finale
+             * historique afin de ne pas remettre les lignes au-dessus d'un fond
+             * encore complètement vide.
+             */
+            if (showHighVoltageLinesLayer) {
                 waitForNpfFinalZoomFirstTiles({
-                    timeoutMs: roadOnlyResume
-                        ? ROAD_ONLY_FINAL_TILE_WAIT_MS
-                        : 1600,
-                    targetVisibleMax: roadOnlyResume
-                        ? ROAD_ONLY_FINAL_TILE_TARGET_MAX
-                        : 8,
-                    pollMs: roadOnlyResume ? 45 : 55,
-                    diagnosticMode: roadOnlyResume ? 'routes-seules' : 'heavy',
+                    timeoutMs: 1600,
+                    targetVisibleMax: 8,
+                    pollMs: 55,
+                    diagnosticMode: 'heavy',
                     isCancelled: () => overlayResumeToken !== npfHeavyOverlayZoomSerialToken || !map
                 }).finally(() => {
                     if (overlayResumeToken === npfHeavyOverlayZoomSerialToken) {
@@ -7497,8 +7490,8 @@ function initMap() {
                 });
             } else {
                 /*
-                 * v16.76 — carte seule OU Routes ON mais tier 0 :
-                 * aucun polling des tuiles finales.
+                 * Carte seule, Routes seule (tier 1/2) ou Routes tier 0 :
+                 * aucun TUILES ZOOM FINAL.
                  */
                 setNpfHeavyOverlayPanesHidden(false);
             }
@@ -8685,17 +8678,10 @@ let directOfflineLastRecoveryReason = '';
 const DIRECT_OFFLINE_NPF_MAX_CONCURRENT_READS = 5;
 
 /*
- * v16.80 — synchronisation visuelle Routes seule.
- *
- * Le moteur de tuiles v16.75 reste strictement inchangé. Seule l'attente
- * d'affichage du pane Routes est raccourcie lorsque HT est OFF :
- * - au plus 360 ms ;
- * - 2 tuiles visibles suffisent.
- *
- * Avec HT actif, la politique lourde historique est conservée.
+ * v16.81 — Routes seule n'attend plus les tuiles finales au zoomend.
+ * Le moteur de tuiles v16.75 reste strictement inchangé.
+ * L'attente TUILES ZOOM FINAL est conservée uniquement lorsque HT est actif.
  */
-const ROAD_ONLY_FINAL_TILE_WAIT_MS = 360;
-const ROAD_ONLY_FINAL_TILE_TARGET_MAX = 2;
 const DIRECT_OFFLINE_NPF_MAX_QUEUED_READS = 160;
 
 function getDirectOfflineNpfMaxConcurrentReads() {
