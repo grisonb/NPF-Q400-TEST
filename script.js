@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v16.82';
+const NPF_SCRIPT_BUILD_VERSION = 'v16.83';
 
 
 /*
@@ -7461,40 +7461,16 @@ function initMap() {
             }
             npfHeavyOverlayZoomStartLevel = null;
             /*
-             * v16.70 — même sans combinaison Routes+HT, ne pas réafficher les
-             * panes au-dessus d'un fond OFFLINE encore vide. Un petit noyau de
-             * tuiles du zoom final suffit ; le reste peut continuer en fond.
-             */
-            const overlayResumeToken = npfHeavyOverlayZoomSerialToken;
-
-            /*
-             * v16.81 — Routes seule ne dépend plus du chargement du fond
-             * OFFLINE. Le pane Routes est réaffiché immédiatement à zoomend et
-             * le moteur de tuiles v16.75 poursuit son travail indépendamment.
+             * v16.83 — Routes seul ET HT seul sont désormais indépendants du
+             * chargement du fond OFFLINE à zoomend.
              *
-             * HT reste un overlay lourd : conserver pour lui l'attente finale
-             * historique afin de ne pas remettre les lignes au-dessus d'un fond
-             * encore complètement vide.
+             * Les panes sont réaffichés immédiatement ; le moteur tuiles v16.75
+             * continue son travail sans attente artificielle.
+             *
+             * La transaction sérialisée Routes+HT conserve, elle, son attente
+             * spécifique gérée séparément.
              */
-            if (showHighVoltageLinesLayer) {
-                waitForNpfFinalZoomFirstTiles({
-                    timeoutMs: 1600,
-                    targetVisibleMax: 8,
-                    pollMs: 55,
-                    diagnosticMode: 'heavy',
-                    isCancelled: () => overlayResumeToken !== npfHeavyOverlayZoomSerialToken || !map
-                }).finally(() => {
-                    if (overlayResumeToken === npfHeavyOverlayZoomSerialToken) {
-                        setNpfHeavyOverlayPanesHidden(false);
-                    }
-                });
-            } else {
-                /*
-                 * Carte seule, Routes seule (tier 1/2) ou Routes tier 0 :
-                 * aucun TUILES ZOOM FINAL.
-                 */
-                setNpfHeavyOverlayPanesHidden(false);
-            }
+            setNpfHeavyOverlayPanesHidden(false);
         }
 
         if (showRoadOverlayLayer) {
@@ -8678,9 +8654,10 @@ let directOfflineLastRecoveryReason = '';
 const DIRECT_OFFLINE_NPF_MAX_CONCURRENT_READS = 5;
 
 /*
- * v16.81 — Routes seule n'attend plus les tuiles finales au zoomend.
+ * v16.83 — Routes seule ET HT seul n'attendent plus les tuiles finales au zoomend.
  * Le moteur de tuiles v16.75 reste strictement inchangé.
- * L'attente TUILES ZOOM FINAL est conservée uniquement lorsque HT est actif.
+ * L'attente TUILES ZOOM FINAL n'est conservée que pour la transaction
+ * sérialisée Routes+HT.
  */
 const DIRECT_OFFLINE_NPF_MAX_QUEUED_READS = 160;
 
