@@ -1,3 +1,98 @@
+VERSION TEST v16.85 — ROUTES+HT : SUPPRESSION DES DEUX ATTENTES INTERNES DE TUILES
+Date : 13/09/2026
+Base : TEST v16.84
+Référence fluidité carte seule : v16.75
+
+CONSTat DIAG v16.84
+- `TUILES ZOOM FINAL` a bien disparu.
+- Pourtant, lors d'un zoom 12 -> 11 avec Routes+HT, le DIAG montre :
+  - zoomend vers 14:54:09 ;
+  - recalcul Routes seulement vers 14:54:23.
+- Le ressenti reste donc mauvais malgré `7 zooms / 0 lent`.
+- Cause identifiée dans le code :
+  - `refreshRoadOverlayVisibleParts('zoom-out-serial-routes')`
+    attend encore les tuiles visibles via `waitForRoadOverlayOfflineTiles()`,
+    jusqu'à 7 s ;
+  - `refreshVisibleHighVoltageLines('zoom-out-serial-ht')`
+    attend encore `waitForNpfVisibleBaseTilesReady()`, jusqu'à 7 s.
+- Ces appels étant sérialisés Routes puis HT, le délai théorique pouvait
+  approcher 14 s.
+
+1. ROUTES — BYPASS CIBLÉ DE L'ATTENTE INTERNE
+- Pour la source exacte `zoom-out-serial-routes` uniquement :
+  - aucune attente `waitForRoadOverlayOfflineTiles()` ;
+  - reconstruction immédiate du viewport final.
+- Tous les autres refresh Routes gardent leur priorité tuiles historique.
+- Le comportement normal de `tile-priority-retry` hors séquence sérialisée
+  reste inchangé.
+
+2. HT — BYPASS CIBLÉ DE L'ATTENTE INTERNE
+- Pour la source exacte `zoom-out-serial-ht` uniquement :
+  - aucune attente `waitForNpfVisibleBaseTilesReady()` ;
+  - reconstruction immédiate du viewport final.
+- Tous les autres refresh HT gardent leur garde-fou historique.
+- Le comportement normal de `tile-priority-retry` hors séquence sérialisée
+  reste inchangé.
+
+3. SÉRIALISATION ROUTES + HT CONSERVÉE
+- Ordre inchangé :
+  1. Routes ;
+  2. HT ;
+  3. réaffichage des panes.
+- Les panes restent masqués pendant la reconstruction.
+- Le fond OFFLINE continue de charger en parallèle.
+- Aucune attente de tuiles n'existe désormais dans cette transaction :
+  ni attente finale, ni attente interne Routes, ni attente interne HT.
+
+4. MOTEUR TUILES
+- AUCUNE modification du moteur de référence v16.75 :
+  - `updateWhenIdle: !isNpfDirectOfflineLayer`
+  - intervalle direct 60 ms
+  - `updateWhenZooming: false`
+  - 5 lectures IndexedDB simultanées.
+- Aucun changement des packs OFFLINE ni d'IndexedDB.
+
+5. ROUTES / HT
+- Cache spatial Routes v16.78 conservé.
+- Cache RAM/parallèle v16.79 conservé.
+- Cache RAM au tier 0 v16.80 conservé.
+- Rendu Routes v16.82 conservé.
+- Données HT inchangées.
+- Aucune réimportation nécessaire.
+
+6. DIAGNOSTIC ATTENDU
+- Routes ON + HT ON.
+- Lors des zooms 13 -> 12 -> 11 -> 10 puis retour :
+  - aucune ligne `TUILES ZOOM FINAL` ;
+  - pas de délai de plusieurs secondes avant `ROUTES SOURCE` ;
+  - pas de `tile-priority-retry` nécessaire pour terminer la transaction
+    sérialisée elle-même ;
+  - fin `zoom-out série · terminé ...` rapidement après zoomend.
+- Les chargements de tuiles peuvent continuer en parallèle sans bloquer
+  l'affichage des overlays.
+
+7. VERSION
+- App : v16.85.
+- Service Worker : `sw-v16-85_routes_ht_internal_wait_bypass`.
+- Packs Routes/HT existants compatibles.
+- Aucune réimportation nécessaire.
+- Révision SIA inchangée : `15.69-radio1026-1-maplite1`.
+
+VALIDATION STATIQUE EFFECTUÉE
+- Syntaxe JavaScript Script / SIA / Service Worker vérifiée.
+- Index inline et Manifest JSON vérifiés.
+- Cohérence v16.85 vérifiée.
+- Bypass Routes limité à `zoom-out-serial-routes`.
+- Bypass HT limité à `zoom-out-serial-ht`.
+- Attentes historiques conservées pour tous les autres appels.
+- Aucun appel actif `TUILES ZOOM FINAL`.
+- Sérialisation Routes -> HT conservée.
+- Moteur tuiles v16.75 inchangé.
+- Style Routes v16.82 conservé.
+- Radio conservée : 326 terrains / TWR=95 / AFIS=69 / A/A=228.
+
+HISTORIQUE PRÉCÉDENT CONSERVÉ INTÉGRALEMENT
+
 VERSION TEST v16.84 — ROUTES + HT : SUPPRESSION DE LA DERNIÈRE ATTENTE TUILES FINALES
 Date : 13/09/2026
 Base : TEST v16.83
