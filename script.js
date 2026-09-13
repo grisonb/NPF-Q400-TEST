@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v16.83';
+const NPF_SCRIPT_BUILD_VERSION = 'v16.84';
 
 
 /*
@@ -8654,10 +8654,9 @@ let directOfflineLastRecoveryReason = '';
 const DIRECT_OFFLINE_NPF_MAX_CONCURRENT_READS = 5;
 
 /*
- * v16.83 — Routes seule ET HT seul n'attendent plus les tuiles finales au zoomend.
+ * v16.84 — aucun calque lourd (Routes, HT, Routes+HT) n'attend désormais
+ * les tuiles finales au zoomend.
  * Le moteur de tuiles v16.75 reste strictement inchangé.
- * L'attente TUILES ZOOM FINAL n'est conservée que pour la transaction
- * sérialisée Routes+HT.
  */
 const DIRECT_OFFLINE_NPF_MAX_QUEUED_READS = 160;
 
@@ -11900,12 +11899,12 @@ async function runSerializedHeavyOverlayZoomOut(startZoom, finalZoom) {
             highVoltageLinesLayer.addTo(map);
         }
     } catch (_) {}
-    await waitForNpfFinalZoomFirstTiles({
-        timeoutMs: 2200,
-        targetVisibleMax: 8,
-        diagnosticMode: 'routes+ht-sérialisé',
-        isCancelled: () => token !== npfHeavyOverlayZoomSerialToken || !map
-    });
+    /*
+     * v16.84 — la reconstruction Routes+HT reste sérialisée, mais elle ne
+     * dépend plus du chargement des tuiles finales. Une fois Routes puis HT
+     * reconstruits, les panes sont réaffichés immédiatement et le fond
+     * OFFLINE continue son chargement indépendamment.
+     */
     if (token !== npfHeavyOverlayZoomSerialToken || !map) return;
 
     setNpfHeavyOverlayPanesHidden(false);
@@ -11945,8 +11944,7 @@ function cancelNpfHeavyOverlayWaitsForRoadStateChange(reason = 'routes-state-cha
         cancelPendingSerializedHeavyOverlayZoomOut(reason);
     } else {
         /*
-         * Invalide notamment un waitForNpfFinalZoomFirstTiles() déjà lancé.
-         * Sa boucle verra immédiatement un token différent.
+         * Invalide toute transaction lourde déjà engagée.
          */
         npfHeavyOverlayZoomSerialToken += 1;
         npfHeavyOverlayZoomStartLevel = null;
