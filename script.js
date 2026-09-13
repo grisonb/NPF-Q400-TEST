@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v16.79';
+const NPF_SCRIPT_BUILD_VERSION = 'v16.80';
 
 
 /*
@@ -7467,8 +7467,28 @@ function initMap() {
              */
             const overlayResumeToken = npfHeavyOverlayZoomSerialToken;
             if (hasEffectiveHeavyOverlayAtCurrentZoom()) {
+                /*
+                 * v16.80 — Routes seule est désormais assez légère pour ne plus
+                 * justifier une attente pouvant atteindre 1,6 s. On conserve un
+                 * très court garde-fou visuel (360 ms / 2 tuiles) afin d'éviter
+                 * autant que possible d'afficher les routes sur un fond vide.
+                 *
+                 * Dès que HT est actif, conserver la politique lourde existante.
+                 */
+                const roadOnlyResume = !!(
+                    isRoadOverlayEffectiveAtCurrentZoom()
+                    && !showHighVoltageLinesLayer
+                );
+
                 waitForNpfFinalZoomFirstTiles({
-                    timeoutMs: 1600,
+                    timeoutMs: roadOnlyResume
+                        ? ROAD_ONLY_FINAL_TILE_WAIT_MS
+                        : 1600,
+                    targetVisibleMax: roadOnlyResume
+                        ? ROAD_ONLY_FINAL_TILE_TARGET_MAX
+                        : 8,
+                    pollMs: roadOnlyResume ? 45 : 55,
+                    diagnosticMode: roadOnlyResume ? 'routes-seules' : 'heavy',
                     isCancelled: () => overlayResumeToken !== npfHeavyOverlayZoomSerialToken || !map
                 }).finally(() => {
                     if (overlayResumeToken === npfHeavyOverlayZoomSerialToken) {
@@ -8663,6 +8683,19 @@ let directOfflineLastRecoveryReason = '';
  * 5 lectures IndexedDB simultanées fixes.
  */
 const DIRECT_OFFLINE_NPF_MAX_CONCURRENT_READS = 5;
+
+/*
+ * v16.80 — synchronisation visuelle Routes seule.
+ *
+ * Le moteur de tuiles v16.75 reste strictement inchangé. Seule l'attente
+ * d'affichage du pane Routes est raccourcie lorsque HT est OFF :
+ * - au plus 360 ms ;
+ * - 2 tuiles visibles suffisent.
+ *
+ * Avec HT actif, la politique lourde historique est conservée.
+ */
+const ROAD_ONLY_FINAL_TILE_WAIT_MS = 360;
+const ROAD_ONLY_FINAL_TILE_TARGET_MAX = 2;
 const DIRECT_OFFLINE_NPF_MAX_QUEUED_READS = 160;
 
 function getDirectOfflineNpfMaxConcurrentReads() {
@@ -11772,6 +11805,13 @@ async function waitForNpfFinalZoomFirstTiles(options = {}) {
     const timeoutMs = Number.isFinite(Number(options.timeoutMs))
         ? Math.max(300, Number(options.timeoutMs))
         : 2200;
+    const targetVisibleMax = Number.isFinite(Number(options.targetVisibleMax))
+        ? Math.max(1, Math.floor(Number(options.targetVisibleMax)))
+        : 8;
+    const pollMs = Number.isFinite(Number(options.pollMs))
+        ? Math.max(30, Math.floor(Number(options.pollMs)))
+        : 55;
+    const diagnosticMode = String(options.diagnosticMode || 'heavy');
     const isCancelled = typeof options.isCancelled === 'function'
         ? options.isCancelled
         : () => false;
@@ -11789,33 +11829,41 @@ async function waitForNpfFinalZoomFirstTiles(options = {}) {
         maxActive = Math.max(maxActive, active);
 
         const targetVisible = retained > 0
-            ? Math.max(1, Math.min(8, Math.ceil(retained * 0.25)))
+            ? Math.max(
+                1,
+                Math.min(
+                    targetVisibleMax,
+                    Math.ceil(retained * 0.25)
+                )
+            )
             : 1;
 
         if (visible >= targetVisible) {
             npfDiagSiaInteraction(
                 'TUILES ZOOM FINAL',
-                `état=premier-noyau-prêt · zoom=${map.getZoom()} · visibles=${visible}/${retained}`,
+                `état=premier-noyau-prêt · mode=${diagnosticMode} · zoom=${map.getZoom()} · visibles=${visible}/${retained}`,
                 {
                     waitMs: Math.round(NPF_STARTUP_DIAGNOSTIC.now() - startedAt),
                     maxQueued,
                     maxActive,
+                    targetVisible,
                     concurrency: getDirectOfflineNpfMaxConcurrentReads()
                 }
             );
             return true;
         }
 
-        await new Promise(resolve => setTimeout(resolve, 55));
+        await new Promise(resolve => setTimeout(resolve, pollMs));
     }
 
     npfDiagSiaInteraction(
         'TUILES ZOOM FINAL',
-        `état=timeout · zoom=${map?.getZoom?.() ?? '—'} · visibles=${countVisibleLoadedBaseTiles()}/${getNpfRetainedBaseTileCount()}`,
+        `état=timeout · mode=${diagnosticMode} · zoom=${map?.getZoom?.() ?? '—'} · visibles=${countVisibleLoadedBaseTiles()}/${getNpfRetainedBaseTileCount()}`,
         {
             waitMs: Math.round(NPF_STARTUP_DIAGNOSTIC.now() - startedAt),
             maxQueued,
             maxActive,
+            targetVisibleMax,
             concurrency: getDirectOfflineNpfMaxConcurrentReads()
         }
     );
@@ -11891,6 +11939,8 @@ async function runSerializedHeavyOverlayZoomOut(startZoom, finalZoom) {
     } catch (_) {}
     await waitForNpfFinalZoomFirstTiles({
         timeoutMs: 2200,
+        targetVisibleMax: 8,
+        diagnosticMode: 'routes+ht-sérialisé',
         isCancelled: () => token !== npfHeavyOverlayZoomSerialToken || !map
     });
     if (token !== npfHeavyOverlayZoomSerialToken || !map) return;
@@ -14463,8 +14513,15 @@ async function refreshRoadOverlayVisibleParts(source = 'refresh') {
 
     try {
         if (currentTier === 0) {
+            /*
+             * v16.80 — Routes reste ON : conserver les cellules et manifestes
+             * déjà chauds en RAM. Le calque reste totalement inerte au tier 0,
+             * mais un retour à 2/1 NM ne doit pas repartir avec ram=0.
+             *
+             * La construction d'index encore en cours est toujours annulée pour
+             * protéger la fluidité carte seule au tier 0.
+             */
             cancelRoadOverlaySpatialBuilds('routes-tier0');
-            clearRoadOverlaySpatialRamCaches();
 
             if (
                 roadOverlayLoadedZoomTier !== 0
