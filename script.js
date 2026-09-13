@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v16.78';
+const NPF_SCRIPT_BUILD_VERSION = 'v16.79';
 
 
 /*
@@ -2098,7 +2098,18 @@ const ROAD_OVERLAY_SPATIAL_INDEX_VERSION = 1;
 const ROAD_OVERLAY_SPATIAL_CELL_DEG = 0.15;
 const ROAD_OVERLAY_SPATIAL_MAX_CELLS_PER_FEATURE = 64;
 const ROAD_OVERLAY_SPATIAL_BUILD_YIELD_EVERY = 600;
+
+/*
+ * v16.79 — lecture spatiale chaude.
+ * - manifeste gardé en RAM tant que Routes reste actif ;
+ * - cellules déjà décodées gardées en petit LRU RAM ;
+ * - nouvelles cellules lues/décodées par lots parallèles de 4.
+ */
+const ROAD_OVERLAY_SPATIAL_CELL_READ_CONCURRENCY = 4;
+const ROAD_OVERLAY_SPATIAL_RAM_CELL_LIMIT = 96;
 const roadOverlaySpatialBuildStates = new Map();
+const roadOverlaySpatialManifestRam = new Map();
+const roadOverlaySpatialCellRam = new Map();
 
 const ROAD_OVERLAY_FILTER_YIELD_EVERY = 1200;
 const ROAD_OVERLAY_TILE_PRIORITY_QUEUE_LIMIT = 0;
@@ -12435,6 +12446,7 @@ function buildRoadOverlayCacheRequest(key) {
 
 async function clearRoadOverlayCacheAndManifest() {
     cancelRoadOverlaySpatialBuilds('clear-road-pack');
+    clearRoadOverlaySpatialRamCaches();
     try {
         await caches.delete(ROAD_OVERLAY_CACHE_NAME);
     } catch (_) {}
@@ -12745,6 +12757,59 @@ function cancelRoadOverlaySpatialBuilds(reason = '') {
     roadOverlaySpatialBuildStates.clear();
 }
 
+function clearRoadOverlaySpatialRamCaches() {
+    roadOverlaySpatialManifestRam.clear();
+    roadOverlaySpatialCellRam.clear();
+}
+
+function getRoadOverlaySpatialCellRamKey(partKey, tier, cellKey) {
+    return `${String(partKey)}|${Number(tier)}|${String(cellKey)}`;
+}
+
+function getRoadOverlaySpatialCellFromRam(partKey, tier, cellKey) {
+    const key = getRoadOverlaySpatialCellRamKey(partKey, tier, cellKey);
+    if (!roadOverlaySpatialCellRam.has(key)) return null;
+
+    const value = roadOverlaySpatialCellRam.get(key);
+
+    /*
+     * LRU léger : réinsérer en fin de Map à chaque hit.
+     */
+    roadOverlaySpatialCellRam.delete(key);
+    roadOverlaySpatialCellRam.set(key, value);
+    return value;
+}
+
+function setRoadOverlaySpatialCellInRam(partKey, tier, cellKey, payload) {
+    const key = getRoadOverlaySpatialCellRamKey(partKey, tier, cellKey);
+    roadOverlaySpatialCellRam.delete(key);
+    roadOverlaySpatialCellRam.set(key, payload);
+
+    while (roadOverlaySpatialCellRam.size > ROAD_OVERLAY_SPATIAL_RAM_CELL_LIMIT) {
+        const oldestKey = roadOverlaySpatialCellRam.keys().next().value;
+        if (oldestKey == null) break;
+        roadOverlaySpatialCellRam.delete(oldestKey);
+    }
+}
+
+async function mapRoadOverlaySpatialInBatches(items, concurrency, worker) {
+    const source = Array.isArray(items) ? items : [];
+    const width = Math.max(1, Math.floor(Number(concurrency) || 1));
+    const results = [];
+
+    for (let index = 0; index < source.length; index += width) {
+        const batch = source.slice(index, index + width);
+        const batchResults = await Promise.all(batch.map(worker));
+        results.push(...batchResults);
+
+        if (index + width < source.length) {
+            await yieldRoadOverlayRenderTurn();
+        }
+    }
+
+    return results;
+}
+
 function addRoadOverlaySpatialEntry(bucketMap, cellKey, entry) {
     if (!bucketMap.has(cellKey)) bucketMap.set(cellKey, []);
     bucketMap.get(cellKey).push(entry);
@@ -12903,6 +12968,7 @@ async function persistRoadOverlaySpatialBuckets(part, state) {
         )
     );
 
+    roadOverlaySpatialManifestRam.set(part.key, spatialManifest);
     state.persisted = true;
 
     npfDiagSiaInteraction(
@@ -12974,11 +13040,15 @@ function scheduleRoadOverlaySpatialIndexBuild(part, rawGeojson, rawFeatureCount)
 }
 
 async function loadRoadOverlaySpatialManifest(cache, part) {
+    const cachedManifest = roadOverlaySpatialManifestRam.get(part.key);
+    if (cachedManifest) return cachedManifest;
+
     try {
         const response = await cache.match(
             buildRoadOverlaySpatialManifestRequest(part.key)
         );
         if (!response || !response.ok) return null;
+
         const manifest = await response.json();
         if (
             Number(manifest?.v) !== ROAD_OVERLAY_SPATIAL_INDEX_VERSION
@@ -12987,6 +13057,8 @@ async function loadRoadOverlaySpatialManifest(cache, part) {
         ) {
             return null;
         }
+
+        roadOverlaySpatialManifestRam.set(part.key, manifest);
         return manifest;
     } catch (_) {
         return null;
@@ -13107,19 +13179,46 @@ async function buildRoadOverlayGeojsonFromSpatialCache(
     const availableCells = new Set(
         Array.isArray(tierManifest.cells) ? tierManifest.cells : []
     );
+
     const requestedKeys = getRoadOverlaySpatialCellKeysForBounds(bounds)
         .filter(key => availableCells.has(key));
+
+    if (tierManifest.overflow) {
+        requestedKeys.push('__overflow__');
+    }
 
     const features = [];
     const seenIndexes = new Set();
 
-    const loadCell = async cellKey => {
+    const loadCellPayload = async cellKey => {
+        if (
+            token !== roadOverlayRefreshToken
+            || !showRoadOverlayLayer
+            || tier !== roadOverlayLoadedZoomTier
+        ) {
+            return null;
+        }
+
+        const ramPayload = getRoadOverlaySpatialCellFromRam(
+            part.key,
+            tier,
+            cellKey
+        );
+        if (ramPayload) {
+            return {
+                cellKey,
+                payload: ramPayload,
+                fromRam: true
+            };
+        }
+
         const response = await cache.match(
             buildRoadOverlaySpatialCellRequest(part.key, tier, cellKey)
         );
         if (!response || !response.ok) {
             throw new Error(`Cellule Routes absente : ${part.name} ${cellKey}`);
         }
+
         const payload = await response.json();
         if (
             Number(payload?.v) !== ROAD_OVERLAY_SPATIAL_INDEX_VERSION
@@ -13128,32 +13227,60 @@ async function buildRoadOverlayGeojsonFromSpatialCache(
         ) {
             throw new Error(`Cellule Routes invalide : ${part.name} ${cellKey}`);
         }
-        return collectRoadOverlaySpatialEntries(
-            payload.e,
+
+        setRoadOverlaySpatialCellInRam(
+            part.key,
+            tier,
+            cellKey,
+            payload
+        );
+
+        return {
+            cellKey,
+            payload,
+            fromRam: false
+        };
+    };
+
+    /*
+     * v16.79 — Cache.match() + response.json() ne sont plus strictement
+     * séquentiels. On charge les nouvelles cellules par petits lots de 4 afin
+     * de réduire la latence cumulée sans créer un pic de pression WebKit.
+     */
+    const loadedCells = await mapRoadOverlaySpatialInBatches(
+        requestedKeys,
+        ROAD_OVERLAY_SPATIAL_CELL_READ_CONCURRENCY,
+        loadCellPayload
+    );
+
+    let ramHits = 0;
+    let storageReads = 0;
+
+    for (const item of loadedCells) {
+        if (!item?.payload) return null;
+
+        if (item.fromRam) ramHits += 1;
+        else storageReads += 1;
+
+        const ok = await collectRoadOverlaySpatialEntries(
+            item.payload.e,
             bounds,
             token,
             tier,
             seenIndexes,
             features
         );
-    };
-
-    for (let index = 0; index < requestedKeys.length; index += 1) {
-        const ok = await loadCell(requestedKeys[index]);
-        if (!ok) return null;
-        if (index > 0 && index % 3 === 0) {
-            await yieldRoadOverlayRenderTurn();
-        }
-    }
-
-    if (tierManifest.overflow) {
-        const ok = await loadCell('__overflow__');
         if (!ok) return null;
     }
 
     return {
         type: 'FeatureCollection',
-        features
+        features,
+        __npfSpatialStats: {
+            cells: requestedKeys.length,
+            ramHits,
+            storageReads
+        }
     };
 }
 
@@ -14170,6 +14297,8 @@ async function getRoadOverlaySourcePart(part, token, tier, renderBounds) {
         ? compactGeojson.features.length
         : 0;
 
+    const spatialStats = compactGeojson.__npfSpatialStats || null;
+
     const record = {
         geojson: compactGeojson,
         featureCount: retainedFeatureCount,
@@ -14182,11 +14311,17 @@ async function getRoadOverlaySourcePart(part, token, tier, renderBounds) {
 
     npfDiagSiaInteraction(
         'ROUTES SOURCE',
-        `partie=${part.name} · tier=${tier} · source=${sourceKind} · brut=${rawFeatureCount} · retenu=${retainedFeatureCount}`,
+        `partie=${part.name} · tier=${tier} · source=${sourceKind} · brut=${rawFeatureCount} · retenu=${retainedFeatureCount}`
+            + (spatialStats
+                ? ` · cellules=${spatialStats.cells} · ram=${spatialStats.ramHits} · storage=${spatialStats.storageReads}`
+                : ''),
         {
             totalMs: Math.round(NPF_STARTUP_DIAGNOSTIC.now() - startedAt),
             rawFeatures: rawFeatureCount,
-            retainedFeatures: retainedFeatureCount
+            retainedFeatures: retainedFeatureCount,
+            spatialCells: Number(spatialStats?.cells || 0),
+            spatialRamHits: Number(spatialStats?.ramHits || 0),
+            spatialStorageReads: Number(spatialStats?.storageReads || 0)
         }
     );
 
@@ -14329,6 +14464,7 @@ async function refreshRoadOverlayVisibleParts(source = 'refresh') {
     try {
         if (currentTier === 0) {
             cancelRoadOverlaySpatialBuilds('routes-tier0');
+            clearRoadOverlaySpatialRamCaches();
 
             if (
                 roadOverlayLoadedZoomTier !== 0
@@ -14672,6 +14808,7 @@ async function toggleRoadOverlayLayer(forceState = null, options = {}) {
 
         cancelNpfHeavyOverlayWaitsForRoadStateChange('routes-off');
         cancelRoadOverlaySpatialBuilds('routes-off');
+        clearRoadOverlaySpatialRamCaches();
 
         if (roadOverlayLayer && map.hasLayer(roadOverlayLayer)) {
             map.removeLayer(roadOverlayLayer);
