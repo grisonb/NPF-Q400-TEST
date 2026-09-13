@@ -1,3 +1,78 @@
+VERSION TEST v16.82 — ROUTES : LISIBILITÉ DES NOMS DE VILLES
+Date : 13/09/2026
+Base : TEST v16.81
+Référence fluidité carte seule : v16.75
+
+CONSTat APRÈS VALIDATION v16.81
+- Fluidité Routes stabilisée :
+  - aucun `TUILES ZOOM FINAL` avec Routes seule ;
+  - cache spatial/RAM validé ;
+  - cache RAM conservé à travers le tier 0 ;
+  - zooms fluides.
+- Le problème restant est graphique :
+  le calque vectoriel Routes masque trop les noms de villes déjà imprimés
+  dans le fond raster.
+
+1. OBJECTIF
+- Améliorer la lisibilité des toponymes sans recréer les noms de villes.
+- Ne pas toucher au moteur de tuiles, au cache spatial ni au scheduler Routes.
+- Conserver les couleurs par classe et les cartouches de routes.
+
+2. OPACITÉ
+Ancien réglage :
+- liseré blanc : 0,94
+- trait couleur : 0,95
+
+Nouveau réglage :
+- liseré blanc : 0,32
+- trait couleur : 0,78
+
+3. LARGEUR DES TRAITS
+Autoroutes A :
+- trait : 5,2/4,4 -> 4,6/3,9
+- liseré : 8,2/7,2 -> 6,3/5,5
+
+Nationales / T :
+- trait : 4,5/3,7 -> 4,0/3,3
+- liseré : 7,4/6,4 -> 5,6/4,9
+
+Départementales / M :
+- trait : 3,4/2,8 -> 3,0/2,5
+- liseré : 6,0/5,2 -> 4,8/4,2
+
+4. INCHANGÉ
+- Couleurs : A orange, N/T rouge, D/M jaune.
+- Seuils d'affichage inchangés.
+- Cartouches / labels Routes inchangés.
+- Pans/zooms/cache spatial inchangés.
+- v16.81 : aucune attente `TUILES ZOOM FINAL` pour Routes seule.
+- HT, SIA, départements, radio, pistes et VAC inchangés.
+
+5. PERFORMANCE
+- Aucun nouveau calcul géométrique.
+- Aucun blend mode CSS.
+- Aucun nouveau calque de texte.
+- Modification purement visuelle des styles Leaflet.
+
+6. VERSION
+- App : v16.82.
+- Service Worker : `sw-v16-82_routes_city_names_visibility`.
+- Packs Routes existants compatibles.
+- Aucune réimportation nécessaire.
+- Révision SIA inchangée : `15.69-radio1026-1-maplite1`.
+
+VALIDATION STATIQUE EFFECTUÉE
+- Syntaxe JavaScript Script / SIA / Service Worker vérifiée.
+- Index inline et Manifest JSON vérifiés.
+- Cohérence v16.82 vérifiée.
+- Seules les largeurs/opacités du style Routes ont été modifiées.
+- Aucun changement du moteur tuiles v16.75.
+- Aucun changement du cache spatial/RAM v16.78-v16.81.
+- Aucune attente `TUILES ZOOM FINAL` réintroduite pour Routes seule.
+- Radio conservée : 326 terrains / TWR=95 / AFIS=69 / A/A=228.
+
+HISTORIQUE PRÉCÉDENT CONSERVÉ INTÉGRALEMENT
+
 VERSION TEST v16.81 — ROUTES : SUPPRESSION TOTALE DE L'ATTENTE TUILES FINALES
 Date : 13/09/2026
 Base : TEST v16.80
