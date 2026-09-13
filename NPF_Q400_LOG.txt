@@ -1,3 +1,67 @@
+VERSION TEST v16.81 — ROUTES : SUPPRESSION TOTALE DE L'ATTENTE TUILES FINALES
+Date : 13/09/2026
+Base : TEST v16.80
+Référence fluidité carte seule : v16.75
+
+CONSTat DIAG v16.80
+- Maintien du cache RAM à travers le tier 0 validé : retour dans la même zone avec 30/30 puis 28/28 cellules servies depuis la RAM, 0 lecture storage.
+- Cache RAM / lectures parallèles Routes validés.
+- 10 zooms, 0 lent sur le test ciblé.
+- Le dernier coût volontaire restant pour Routes seule était `TUILES ZOOM FINAL`, encore mesuré à ~381–484 ms dans plusieurs cas.
+
+1. ROUTES SEULE : PLUS AUCUNE ATTENTE `TUILES ZOOM FINAL`
+- À zoomend, si HT est OFF :
+  - aucun appel à `waitForNpfFinalZoomFirstTiles()` ;
+  - pane Routes réaffiché immédiatement ;
+  - chargement des tuiles OFFLINE continue indépendamment.
+- Cela s'applique à Routes seule tier 1/2, carte seule et Routes ON tier 0.
+
+2. HT CONSERVÉ EN MODE LOURD
+- Si Lignes HT est actif : attente `TUILES ZOOM FINAL` conservée, timeout zoomend 1600 ms, cible historique 8 tuiles max.
+- Transaction Routes+HT sérialisée 2200 ms inchangée.
+
+3. CACHE ROUTES INCHANGÉ
+- v16.78 : index spatial persistant 0,15°.
+- v16.79 : cache RAM LRU 96 + lectures parallèles x4.
+- v16.80 : cache RAM conservé au tier 0 tant que Routes reste ON.
+- Routes OFF / reset pack continuent de vider le cache RAM.
+- Aucune réimportation des 53 parties Routes.
+
+4. MOTEUR TUILES
+- AUCUNE modification du scheduler de référence v16.75 : updateWhenIdle direct, intervalle 60 ms, updateWhenZooming=false, 5 lectures IndexedDB simultanées.
+- La v16.81 retire seulement la dépendance Routes -> attente finale.
+
+5. DIAGNOSTIC ATTENDU
+- Avec Routes ON / HT OFF : aucune ligne `TUILES ZOOM FINAL` ne doit être produite par les zooms Routes.
+- Les `ROUTES SOURCE` doivent continuer à montrer les hits RAM sur les zones déjà visitées.
+- Avec HT actif, `TUILES ZOOM FINAL` reste normal.
+
+6. CONSERVÉ
+- v16.75 référence carte seule ; corrections v16.76 à v16.80 conservées.
+- Style graphique Routes inchangé.
+- SIA léger, départements à la demande et radio inchangés.
+- Révision SIA : `15.69-radio1026-1-maplite1`.
+
+7. VERSION
+- App : v16.81.
+- Service Worker : `sw-v16-81_routes_no_final_tile_wait`.
+- Packs Routes existants compatibles.
+- Packs OFFLINE / IndexedDB inchangés.
+
+VALIDATION STATIQUE EFFECTUÉE
+- Syntaxe JavaScript Script / SIA / Service Worker vérifiée.
+- Script inline Index et Manifest JSON vérifiés.
+- Cohérence v16.81 vérifiée.
+- Constantes d'attente Routes seule v16.80 supprimées.
+- Zoomend Routes seule : aucun appel `waitForNpfFinalZoomFirstTiles`.
+- Zoomend HT : attente 1600 ms conservée.
+- Transaction Routes+HT 2200 ms conservée.
+- Cache RAM tier 0 v16.80 conservé.
+- Moteur tuiles v16.75 conservé.
+- Radio : 326 terrains / TWR=95 / AFIS=69 / A/A=228.
+
+HISTORIQUE PRÉCÉDENT CONSERVÉ INTÉGRALEMENT
+
 VERSION TEST v16.80 — ROUTES : CACHE CHAUD TIER 0 + ATTENTE TUILES COURTE
 Date : 13/09/2026
 Base : TEST v16.79
