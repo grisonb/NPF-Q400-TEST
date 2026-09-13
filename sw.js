@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v16-80_routes_warm_tier0_short_wait';
-const APP_VERSION = 'v16.80';
+const SW_VERSION = 'sw-v16-81_routes_no_final_tile_wait';
+const APP_VERSION = 'v16.81';
 const SIA_DATA_REVISION = '15.69-radio1026-1-maplite1';
 const SIA_DATA_URL = './sia.js';
 const SIA_DATA_CACHE = `npf-q400-sia-data-${SIA_DATA_REVISION}`;
