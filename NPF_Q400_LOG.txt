@@ -1,3 +1,78 @@
+VERSION TEST v16.83 — HT : SUPPRESSION DE L'ATTENTE TUILES FINALES
+Date : 13/09/2026
+Base : TEST v16.82
+Référence fluidité carte seule : v16.75
+
+CONSTat DIAG v16.82
+- Routes seule : comportement fluide confirmé.
+- Avec HT actif, le coût volontaire restant vient de l'attente
+  `TUILES ZOOM FINAL` à zoomend.
+- Mesures observées sur le DIAG HT :
+  - ~306 ms ;
+  - ~1101 ms ;
+  - timeout ~1622 ms.
+- L'activation initiale HT reste raisonnable :
+  ~176 ms d'attente tuiles + ~160 ms de chargement pour 13 287 tronçons connus.
+
+1. HT SEUL : PLUS D'ATTENTE `TUILES ZOOM FINAL`
+- À zoomend, HT seul n'appelle plus `waitForNpfFinalZoomFirstTiles()`.
+- Les panes lourds sont réaffichés immédiatement.
+- Le fond OFFLINE continue son chargement indépendamment.
+- Objectif : supprimer les pauses artificielles de 1 à 1,6 s.
+
+2. ROUTES SEULE
+- Comportement v16.81 conservé :
+  aucune attente `TUILES ZOOM FINAL`.
+- Cache spatial/RAM, tier 0 et scheduler Routes inchangés.
+
+3. ROUTES + HT
+- La transaction sérialisée Routes+HT reste conservée.
+- Son attente spécifique jusqu'à 2200 ms reste inchangée.
+- Cette version isole volontairement HT seul.
+- Une optimisation Routes+HT sera traitée séparément si nécessaire.
+
+4. MOTEUR TUILES
+- AUCUNE modification du moteur de référence v16.75 :
+  - `updateWhenIdle: !isNpfDirectOfflineLayer`
+  - intervalle direct 60 ms
+  - `updateWhenZooming: false`
+  - 5 lectures IndexedDB simultanées.
+
+5. RENDU ROUTES v16.82 CONSERVÉ
+- Liseré blanc plus fin / plus transparent.
+- Trait couleur plus fin / plus transparent.
+- Aucun nouveau changement graphique dans cette version.
+
+6. DIAGNOSTIC ATTENDU
+- HT ON / Routes OFF :
+  aucune ligne `TUILES ZOOM FINAL` due au zoomend HT.
+- Routes ON / HT OFF :
+  aucune ligne `TUILES ZOOM FINAL`.
+- Routes+HT :
+  `mode=routes+ht-sérialisé` peut encore apparaître.
+- Les zooms doivent rester fluides.
+
+7. VERSION
+- App : v16.83.
+- Service Worker : `sw-v16-83_ht_no_final_tile_wait`.
+- Packs Routes/HT existants compatibles.
+- Aucune réimportation nécessaire.
+- Révision SIA inchangée : `15.69-radio1026-1-maplite1`.
+
+VALIDATION STATIQUE EFFECTUÉE
+- Syntaxe JavaScript Script / SIA / Service Worker vérifiée.
+- Index inline et Manifest JSON vérifiés.
+- Cohérence v16.83 vérifiée.
+- Attente zoomend HT 1600 ms supprimée.
+- Aucune attente zoomend pour Routes seul ou HT seul.
+- Transaction Routes+HT 2200 ms conservée.
+- Moteur tuiles v16.75 inchangé.
+- Cache spatial/RAM Routes inchangé.
+- Style Routes v16.82 conservé.
+- Radio conservée : 326 terrains / TWR=95 / AFIS=69 / A/A=228.
+
+HISTORIQUE PRÉCÉDENT CONSERVÉ INTÉGRALEMENT
+
 VERSION TEST v16.82 — ROUTES : LISIBILITÉ DES NOMS DE VILLES
 Date : 13/09/2026
 Base : TEST v16.81
