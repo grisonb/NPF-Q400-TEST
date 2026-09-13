@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v16.81';
+const NPF_SCRIPT_BUILD_VERSION = 'v16.82';
 
 
 /*
@@ -13501,28 +13501,28 @@ function getRoadOverlayLineStyle(feature, casing = false) {
     const styleByClass = {
         A: {
             color: '#e85d04',
-            weight: zoom >= 12 ? 5.2 : 4.4,
-            casingWeight: zoom >= 12 ? 8.2 : 7.2
+            weight: zoom >= 12 ? 4.6 : 3.9,
+            casingWeight: zoom >= 12 ? 6.3 : 5.5
         },
         N: {
             color: '#d62828',
-            weight: zoom >= 12 ? 4.5 : 3.7,
-            casingWeight: zoom >= 12 ? 7.4 : 6.4
+            weight: zoom >= 12 ? 4.0 : 3.3,
+            casingWeight: zoom >= 12 ? 5.6 : 4.9
         },
         T: {
             color: '#d62828',
-            weight: zoom >= 12 ? 4.5 : 3.7,
-            casingWeight: zoom >= 12 ? 7.4 : 6.4
+            weight: zoom >= 12 ? 4.0 : 3.3,
+            casingWeight: zoom >= 12 ? 5.6 : 4.9
         },
         D: {
             color: '#f0a202',
-            weight: zoom >= 13 ? 3.4 : 2.8,
-            casingWeight: zoom >= 13 ? 6.0 : 5.2
+            weight: zoom >= 13 ? 3.0 : 2.5,
+            casingWeight: zoom >= 13 ? 4.8 : 4.2
         },
         M: {
             color: '#f0a202',
-            weight: zoom >= 13 ? 3.4 : 2.8,
-            casingWeight: zoom >= 13 ? 6.0 : 5.2
+            weight: zoom >= 13 ? 3.0 : 2.5,
+            casingWeight: zoom >= 13 ? 4.8 : 4.2
         }
     };
 
@@ -13537,8 +13537,13 @@ function getRoadOverlayLineStyle(feature, casing = false) {
         weight: visibleAtCurrentZoom
             ? (casing ? selected.casingWeight : selected.weight)
             : 0,
+        /*
+         * v16.82 — les noms de villes sont imprimés dans le fond raster.
+         * Le calque Routes reste au-dessus mais devient plus transparent
+         * afin de laisser les toponymes lisibles.
+         */
         opacity: visibleAtCurrentZoom
-            ? (casing ? 0.94 : 0.95)
+            ? (casing ? 0.32 : 0.78)
             : 0,
         fillOpacity: 0,
         lineCap: 'round',
