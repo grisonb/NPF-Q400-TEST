@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v16.84';
+const NPF_SCRIPT_BUILD_VERSION = 'v16.85';
 
 
 /*
@@ -8654,8 +8654,8 @@ let directOfflineLastRecoveryReason = '';
 const DIRECT_OFFLINE_NPF_MAX_CONCURRENT_READS = 5;
 
 /*
- * v16.84 — aucun calque lourd (Routes, HT, Routes+HT) n'attend désormais
- * les tuiles finales au zoomend.
+ * v16.85 — la séquence sérialisée Routes+HT ne dépend plus non plus des
+ * attentes INTERNES de tuiles propres à Routes et HT.
  * Le moteur de tuiles v16.75 reste strictement inchangé.
  */
 const DIRECT_OFFLINE_NPF_MAX_QUEUED_READS = 160;
@@ -11665,18 +11665,28 @@ async function refreshVisibleHighVoltageLines(source = 'refresh') {
     if (!map || !highVoltageLinesLayer || !showHighVoltageLinesLayer || !hasLoadedHighVoltageLines) return;
 
     const token = ++highVoltageLinesRefreshToken;
-    const tilesReady = await waitForNpfVisibleBaseTilesReady({
-        maxWaitMs: 7000,
-        isCancelled: () => (
-            token !== highVoltageLinesRefreshToken
-            || !showHighVoltageLinesLayer
-        )
-    });
-    if (!tilesReady) {
-        if (token === highVoltageLinesRefreshToken && showHighVoltageLinesLayer) {
-            scheduleHighVoltageLinesRefresh('tile-priority-retry');
+
+    /*
+     * v16.85 — pendant la transaction sérialisée Routes+HT, les panes sont
+     * déjà masqués et le fond OFFLINE continue de charger en parallèle.
+     * Ne pas bloquer HT jusqu'à 7 s sur les tuiles : reconstruire directement
+     * le viewport final. Les autres appels HT conservent leur garde-fou.
+     */
+    const bypassTileWait = source === 'zoom-out-serial-ht';
+    if (!bypassTileWait) {
+        const tilesReady = await waitForNpfVisibleBaseTilesReady({
+            maxWaitMs: 7000,
+            isCancelled: () => (
+                token !== highVoltageLinesRefreshToken
+                || !showHighVoltageLinesLayer
+            )
+        });
+        if (!tilesReady) {
+            if (token === highVoltageLinesRefreshToken && showHighVoltageLinesLayer) {
+                scheduleHighVoltageLinesRefresh('tile-priority-retry');
+            }
+            return;
         }
-        return;
     }
 
     const zoom = Number(map.getZoom?.());
@@ -11900,10 +11910,10 @@ async function runSerializedHeavyOverlayZoomOut(startZoom, finalZoom) {
         }
     } catch (_) {}
     /*
-     * v16.84 — la reconstruction Routes+HT reste sérialisée, mais elle ne
-     * dépend plus du chargement des tuiles finales. Une fois Routes puis HT
-     * reconstruits, les panes sont réaffichés immédiatement et le fond
-     * OFFLINE continue son chargement indépendamment.
+     * v16.85 — la reconstruction Routes+HT reste sérialisée et les deux appels
+     * internes utilisent maintenant le mode sans attente tuiles. Une fois
+     * Routes puis HT reconstruits, les panes sont réaffichés immédiatement ;
+     * le fond OFFLINE poursuit son chargement indépendamment.
      */
     if (token !== npfHeavyOverlayZoomSerialToken || !map) return;
 
@@ -14577,12 +14587,22 @@ async function refreshRoadOverlayVisibleParts(source = 'refresh') {
         }
 
         if (featureSelectionChanged) {
-            const tilesReady = await waitForRoadOverlayOfflineTiles(token);
-            if (!tilesReady) {
-                if (token === roadOverlayRefreshToken && showRoadOverlayLayer) {
-                    scheduleRoadOverlayRefresh('tile-priority-retry');
+            /*
+             * v16.85 — même principe que HT : pendant la séquence sérialisée
+             * Routes+HT, le fond OFFLINE charge déjà en parallèle et les panes
+             * sont masqués. Ne pas attendre jusqu'à 7 s les tuiles visibles
+             * avant de reconstruire Routes. Les autres refresh conservent leur
+             * priorité tuiles historique.
+             */
+            const bypassTileWait = source === 'zoom-out-serial-routes';
+            if (!bypassTileWait) {
+                const tilesReady = await waitForRoadOverlayOfflineTiles(token);
+                if (!tilesReady) {
+                    if (token === roadOverlayRefreshToken && showRoadOverlayLayer) {
+                        scheduleRoadOverlayRefresh('tile-priority-retry');
+                    }
+                    return;
                 }
-                return;
             }
             if (
                 token !== roadOverlayRefreshToken
