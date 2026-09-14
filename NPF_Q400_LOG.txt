@@ -1,3 +1,100 @@
+VERSION TEST v16.88 — RECHERCHE LOCALITÉS : FRAGMENTS MULTI-FORMES AVANT PHONÉTIQUE
+Date : 14/09/2026
+Base : TEST v16.87
+Référence fluidité carte seule : v16.75
+
+CONSTat
+- `lapradelle` retrouve directement Lapradelle-Puilaurens.
+- `la pradelle` pouvait encore échouer.
+- Soundex et Levenshtein sont toujours présents.
+- Le défaut se produisait AVANT eux : la présélection pouvait retirer l'article
+  `la`, obtenir `pradelle` et ne charger que la famille `pr...`.
+- L'entrée `Lapradelle...`, rangée sous `la...`, pouvait donc ne jamais arriver
+  jusqu'au moteur phonétique.
+
+1. PRÉSÉLECTION MULTI-FORMES — CORRECTION GÉNÉRIQUE
+Pour chaque recherche, NPF calcule simultanément :
+- forme originale normalisée ;
+- forme compacte sans espaces ;
+- forme sans article initial ;
+- forme sans article et compacte.
+
+Exemple `la pradelle` :
+- `la pradelle`
+- `lapradelle`
+- `pradelle`
+
+Les fragments de TOUTES ces formes sont réunis avant scoring.
+Les doublons de fragments sont supprimés.
+
+2. ESPACES / TIRETS / ARTICLES
+- La forme compacte rend la recherche indépendante des espaces.
+- Les tirets restent normalisés par le moteur existant.
+- La forme sans article est conservée.
+- Les méthodes sont unionnées, pas remplacées.
+
+3. CORRESPONDANCE EXACTE COMPACTE
+- Une localité est exacte si son nom compact correspond à la saisie compacte.
+- `la pradelle` et `lapradelle` sont donc équivalents pour la priorité exacte.
+- La comparaison nom+commune de v16.87 reste conservée.
+
+4. ÉQUIVALENCES D'USAGE
+- Les équivalences historiques existantes utilisent aussi la forme compacte.
+- `la pradelle 11` peut donc retrouver l'équivalence existante immédiatement.
+- La base nationale bénéficie néanmoins de la même correction générique.
+
+5. SOUNDEX + LEVENSHTEIN
+- Aucun des deux mécanismes n'est supprimé.
+- Ils restent appliqués après la présélection.
+- v16.88 garantit que les bons candidats ont davantage de chances de leur
+  parvenir malgré espaces/articles.
+
+6. DIAGNOSTIC RECHERCHE
+`RECHERCHE LOCALITÉS` affiche désormais aussi :
+- variantes utilisées ;
+- nombre total de fragments chargés.
+
+Pour `la pradelle`, on doit voir :
+`la pradelle / lapradelle / pradelle`.
+
+7. CONSERVÉ DE v16.87
+- diagnostic complet recherche ;
+- diagnostic détaillé `SIA COUCHES` ;
+- détail SIA dans l'export ;
+- décorations SIA après 950 ms de vraie stabilité ;
+- anti-doublon des décorations ;
+- bandes/bordures intérieures à 5 NM conservées ;
+- v16.86 préchauffage Routes toujours abandonnée.
+
+8. INCHANGÉ
+- moteur tuiles v16.75 ;
+- séquence Routes+HT v16.85 ;
+- caches Routes ;
+- style Routes v16.82 ;
+- SIA AIRAC / fréquences / VAC ;
+- aucune réimportation nécessaire.
+
+9. VERSION
+- App : v16.88.
+- Service Worker : `sw-v16-88_locality_multiform_shards`.
+- Révision SIA inchangée : `15.69-radio1026-1-maplite1`.
+
+VALIDATION STATIQUE EFFECTUÉE
+- Syntaxe JavaScript Script / SIA / Service Worker vérifiée.
+- Index inline et Manifest JSON vérifiés.
+- Cohérence v16.88 vérifiée.
+- `la pradelle` produit bien `la pradelle`, `lapradelle`, `pradelle`.
+- Préfixes chargés incluent `la` ET `pr`.
+- Exact-match compact vérifié.
+- Soundex + Levenshtein toujours présents.
+- Recherche/SIA v16.87 conservés.
+- Aucun préchauffage Routes v16.86 repris.
+- Aucun appel actif `TUILES ZOOM FINAL`.
+- Moteur tuiles v16.75 inchangé.
+- Radio conservée : 326 terrains / TWR=95 / AFIS=69 / A/A=228.
+
+HISTORIQUE PRÉCÉDENT CONSERVÉ INTÉGRALEMENT
+
 VERSION TEST v16.87 — RECHERCHE LOCALITÉS + STABILITÉ SIA + DIAGNOSTIC DÉTAILLÉ
 Date : 14/09/2026
 Base retenue : TEST v16.85
