@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v16.87';
+const NPF_SCRIPT_BUILD_VERSION = 'v16.88';
 
 
 /*
@@ -1961,23 +1961,35 @@ const NPF_KNOWN_LOCALITY_EQUIVALENTS = Object.freeze([
 
 function searchNpfKnownLocalityEquivalents(searchTerm, departmentFilter = null) {
     const normalizedQuery = simplifyString(searchTerm);
-    if (!normalizedQuery || normalizedQuery.length < 3) return [];
+    const compactQuery = normalizedQuery.replace(/\s+/g, '');
+    if (!normalizedQuery || compactQuery.length < 3) return [];
 
     return NPF_KNOWN_LOCALITY_EQUIVALENTS
         .filter(entry => !departmentFilter || entry.departmentCode === departmentFilter)
         .filter(entry => entry.names.some(name => {
             const normalizedName = simplifyString(name);
+            const compactName = normalizedName.replace(/\s+/g, '');
             return normalizedName === normalizedQuery
+                || compactName === compactQuery
                 || normalizedName.startsWith(normalizedQuery)
-                || normalizedQuery.startsWith(normalizedName);
+                || normalizedQuery.startsWith(normalizedName)
+                || (
+                    compactQuery.length >= 4
+                    && (
+                        compactName.startsWith(compactQuery)
+                        || compactQuery.startsWith(compactName)
+                    )
+                );
         }))
         .map(entry => {
             const commune = communesByCodeInsee.get(entry.codeInsee);
             const normalizedName = simplifyString(entry.displayName);
             const municipalityNormalized = simplifyString(entry.municipalityName);
-            const exactUsageName = entry.names.some(
-                name => simplifyString(name) === normalizedQuery
-            );
+            const exactUsageName = entry.names.some(name => {
+                const normalizedName = simplifyString(name);
+                return normalizedName === normalizedQuery
+                    || normalizedName.replace(/\s+/g, '') === compactQuery;
+            });
             const searchParts = Array.from(new Set([
                 ...normalizedName.split(' ').filter(Boolean),
                 ...municipalityNormalized.split(' ').filter(Boolean)
@@ -6058,31 +6070,77 @@ function buildNamedPlacesShardPrefixIndex(archive) {
     return index;
 }
 
+function getNamedPlacesSearchVariants(searchTerm) {
+    const original = simplifyString(searchTerm);
+    if (!original) return [];
+
+    const compact = original.replace(/\s+/g, '');
+    const withoutArticle = normalizeNamedPlacesShardSearchKey(original);
+    const withoutArticleCompact = withoutArticle.replace(/\s+/g, '');
+
+    /*
+     * v16.88 — la sélection des fragments ne doit plus casser la recherche
+     * phonétique avant même Soundex/Levenshtein.
+     *
+     * Exemple :
+     *   "la pradelle"
+     *       forme originale         -> "la pradelle"
+     *       forme compacte          -> "lapradelle"
+     *       forme sans article      -> "pradelle"
+     *
+     * Les familles de fragments "la..." ET "pr..." sont donc chargées.
+     * Même principe pour espaces, tirets et articles des autres toponymes.
+     */
+    return Array.from(new Set([
+        original,
+        compact,
+        withoutArticle,
+        withoutArticleCompact
+    ].filter(value => String(value || '').length >= 2)));
+}
+
 function getNamedPlacesShardIds(searchTerm) {
-    const normalized = normalizeNamedPlacesShardSearchKey(searchTerm);
-    if (
-        normalized.length
-            < NAMED_PLACES_OFFLINE_PHONETIC_PREFIX_LENGTH
-    ) {
-        return [getNamedPlacesShardId(searchTerm)];
+    const variants = getNamedPlacesSearchVariants(searchTerm);
+    const collectedShardIds = new Set();
+
+    const collectForVariant = variant => {
+        const normalized = normalizeNamedPlacesShardSearchKey(variant);
+        if (!normalized) return;
+
+        if (
+            normalized.length
+                < NAMED_PLACES_OFFLINE_PHONETIC_PREFIX_LENGTH
+        ) {
+            collectedShardIds.add(getNamedPlacesShardId(variant));
+            return;
+        }
+
+        const broadPrefix = normalized.slice(
+            0,
+            NAMED_PLACES_OFFLINE_PHONETIC_PREFIX_LENGTH
+        );
+        const broadPrefixId = encodeNamedPlacesShardPrefix(
+            broadPrefix
+        );
+        const shardIds = namedPlacesOfflineShardIdsByPrefix.get(
+            broadPrefixId
+        );
+
+        if (Array.isArray(shardIds) && shardIds.length) {
+            shardIds.forEach(shardId => collectedShardIds.add(shardId));
+            return;
+        }
+
+        collectedShardIds.add(getNamedPlacesShardId(variant));
+    };
+
+    variants.forEach(collectForVariant);
+
+    if (!collectedShardIds.size) {
+        collectedShardIds.add(getNamedPlacesShardId(searchTerm));
     }
 
-    const broadPrefix = normalized.slice(
-        0,
-        NAMED_PLACES_OFFLINE_PHONETIC_PREFIX_LENGTH
-    );
-    const broadPrefixId = encodeNamedPlacesShardPrefix(
-        broadPrefix
-    );
-    const shardIds = namedPlacesOfflineShardIdsByPrefix.get(
-        broadPrefixId
-    );
-
-    if (Array.isArray(shardIds) && shardIds.length) {
-        return shardIds;
-    }
-
-    return [getNamedPlacesShardId(searchTerm)];
+    return Array.from(collectedShardIds).sort();
 }
 
 function showNamedPlacesOfflineStatus(
@@ -6277,11 +6335,13 @@ async function loadNamedPlacesOfflineDatabase({
     };
 
     /*
-     * v14.81 — un fragment unique sur trois lettres empêchait la recherche
-     * phonétique lorsqu'une faute modifiait la troisième lettre :
-     * « Abartelo » chargeait `aba`, jamais `abb` ; « Baye Argent » chargeait
-     * `bay`, jamais `bai`. Tous les fragments partageant les deux premières
-     * lettres sont maintenant chargés avant le classement phonétique local.
+     * v14.81 — tous les fragments partageant les deux premières lettres sont
+     * chargés avant le classement phonétique local.
+     *
+     * v16.88 — ces préfixes sont maintenant calculés sur plusieurs formes
+     * simultanées (originale, compacte, sans article). Ainsi une saisie comme
+     * « la pradelle » ne reste plus cantonnée à `pr...` : `la...` est aussi
+     * chargé avant Soundex + Levenshtein.
      */
     const shardIds = getNamedPlacesShardIds(searchTerm);
     const shardGroups = await Promise.all(
@@ -6394,6 +6454,7 @@ async function searchNamedPlacesOffline(
         departmentFilter
     );
 
+    const searchVariants = getNamedPlacesSearchVariants(searchTerm);
     const requestedShardIds = getNamedPlacesShardIds(searchTerm);
     const records = await loadNamedPlacesOfflineDatabase({ searchTerm });
 
@@ -6408,6 +6469,7 @@ async function searchNamedPlacesOffline(
                 ? 'archive-erreur'
                 : 'aucun-enregistrement',
             shards: requestedShardIds.length,
+            variants: searchVariants.join(' | '),
             records: 0,
             prefiltered: 0,
             scored: 0,
@@ -6417,7 +6479,7 @@ async function searchNamedPlacesOffline(
         };
         recordNpfLocalitySearchDiagnostic(
             'archive',
-            `requête="${normalizedQuery}" · aucun enregistrement · retour=${fallback.length}`,
+            `requête="${normalizedQuery}" · variantes=${searchVariants.join(' / ')} · shards=${requestedShardIds.length} · aucun enregistrement · retour=${fallback.length}`,
             namedPlacesLastOfflineSearchMeta
         );
         return fallback;
@@ -6446,18 +6508,26 @@ async function searchNamedPlacesOffline(
                 || candidate.normalized_name
                 || ''
             ).replace(/\s+/g, '');
+            const candidateNameCompact = String(
+                candidate.normalized_name
+                || candidate.nom_standard
+                || ''
+            ).replace(/\s+/g, '');
 
             /*
-             * v16.87 — une correspondance exacte ne dépend plus du score :
-             * - nom de localité exact ;
-             * - ou nom de localité + commune exactement équivalent à la saisie
-             *   compacte (cas générique des lieux d'usage composés).
+             * v16.88 — exact signifie aussi "même nom sans espaces".
+             * "la pradelle" == "lapradelle" avant tout score phonétique.
+             * Le compact nom+commune reste accepté pour les recherches de
+             * lieux d'usage composés déjà gérées en v16.87.
              */
             const exactLocality = (
                 candidate.normalized_name === normalizedQuery
                 || (
                     searchCompact.length >= 3
-                    && candidateCompact === searchCompact
+                    && (
+                        candidateNameCompact === searchCompact
+                        || candidateCompact === searchCompact
+                    )
                 )
             );
 
@@ -6509,6 +6579,7 @@ async function searchNamedPlacesOffline(
         department: departmentFilter || '',
         status: 'ok',
         shards: requestedShardIds.length,
+        variants: searchVariants.join(' | '),
         records: records.length,
         prefiltered: prefilteredCount,
         scored: scored.length,
@@ -6521,7 +6592,7 @@ async function searchNamedPlacesOffline(
 
     recordNpfLocalitySearchDiagnostic(
         'archive',
-        `requête="${normalizedQuery}" · shards=${requestedShardIds.length} · enregistrements=${records.length} · exacts=${exactResults.length} · retour=${finalResults.length}`,
+        `requête="${normalizedQuery}" · variantes=${searchVariants.join(' / ')} · shards=${requestedShardIds.length} · enregistrements=${records.length} · exacts=${exactResults.length} · retour=${finalResults.length}`,
         namedPlacesLastOfflineSearchMeta
     );
 
@@ -6676,6 +6747,7 @@ async function enrichCommuneSearchWithNamedPlaces({
             top: formatNpfSearchResultNames(mergedResults),
             archiveStatus: String(namedPlacesLastOfflineSearchMeta?.status || '—'),
             shards: Number(namedPlacesLastOfflineSearchMeta?.shards || 0),
+            variants: String(namedPlacesLastOfflineSearchMeta?.variants || ''),
             records: Number(namedPlacesLastOfflineSearchMeta?.records || 0),
             prefiltered: Number(namedPlacesLastOfflineSearchMeta?.prefiltered || 0),
             scored: Number(namedPlacesLastOfflineSearchMeta?.scored || 0)
@@ -8838,11 +8910,11 @@ let directOfflineLastRecoveryReason = '';
 const DIRECT_OFFLINE_NPF_MAX_CONCURRENT_READS = 5;
 
 /*
- * v16.87 — base v16.85.
- * - fiabilisation générique de la recherche villages / hameaux / lieux-dits ;
- * - diagnostic complet du chemin de recherche ;
- * - diagnostic détaillé des couches SIA réellement rendues ;
- * - décorations SIA recalculées seulement après stabilisation réelle de la vue.
+ * v16.88 — base v16.87.
+ * La présélection des fragments de la base nationale devient elle aussi
+ * indépendante des espaces/articles : forme originale, compacte et sans
+ * article sont recherchées ensemble avant Soundex + Levenshtein.
+ * Les diagnostics recherche/SIA et la stabilisation SIA v16.87 sont conservés.
  * Le moteur de tuiles v16.75 reste strictement inchangé.
  */
 const DIRECT_OFFLINE_NPF_MAX_QUEUED_READS = 160;
