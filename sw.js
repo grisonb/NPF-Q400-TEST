@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v16-85_routes_ht_internal_wait_bypass';
-const APP_VERSION = 'v16.85';
+const SW_VERSION = 'sw-v16-87_search_sia_stability_diag';
+const APP_VERSION = 'v16.87';
 const SIA_DATA_REVISION = '15.69-radio1026-1-maplite1';
 const SIA_DATA_URL = './sia.js';
 const SIA_DATA_CACHE = `npf-q400-sia-data-${SIA_DATA_REVISION}`;
