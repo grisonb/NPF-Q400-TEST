@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v16.88';
+const NPF_SCRIPT_BUILD_VERSION = 'v16.89';
 
 
 /*
@@ -24,9 +24,18 @@ const NPF_STARTUP_DIAGNOSTIC = (() => {
         eventLoopMonitorSupported: true,
         longTaskObserverSupported: false,
         mapMotionSummary: {
-            gpsFollow: { count: 0, slow: 0, totalMs: 0, maxMs: 0, maxGapMs: 0, maxEvents: 0 },
-            manual: { count: 0, slow: 0, totalMs: 0, maxMs: 0, maxGapMs: 0, maxEvents: 0 },
-            other: { count: 0, slow: 0, totalMs: 0, maxMs: 0, maxGapMs: 0, maxEvents: 0 },
+            gpsFollow: {
+                count: 0, slow: 0, totalMs: 0, maxMs: 0, maxGapMs: 0, maxEvents: 0,
+                gap100Count: 0, gap150Count: 0, gap250Count: 0
+            },
+            manual: {
+                count: 0, slow: 0, totalMs: 0, maxMs: 0, maxGapMs: 0, maxEvents: 0,
+                gap100Count: 0, gap150Count: 0, gap250Count: 0
+            },
+            other: {
+                count: 0, slow: 0, totalMs: 0, maxMs: 0, maxGapMs: 0, maxEvents: 0,
+                gap100Count: 0, gap150Count: 0, gap250Count: 0
+            },
             zoom: { count: 0, slow: 0, totalMs: 0, maxMs: 0 }
         },
         gpsSummary: {
@@ -205,18 +214,30 @@ const NPF_STARTUP_DIAGNOSTIC = (() => {
         const avgGapMs = Math.max(0, Number(safeMetrics.gapMoyMs) || 0);
         const maxGapMs = Math.max(0, Number(safeMetrics.gapMaxMs) || 0);
         const moveEvents = Math.max(0, Number(safeMetrics.moveEvents) || 0);
-        const slow = maxGapMs >= 80 || avgGapMs >= 35 || durationMs >= 1800;
+        const gap100Count = Math.max(0, Number(safeMetrics.gaps100) || 0);
+        const gap150Count = Math.max(0, Number(safeMetrics.gaps150) || 0);
+        const gap250Count = Math.max(0, Number(safeMetrics.gaps250) || 0);
+
+        /*
+         * v16.89 — la durée du geste n'est plus assimilée à une lenteur.
+         * Un pan de 2,3 s à 18 ms entre frames est fluide. On retient une
+         * saccade lorsqu'un vrai trou temporel >=100 ms est observé.
+         */
+        const slow = maxGapMs >= 100 || gap100Count > 0;
 
         bucket.count += 1;
         bucket.totalMs += durationMs;
         bucket.maxMs = Math.max(bucket.maxMs, durationMs);
         bucket.maxGapMs = Math.max(bucket.maxGapMs, maxGapMs);
         bucket.maxEvents = Math.max(bucket.maxEvents, moveEvents);
+        bucket.gap100Count = Number(bucket.gap100Count || 0) + gap100Count;
+        bucket.gap150Count = Number(bucket.gap150Count || 0) + gap150Count;
+        bucket.gap250Count = Number(bucket.gap250Count || 0) + gap250Count;
         if (slow) bucket.slow += 1;
 
         if (slow) {
             return addSiaInteraction(
-                'PAN CARTE LENT',
+                'PAN CARTE SACCADÉ',
                 `source=${source || 'autre'}`,
                 { ...safeMetrics }
             );
@@ -479,6 +500,10 @@ function getNpfStartupDiagnosticOverlaySnapshot() {
         npfTileRetries: Number(directOfflineNpfTileRetryCount || 0),
         npfViewEpoch: Number(directOfflineTileViewPriorityEpoch || 0),
         tileBlobCache: Number(directOfflineTileBlobCache?.size || 0),
+        leafletLayers: (() => {
+            try { return Number(Object.keys(map?._layers || {}).length || 0); }
+            catch (_) { return 0; }
+        })(),
         runwayLayers: Number(npfRunwayMapLayer?.getLayers?.().length || 0),
         siaLayers: Number(siaLayerGroup?.getLayers?.().length || 0),
         siaZones: Number(siaRenderedDiagnosticCounts?.zones || 0),
@@ -495,6 +520,179 @@ function getNpfStartupDiagnosticOverlaySnapshot() {
 function recordNpfStartupDiagnosticOverlaySnapshot(detail = '') {
     const snapshot = getNpfStartupDiagnosticOverlaySnapshot();
     return npfDiagSiaInteraction('Couches carte', detail || 'état', snapshot);
+}
+
+/*
+ * v16.89 — corrélation passive d'une vraie saccade de pan.
+ * Le timer de surveillance JS travaille à 1 Hz : on attend 1150 ms après le
+ * moveend afin de lui laisser le temps d'enregistrer un éventuel retard.
+ * Aucun traitement de carte n'est déclenché par ce diagnostic.
+ */
+function scheduleNpfPanJankCorrelation(sample, endedAt, endSnapshot) {
+    if (!sample || !Number.isFinite(Number(sample.startedAt))) return;
+
+    const startedAt = Number(sample.startedAt);
+    const finishedAt = Number(endedAt);
+    const startSnapshot = sample.startSnapshot || {};
+    const finalSnapshot = endSnapshot || getNpfStartupDiagnosticOverlaySnapshot();
+
+    setTimeout(() => {
+        try {
+            const state = NPF_STARTUP_DIAGNOSTIC.state;
+            const overlap = (aStart, aEnd, bStart, bEnd) =>
+                Math.max(aStart, bStart) <= Math.min(aEnd, bEnd);
+
+            /*
+             * Le timestamp du stall est celui du réveil du timer.
+             * Son début estimé est donc t - delay. Cela permet de savoir si
+             * l'intervalle bloqué recoupe réellement le geste.
+             */
+            const stalls = (Array.isArray(state?.stalls) ? state.stalls : [])
+                .filter(item => {
+                    const stallEnd = Number(item?.t) || 0;
+                    const delay = Math.max(0, Number(item?.delay) || 0);
+                    const stallStart = Math.max(0, stallEnd - delay);
+                    return overlap(startedAt, finishedAt, stallStart, stallEnd);
+                });
+            const jsStallMaxMs = stalls.reduce(
+                (maxValue, item) => Math.max(maxValue, Number(item?.delay) || 0),
+                0
+            );
+
+            const classifyInteraction = item => {
+                const kind = String(item?.kind || '').toUpperCase();
+                const detail = String(item?.detail || '').toUpperCase();
+                if (kind.includes('ROUTES') || detail.includes('ROUTES')) return 'Routes';
+                if (
+                    kind.includes('HT')
+                    || detail.includes('LIGNES-HT')
+                    || detail.includes('COUCHE=HT')
+                ) return 'HT';
+                if (kind.includes('SIA')) return 'SIA';
+                if (
+                    kind.includes('TUILE')
+                    || kind.includes('MÉMOIRE CARTE')
+                    || detail.includes('TUILE')
+                ) return 'Tuiles';
+                return 'Autre';
+            };
+
+            const getInteractionDuration = item => {
+                const metrics = item?.metrics && typeof item.metrics === 'object'
+                    ? item.metrics
+                    : {};
+                return Math.max(
+                    0,
+                    Number(metrics.totalMs) || 0,
+                    Number(metrics.dureeMs) || 0,
+                    Number(metrics.waitMs) || 0,
+                    Number(metrics.layerMs) || 0,
+                    Number(metrics.pointsMs) || 0,
+                    Number(metrics.bandMs) || 0,
+                    Number(metrics.labelMs) || 0,
+                    Number(metrics.datasetMs) || 0,
+                    Number(metrics.scanMs) || 0,
+                    Number(metrics.geoJsonMs) || 0,
+                    Number(metrics.commitMs) || 0
+                );
+            };
+
+            const componentStats = {
+                Routes: { count: 0, maxMs: 0 },
+                HT: { count: 0, maxMs: 0 },
+                SIA: { count: 0, maxMs: 0 },
+                Tuiles: { count: 0, maxMs: 0 },
+                Autre: { count: 0, maxMs: 0 }
+            };
+
+            const overlappingEvents = (
+                Array.isArray(state?.siaInteractions)
+                    ? state.siaInteractions
+                    : []
+            )
+                .filter(item => !String(item?.kind || '').startsWith('PAN '))
+                .filter(item => {
+                    const eventEnd = Number(item?.t) || 0;
+                    const duration = getInteractionDuration(item);
+                    const eventStart = Math.max(0, eventEnd - duration);
+                    return duration > 0
+                        ? overlap(startedAt, finishedAt, eventStart, eventEnd)
+                        : eventEnd >= startedAt && eventEnd <= finishedAt;
+                });
+
+            overlappingEvents.forEach(item => {
+                const category = classifyInteraction(item);
+                const stats = componentStats[category] || componentStats.Autre;
+                const duration = getInteractionDuration(item);
+                stats.count += 1;
+                stats.maxMs = Math.max(stats.maxMs, duration);
+            });
+
+            const gpsPositionsEnd = Number(state?.gpsSummary?.positions || 0);
+            const gpsPositionsDelta = Math.max(
+                0,
+                gpsPositionsEnd - Number(sample.gpsPositionsStart || 0)
+            );
+
+            const delta = key =>
+                Number(finalSnapshot?.[key] || 0)
+                    - Number(startSnapshot?.[key] || 0);
+
+            const activityText = [
+                `JS=${stalls.length ? Math.round(jsStallMaxMs) + 'ms' : '0'}`,
+                `tuiles=q${Math.round(Number(sample.maxReadsQueued || 0))}/a${Math.round(Number(sample.maxReadsActive || 0))}`,
+                `SIA=${componentStats.SIA.count}/${Math.round(componentStats.SIA.maxMs)}ms`,
+                `Routes=${componentStats.Routes.count}/${Math.round(componentStats.Routes.maxMs)}ms`,
+                `HT=${componentStats.HT.count}/${Math.round(componentStats.HT.maxMs)}ms`,
+                `GPS=${gpsPositionsDelta}`,
+                `Leaflet=${Number(startSnapshot.leafletLayers || 0)}→${Number(finalSnapshot.leafletLayers || 0)}`
+            ].join(' · ');
+
+            npfDiagSiaInteraction(
+                'PAN DIAGNOSTIC',
+                `source=${sample.source || 'autre'} · ${activityText}`,
+                {
+                    gesteMs: Math.round(finishedAt - startedAt),
+                    moveEvents: Number(sample.events || 0),
+                    gapMoyMs: Math.round(
+                        Number(sample.events || 0) > 0
+                            ? Number(sample.gapTotal || 0) / Number(sample.events || 1)
+                            : 0
+                    ),
+                    gapMaxMs: Math.round(Number(sample.maxGap || 0)),
+                    gaps100: Number(sample.gaps100 || 0),
+                    gaps150: Number(sample.gaps150 || 0),
+                    gaps250: Number(sample.gaps250 || 0),
+                    jsStalls: stalls.length,
+                    jsStallMaxMs: Math.round(jsStallMaxMs),
+                    tileQueueMax: Number(sample.maxReadsQueued || 0),
+                    tileActiveMax: Number(sample.maxReadsActive || 0),
+                    tileQueuedDiscardedDelta: delta('npfQueuedDiscarded'),
+                    tileAbortedDelta: delta('npfReadsAborted'),
+                    tileRetriesDelta: delta('npfTileRetries'),
+                    tilesVisibleStart: Number(startSnapshot.tilesVisible || 0),
+                    tilesVisibleEnd: Number(finalSnapshot.tilesVisible || 0),
+                    routesSourceDelta: delta('routesSourceSegments'),
+                    routesRenderedDelta: delta('routesRenderedSegments'),
+                    htRenderedDelta: delta('htRenderedSegments'),
+                    siaLayersDelta: delta('siaLayers'),
+                    gpsPositionsDelta,
+                    leafletLayersStart: Number(startSnapshot.leafletLayers || 0),
+                    leafletLayersEnd: Number(finalSnapshot.leafletLayers || 0),
+                    siaEvents: componentStats.SIA.count,
+                    siaEventMaxMs: Math.round(componentStats.SIA.maxMs),
+                    routeEvents: componentStats.Routes.count,
+                    routeEventMaxMs: Math.round(componentStats.Routes.maxMs),
+                    htEvents: componentStats.HT.count,
+                    htEventMaxMs: Math.round(componentStats.HT.maxMs),
+                    tileEvents: componentStats.Tuiles.count,
+                    tileEventMaxMs: Math.round(componentStats.Tuiles.maxMs)
+                }
+            );
+        } catch (error) {
+            console.warn('[NPF DIAG] Corrélation pan impossible:', error);
+        }
+    }, 1150);
 }
 
 function getNpfStartupDiagnosticRuntimeInfo() {
@@ -540,6 +738,7 @@ function getNpfStartupDiagnosticRuntimeInfo() {
         npfTileRetries: layers.npfTileRetries,
         npfViewEpoch: layers.npfViewEpoch,
         tileBlobCacheSize: layers.tileBlobCache,
+        leafletLayerCount: layers.leafletLayers,
         runwayLayerCount: layers.runwayLayers,
         siaLayerCount: layers.siaLayers,
         siaZoneCount: layers.siaZones,
@@ -638,6 +837,7 @@ function buildNpfStartupDiagnosticExportText() {
         + runtime.npfReadsAborted + ' lectures devenues obsolètes / '
         + runtime.npfTileRetries + ' reprises | '
         + runtime.tileBlobCacheSize + ' blobs cache | '
+        + runtime.leafletLayerCount + ' calques Leaflet totaux | '
         + runtime.runwayLayerCount + ' couches pistes | '
         + runtime.siaLayerCount + ' couches SIA'
     );
@@ -706,11 +906,22 @@ function buildNpfStartupDiagnosticExportText() {
         + 'précision moy ' + fmtAvg(gpsDiag.accuracyTotalM || 0, gpsDiag.accuracyCount || 0) + ' m / max ' + Math.round(gpsDiag.maxAccuracyM || 0) + ' m | '
         + 'déplacement centre max ' + Math.round(gpsDiag.maxCenterShiftM || 0) + ' m'
     );
+    const fmtMotionBucket = bucket => {
+        const safeBucket = bucket || {};
+        return (safeBucket.count || 0)
+            + ' (' + (safeBucket.slow || 0) + ' saccadés'
+            + ', >100=' + (safeBucket.gap100Count || 0)
+            + ', >150=' + (safeBucket.gap150Count || 0)
+            + ', >250=' + (safeBucket.gap250Count || 0)
+            + ', gap max ' + Math.round(safeBucket.maxGapMs || 0) + ' ms)';
+    };
     lines.push(
         'Mouvements carte : GPS auto '
-        + (motion.gpsFollow?.count || 0) + ' (' + (motion.gpsFollow?.slow || 0) + ' lents, gap max ' + Math.round(motion.gpsFollow?.maxGapMs || 0) + ' ms) | '
-        + 'manuels ' + (motion.manual?.count || 0) + ' (' + (motion.manual?.slow || 0) + ' lents, gap max ' + Math.round(motion.manual?.maxGapMs || 0) + ' ms) | '
-        + 'zooms ' + (motion.zoom?.count || 0) + ' (' + (motion.zoom?.slow || 0) + ' lents)'
+        + fmtMotionBucket(motion.gpsFollow)
+        + ' | manuels ' + fmtMotionBucket(motion.manual)
+        + ' | autres ' + fmtMotionBucket(motion.other)
+        + ' | zooms ' + (motion.zoom?.count || 0)
+        + ' (' + (motion.zoom?.slow || 0) + ' lents)'
     );
     lines.push(
         'Synthèse performance : '
@@ -8910,11 +9121,12 @@ let directOfflineLastRecoveryReason = '';
 const DIRECT_OFFLINE_NPF_MAX_CONCURRENT_READS = 5;
 
 /*
- * v16.88 — base v16.87.
- * La présélection des fragments de la base nationale devient elle aussi
- * indépendante des espaces/articles : forme originale, compacte et sans
- * article sont recherchées ensemble avant Soundex + Levenshtein.
- * Les diagnostics recherche/SIA et la stabilisation SIA v16.87 sont conservés.
+ * v16.89 — base v16.88.
+ * Version essentiellement DIAGNOSTIC :
+ * - distingue la durée du geste de la vraie saccade (gaps >100/150/250 ms) ;
+ * - corrèle les gaps aux blocages JS et aux activités Routes/HT/SIA/tuiles/GPS ;
+ * - photographie les couches Leaflet et les files de tuiles au début/à la fin.
+ * Aucun moteur de rendu Routes/HT/SIA ni moteur de tuiles n'est optimisé ici.
  * Le moteur de tuiles v16.75 reste strictement inchangé.
  */
 const DIRECT_OFFLINE_NPF_MAX_QUEUED_READS = 160;
@@ -47723,12 +47935,22 @@ function initializeSiaSystem() {
                 siaDecorationProgressiveRun += 1;
             }
             const now = NPF_STARTUP_DIAGNOSTIC.now();
+            const startSnapshot = getNpfStartupDiagnosticOverlaySnapshot();
             npfDiagMoveSample = {
                 startedAt: now,
                 lastAt: now,
                 events: 0,
                 gapTotal: 0,
                 maxGap: 0,
+                gaps100: 0,
+                gaps150: 0,
+                gaps250: 0,
+                maxReadsActive: Number(startSnapshot.npfReadsActive || 0),
+                maxReadsQueued: Number(startSnapshot.npfReadsQueued || 0),
+                gpsPositionsStart: Number(
+                    NPF_STARTUP_DIAGNOSTIC.state?.gpsSummary?.positions || 0
+                ),
+                startSnapshot,
                 source: gpsFollowPan
                     ? 'gps-follow'
                     : (centerGpsFollowUserGestureActive ? 'manual' : 'autre')
@@ -47742,6 +47964,17 @@ function initializeSiaSystem() {
             npfDiagMoveSample.events += 1;
             npfDiagMoveSample.gapTotal += gap;
             npfDiagMoveSample.maxGap = Math.max(npfDiagMoveSample.maxGap, gap);
+            if (gap >= 100) npfDiagMoveSample.gaps100 += 1;
+            if (gap >= 150) npfDiagMoveSample.gaps150 += 1;
+            if (gap >= 250) npfDiagMoveSample.gaps250 += 1;
+            npfDiagMoveSample.maxReadsActive = Math.max(
+                Number(npfDiagMoveSample.maxReadsActive || 0),
+                Number(directOfflineNpfActiveReads || 0)
+            );
+            npfDiagMoveSample.maxReadsQueued = Math.max(
+                Number(npfDiagMoveSample.maxReadsQueued || 0),
+                Number(directOfflineNpfReadQueue?.length || 0)
+            );
         });
         map.on('moveend', () => {
             markSiaDecorationMapMotion();
@@ -47750,14 +47983,29 @@ function initializeSiaSystem() {
             if (sample) {
                 const now = NPF_STARTUP_DIAGNOSTIC.now();
                 const avgGap = sample.events > 0 ? sample.gapTotal / sample.events : 0;
+                const endSnapshot = getNpfStartupDiagnosticOverlaySnapshot();
                 npfDiagMapMotion(sample.source || 'autre', {
                     dureeMs: Math.round(now - sample.startedAt),
                     moveEvents: sample.events,
                     gapMoyMs: Math.round(avgGap),
                     gapMaxMs: Math.round(sample.maxGap),
+                    gaps100: Number(sample.gaps100 || 0),
+                    gaps150: Number(sample.gaps150 || 0),
+                    gaps250: Number(sample.gaps250 || 0),
+                    tileQueueMaxPendantPan: Number(sample.maxReadsQueued || 0),
+                    tileActiveMaxPendantPan: Number(sample.maxReadsActive || 0),
+                    leafletLayersDebut: Number(sample.startSnapshot?.leafletLayers || 0),
+                    leafletLayersFin: Number(endSnapshot.leafletLayers || 0),
                     zoom: map.getZoom(),
                     zonesVisibles: Array.isArray(siaRenderedAirspaceFeatures) ? siaRenderedAirspaceFeatures.length : 0
                 });
+
+                if (
+                    Number(sample.maxGap || 0) >= 100
+                    || Number(sample.gaps100 || 0) > 0
+                ) {
+                    scheduleNpfPanJankCorrelation(sample, now, endSnapshot);
+                }
             } else if (consumeSiaStartupPassiveMoveendGuard()) {
                 npfDiagSiaInteraction(
                     'SIA RAFRAÎCHISSEMENT',
