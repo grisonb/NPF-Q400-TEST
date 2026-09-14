@@ -1,3 +1,145 @@
+VERSION TEST v16.89 — DIAGNOSTIC CIBLÉ DES SACCADES DE CARTE
+Date : 14/09/2026
+Base : TEST v16.88
+Référence fluidité carte seule : v16.75
+
+OBJECTIF
+Les derniers DIAG montraient des entrées `PAN CARTE LENT` dont certaines
+correspondaient simplement à un geste long et fluide. Exemple typique :
+plus de 2 secondes de déplacement, mais ~18 ms entre événements et aucun
+vrai blocage visible.
+
+v16.89 ne cherche donc PAS encore à optimiser Routes, HT ou SIA.
+Elle mesure d'abord précisément ce qui se passe au moment d'une vraie saccade.
+
+1. DURÉE DU GESTE ≠ SACCADE
+- La durée totale du pan n'est plus utilisée pour déclarer un pan lent.
+- Le seuil de diagnostic réel devient un trou temporel >= 100 ms.
+- Les compteurs suivants sont enregistrés pour chaque pan :
+  - gaps >= 100 ms ;
+  - gaps >= 150 ms ;
+  - gaps >= 250 ms ;
+  - gap maximum ;
+  - gap moyen ;
+  - nombre d'événements move.
+- Le libellé devient `PAN CARTE SACCADÉ`.
+
+2. CORRÉLATION AUTOMATIQUE APRÈS UNE SACCADE
+Lorsqu'un gap >=100 ms est détecté, NPF génère automatiquement environ
+1,15 s après le moveend une ligne :
+`PAN DIAGNOSTIC`
+
+Elle corrèle le même intervalle avec :
+- blocage(s) de boucle JavaScript ;
+- activité tuiles ;
+- activité SIA ;
+- activité Routes ;
+- activité HT ;
+- positions GPS reçues ;
+- nombre total de calques Leaflet.
+
+3. BLOCAGES JAVASCRIPT
+Le moniteur JS existant à 1 Hz est conservé.
+Pour corréler correctement un stall, v16.89 utilise l'intervalle estimé :
+`t du réveil - retard` → `t du réveil`.
+
+Cela permet de savoir si le blocage recouvre réellement le pan, même si le
+timer ne se réveille qu'après la fin du geste.
+
+4. TUILES PENDANT LE PAN
+Sans scanner le DOM à chaque frame, v16.89 relève pendant le geste :
+- maximum de lectures IndexedDB actives ;
+- maximum de lectures en file.
+
+Début/fin du pan :
+- tuiles visibles ;
+- demandes abandonnées ;
+- lectures devenues obsolètes ;
+- reprises.
+
+Le DIAG calcule les deltas correspondants.
+
+5. ROUTES / HT / SIA
+Début/fin du pan et événements corrélés :
+- segments source Routes ;
+- segments Routes rendus ;
+- tronçons HT rendus ;
+- couches SIA ;
+- durée maximale des événements Routes / HT / SIA recoupant le pan.
+
+Aucune logique de rendu n'est modifiée.
+
+6. GPS
+Le nombre de nouvelles positions GPS reçues pendant la fenêtre du pan est
+enregistré afin de voir si une mise à jour GPS coïncide avec une saccade.
+
+7. CALQUES LEAFLET
+Le nombre total de `map._layers` est photographié au début et à la fin de
+chaque pan diagnostiqué.
+La ligne `Mémoire carte` de l'export affiche désormais aussi :
+`X calques Leaflet totaux`.
+
+8. RÉSUMÉ DES MOUVEMENTS
+La synthèse export distingue maintenant :
+- GPS auto ;
+- manuels ;
+- autres ;
+- zooms.
+
+Pour chaque catégorie de pan :
+- nombre de pans ;
+- nombre réellement saccadés ;
+- nombre total de gaps >100 / >150 / >250 ms ;
+- gap maximum.
+
+Cela corrige notamment le fait que les pans `source=autre` étaient présents
+dans les événements mais absents de la synthèse principale.
+
+9. AUCUNE NOUVELLE OPTIMISATION
+Cette version ne modifie pas :
+- le moteur tuiles v16.75 ;
+- le rendu HT ;
+- le rendu Routes ;
+- les caches Routes ;
+- le rendu SIA / VRP ;
+- la recherche localités v16.88 ;
+- les seuils d'affichage des couches.
+
+Le but est de mesurer avant de corriger.
+
+10. CONSERVÉ DE v16.88
+- recherche multi-formes avant Soundex + Levenshtein ;
+- `la pradelle` / `lapradelle` / `pradelle` ;
+- diagnostic recherche localités ;
+- diagnostic détaillé `SIA COUCHES` ;
+- stabilisation SIA v16.87 ;
+- v16.86 préchauffage Routes toujours abandonnée / non reprise.
+
+11. VERSION
+- App : v16.89.
+- Service Worker : `sw-v16-89_pan_jank_diagnostic`.
+- Révision SIA inchangée : `15.69-radio1026-1-maplite1`.
+- Aucune réimportation nécessaire.
+
+VALIDATION STATIQUE EFFECTUÉE
+- Syntaxe JavaScript Script / SIA / Service Worker vérifiée.
+- Index inline et Manifest JSON vérifiés.
+- Cohérence v16.89 vérifiée.
+- Pan long seul ne déclenche plus un faux `PAN CARTE LENT`.
+- Seuil réel de saccade >=100 ms vérifié.
+- Compteurs >100 / >150 / >250 ms présents.
+- `PAN DIAGNOSTIC` avec corrélation JS/tuiles/SIA/Routes/HT/GPS/Leaflet présent.
+- Snapshot total Leaflet présent.
+- Recherche multi-formes v16.88 conservée.
+- Soundex + Levenshtein conservés.
+- Aucun préchauffage Routes v16.86 repris.
+- Aucun appel actif `TUILES ZOOM FINAL`.
+- Séquence Routes+HT v16.85 conservée.
+- Moteur tuiles v16.75 inchangé.
+- Radio conservée : 326 terrains / TWR=95 / AFIS=69 / A/A=228.
+
+HISTORIQUE PRÉCÉDENT CONSERVÉ INTÉGRALEMENT
+
 VERSION TEST v16.88 — RECHERCHE LOCALITÉS : FRAGMENTS MULTI-FORMES AVANT PHONÉTIQUE
 Date : 14/09/2026
 Base : TEST v16.87
