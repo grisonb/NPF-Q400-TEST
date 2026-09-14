@@ -1,3 +1,134 @@
+VERSION TEST v16.87 — RECHERCHE LOCALITÉS + STABILITÉ SIA + DIAGNOSTIC DÉTAILLÉ
+Date : 14/09/2026
+Base retenue : TEST v16.85
+Référence fluidité carte seule : v16.75
+
+IMPORTANT
+- La v16.86 de préchauffage Routes est abandonnée et NON reprise ici.
+- v16.87 repart volontairement de v16.85, conformément aux derniers DIAG.
+- Routes et HT peuvent être OFF et des lenteurs subsistent : la priorité est
+  désormais la recherche de localités et l'identification/stabilisation du SIA.
+
+CONSTATS AYANT CONDUIT À v16.87
+- Lapradelle-Puilaurens avait déjà été traité auparavant : sa disparition
+  signale une possible régression du chemin de recherche, pas un simple nom
+  manquant à ajouter en dur.
+- Le problème doit être traité pour les prochains villages/hameaux/lieux-dits,
+  pas uniquement pour Lapradelle.
+- DIAG v16.85 : avec Routes OFF et HT OFF, des pans lents subsistent.
+- Avec zones SIA OFF, `siaLayers` pouvait pourtant rester très élevé
+  (238 / 242 / 346 / 374...), sans détail sur leur composition.
+- Avec zones SIA ON, les décorations bandes/libellés pouvaient coûter
+  plusieurs centaines de ms et être relancées entre des petits gestes.
+
+1. RECHERCHE LOCALITÉS — CORRECTION GÉNÉRIQUE
+- Une localité exactement égale à la saisie reçoit désormais un statut
+  `search_exact_locality`.
+- Une correspondance exacte peut être :
+  - le nom exact du village/hameau/lieu-dit ;
+  - ou le nom + sa commune de rattachement correspondant exactement à la
+    saisie compacte.
+- Les correspondances exactes passent AVANT le scoring phonétique.
+- Elles passent également AVANT les communes/alias lors de la fusion finale.
+- Elles ne peuvent donc plus disparaître simplement parce que la liste finale
+  est limitée à 10 résultats.
+- Le mécanisme vaut pour toute la base nationale, pas seulement Lapradelle.
+
+2. ÉQUIVALENCES D'USAGE EXISTANTES
+- La table historique d'équivalences n'est pas supprimée.
+- Ses noms exacts bénéficient du même drapeau exact générique.
+- Aucune nouvelle rustine spécifique Lapradelle n'est ajoutée.
+- L'objectif est de diagnostiquer et sécuriser les autres cas du même type.
+
+3. DIAGNOSTIC COMPLET DE RECHERCHE
+Nouvelle famille DIAG :
+`RECHERCHE LOCALITÉS`
+avec trois étapes possibles :
+- `immédiat` : communes + alias + équivalences déjà disponibles ;
+- `archive` : fragments nationaux chargés, nombre d'enregistrements,
+  préfiltrés, scorés, exacts et statut archive ;
+- `fusion` : résultats finaux réellement affichés.
+
+Le DIAG indique notamment :
+- requête normalisée ;
+- département demandé ;
+- nombre de fragments (shards) ;
+- nombre d'enregistrements chargés ;
+- candidats préfiltrés/scorés ;
+- nombre de correspondances exactes ;
+- premiers résultats finaux.
+
+Cela permettra de savoir si un futur lieu :
+- est absent de l'archive ;
+- n'a pas chargé le bon fragment ;
+- a été éliminé par le filtre département ;
+- a été éliminé au scoring ;
+- ou a été perdu à la fusion finale.
+
+4. DIAGNOSTIC DÉTAILLÉ DES COUCHES SIA
+Le simple total `siaLayers` est complété par :
+- zones ;
+- terrains ;
+- VRP ;
+- autres points ;
+- décorations bandes/libellés ;
+- entrées tactiles des zones.
+
+Nouvelle ligne export :
+`Détail SIA rendu : zones ... | terrains ... | VRP ... | ...`
+
+Nouvel événement :
+`SIA COUCHES`
+
+Cela permettra d'expliquer un total élevé de couches même lorsque les zones
+aériennes sont masquées.
+
+5. DÉCORATIONS SIA — STABILISATION RÉELLE
+- Temporisation portée de 560 ms à 950 ms.
+- Chaque movestart, moveend, zoomstart et zoomend marque l'activité carte.
+- Juste avant de reconstruire bandes/libellés, NPF vérifie que la carte est
+  réellement restée stable pendant la durée requise.
+- Si l'utilisateur recommence à bouger, le calcul est repoussé.
+- Une même vue déjà décorée n'est pas recalculée une seconde fois.
+- Les bandes intérieures à 5 NM restent conservées :
+  `skipInnerBands = false` est inchangé.
+
+6. CE QUI RESTE STRICTEMENT INCHANGÉ
+- Moteur de tuiles référence v16.75.
+- 5 lectures IndexedDB simultanées.
+- `updateWhenIdle: !isNpfDirectOfflineLayer`.
+- `updateWhenZooming: false`.
+- intervalle direct OFFLINE 60 ms.
+- v16.85 : bypass ciblé des attentes internes Routes+HT.
+- Cache spatial Routes et RAM existants de v16.85.
+- Style Routes v16.82.
+- SIA AIRAC / fréquences / VAC.
+- Aucune réimportation Routes, HT, cartes ou VAC.
+
+7. VERSION
+- App : v16.87.
+- Service Worker : `sw-v16-87_search_sia_stability_diag`.
+- Révision SIA inchangée : `15.69-radio1026-1-maplite1`.
+- Aucune réimportation nécessaire.
+
+VALIDATION STATIQUE EFFECTUÉE
+- Syntaxe JavaScript Script / SIA / Service Worker vérifiée.
+- Index inline et Manifest JSON vérifiés.
+- Cohérence v16.87 vérifiée.
+- Recherche exacte prioritaire avant scoring + fusion vérifiée.
+- Trace `RECHERCHE LOCALITÉS` présente.
+- Trace `SIA COUCHES` présente.
+- Détail SIA ajouté à l'export DIAG.
+- Stabilisation décorations = 950 ms + contrôle activité + anti-doublon.
+- Bordures/bandes intérieures 5 NM conservées.
+- Aucun préchauffage Routes v16.86 repris.
+- Aucun appel actif `TUILES ZOOM FINAL`.
+- Séquence Routes+HT v16.85 conservée.
+- Moteur tuiles v16.75 inchangé.
+- Radio conservée : 326 terrains / TWR=95 / AFIS=69 / A/A=228.
+
+HISTORIQUE PRÉCÉDENT CONSERVÉ INTÉGRALEMENT
+
 VERSION TEST v16.85 — ROUTES+HT : SUPPRESSION DES DEUX ATTENTES INTERNES DE TUILES
 Date : 13/09/2026
 Base : TEST v16.84
