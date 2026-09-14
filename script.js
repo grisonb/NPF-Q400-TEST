@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v16.85';
+const NPF_SCRIPT_BUILD_VERSION = 'v16.87';
 
 
 /*
@@ -481,6 +481,12 @@ function getNpfStartupDiagnosticOverlaySnapshot() {
         tileBlobCache: Number(directOfflineTileBlobCache?.size || 0),
         runwayLayers: Number(npfRunwayMapLayer?.getLayers?.().length || 0),
         siaLayers: Number(siaLayerGroup?.getLayers?.().length || 0),
+        siaZones: Number(siaRenderedDiagnosticCounts?.zones || 0),
+        siaTerrains: Number(siaRenderedDiagnosticCounts?.terrains || 0),
+        siaVrp: Number(siaRenderedDiagnosticCounts?.vrp || 0),
+        siaOtherPoints: Number(siaRenderedDiagnosticCounts?.otherPoints || 0),
+        siaDecorations: Number(siaRenderedDiagnosticCounts?.decorations || 0),
+        siaTouchEntries: Number(siaRenderedDiagnosticCounts?.touchEntries || 0),
         departmentsLoaded: hasLoadedDepartments ? 'OUI' : 'NON',
         departmentsVisible: areDepartmentsVisible ? 'OUI' : 'NON'
     };
@@ -536,6 +542,13 @@ function getNpfStartupDiagnosticRuntimeInfo() {
         tileBlobCacheSize: layers.tileBlobCache,
         runwayLayerCount: layers.runwayLayers,
         siaLayerCount: layers.siaLayers,
+        siaZoneCount: layers.siaZones,
+        siaTerrainCount: layers.siaTerrains,
+        siaVrpCount: layers.siaVrp,
+        siaOtherPointCount: layers.siaOtherPoints,
+        siaDecorationLayerCount: layers.siaDecorations,
+        siaTouchEntryCount: layers.siaTouchEntries,
+        lastLocalitySearchDiagnostic: npfLastLocalitySearchDiagnostic,
         vacInstalledCount: Number(vacInstalledOaciSet?.size || 0),
         vacAvailableCount: Math.max(0, Number(localStorage.getItem(VAC_EXPECTED_COUNT_KEY)) || 0),
         vacManifestAirportCount: Math.max(0, Number(localStorage.getItem(VAC_REMOTE_AIRPORT_COUNT_KEY)) || 0),
@@ -629,6 +642,15 @@ function buildNpfStartupDiagnosticExportText() {
         + runtime.siaLayerCount + ' couches SIA'
     );
     lines.push(
+        'Détail SIA rendu : '
+        + 'zones ' + runtime.siaZoneCount
+        + ' | terrains ' + runtime.siaTerrainCount
+        + ' | VRP ' + runtime.siaVrpCount
+        + ' | autres points ' + runtime.siaOtherPointCount
+        + ' | décorations ' + runtime.siaDecorationLayerCount
+        + ' | entrées tactiles zones ' + runtime.siaTouchEntryCount
+    );
+    lines.push(
         'VAC : '
         + runtime.vacInstalledCount + ' téléchargées / '
         + runtime.vacAvailableCount + ' disponibles dans le dépôt | '
@@ -661,6 +683,16 @@ function buildNpfStartupDiagnosticExportText() {
         + (runtime.localityLoadedCount ? ' | rattachées ' + runtime.localityLinkedCount + ' / sans commune ' + runtime.localityOrphanCount : '')
         + (runtime.localityLoadError ? ' | erreur=' + runtime.localityLoadError : '')
     );
+
+    if (runtime.lastLocalitySearchDiagnostic) {
+        const searchDiag = runtime.lastLocalitySearchDiagnostic;
+        lines.push(
+            'Dernière recherche localités : '
+            + String(searchDiag.stage || '—')
+            + ' | ' + String(searchDiag.detail || '—')
+            + (searchDiag.top ? ' | résultats=' + String(searchDiag.top) : '')
+        );
+    }
 
     const motion = runtime.diagMapMotion || {};
     const gpsDiag = runtime.diagGps || {};
@@ -1943,6 +1975,9 @@ function searchNpfKnownLocalityEquivalents(searchTerm, departmentFilter = null) 
             const commune = communesByCodeInsee.get(entry.codeInsee);
             const normalizedName = simplifyString(entry.displayName);
             const municipalityNormalized = simplifyString(entry.municipalityName);
+            const exactUsageName = entry.names.some(
+                name => simplifyString(name) === normalizedQuery
+            );
             const searchParts = Array.from(new Set([
                 ...normalizedName.split(' ').filter(Boolean),
                 ...municipalityNormalized.split(' ').filter(Boolean)
@@ -1967,12 +2002,48 @@ function searchNpfKnownLocalityEquivalents(searchTerm, departmentFilter = null) 
                 locality_source: 'Équivalence locale NPF — rattachement commune INSEE',
                 locality_offline: true,
                 locality_linked_commune: !!commune,
-                score: normalizedName === normalizedQuery ? -0.75 : -0.25
+                search_exact_locality: exactUsageName,
+                score: exactUsageName ? -0.90 : -0.25
             };
         });
 }
 
 let namedPlacesSearchSequence = 0;
+/*
+ * v16.87 — diagnostic de la dernière recherche nationale.
+ * Il permet de distinguer : résultat absent de l'archive, fragment non chargé,
+ * filtre département, élimination au scoring ou perte au merge final.
+ */
+let namedPlacesLastOfflineSearchMeta = null;
+let npfLastLocalitySearchDiagnostic = null;
+
+function formatNpfSearchResultNames(results, limit = 6) {
+    return (Array.isArray(results) ? results : [])
+        .slice(0, Math.max(1, Number(limit) || 6))
+        .map(item => {
+            const name = String(item?.nom_standard || '').trim();
+            const dep = String(item?.dep_code || '').trim();
+            return `${name}${dep ? `(${dep})` : ''}`;
+        })
+        .filter(Boolean)
+        .join(', ');
+}
+
+function recordNpfLocalitySearchDiagnostic(stage, detail, metrics = {}) {
+    const safeStage = String(stage || 'étape');
+    const safeDetail = String(detail || '');
+    npfLastLocalitySearchDiagnostic = {
+        stage: safeStage,
+        detail: safeDetail,
+        ...metrics
+    };
+    npfDiagSiaInteraction(
+        'RECHERCHE LOCALITÉS',
+        `étape=${safeStage}${safeDetail ? ` · ${safeDetail}` : ''}`,
+        metrics
+    );
+}
+
 let namedPlacesOfflineArchive = null;
 let namedPlacesOfflineIndex = null;
 let namedPlacesOfflineLoadPromise = null;
@@ -6270,121 +6341,197 @@ async function searchNamedPlacesOffline(
     departmentFilter,
     searchWords
 ) {
+    const normalizedQuery = simplifyString(searchTerm);
+    const searchCompact = Array.isArray(searchWords)
+        ? searchWords.join('')
+        : '';
+
     if (
         !Array.isArray(searchWords)
         || !searchWords.length
-        || simplifyString(searchTerm).length < 3
+        || normalizedQuery.length < 3
     ) {
+        namedPlacesLastOfflineSearchMeta = {
+            query: normalizedQuery,
+            department: departmentFilter || '',
+            status: 'saisie-trop-courte',
+            shards: 0,
+            records: 0,
+            prefiltered: 0,
+            scored: 0,
+            exact: 0,
+            returned: 0
+        };
         return [];
     }
 
     if (
         departmentFilter
-        && Array.isArray(
-            namedPlacesOfflineIndex?.departments
-        )
-        && !namedPlacesOfflineIndex.departments
-            .includes(departmentFilter)
+        && Array.isArray(namedPlacesOfflineIndex?.departments)
+        && !namedPlacesOfflineIndex.departments.includes(departmentFilter)
     ) {
+        namedPlacesLastOfflineSearchMeta = {
+            query: normalizedQuery,
+            department: departmentFilter || '',
+            status: 'departement-absent-index',
+            shards: 0,
+            records: 0,
+            prefiltered: 0,
+            scored: 0,
+            exact: 0,
+            returned: 0
+        };
+        recordNpfLocalitySearchDiagnostic(
+            'archive',
+            `requête="${normalizedQuery}" · département=${departmentFilter} absent de l'index`,
+            namedPlacesLastOfflineSearchMeta
+        );
         return [];
     }
 
-    const normalizedQuery = simplifyString(searchTerm);
     const knownEquivalentResults = searchNpfKnownLocalityEquivalents(
         searchTerm,
         departmentFilter
     );
 
-    const records =
-        await loadNamedPlacesOfflineDatabase({
-            searchTerm
-        });
+    const requestedShardIds = getNamedPlacesShardIds(searchTerm);
+    const records = await loadNamedPlacesOfflineDatabase({ searchTerm });
+
     if (!records.length) {
-        return knownEquivalentResults.slice(0, NAMED_PLACES_OFFLINE_RESULT_LIMIT);
+        const fallback = knownEquivalentResults
+            .slice(0, NAMED_PLACES_OFFLINE_RESULT_LIMIT);
+
+        namedPlacesLastOfflineSearchMeta = {
+            query: normalizedQuery,
+            department: departmentFilter || '',
+            status: namedPlacesOfflineLoadError
+                ? 'archive-erreur'
+                : 'aucun-enregistrement',
+            shards: requestedShardIds.length,
+            records: 0,
+            prefiltered: 0,
+            scored: 0,
+            exact: fallback.filter(item => item.search_exact_locality).length,
+            returned: fallback.length,
+            top: formatNpfSearchResultNames(fallback)
+        };
+        recordNpfLocalitySearchDiagnostic(
+            'archive',
+            `requête="${normalizedQuery}" · aucun enregistrement · retour=${fallback.length}`,
+            namedPlacesLastOfflineSearchMeta
+        );
+        return fallback;
     }
 
-    const searchCompact =
-        searchWords.join('');
+    let prefilteredCount = 0;
 
     const scored = records
         .filter(candidate => (
             !departmentFilter
-            || candidate.dep_code
-                === departmentFilter
+            || candidate.dep_code === departmentFilter
         ))
-        .filter(candidate =>
-            shouldSearchCandidate(
+        .filter(candidate => {
+            const keep = shouldSearchCandidate(
                 candidate,
                 searchWords,
                 searchCompact,
                 departmentFilter
-            )
-        )
+            );
+            if (keep) prefilteredCount += 1;
+            return keep;
+        })
         .map(candidate => {
-            let score =
-                scoreCommuneSearchCandidate(
-                    candidate,
-                    searchWords,
-                    departmentFilter
-                );
+            const candidateCompact = String(
+                candidate.search_compact
+                || candidate.normalized_name
+                || ''
+            ).replace(/\s+/g, '');
 
-            if (
-                candidate.normalized_name
-                === normalizedQuery
-            ) {
-                score = -0.5;
+            /*
+             * v16.87 — une correspondance exacte ne dépend plus du score :
+             * - nom de localité exact ;
+             * - ou nom de localité + commune exactement équivalent à la saisie
+             *   compacte (cas générique des lieux d'usage composés).
+             */
+            const exactLocality = (
+                candidate.normalized_name === normalizedQuery
+                || (
+                    searchCompact.length >= 3
+                    && candidateCompact === searchCompact
+                )
+            );
+
+            let score = scoreCommuneSearchCandidate(
+                candidate,
+                searchWords,
+                departmentFilter
+            );
+
+            if (exactLocality) {
+                score = -1.00;
             } else {
                 score += 0.35;
             }
 
             return {
                 ...candidate,
+                search_exact_locality: exactLocality,
                 score
             };
         })
-        .filter(candidate =>
-            candidate.score < 999
-        )
-        .sort(
-            (a, b) =>
-                a.score - b.score
-                || a.nom_standard.length
-                    - b.nom_standard.length
+        .filter(candidate => candidate.score < 999)
+        .sort((a, b) =>
+            Number(Boolean(b.search_exact_locality))
+                - Number(Boolean(a.search_exact_locality))
+            || a.score - b.score
+            || a.nom_standard.length - b.nom_standard.length
         );
 
-    const grouped =
-        groupOfflineNamedPlaceResults(
-            [...knownEquivalentResults, ...scored],
-            searchTerm
-        );
+    const grouped = groupOfflineNamedPlaceResults(
+        [...knownEquivalentResults, ...scored],
+        searchTerm
+    );
 
     const exactResults = grouped.filter(
-        candidate =>
-            candidate.normalized_name
-                === normalizedQuery
+        candidate => candidate.search_exact_locality === true
     );
 
     /*
-     * Un nom exact doit rester lisible : « Blagon » n'affiche que Blagon.
-     * Les autres propositions phonétiques restent disponibles lorsque la
-     * saisie comporte une faute, par exemple « Blagond ».
+     * v16.87 — garantie générique : une localité exacte n'est jamais éliminée
+     * par le scoring phonétique ni par la limite des propositions.
      */
-    if (exactResults.length) {
-        return exactResults.slice(
-            0,
-            NAMED_PLACES_OFFLINE_RESULT_LIMIT
-        );
-    }
+    const finalResults = exactResults.length
+        ? exactResults.slice(0, NAMED_PLACES_OFFLINE_RESULT_LIMIT)
+        : grouped.slice(0, NAMED_PLACES_OFFLINE_RESULT_LIMIT);
 
-    return grouped.slice(
-        0,
-        NAMED_PLACES_OFFLINE_RESULT_LIMIT
+    namedPlacesLastOfflineSearchMeta = {
+        query: normalizedQuery,
+        department: departmentFilter || '',
+        status: 'ok',
+        shards: requestedShardIds.length,
+        records: records.length,
+        prefiltered: prefilteredCount,
+        scored: scored.length,
+        exact: exactResults.length,
+        known: knownEquivalentResults.length,
+        returned: finalResults.length,
+        archiveOpen: Boolean(namedPlacesOfflineArchive),
+        top: formatNpfSearchResultNames(finalResults)
+    };
+
+    recordNpfLocalitySearchDiagnostic(
+        'archive',
+        `requête="${normalizedQuery}" · shards=${requestedShardIds.length} · enregistrements=${records.length} · exacts=${exactResults.length} · retour=${finalResults.length}`,
+        namedPlacesLastOfflineSearchMeta
     );
+
+    return finalResults;
 }
 
 function mergeCommuneAndNamedPlaceResults(
     communeResults,
-    namedPlaceResults
+    namedPlaceResults,
+    searchTerm = ''
 ) {
     const merged = [];
     const seen = new Set();
@@ -6433,27 +6580,35 @@ function mergeCommuneAndNamedPlaceResults(
         : []
     ).forEach(addCandidate);
 
+    const normalizedQuery = simplifyString(searchTerm);
+
     return merged
-        .sort(
-            (a, b) =>
-                Number(a.score || 0)
-                    - Number(b.score || 0)
-                || (
-                    a.locality_match
-                        ? 1
-                        : 0
-                ) - (
-                    b.locality_match
-                        ? 1
-                        : 0
+        .sort((a, b) => {
+            const aExactLocality = Boolean(
+                a?.locality_match
+                && (
+                    a.search_exact_locality
+                    || simplifyString(a.nom_standard || '') === normalizedQuery
                 )
-                || String(
-                    a.nom_standard || ''
-                ).length
-                    - String(
-                        b.nom_standard || ''
-                    ).length
-        )
+            );
+            const bExactLocality = Boolean(
+                b?.locality_match
+                && (
+                    b.search_exact_locality
+                    || simplifyString(b.nom_standard || '') === normalizedQuery
+                )
+            );
+
+            return Number(bExactLocality) - Number(aExactLocality)
+                || Number(a.score || 0) - Number(b.score || 0)
+                || (
+                    a.locality_match ? 1 : 0
+                ) - (
+                    b.locality_match ? 1 : 0
+                )
+                || String(a.nom_standard || '').length
+                    - String(b.nom_standard || '').length;
+        })
         .slice(0, 10);
 }
 
@@ -6491,11 +6646,40 @@ async function enrichCommuneSearchWithNamedPlaces({
         return;
     }
 
-    displayResults(
-        mergeCommuneAndNamedPlaceResults(
-            localResults,
-            offlineResults
+    const mergedResults = mergeCommuneAndNamedPlaceResults(
+        localResults,
+        offlineResults,
+        searchTerm
+    );
+
+    displayResults(mergedResults);
+
+    const exactCount = mergedResults.filter(item => (
+        item?.locality_match
+        && (
+            item.search_exact_locality
+            || simplifyString(item.nom_standard || '')
+                === simplifyString(searchTerm)
         )
+    )).length;
+
+    recordNpfLocalitySearchDiagnostic(
+        'fusion',
+        `requête="${simplifyString(searchTerm)}" · dept=${departmentFilter || '—'} · immédiats=${Array.isArray(localResults) ? localResults.length : 0} · archive=${offlineResults.length} · finaux=${mergedResults.length} · exacts=${exactCount}`,
+        {
+            query: simplifyString(searchTerm),
+            department: departmentFilter || '',
+            immediate: Array.isArray(localResults) ? localResults.length : 0,
+            archive: offlineResults.length,
+            final: mergedResults.length,
+            exact: exactCount,
+            top: formatNpfSearchResultNames(mergedResults),
+            archiveStatus: String(namedPlacesLastOfflineSearchMeta?.status || '—'),
+            shards: Number(namedPlacesLastOfflineSearchMeta?.shards || 0),
+            records: Number(namedPlacesLastOfflineSearchMeta?.records || 0),
+            prefiltered: Number(namedPlacesLastOfflineSearchMeta?.prefiltered || 0),
+            scored: Number(namedPlacesLastOfflineSearchMeta?.scored || 0)
+        }
     );
 }
 
@@ -8654,8 +8838,11 @@ let directOfflineLastRecoveryReason = '';
 const DIRECT_OFFLINE_NPF_MAX_CONCURRENT_READS = 5;
 
 /*
- * v16.85 — la séquence sérialisée Routes+HT ne dépend plus non plus des
- * attentes INTERNES de tuiles propres à Routes et HT.
+ * v16.87 — base v16.85.
+ * - fiabilisation générique de la recherche villages / hameaux / lieux-dits ;
+ * - diagnostic complet du chemin de recherche ;
+ * - diagnostic détaillé des couches SIA réellement rendues ;
+ * - décorations SIA recalculées seulement après stabilisation réelle de la vue.
  * Le moteur de tuiles v16.75 reste strictement inchangé.
  */
 const DIRECT_OFFLINE_NPF_MAX_QUEUED_READS = 160;
@@ -10011,14 +10198,36 @@ function searchCommunesWithSharedEngine(rawSearch, limit = 10) {
         }
     });
 
-    scoredResults.sort((a, b) => a.score - b.score || a.nom_standard.length - b.nom_standard.length);
+    scoredResults.sort((a, b) =>
+        Number(Boolean(b.search_exact_locality))
+            - Number(Boolean(a.search_exact_locality))
+        || a.score - b.score
+        || a.nom_standard.length - b.nom_standard.length
+    );
+
+    const immediateResults = scoredResults.slice(
+        0,
+        Math.max(1, Number(limit) || 10)
+    );
+
+    recordNpfLocalitySearchDiagnostic(
+        'immédiat',
+        `requête="${simplifiedSearch}" · dept=${departmentFilter || '—'} · communes+alias=${immediateResults.length} · équivalences=${knownLocalityResults.length}`,
+        {
+            query: simplifiedSearch,
+            department: departmentFilter || '',
+            immediate: immediateResults.length,
+            known: knownLocalityResults.length,
+            top: formatNpfSearchResultNames(immediateResults)
+        }
+    );
 
     return {
         departmentFilter,
         searchTerm,
         simplifiedSearch,
         searchWords,
-        results: scoredResults.slice(0, Math.max(1, Number(limit) || 10))
+        results: immediateResults
     };
 }
 
@@ -44209,6 +44418,21 @@ let siaRenderedAirspaceFeatures = [];
 let siaZoomDependentLayers = [];
 let siaRenderedShowDesignatedPoints = null;
 let siaRenderedPointLabelsEnabled = null;
+
+/*
+ * v16.87 — détail réel du contenu SIA visible.
+ * Le simple compteur `siaLayers` ne permettait pas de savoir si la charge
+ * provenait des zones, terrains, VRP, autres points ou décorations.
+ */
+let siaRenderedDiagnosticCounts = {
+    zones: 0,
+    terrains: 0,
+    vrp: 0,
+    otherPoints: 0,
+    decorations: 0,
+    touchEntries: 0
+};
+
 let siaRefreshInProgress = false;
 let siaRefreshPendingReason = null;
 let siaRefreshCurrentReason = null;
@@ -44219,7 +44443,40 @@ let siaRefreshScheduledReason = null;
  * seulement après la fin du geste et après une courte période d'inactivité.
  */
 let siaMoveDecorationRefreshTimer = null;
-const SIA_MOVE_DECORATION_IDLE_MS = 560;
+/*
+ * v16.87 — 560 ms était trop court sur iPad : lors de petits déplacements
+ * successifs, les bandes/libellés pouvaient être reconstruits entre deux gestes.
+ * On exige désormais une vraie période de stabilité, puis on vérifie à nouveau
+ * juste avant de commencer le travail.
+ */
+const SIA_MOVE_DECORATION_IDLE_MS = 950;
+const SIA_DECORATION_STABLE_RECHECK_MS = 180;
+let siaLastMapMotionAt = 0;
+let siaLastDecorationViewKey = '';
+
+function markSiaDecorationMapMotion() {
+    siaLastMapMotionAt = NPF_STARTUP_DIAGNOSTIC.now();
+}
+
+function getSiaDecorationViewKey() {
+    if (!map) return '';
+    try {
+        const bounds = map.getBounds();
+        const round = value => Number(value).toFixed(4);
+        return [
+            map.getZoom(),
+            round(bounds.getSouth()),
+            round(bounds.getWest()),
+            round(bounds.getNorth()),
+            round(bounds.getEast()),
+            String(siaRenderedSignature || ''),
+            Number(siaRenderedAirspaceFeatures?.length || 0)
+        ].join('|');
+    } catch (_) {
+        return '';
+    }
+}
+
 /* v16.32 — décorations SIA construites par petits lots pour ne plus figer WebKit. */
 /* v16.70 — budget temporel plutôt qu'un nombre fixe de zones : une géométrie
  * complexe peut coûter beaucoup plus cher que deux géométries simples. */
@@ -45144,6 +45401,15 @@ function clearSiaRenderedLayers() {
     siaZoomDependentLayers = [];
     siaRenderedShowDesignatedPoints = null;
     siaRenderedPointLabelsEnabled = null;
+    siaRenderedDiagnosticCounts = {
+        zones: 0,
+        terrains: 0,
+        vrp: 0,
+        otherPoints: 0,
+        decorations: 0,
+        touchEntries: 0
+    };
+    siaLastDecorationViewKey = '';
     clearSiaSelectionHighlight();
     siaSelectedCtrTouchLayer = null;
     siaSelectedCtrKey = null;
@@ -47377,6 +47643,7 @@ function initializeSiaSystem() {
         let npfDiagZoomStartedAt = 0;
 
         map.on('movestart', () => {
+            markSiaDecorationMapMotion();
             const gpsFollowPan = isNpfGpsFollowProgrammaticPan();
             if (!gpsFollowPan) {
                 clearTimeout(siaMoveDecorationRefreshTimer);
@@ -47405,6 +47672,7 @@ function initializeSiaSystem() {
             npfDiagMoveSample.maxGap = Math.max(npfDiagMoveSample.maxGap, gap);
         });
         map.on('moveend', () => {
+            markSiaDecorationMapMotion();
             const sample = npfDiagMoveSample;
             npfDiagMoveSample = null;
             if (sample) {
@@ -47456,6 +47724,7 @@ function initializeSiaSystem() {
             }
         });
         map.on('zoomstart', () => {
+            markSiaDecorationMapMotion();
             npfDiagZoomStartedAt = NPF_STARTUP_DIAGNOSTIC.now();
             siaZoomGestureActive = true;
             /* v16.62 — une transaction Routes/HT différée peut couvrir plusieurs
@@ -47466,6 +47735,7 @@ function initializeSiaSystem() {
             cancelAllSiaWorkForZoomStart();
         });
         map.on('zoomend', () => {
+            markSiaDecorationMapMotion();
             const now = NPF_STARTUP_DIAGNOSTIC.now();
             siaZoomGestureActive = false;
             if (npfDiagZoomStartedAt > 0) {
@@ -50088,6 +50358,12 @@ async function renderSiaZoomDependentDecorationsProgressive(features, refreshGen
         }
     }
     labelMs = NPF_STARTUP_DIAGNOSTIC.now() - labelStartedAt;
+    siaRenderedDiagnosticCounts.decorations = Number(
+        siaZoomDependentLayers?.length || 0
+    );
+    siaRenderedDiagnosticCounts.touchEntries = Number(
+        siaAirspaceTouchEntries?.length || 0
+    );
 
     npfDiagSiaInteraction(
         'SIA DÉCORATIONS',
@@ -50102,30 +50378,93 @@ async function renderSiaZoomDependentDecorationsProgressive(features, refreshGen
 
 function scheduleSiaMoveDecorationRefresh(reason = 'moveend-idle') {
     clearTimeout(siaMoveDecorationRefreshTimer);
-    siaMoveDecorationRefreshTimer = setTimeout(async () => {
+
+    const scheduledGeneration = getSiaRefreshGeneration();
+
+    const attempt = async () => {
         siaMoveDecorationRefreshTimer = null;
-        if (!map || !siaMapAirspacesVisible || !Array.isArray(siaRenderedAirspaceFeatures)) return;
-        if (!siaRenderedAirspaceFeatures.length) return;
+
+        if (
+            !map
+            || !siaMapAirspacesVisible
+            || !Array.isArray(siaRenderedAirspaceFeatures)
+            || !siaRenderedAirspaceFeatures.length
+        ) {
+            return;
+        }
+
+        if (scheduledGeneration !== getSiaRefreshGeneration()) {
+            return;
+        }
+
+        const now = NPF_STARTUP_DIAGNOSTIC.now();
+        const quietFor = Math.max(0, now - Number(siaLastMapMotionAt || 0));
+
+        /*
+         * v16.87 — si un geste/zoom vient encore d'avoir lieu, ne pas commencer
+         * une reconstruction de 200–600 ms entre deux mouvements. On attend la
+         * fin réelle de l'activité carte.
+         */
+        if (quietFor < SIA_MOVE_DECORATION_IDLE_MS) {
+            const remaining = Math.max(
+                SIA_DECORATION_STABLE_RECHECK_MS,
+                SIA_MOVE_DECORATION_IDLE_MS - quietFor
+            );
+            siaMoveDecorationRefreshTimer = setTimeout(attempt, remaining);
+            return;
+        }
+
+        const viewKey = getSiaDecorationViewKey();
+        if (viewKey && viewKey === siaLastDecorationViewKey) {
+            npfDiagSiaInteraction(
+                'SIA DÉCORATIONS',
+                `raison=${reason} · vue déjà décorée · aucun recalcul · zoom=${map.getZoom()}`,
+                { dureeMs: 0, skippedDuplicate: 1 }
+            );
+            return;
+        }
 
         const startedAt = NPF_STARTUP_DIAGNOSTIC.now();
         const refreshGeneration = getSiaRefreshGeneration();
+
         try {
             await renderSiaZoomDependentDecorationsProgressive(
                 siaRenderedAirspaceFeatures,
                 refreshGeneration
             );
+
+            if (
+                refreshGeneration === getSiaRefreshGeneration()
+                && getSiaDecorationViewKey() === viewKey
+            ) {
+                siaLastDecorationViewKey = viewKey;
+            }
+
             scheduleSiaProfileRefresh('sia-moveend-idle-decorations');
             npfDiagSiaInteraction(
                 'SIA RAFRAÎCHISSEMENT',
-                `raison=${reason} · décorations différées progressives · zones=${siaRenderedAirspaceFeatures.length} · zoom=${map.getZoom()}`,
-                { totalMs: Math.round(NPF_STARTUP_DIAGNOSTIC.now() - startedAt) }
+                `raison=${reason} · décorations après stabilisation · zones=${siaRenderedAirspaceFeatures.length} · zoom=${map.getZoom()}`,
+                {
+                    totalMs: Math.round(
+                        NPF_STARTUP_DIAGNOSTIC.now() - startedAt
+                    ),
+                    stableMs: Math.round(
+                        NPF_STARTUP_DIAGNOSTIC.now()
+                        - Number(siaLastMapMotionAt || 0)
+                    )
+                }
             );
         } catch (error) {
             if (error?.name !== SIA_REFRESH_ABORT_ERROR_NAME) {
                 console.warn('[SIA] Décorations différées impossibles:', error);
             }
         }
-    }, SIA_MOVE_DECORATION_IDLE_MS);
+    };
+
+    siaMoveDecorationRefreshTimer = setTimeout(
+        attempt,
+        SIA_MOVE_DECORATION_IDLE_MS
+    );
 }
 
 const SIA_REFRESH_ABORT_ERROR_NAME = 'NpfSiaRefreshAborted';
@@ -50231,6 +50570,9 @@ async function refreshSiaLayers(reason = 'manual') {
     let npfDiagCommitMs = 0;
     let npfDiagVisibleZones = 0;
     let npfDiagRenderedObjects = 0;
+    let npfDiagTerrainCount = 0;
+    let npfDiagVrpCount = 0;
+    let npfDiagOtherPointCount = 0;
 
     const refreshGeneration = getSiaRefreshGeneration();
     let previousSiaLayerGroupForSwap = null;
@@ -50507,6 +50849,7 @@ async function refreshSiaLayers(reason = 'manual') {
             }
             marker.addTo(siaLayerGroup);
             addSiaTouchHitbox(latlng, terrainPopupHtml);
+            npfDiagTerrainCount += 1;
             rendered += 1;
         }
 
@@ -50544,6 +50887,7 @@ async function refreshSiaLayers(reason = 'manual') {
                 marker.on('popupopen', () => marker.setPopupContent(buildSiaPointPopup(item)));
                 marker.addTo(siaLayerGroup);
                 addSiaTouchHitbox(latlng, popupHtml, () => buildSiaPointPopup(item));
+                npfDiagVrpCount += 1;
                 rendered += 1;
                 continue;
             }
@@ -50568,6 +50912,7 @@ async function refreshSiaLayers(reason = 'manual') {
             }
             marker.addTo(siaLayerGroup);
             addSiaTouchHitbox(latlng, popupHtml);
+            npfDiagOtherPointCount += 1;
             rendered += 1;
         }
         npfDiagPointsMs = NPF_STARTUP_DIAGNOSTIC.now() - npfDiagPointsStart;
@@ -50595,6 +50940,28 @@ async function refreshSiaLayers(reason = 'manual') {
         siaRenderedAirspaceFeatures = visibleAirspaceFeatures;
         siaRenderedShowDesignatedPoints = showSiaDesignatedPointsNow;
         siaRenderedPointLabelsEnabled = pointLabelsEnabledNow;
+        siaRenderedDiagnosticCounts = {
+            zones: visibleAirspaceFeatures.length,
+            terrains: npfDiagTerrainCount,
+            vrp: npfDiagVrpCount,
+            otherPoints: npfDiagOtherPointCount,
+            decorations: Number(siaZoomDependentLayers?.length || 0),
+            touchEntries: Number(siaAirspaceTouchEntries?.length || 0)
+        };
+
+        npfDiagSiaInteraction(
+            'SIA COUCHES',
+            `zones=${siaRenderedDiagnosticCounts.zones} · terrains=${siaRenderedDiagnosticCounts.terrains} · vrp=${siaRenderedDiagnosticCounts.vrp} · autres=${siaRenderedDiagnosticCounts.otherPoints} · décorations=${siaRenderedDiagnosticCounts.decorations} · tactiles=${siaRenderedDiagnosticCounts.touchEntries}`,
+            {
+                zones: siaRenderedDiagnosticCounts.zones,
+                terrains: siaRenderedDiagnosticCounts.terrains,
+                vrp: siaRenderedDiagnosticCounts.vrp,
+                otherPoints: siaRenderedDiagnosticCounts.otherPoints,
+                decorations: siaRenderedDiagnosticCounts.decorations,
+                touchEntries: siaRenderedDiagnosticCounts.touchEntries,
+                totalLayers: Number(siaLayerGroup?.getLayers?.().length || 0)
+            }
+        );
 
         /* v16.66 — contours/points sont maintenant engagés ; bandes
          * intérieures et libellés suivent au repos, sans retarder ce commit. */
