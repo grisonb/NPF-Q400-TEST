@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v16-88_locality_multiform_shards';
-const APP_VERSION = 'v16.88';
+const SW_VERSION = 'sw-v16-89_pan_jank_diagnostic';
+const APP_VERSION = 'v16.89';
 const SIA_DATA_REVISION = '15.69-radio1026-1-maplite1';
 const SIA_DATA_URL = './sia.js';
 const SIA_DATA_CACHE = `npf-q400-sia-data-${SIA_DATA_REVISION}`;
