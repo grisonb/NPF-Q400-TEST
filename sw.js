@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v16-90_airport_labels_pan_stability';
-const APP_VERSION = 'v16.90';
+const SW_VERSION = 'sw-v16-91_zoomout_tile_priority';
+const APP_VERSION = 'v16.91';
 const SIA_DATA_REVISION = '15.69-radio1026-1-maplite1';
 const SIA_DATA_URL = './sia.js';
 const SIA_DATA_CACHE = `npf-q400-sia-data-${SIA_DATA_REVISION}`;
