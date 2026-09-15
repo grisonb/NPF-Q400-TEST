@@ -1,3 +1,74 @@
+VERSION TEST v16.91 — PRIORITÉ TUILES AU ZOOM OUT
+Date : 15/09/2026
+Base : TEST v16.90
+Référence moteur tuiles : v16.75
+
+CONSTAT
+Lors d'une série de zoom-out avec Routes + HT actifs, le DIAG v16.90 a montré
+un écran temporairement sans tuile visible alors que le moteur OFFLINE avait
+5 lectures actives et 25 en file. En parallèle, Routes a lancé un chargement
+tier 1 de 28 cellules qui a duré 4 021 ms. Le fond de carte pouvait donc rester
+visuellement incomplet pendant qu'une couche annexe effectuait son traitement.
+
+CORRECTION v16.91
+
+1. PRIORITÉ ABSOLUE AU FOND DE CARTE PENDANT UN ZOOM-OUT ROUTES + HT
+- La transaction sérialisée de zoom-out masque toujours Routes/HT pendant le geste.
+- Avant de commencer le moindre recalcul Routes ou HT, v16.91 attend désormais
+  que les tuiles visibles du nouveau niveau soient réellement chargées,
+  que le niveau de tuile corresponde au zoom courant et que la file OFFLINE
+  soit revenue au repos.
+- Deux passages stables sont exigés puis deux frames Safari sont laissées au
+  navigateur avant de lancer les couches lourdes.
+- Cette attente est asynchrone : elle ne bloque pas l'interface et ne modifie
+  pas le moteur de tuiles.
+
+2. ANNULATION DES NIVEAUX INTERMÉDIAIRES
+- Si un nouveau zoom commence pendant cette fenêtre de priorité tuiles,
+  l'attente de l'ancien niveau est annulée par le token de transaction existant.
+- Le traitement Routes/HT prévu pour ce niveau intermédiaire n'est donc pas lancé.
+- La transaction repart uniquement sur la vue finale stabilisée.
+
+3. UNE SEULE FENÊTRE D'ATTENTE COMMUNE
+- Les bypass internes v16.85 restent conservés.
+- Routes et HT ne retrouvent donc PAS chacun leur ancienne attente de 7 s.
+- v16.91 ajoute une unique fenêtre commune avant Routes -> HT -> SIA.
+- Le SIA/VRP reste déjà verrouillé sur le Promise commun et bénéficie donc
+  automatiquement de la même priorité donnée aux tuiles.
+
+4. DIAGNOSTIC
+- Ajout d'un événement `TUILES ZOOM-OUT`.
+- Il enregistre : temps d'attente, tuiles visibles, file maximale,
+  lectures actives maximales et nombre de passages avec écran vide.
+- En cas d'absence de stabilisation après 10 s, l'événement indique un timeout ;
+  les couches annexes sont ensuite autorisées afin de ne jamais rester bloquées.
+
+5. INCHANGÉ
+- moteur OFFLINE / cache / concurrence tuiles de la référence v16.75 ;
+- corrections fluidité et libellés aérodromes v16.90 ;
+- seuil libellés aérodromes <= 2 NM ;
+- Routes : données, rendu, cache spatial et style inchangés ;
+- HT : données et rendu inchangés ;
+- SIA/VRP : données et rendu inchangés ;
+- recherche localités v16.88 ;
+- aucune réimportation nécessaire.
+
+VERSION
+- App : v16.91.
+- Service Worker : `sw-v16-91_zoomout_tile_priority`.
+- Révision SIA inchangée : `15.69-radio1026-1-maplite1`.
+
+VALIDATION STATIQUE EFFECTUÉE
+- Syntaxe JavaScript Script / SIA / Service Worker vérifiée.
+- Manifest JSON vérifié.
+- Références app v16.91 vérifiées.
+- Attente commune placée AVANT tout traitement Routes/HT du zoom-out sérialisé.
+- Annulation sur nouveau zoom vérifiée via `npfHeavyOverlayZoomSerialToken`.
+- Bypass internes v16.85 conservés : pas de double attente Routes + HT.
+- Moteur tuiles v16.75 non modifié.
+
+HISTORIQUE PRÉCÉDENT CONSERVÉ INTÉGRALEMENT
+
 VERSION TEST v16.90 — FLUIDITÉ PAN : LIBELLÉS AÉRODROMES HORS GESTE
 Date : 15/09/2026
 Base : TEST v16.89
