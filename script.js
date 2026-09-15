@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v16.89';
+const NPF_SCRIPT_BUILD_VERSION = 'v16.90';
 
 
 /*
@@ -7848,7 +7848,15 @@ function initMap() {
     npfRunwayMapLayer = L.layerGroup().addTo(map);
     permanentAirportLayer = L.layerGroup().addTo(map);
     airportOperationalLabelLayer = L.layerGroup().addTo(map);
-    map.on('zoomend moveend', () => scheduleAirportOperationalLabelsRefresh(90));
+    /*
+     * v16.90 — les libellés nom/fréquence sont des DIV Leaflet. Sur iPad,
+     * on ne les compose plus pendant un geste de carte : ils disparaissent
+     * au début du drag/zoom puis sont reconstruits après stabilisation.
+     * Cela élimine aussi les reliquats tronqués observés après zoom arrière.
+     */
+    map.on('zoomstart dragstart', () => clearAirportOperationalLabelsForMapMotion());
+    map.on('zoomend', () => scheduleAirportOperationalLabelsRefresh(0));
+    map.on('moveend', () => scheduleAirportOperationalLabelsRefresh(180));
     routesLayer = L.layerGroup().addTo(map);
     fireHistoryLayer = L.layerGroup().addTo(map);
     waterPointsLayer = L.layerGroup().addTo(map);
@@ -30442,12 +30450,22 @@ function getAirportOperationalFrequency(oaci) {
     };
 }
 
+function clearAirportOperationalLabelsForMapMotion() {
+    clearTimeout(airportOperationalLabelRefreshTimer);
+    airportOperationalLabelRefreshTimer = null;
+    if (!airportOperationalLabelLayer) return;
+    try {
+        airportOperationalLabelLayer.clearLayers();
+    } catch (_) {}
+}
+
 function refreshAirportOperationalLabels() {
     if (!map) return;
     if (!airportOperationalLabelLayer) airportOperationalLabelLayer = L.layerGroup().addTo(map);
     const scaleNm = getCurrentNpfScaleNm();
     if (!Number.isFinite(scaleNm) || scaleNm > 2.000001) {
-        airportOperationalLabelLayer.clearLayers();
+        /* v16.90 — nettoyage strict hors seuil, timer compris. */
+        clearAirportOperationalLabelsForMapMotion();
         return;
     }
 
