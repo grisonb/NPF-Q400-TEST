@@ -1,3 +1,81 @@
+VERSION TEST v16.90 — FLUIDITÉ PAN : LIBELLÉS AÉRODROMES HORS GESTE
+Date : 15/09/2026
+Base : TEST v16.89
+Référence fluidité carte seule : v16.75
+
+CONSTATS AYANT CONDUIT À v16.90
+Les tests contrôlés v16.89 ont permis d'écarter comme cause directe unique :
+- Routes ;
+- lignes HT ;
+- GPS ;
+- rafraîchissement SIA ;
+- blocage JavaScript mesuré ;
+- simple présence d'une file de tuiles.
+
+Des saccades importantes ont été mesurées alors que le diagnostic indiquait
+simultanément q0/a0, JS=0, SIA=0, Routes=0, HT=0 et GPS=0.
+La correction v16.90 ne touche donc PAS au moteur tuiles v16.75.
+
+Une anomalie visuelle a parallèlement été observée : à 5 NM, certains libellés
+d'aérodromes pouvaient rester partiellement affichés, coupés et sans fréquence,
+alors que leur seuil normal est <= 2 NM.
+
+1. LIBELLÉS AÉRODROMES — PRIORITÉ À LA FLUIDITÉ PENDANT LE PAN
+- Au début d'un glissement utilisateur (`dragstart`) les libellés opérationnels
+  des aérodromes sont retirés immédiatement.
+- Au début d'un zoom (`zoomstart`) ils sont également retirés immédiatement.
+- Aucun texte nom/fréquence n'est donc composité pendant le geste lui-même.
+- Après stabilisation de la carte, les libellés sont reconstruits seulement
+  lorsque l'échelle courante est <= 2 NM.
+- Après un `moveend`, la reconstruction est différée d'environ 180 ms afin de
+  laisser Safari/Leaflet terminer le déplacement visuel avant de recréer les DIV.
+
+2. SEUIL 2 NM — NETTOYAGE STRICT
+- Si l'échelle est > 2 NM, le groupe de libellés aérodromes est vidé.
+- Tout timer de reconstruction encore en attente est annulé lors du début
+  d'un pan/zoom.
+- Un ancien libellé ne doit donc plus survivre à un zoom arrière vers 5 NM,
+  10 NM, etc.
+- Le contenu normal à <= 2 NM reste : nom terrain + fréquence opérationnelle
+  selon la priorité TWR → AFIS → A/A → INFO.
+
+3. POINTS VFR / VRP
+- Aucune modification de leur logique de rendu dans cette version.
+- Les DIAG v16.89 montrent que la grosse saccade peut apparaître avec SIA=0
+  pendant le geste.
+- La logique v16.70 de zéro recalcul lorsque la couverture SIA reste valide
+  est conservée.
+- La piste d'une nouvelle optimisation VRP reste donc volontairement différée
+  pour ne pas modifier une couche non incriminée par le dernier A/B.
+
+4. INCHANGÉ
+- moteur tuiles / cache offline de la référence v16.75 ;
+- Routes et caches Routes ;
+- lignes HT ;
+- recherche localités v16.88 ;
+- diagnostic pan v16.89 ;
+- rendu SIA / AIRAC / fréquences / VAC ;
+- seuil d'apparition des points VFR ;
+- aucune réimportation nécessaire.
+
+5. VERSION
+- App : v16.90.
+- Service Worker : `sw-v16-90_airport_labels_pan_stability`.
+- Révision SIA inchangée : `15.69-radio1026-1-maplite1`.
+
+VALIDATION STATIQUE EFFECTUÉE
+- Syntaxe JavaScript Script / SIA / Service Worker vérifiée.
+- Index inline et Manifest JSON vérifiés.
+- Cohérence v16.90 vérifiée.
+- `dragstart` et `zoomstart` vident immédiatement les libellés aérodromes.
+- `moveend` reconstruit après temporisation de 180 ms.
+- `refreshAirportOperationalLabels()` conserve le seuil strict <= 2 NM.
+- Aucun changement du moteur tuiles v16.75.
+- Aucun changement Routes / HT / SIA / VRP.
+- Diagnostic v16.89 conservé pour comparer objectivement la fluidité.
+
+HISTORIQUE PRÉCÉDENT CONSERVÉ INTÉGRALEMENT
+
 VERSION TEST v16.89 — DIAGNOSTIC CIBLÉ DES SACCADES DE CARTE
 Date : 14/09/2026
 Base : TEST v16.88
