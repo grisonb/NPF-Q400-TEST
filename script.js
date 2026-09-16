@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v16.92';
+const NPF_SCRIPT_BUILD_VERSION = 'v16.93';
 
 
 /*
@@ -8082,11 +8082,15 @@ function scheduleTrafficVisualResumeAfterMapInteraction(reason = 'map-end') {
 let npfPassiveTileZoomDiagToken = 0;
 let npfPassiveTileZoomStartZoom = NaN;
 let npfPassiveTileZoomStartedAt = 0;
+let npfPassiveTileZoomIdbSeqStart = 0;
+let npfPassiveTileZoomLookupSeqStart = 0;
 
 function beginNpfPassiveTileZoomDiagnostic() {
     npfPassiveTileZoomDiagToken += 1;
     npfPassiveTileZoomStartZoom = Number(map?.getZoom?.());
     npfPassiveTileZoomStartedAt = NPF_STARTUP_DIAGNOSTIC.now();
+    npfPassiveTileZoomIdbSeqStart = Number(directOfflineTileIdbDiagSeq || 0);
+    npfPassiveTileZoomLookupSeqStart = Number(directOfflineTileLookupDiagSeq || 0);
 }
 
 function scheduleNpfPassiveTileZoomDiagnostic() {
@@ -8118,9 +8122,18 @@ function scheduleNpfPassiveTileZoomDiagnostic() {
         const total = Math.max(0, Number(state?.total || 0));
         const tileZoomReady = state?.tileZoomReady !== false;
 
+        const idbEvents = getDirectOfflineTileIdbDiagEventsSince(
+            npfPassiveTileZoomIdbSeqStart
+        );
+        const lookupEvents = getDirectOfflineTileLookupDiagEventsSince(
+            npfPassiveTileZoomLookupSeqStart
+        );
+        const idbSummary = summarizeDirectOfflineTileIdbDiagEvents(idbEvents);
+        const lookupSummary = summarizeDirectOfflineTileLookupDiagEvents(lookupEvents);
+
         npfDiagSiaInteraction(
             'TUILES ZOOM PASSIF',
-            `direction=${direction} · z${fromZoom}->${toZoom} · état=${status} · première=${firstVisibleMs === null ? '—' : Math.round(firstVisibleMs) + 'ms'} · couverture=${status === 'complet' ? Math.round(elapsedMs) + 'ms' : '—'} · visibles=${loaded}/${total}`,
+            `direction=${direction} · z${fromZoom}->${toZoom} · état=${status} · première=${firstVisibleMs === null ? '—' : Math.round(firstVisibleMs) + 'ms'} · couverture=${status === 'complet' ? Math.round(elapsedMs) + 'ms' : '—'} · visibles=${loaded}/${total} · IDB=${idbSummary.count} moy=${idbSummary.avgMs}ms max=${idbSummary.maxMs}ms >=1s=${idbSummary.ge1000} · lookup=${lookupSummary.count} cache=${lookupSummary.cacheHits} max=${lookupSummary.maxMs}ms timeout=${lookupSummary.readTimeouts}`,
             {
                 direction,
                 fromZoom,
@@ -8136,7 +8149,28 @@ function scheduleNpfPassiveTileZoomDiagnostic() {
                 maxQueued,
                 maxActive,
                 readsQueued: Math.max(0, Number(directOfflineNpfReadQueue?.length || 0)),
-                readsActive: Math.max(0, Number(directOfflineNpfActiveReads || 0))
+                readsActive: Math.max(0, Number(directOfflineNpfActiveReads || 0)),
+                idbReads: idbSummary.count,
+                idbFound: idbSummary.found,
+                idbMiss: idbSummary.miss,
+                idbErrors: idbSummary.errors,
+                idbAvgMs: idbSummary.avgMs,
+                idbMaxMs: idbSummary.maxMs,
+                idbGe500: idbSummary.ge500,
+                idbGe1000: idbSummary.ge1000,
+                idbIndexCursorMax: idbSummary.indexCursorMax,
+                idbLegacyReads: idbSummary.legacyReads,
+                tileLookups: lookupSummary.count,
+                tileLookupCacheHits: lookupSummary.cacheHits,
+                tileLookupIdb: lookupSummary.idbLookups,
+                tileLookupAvgMs: lookupSummary.avgMs,
+                tileLookupMaxMs: lookupSummary.maxMs,
+                tileLookupDbAttempts: lookupSummary.dbAttempts,
+                tileLookupUrlAttempts: lookupSummary.urlAttempts,
+                tileLookupOpenMs: lookupSummary.openMs,
+                tileLookupReadMs: lookupSummary.readMs,
+                tileLookupTimeouts: lookupSummary.readTimeouts,
+                tileLookupSlowest: lookupSummary.slowestCoords
             }
         );
     };
@@ -8184,7 +8218,7 @@ function scheduleNpfPassiveTileZoomDiagnostic() {
             return;
         }
 
-        if (elapsedMs >= 8000) {
+        if (elapsedMs >= 12000) {
             finish('timeout', state, elapsedMs);
             return;
         }
@@ -9736,6 +9770,11 @@ function getDirectOfflineStoredKeyCandidates(tileUrl) {
 
 function readDirectOfflineTileRecord(db, tileUrl, options = {}) {
     const allowLegacyFallback = options.allowLegacyFallback !== false;
+    const diagStartedAt = directOfflineTileDiagNow();
+    let diagIndexCursorSteps = 0;
+    let diagLegacyGets = 0;
+    let diagLegacyCursorSteps = 0;
+    let diagUsedIndex = false;
 
     return new Promise((resolve, reject) => {
         let tx;
@@ -9749,14 +9788,32 @@ function readDirectOfflineTileRecord(db, tileUrl, options = {}) {
         }
 
         let settled = false;
+        const recordDiag = (outcome, error = null) => {
+            recordDirectOfflineTileIdbDiagEvent({
+                startedAt: diagStartedAt,
+                durationMs: Math.max(0, directOfflineTileDiagNow() - diagStartedAt),
+                outcome,
+                dbName: String(db?.name || ''),
+                tileUrl: String(tileUrl || '').slice(-160),
+                usedIndex: diagUsedIndex ? 1 : 0,
+                indexCursorSteps: diagIndexCursorSteps,
+                legacyGets: diagLegacyGets,
+                legacyCursorSteps: diagLegacyCursorSteps,
+                allowLegacyFallback: allowLegacyFallback ? 1 : 0,
+                error: error ? String(error?.message || error) : ''
+            });
+        };
+
         const finish = value => {
             if (settled) return;
             settled = true;
+            recordDiag(value ? 'hit' : 'miss');
             resolve(value);
         };
         const fail = error => {
             if (settled) return;
             settled = true;
+            recordDiag('error', error);
             reject(error);
         };
 
@@ -9771,6 +9828,7 @@ function readDirectOfflineTileRecord(db, tileUrl, options = {}) {
                 return;
             }
 
+            diagUsedIndex = true;
             let request;
             try {
                 request = store.index('tileUrl').openCursor(IDBKeyRange.only(tileUrl));
@@ -9781,6 +9839,7 @@ function readDirectOfflineTileRecord(db, tileUrl, options = {}) {
 
             request.onsuccess = () => {
                 const cursor = request.result;
+                if (cursor) diagIndexCursorSteps += 1;
                 if (!cursor) {
                     if (allowLegacyFallback) {
                         readByLegacyKeys();
@@ -9815,6 +9874,7 @@ function readDirectOfflineTileRecord(db, tileUrl, options = {}) {
             }
             request.onsuccess = () => {
                 const cursor = request.result;
+                if (cursor) diagLegacyCursorSteps += 1;
                 if (!cursor) {
                     finish(null);
                     return;
@@ -9841,6 +9901,7 @@ function readDirectOfflineTileRecord(db, tileUrl, options = {}) {
                 return;
             }
             const key = exactKeys[keyIndex++];
+            diagLegacyGets += 1;
             let request;
             try {
                 request = store.get(key);
@@ -10065,6 +10126,131 @@ window.getNpfOfflineRecoveryStatus = function getNpfOfflineRecoveryStatus() {
     };
 };
 
+
+/*
+ * v16.93 — instrumentation PASSIVE des lectures de tuiles.
+ * Aucun événement UI n'est généré à chaque lecture : on garde uniquement
+ * de petits buffers en mémoire, résumés ensuite par TUILES ZOOM PASSIF.
+ */
+const DIRECT_OFFLINE_TILE_IO_DIAG_LIMIT = 240;
+let directOfflineTileIdbDiagSeq = 0;
+let directOfflineTileLookupDiagSeq = 0;
+const directOfflineTileIdbDiagEvents = [];
+const directOfflineTileLookupDiagEvents = [];
+
+function directOfflineTileDiagNow() {
+    try {
+        if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
+            return performance.now();
+        }
+    } catch (_) {}
+    return Date.now();
+}
+
+function pushDirectOfflineTileDiagEvent(buffer, event) {
+    buffer.push(event);
+    if (buffer.length > DIRECT_OFFLINE_TILE_IO_DIAG_LIMIT) {
+        buffer.splice(0, buffer.length - DIRECT_OFFLINE_TILE_IO_DIAG_LIMIT);
+    }
+}
+
+function recordDirectOfflineTileIdbDiagEvent(event = {}) {
+    directOfflineTileIdbDiagSeq += 1;
+    pushDirectOfflineTileDiagEvent(directOfflineTileIdbDiagEvents, {
+        seq: directOfflineTileIdbDiagSeq,
+        ...event
+    });
+}
+
+function recordDirectOfflineTileLookupDiagEvent(event = {}) {
+    directOfflineTileLookupDiagSeq += 1;
+    pushDirectOfflineTileDiagEvent(directOfflineTileLookupDiagEvents, {
+        seq: directOfflineTileLookupDiagSeq,
+        ...event
+    });
+}
+
+function getDirectOfflineTileIdbDiagEventsSince(seq) {
+    const minSeq = Math.max(0, Number(seq) || 0);
+    return directOfflineTileIdbDiagEvents.filter(event => Number(event?.seq) > minSeq);
+}
+
+function getDirectOfflineTileLookupDiagEventsSince(seq) {
+    const minSeq = Math.max(0, Number(seq) || 0);
+    return directOfflineTileLookupDiagEvents.filter(event => Number(event?.seq) > minSeq);
+}
+
+function summarizeDirectOfflineTileIdbDiagEvents(events = []) {
+    const safe = Array.isArray(events) ? events : [];
+    const durations = safe.map(event => Math.max(0, Number(event?.durationMs) || 0));
+    const totalMs = durations.reduce((sum, value) => sum + value, 0);
+    const maxMs = durations.length ? Math.max(...durations) : 0;
+
+    return {
+        count: safe.length,
+        found: safe.filter(event => event?.outcome === 'hit').length,
+        miss: safe.filter(event => event?.outcome === 'miss').length,
+        errors: safe.filter(event => event?.outcome === 'error').length,
+        avgMs: safe.length ? Math.round(totalMs / safe.length) : 0,
+        maxMs: Math.round(maxMs),
+        ge500: durations.filter(value => value >= 500).length,
+        ge1000: durations.filter(value => value >= 1000).length,
+        indexCursorMax: safe.length
+            ? Math.max(...safe.map(event => Math.max(0, Number(event?.indexCursorSteps) || 0)))
+            : 0,
+        legacyReads: safe.filter(
+            event => Number(event?.legacyGets) > 0 || Number(event?.legacyCursorSteps) > 0
+        ).length
+    };
+}
+
+function summarizeDirectOfflineTileLookupDiagEvents(events = []) {
+    const safe = Array.isArray(events) ? events : [];
+    const durations = safe.map(event => Math.max(0, Number(event?.durationMs) || 0));
+    const totalMs = durations.reduce((sum, value) => sum + value, 0);
+    const slowest = safe.reduce((best, event) => {
+        if (!best) return event;
+        return (Number(event?.durationMs) || 0) > (Number(best?.durationMs) || 0)
+            ? event
+            : best;
+    }, null);
+
+    return {
+        count: safe.length,
+        cacheHits: safe.filter(event => event?.outcome === 'cache-hit').length,
+        idbLookups: safe.filter(
+            event => !['cache-hit', 'miss-cache'].includes(String(event?.outcome || ''))
+        ).length,
+        avgMs: safe.length ? Math.round(totalMs / safe.length) : 0,
+        maxMs: safe.length
+            ? Math.round(Math.max(...durations))
+            : 0,
+        dbAttempts: safe.reduce(
+            (sum, event) => sum + Math.max(0, Number(event?.dbAttempts) || 0),
+            0
+        ),
+        urlAttempts: safe.reduce(
+            (sum, event) => sum + Math.max(0, Number(event?.urlAttempts) || 0),
+            0
+        ),
+        openMs: Math.round(safe.reduce(
+            (sum, event) => sum + Math.max(0, Number(event?.openMs) || 0),
+            0
+        )),
+        readMs: Math.round(safe.reduce(
+            (sum, event) => sum + Math.max(0, Number(event?.readMs) || 0),
+            0
+        )),
+        readTimeouts: safe.reduce(
+            (sum, event) => sum + Math.max(0, Number(event?.readTimeouts) || 0),
+            0
+        ),
+        slowestCoords: slowest?.coords
+            ? `${slowest.coords.z}/${slowest.coords.x}/${slowest.coords.y}`
+            : ''
+    };
+}
+
 /*
  * v15.37 TEST — diagnostic léger, accessible uniquement depuis la console.
  * Permet de vérifier si un ralentissement vient encore de la file IndexedDB.
@@ -10089,6 +10275,34 @@ window.getNpfTilePerformanceStatus = function getNpfTilePerformanceStatus() {
 };
 
 async function findDirectOfflineTileBlobUnqueued(coords) {
+    const lookupDiagStartedAt = directOfflineTileDiagNow();
+    let lookupDiagDbAttempts = 0;
+    let lookupDiagUrlAttempts = 0;
+    let lookupDiagOpenMs = 0;
+    let lookupDiagReadMs = 0;
+    let lookupDiagReadTimeouts = 0;
+    let lookupDiagRecorded = false;
+
+    const recordLookupDiag = outcome => {
+        if (lookupDiagRecorded) return;
+        lookupDiagRecorded = true;
+        recordDirectOfflineTileLookupDiagEvent({
+            startedAt: lookupDiagStartedAt,
+            durationMs: Math.max(0, directOfflineTileDiagNow() - lookupDiagStartedAt),
+            outcome,
+            coords: {
+                z: Number(coords?.z),
+                x: Number(coords?.x),
+                y: Number(coords?.y)
+            },
+            dbAttempts: lookupDiagDbAttempts,
+            urlAttempts: lookupDiagUrlAttempts,
+            openMs: lookupDiagOpenMs,
+            readMs: lookupDiagReadMs,
+            readTimeouts: lookupDiagReadTimeouts
+        });
+    };
+
     const cacheKey = [
         coords.z,
         coords.x,
@@ -10101,6 +10315,7 @@ async function findDirectOfflineTileBlobUnqueued(coords) {
         directOfflineTileBlobCache.delete(cacheKey);
         directOfflineTileBlobCache.set(cacheKey, cachedBlob);
         resetDirectOfflineReadErrorCounter();
+        recordLookupDiag('cache-hit');
         return cachedBlob;
     }
 
@@ -10109,6 +10324,7 @@ async function findDirectOfflineTileBlobUnqueued(coords) {
         if (Date.now() - cachedMissAt <= DIRECT_OFFLINE_TILE_MISS_CACHE_TTL_MS) {
             directOfflineTileMissCache.delete(cacheKey);
             directOfflineTileMissCache.set(cacheKey, cachedMissAt);
+            recordLookupDiag('miss-cache');
             return null;
         }
         directOfflineTileMissCache.delete(cacheKey);
@@ -10128,6 +10344,8 @@ async function findDirectOfflineTileBlobUnqueued(coords) {
 
     for (const dbName of dbNames) {
         let tileDb;
+        lookupDiagDbAttempts += 1;
+        const openDiagStartedAt = directOfflineTileDiagNow();
         try {
             const openTimeoutMs = isNpfOfflinePackSelection() ? 7000 : 2200;
             tileDb = await withTimeout(
@@ -10135,7 +10353,15 @@ async function findDirectOfflineTileBlobUnqueued(coords) {
                 openTimeoutMs,
                 `Timeout ouverture ${dbName}`
             );
+            lookupDiagOpenMs += Math.max(
+                0,
+                directOfflineTileDiagNow() - openDiagStartedAt
+            );
         } catch (error) {
+            lookupDiagOpenMs += Math.max(
+                0,
+                directOfflineTileDiagNow() - openDiagStartedAt
+            );
             if (
                 isPrimaryDirectOfflineDatabaseCandidate(dbName)
                 && registerDirectOfflineReadError(
@@ -10149,6 +10375,8 @@ async function findDirectOfflineTileBlobUnqueued(coords) {
         }
 
         for (const tileUrl of tileUrls) {
+            lookupDiagUrlAttempts += 1;
+            const readDiagStartedAt = directOfflineTileDiagNow();
             try {
                 const readTimeoutMs = isNpfOfflinePackSelection() ? 5200 : 1800;
                 const allowLegacyFallback = String(dbName || '') === String(OFFLINE_DB_NAME || '');
@@ -10156,6 +10384,10 @@ async function findDirectOfflineTileBlobUnqueued(coords) {
                     readDirectOfflineTileRecord(tileDb, tileUrl, { allowLegacyFallback }),
                     readTimeoutMs,
                     'Timeout lecture tuile'
+                );
+                lookupDiagReadMs += Math.max(
+                    0,
+                    directOfflineTileDiagNow() - readDiagStartedAt
                 );
                 if (!record?.tile) continue;
 
@@ -10177,8 +10409,16 @@ async function findDirectOfflineTileBlobUnqueued(coords) {
                         'Mode OFFLINE — tuiles locales chargées.'
                     );
                 }
+                recordLookupDiag('idb-hit');
                 return blob;
             } catch (error) {
+                lookupDiagReadMs += Math.max(
+                    0,
+                    directOfflineTileDiagNow() - readDiagStartedAt
+                );
+                if (/Timeout lecture tuile/i.test(String(error?.message || error || ''))) {
+                    lookupDiagReadTimeouts += 1;
+                }
                 if (
                     isPrimaryDirectOfflineDatabaseCandidate(dbName)
                     && registerDirectOfflineReadError(
@@ -10197,6 +10437,7 @@ async function findDirectOfflineTileBlobUnqueued(coords) {
      * raison technique : la récupération automatique est déjà en cours.
      */
     if (hadRecoverableTechnicalError) {
+        recordLookupDiag('technical-error');
         return null;
     }
 
@@ -10210,6 +10451,7 @@ async function findDirectOfflineTileBlobUnqueued(coords) {
             'Mode OFFLINE actif — aucune tuile trouvée ici à ce niveau de zoom.'
         );
     }
+    recordLookupDiag('miss');
     return null;
 }
 
