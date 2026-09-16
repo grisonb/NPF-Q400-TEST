@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v16-92_tile_reference_passive_diag';
-const APP_VERSION = 'v16.92';
+const SW_VERSION = 'sw-v16-93_idb_tile_read_diagnostic';
+const APP_VERSION = 'v16.93';
 const SIA_DATA_REVISION = '15.69-radio1026-1-maplite1';
 const SIA_DATA_URL = './sia.js';
 const SIA_DATA_CACHE = `npf-q400-sia-data-${SIA_DATA_REVISION}`;
