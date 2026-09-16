@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v16.94';
+const NPF_SCRIPT_BUILD_VERSION = 'v16.95';
 
 
 /*
@@ -27462,6 +27462,8 @@ const NPF_WAYPOINT_CAPTURE_RADIUS_NM = 1;
 let npfWaypointRouteState = {
     version: 'npfWaypointRouteV1',
     waypoints: [],
+    origin: null,
+    originPending: false,
     activeId: null,
     gotoActive: false,
     updatedAt: ''
@@ -27689,12 +27691,35 @@ function normalizeNpfWaypointRouteState(raw) {
         })
         .filter(Boolean);
 
+    const rawOrigin = input?.origin && typeof input.origin === 'object'
+        ? input.origin
+        : null;
+    const originLat = Number(rawOrigin?.lat);
+    const originLon = Number(rawOrigin?.lon ?? rawOrigin?.lng);
+    const origin = (
+        waypoints.length
+        && Number.isFinite(originLat)
+        && Number.isFinite(originLon)
+    )
+        ? {
+            lat: originLat,
+            lon: originLon,
+            createdAt: String(rawOrigin?.createdAt || '')
+        }
+        : null;
+
     let activeId = String(input.activeId || '').trim() || null;
     if (!waypoints.some(wp => wp.id === activeId)) activeId = waypoints[0]?.id || null;
 
     return {
         version: 'npfWaypointRouteV1',
         waypoints,
+        origin,
+        originPending: Boolean(
+            waypoints.length
+            && !origin
+            && input.originPending === true
+        ),
         activeId,
         gotoActive: Boolean(input.gotoActive && activeId && waypoints.length),
         updatedAt: String(input.updatedAt || '')
@@ -27917,15 +27942,61 @@ function buildNpfWaypointPopupHtml(wp, index) {
     `;
 }
 
+/*
+ * v16.95 — origine FIXE de la route WP.
+ * Elle est enregistrée une seule fois à la création de WP1 (ou au premier fix
+ * qui suit si aucun GPS valide n'était disponible à cet instant).
+ */
+function getNpfWaypointRouteOrigin() {
+    const origin = npfWaypointRouteState?.origin;
+    const lat = Number(origin?.lat);
+    const lon = Number(origin?.lon ?? origin?.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+    return {
+        id: '__npf-route-origin__',
+        lat,
+        lon,
+        name: 'Départ',
+        source: 'route-origin',
+        sourceRef: '',
+        isRouteOrigin: true
+    };
+}
+
+function getNpfWaypointRoutePathPoints() {
+    const waypoints = Array.isArray(npfWaypointRouteState?.waypoints)
+        ? npfWaypointRouteState.waypoints
+        : [];
+    const origin = getNpfWaypointRouteOrigin();
+    return origin ? [origin, ...waypoints] : [...waypoints];
+}
+
+function setNpfWaypointRouteOriginFromLatLng(latlng, { persist = true } = {}) {
+    const lat = Number(latlng?.lat);
+    const lon = Number(latlng?.lng ?? latlng?.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return false;
+
+    npfWaypointRouteState.origin = {
+        lat,
+        lon,
+        createdAt: new Date().toISOString()
+    };
+    npfWaypointRouteState.originPending = false;
+
+    if (persist) persistNpfWaypointRouteState();
+    return true;
+}
+
 function drawNpfWaypointRouteLines() {
     if (!ensureNpfWaypointRouteLayers()) return;
     npfWaypointLineLayer.clearLayers();
     const waypoints = npfWaypointRouteState.waypoints;
     if (!waypoints.length) return;
 
-    for (let i = 0; i < waypoints.length - 1; i += 1) {
-        const from = waypoints[i];
-        const to = waypoints[i + 1];
+    const routePoints = getNpfWaypointRoutePathPoints();
+    for (let i = 0; i < routePoints.length - 1; i += 1) {
+        const from = routePoints[i];
+        const to = routePoints[i + 1];
         const latlngs = [[from.lat, from.lon], [to.lat, to.lon]];
         L.polyline(latlngs, {
             pane: 'npfWaypointLinePane',
@@ -28057,11 +28128,14 @@ function updateNpfWaypointSegmentLabels() {
     if (!ensureNpfWaypointRouteLayers()) return;
     npfWaypointLabelLayer.clearLayers();
     const waypoints = npfWaypointRouteState.waypoints;
-    if (waypoints.length < 2) return;
+    if (!waypoints.length) return;
 
-    for (let i = 0; i < waypoints.length - 1; i += 1) {
-        const from = waypoints[i];
-        const to = waypoints[i + 1];
+    const routePoints = getNpfWaypointRoutePathPoints();
+    if (routePoints.length < 2) return;
+
+    for (let i = 0; i < routePoints.length - 1; i += 1) {
+        const from = routePoints[i];
+        const to = routePoints[i + 1];
         const label = buildNpfWaypointSegmentLabel(from, to);
         if (!label) continue;
 
@@ -28213,6 +28287,19 @@ function addNpfWaypoint(point = {}) {
     npfWaypointRouteState.waypoints.push(wp);
 
     if (wasEmpty) {
+        /*
+         * v16.95 — la position avion au moment de la création de WP1 devient
+         * l'origine fixe du trait plein. Si aucun fix n'est encore disponible,
+         * on attend uniquement le premier fix valide suivant.
+         */
+        const routeOrigin = getNpfWaypointCurrentPositionLatLng();
+        if (routeOrigin) {
+            setNpfWaypointRouteOriginFromLatLng(routeOrigin, { persist: false });
+        } else {
+            npfWaypointRouteState.origin = null;
+            npfWaypointRouteState.originPending = true;
+        }
+
         suspendNpfFirePelicAutoCycle();
         npfWaypointRouteState.activeId = wp.id;
         npfWaypointRouteState.gotoActive = true;
@@ -28288,15 +28375,20 @@ function addNpfWaypointFromMapLatLng(latlng) {
 const NPF_WAYPOINT_ROUTE_LONG_PRESS_TOLERANCE_PX = 22;
 
 function getNpfWaypointRouteSegmentAtLatLng(latlng, tolerancePx = NPF_WAYPOINT_ROUTE_LONG_PRESS_TOLERANCE_PX) {
-    if (!map || !latlng || npfWaypointRouteState.waypoints.length < 2) return null;
+    if (!map || !latlng || !npfWaypointRouteState.waypoints.length) return null;
+
+    const routePoints = getNpfWaypointRoutePathPoints();
+    if (routePoints.length < 2) return null;
+    const hasFixedOrigin = Boolean(getNpfWaypointRouteOrigin());
+
     let p;
     try { p = map.latLngToContainerPoint(latlng); } catch (_) { return null; }
     if (!p) return null;
 
     let best = null;
-    for (let i = 0; i < npfWaypointRouteState.waypoints.length - 1; i += 1) {
-        const from = npfWaypointRouteState.waypoints[i];
-        const to = npfWaypointRouteState.waypoints[i + 1];
+    for (let i = 0; i < routePoints.length - 1; i += 1) {
+        const from = routePoints[i];
+        const to = routePoints[i + 1];
         let a;
         let b;
         try {
@@ -28321,7 +28413,20 @@ function getNpfWaypointRouteSegmentAtLatLng(latlng, tolerancePx = NPF_WAYPOINT_R
         if (!Number.isFinite(distancePx) || distancePx > tolerancePx) continue;
 
         if (!best || distancePx < best.distancePx) {
-            best = { segmentIndex: i, insertIndex: i + 1, distancePx, t };
+            /*
+             * Avec une origine fixe :
+             *   segment 0 = Origine -> WP1 => insertion à l'index 0 ;
+             *   segment 1 = WP1 -> WP2   => insertion à l'index 1 ; etc.
+             * Sans origine, on conserve exactement l'indexation historique.
+             */
+            const insertIndex = hasFixedOrigin ? i : i + 1;
+            best = {
+                segmentIndex: i,
+                insertIndex,
+                distancePx,
+                t,
+                fromOrigin: Boolean(hasFixedOrigin && i === 0)
+            };
         }
     }
     return best;
@@ -28330,7 +28435,21 @@ function getNpfWaypointRouteSegmentAtLatLng(latlng, tolerancePx = NPF_WAYPOINT_R
 function insertNpfWaypointOnRouteSegment(segmentInfo, latlng) {
     if (!segmentInfo || !latlng) return null;
     const insertIndex = Number(segmentInfo.insertIndex);
-    if (!Number.isInteger(insertIndex) || insertIndex <= 0 || insertIndex >= npfWaypointRouteState.waypoints.length) return null;
+    const hasFixedOrigin = Boolean(getNpfWaypointRouteOrigin());
+
+    const validInsertIndex = hasFixedOrigin
+        ? (
+            Number.isInteger(insertIndex)
+            && insertIndex >= 0
+            && insertIndex < npfWaypointRouteState.waypoints.length
+        )
+        : (
+            Number.isInteger(insertIndex)
+            && insertIndex > 0
+            && insertIndex < npfWaypointRouteState.waypoints.length
+        );
+
+    if (!validInsertIndex) return null;
 
     const lat = Number(latlng.lat);
     const lon = Number(latlng.lng);
@@ -28348,7 +28467,24 @@ function insertNpfWaypointOnRouteSegment(segmentInfo, latlng) {
         sourceRef: ''
     };
 
+    const firstWaypointBeforeInsert = npfWaypointRouteState.waypoints[0] || null;
+    const insertedBeforeActiveFirstWaypoint = Boolean(
+        insertIndex === 0
+        && npfWaypointRouteState.gotoActive
+        && firstWaypointBeforeInsert
+        && npfWaypointRouteState.activeId === firstWaypointBeforeInsert.id
+    );
+
     npfWaypointRouteState.waypoints.splice(insertIndex, 0, wp);
+
+    /*
+     * Si l'on crée un WP sur le premier segment Origine -> WP1 pendant que WP1
+     * est la prochaine cible, le nouveau point devient logiquement le WP actif.
+     */
+    if (insertedBeforeActiveFirstWaypoint) {
+        npfWaypointRouteState.activeId = wp.id;
+    }
+
     persistNpfWaypointRouteState();
     redrawNpfWaypointRoute();
     drawUserToTargetRoute();
@@ -28413,6 +28549,8 @@ function deleteNpfWaypoint(id) {
     npfWaypointRouteState.waypoints.splice(index, 1);
 
     if (!npfWaypointRouteState.waypoints.length) {
+        npfWaypointRouteState.origin = null;
+        npfWaypointRouteState.originPending = false;
         npfWaypointRouteState.activeId = null;
         npfWaypointRouteState.gotoActive = false;
     } else if (wasActive) {
@@ -33166,6 +33304,24 @@ function drawUserToTargetRoute() {
         )
     ) {
         userLatLng = getNpfWaypointCurrentPositionLatLng();
+    }
+
+    if (
+        routeWaypointTarget
+        && npfWaypointRouteState.originPending === true
+        && !getNpfWaypointRouteOrigin()
+        && userLatLng
+        && Number.isFinite(Number(userLatLng.lat))
+        && Number.isFinite(Number(userLatLng.lng))
+    ) {
+        /*
+         * Le premier fix reçu après la création de WP1 fige définitivement
+         * l'origine de la route. Les déplacements GPS suivants ne la modifient plus.
+         */
+        if (setNpfWaypointRouteOriginFromLatLng(userLatLng)) {
+            drawNpfWaypointRouteLines();
+            updateNpfWaypointSegmentLabels();
+        }
     }
 
     if (target && userLatLng
