@@ -1,3 +1,89 @@
+VERSION TEST v16.93 — DIAGNOSTIC CIBLÉ LECTURES INDEXEDDB
+Date : 16/09/2026
+Base fonctionnelle : TEST v16.92
+Référence carte/tuiles : v16.75
+
+OBJECTIF
+Identifier précisément pourquoi certaines tuiles mettent plusieurs secondes à
+sortir d'IndexedDB, sans modifier le scheduler ni le comportement de la carte.
+
+1. MOTEUR DE TUILES NON CORRIGÉ EN v16.93
+Avant modification, comparaison statique effectuée entre v16.75 et v16.92 :
+les quatre blocs centraux sont strictement identiques :
+- scheduler NPF / file de lectures ;
+- lecture d'un enregistrement IndexedDB ;
+- recherche d'une tuile dans les bases ;
+- lecture NPF mise en file.
+La v16.93 conserve leur logique fonctionnelle et ajoute uniquement des mesures.
+
+2. MESURES INDEXEDDB AJOUTÉES
+Chaque lecture est chronométrée en mémoire avec :
+- durée réelle de la transaction/requête ;
+- résultat : trouvée / absente / erreur ;
+- base IndexedDB concernée ;
+- utilisation de l'index `tileUrl` ;
+- nombre de curseurs index parcourus ;
+- éventuels fallbacks legacy (get/cursor).
+
+3. MESURES LOOKUP AJOUTÉES
+Pour chaque recherche de tuile :
+- cache RAM ou lecture IndexedDB ;
+- durée totale ;
+- nombre de bases essayées ;
+- nombre d'URL candidates essayées ;
+- temps cumulé d'ouverture de base ;
+- temps cumulé passé dans les lectures ;
+- nombre de timeouts `Timeout lecture tuile` ;
+- coordonnées z/x/y de la tuile.
+
+Ces mesures sont conservées dans de petits buffers circulaires en mémoire.
+Elles ne créent PAS un événement DIAG pour chaque tuile afin de ne pas ajouter
+de charge significative pendant le zoom.
+
+4. `TUILES ZOOM PASSIF` ENRICHI
+À la fin d'un zoom, le diagnostic ajoute maintenant un résumé des lectures
+effectuées pendant CE zoom :
+- nombre de lectures IndexedDB ;
+- durée moyenne / maximum ;
+- nombre de lectures >= 500 ms et >= 1 s ;
+- nombre maximum d'entrées parcourues dans l'index ;
+- nombre de recherches de tuile ;
+- hits cache RAM ;
+- durée max d'un lookup ;
+- nombre de timeouts ;
+- temps cumulé d'ouverture DB / lecture DB ;
+- coordonnées de la recherche la plus lente.
+
+Le timeout du diagnostic passif passe de 8 s à 12 s uniquement pour observer
+les lectures très lentes. Il ne bloque ni la carte ni les couches.
+
+5. INCHANGÉ
+- concurrence IndexedDB : 5 lectures ;
+- ordre/priorités de la file ;
+- purge de file ;
+- cache tuiles ;
+- URLs candidates ;
+- timeouts fonctionnels de lecture existants ;
+- Leaflet ;
+- Routes / HT / SIA / GPS ;
+- correction libellés aérodromes v16.90 ;
+- recherche localités ;
+- aucune réimportation nécessaire.
+
+VERSION
+- App : v16.93.
+- Service Worker : `sw-v16-93_idb_tile_read_diagnostic`.
+- Révision SIA inchangée : `15.69-radio1026-1-maplite1`.
+
+VALIDATION STATIQUE EFFECTUÉE
+- comparaison v16.75 / v16.92 des blocs tuiles : identiques ;
+- syntaxe JavaScript Script / SIA / Service Worker : OK ;
+- Manifest JSON : OK ;
+- aucun code v16.91 `TUILES ZOOM-OUT` réintroduit ;
+- diagnostic v16.93 limité à l'observation.
+
+HISTORIQUE PRÉCÉDENT CONSERVÉ INTÉGRALEMENT
+
 VERSION TEST v16.92 — RETOUR SÛR À LA BASE TUILES v16.75 + DIAG PASSIF
 Date : 15/09/2026
 Base fonctionnelle : TEST v16.90
