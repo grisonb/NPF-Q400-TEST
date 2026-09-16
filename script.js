@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v16.93';
+const NPF_SCRIPT_BUILD_VERSION = 'v16.94';
 
 
 /*
@@ -28125,6 +28125,36 @@ function redrawNpfWaypointRoute() {
     }
 }
 
+/*
+ * v16.94 — origine de navigation WP.
+ * Le marqueur avion est prioritaire. La dernière position GPS valide permet
+ * néanmoins de tracer immédiatement Position actuelle -> WP pendant une
+ * reconstruction de couche ou juste après réouverture de l'application.
+ */
+function getNpfWaypointCurrentPositionLatLng() {
+    try {
+        const markerLatLng = userMarker?.getLatLng?.();
+        if (
+            markerLatLng
+            && Number.isFinite(Number(markerLatLng.lat))
+            && Number.isFinite(Number(markerLatLng.lng))
+        ) {
+            return {
+                lat: Number(markerLatLng.lat),
+                lng: Number(markerLatLng.lng)
+            };
+        }
+    } catch (_) {}
+
+    const lastLat = Number(lastPosition?.lat ?? lastPosition?.latitude);
+    const lastLng = Number(lastPosition?.lng ?? lastPosition?.longitude);
+    if (Number.isFinite(lastLat) && Number.isFinite(lastLng)) {
+        return { lat: lastLat, lng: lastLng };
+    }
+
+    return null;
+}
+
 function ensureNpfWaypointGps() {
     if (userMarker) return;
     if (typeof requestOneShotGps === 'function') {
@@ -28193,9 +28223,16 @@ function addNpfWaypoint(point = {}) {
 
     persistNpfWaypointRouteState();
     redrawNpfWaypointRoute();
+
+    /*
+     * v16.94 — tout ajout de WP resynchronise immédiatement la branche
+     * Position actuelle -> WP actif. Pour le premier WP, le GoTo vient d'être
+     * activé ci-dessus ; pour les suivants, l'ordre et le WP actif sont conservés.
+     */
+    drawUserToTargetRoute();
+
     if (wasEmpty) {
         updateCommuneDisplay(currentCommune);
-        drawUserToTargetRoute();
         ensureNpfWaypointGps();
     }
     try { map?.closePopup?.(); } catch (_) {}
@@ -28540,7 +28577,7 @@ function updateNpfWaypointNavigationBannerMetrics() {
     const finalMetric = document.getElementById('wp-route-final-metric');
     if (!active || !finalWp) return false;
 
-    const userLatLng = userMarker?.getLatLng?.();
+    const userLatLng = getNpfWaypointCurrentPositionLatLng();
     const formatMetric = wp => {
         if (!userLatLng || !Number.isFinite(userLatLng.lat) || !Number.isFinite(userLatLng.lng)) {
             return '---° / -- Nm / -- min';
@@ -33112,9 +33149,29 @@ function drawUserToTargetRoute() {
                     }
                     : null)));
 
-    if (target && userMarker && userMarker.getLatLng()
+    let userLatLng = null;
+    try { userLatLng = userMarker?.getLatLng?.() || null; } catch (_) { userLatLng = null; }
+
+    /*
+     * v16.94 — pour une navigation WP, ne pas attendre la reconstruction du
+     * marqueur avion si une dernière position GPS valide est déjà connue.
+     * Les autres types de cibles conservent leur comportement historique.
+     */
+    if (
+        routeWaypointTarget
+        && (
+            !userLatLng
+            || !Number.isFinite(Number(userLatLng.lat))
+            || !Number.isFinite(Number(userLatLng.lng))
+        )
+    ) {
+        userLatLng = getNpfWaypointCurrentPositionLatLng();
+    }
+
+    if (target && userLatLng
+        && Number.isFinite(Number(userLatLng.lat))
+        && Number.isFinite(Number(userLatLng.lng))
         && Number.isFinite(target.lat) && Number.isFinite(target.lon)) {
-        const userLatLng = userMarker.getLatLng();
 
         const trueBearingToTarget = calculateBearing(
             userLatLng.lat,
