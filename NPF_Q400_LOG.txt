@@ -1,3 +1,72 @@
+VERSION TEST v16.95 — ORIGINE FIXE DE ROUTE + PREMIER SEGMENT ÉDITABLE
+Date : 16/09/2026
+Base fonctionnelle : TEST v16.94
+
+OBJECTIF
+À la création du premier WP :
+- mémoriser la position avion comme origine FIXE de la route ;
+- tracer un segment plein Origine → WP1 qui ne bouge plus avec l'avion ;
+- conserver en parallèle le trait pointillé dynamique Avion → WP actif ;
+- permettre l'insertion d'un WP intermédiaire sur ce premier segment plein,
+  exactement comme sur les segments WP1 → WP2, etc.
+
+1. ORIGINE FIXE DE ROUTE
+- Lors de la création du tout premier WP, la position avion courante est copiée
+  dans l'état persistant de la route sous `origin`.
+- Cette origine n'est ensuite jamais déplacée par le GPS.
+- Si aucun fix n'est encore disponible au moment de la création, l'origine est
+  marquée en attente et prend UNE SEULE FOIS le premier fix valide reçu ensuite.
+- Les anciennes routes restaurées sans origine ne reçoivent pas artificiellement
+  une nouvelle origine : le mécanisme s'applique aux nouvelles routes.
+
+2. TRAIT PLEIN
+La géométrie du trait plein devient :
+Origine fixe → WP1 → WP2 → WP3 ...
+Le premier segment utilise exactement le même style bleu bordé de blanc que les
+autres segments et reçoit aussi son étiquette Route / Distance / Temps.
+
+3. TRAIT POINTILLÉ CONSERVÉ
+Le trait dynamique existant entre la position réelle de l'avion et le WP actif
+reste inchangé. Il continue donc à suivre l'avion pendant que le trait plein
+reste fixé sur l'origine enregistrée.
+
+4. WP INTERMÉDIAIRE SUR ORIGINE → WP1
+- La détection d'appui long inclut maintenant le premier segment fixe.
+- Un appui long sur Origine → WP1 insère un nouveau WP à l'index 0.
+- L'ancien WP1 devient WP2.
+- Si l'ancien WP1 était le WP actif, le nouveau WP intermédiaire devient le
+  WP actif afin de conserver l'ordre logique de navigation.
+- Le nouveau WP passe ensuite dans le même mode Déplacer que pour les autres
+  insertions de route.
+
+5. SUPPRESSION
+- Si le dernier WP est supprimé, l'origine fixe et l'éventuelle attente de fix
+  sont également supprimées.
+- « Supprimer toute la route » remet naturellement l'origine à zéro.
+
+6. PERFORMANCE / TUILES
+- Aucun changement du scheduler de tuiles.
+- La concurrence IndexedDB reste à 5 lectures.
+- Le diagnostic v16.93 reste présent.
+- Le test expérimental 5 → 2 lectures n'est PAS mélangé à cette version WP.
+
+VERSION
+- App : v16.95.
+- Service Worker : `sw-v16-95_wp_fixed_origin_editable_first_leg`.
+- Révision SIA inchangée : `15.69-radio1026-1-maplite1`.
+
+VALIDATION STATIQUE EFFECTUÉE
+- Syntaxe JavaScript Script / SIA / Service Worker : OK.
+- Manifest JSON : OK.
+- Origine persistante ajoutée à l'état route.
+- Premier segment inclus dans traits pleins, libellés et détection appui long.
+- Insertion index 0 autorisée uniquement avec une origine valide.
+- Trait pointillé dynamique conservé.
+- Diagnostic IndexedDB conservé.
+- Concurrence tuiles inchangée à 5.
+
+HISTORIQUE PRÉCÉDENT CONSERVÉ INTÉGRALEMENT
+
 VERSION TEST v16.94 — ROUTE POSITION ACTUELLE → WP
 Date : 16/09/2026
 Base fonctionnelle : TEST v16.93
