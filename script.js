@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v16.91';
+const NPF_SCRIPT_BUILD_VERSION = 'v16.92';
 
 
 /*
@@ -7673,6 +7673,7 @@ function initMap() {
             clearTimeout(directOfflineNpfZoomSettleTimer);
             directOfflineNpfZoomSettleTimer = null;
         }
+        beginNpfPassiveTileZoomDiagnostic();
         beginBaseMapZoomStabilityGuard('zoomstart');
         beginMapVisualRenderGuard('zoomstart');
         if (showRoadOverlayLayer) {
@@ -7696,6 +7697,7 @@ function initMap() {
         }
         try { pruneDirectOfflineNpfQueueForCurrentView('zoomend'); } catch (_) {}
         try { trimDirectOfflineTileBlobCache(); } catch (_) {}
+        scheduleNpfPassiveTileZoomDiagnostic();
         scheduleBaseMapStabilityRefresh('zoomend');
         scheduleNpfOfflineZoomCleanup('zoomend');
         scheduleTrafficVisualResumeAfterMapInteraction('zoomend');
@@ -8068,6 +8070,129 @@ function scheduleTrafficVisualResumeAfterMapInteraction(reason = 'map-end') {
             reason
         });
     }, TRAFFIC_VISUAL_RESUME_AFTER_MAP_MS);
+}
+
+/*
+ * v16.92 — diagnostic PASSIF du chargement des tuiles pendant un zoom.
+ *
+ * Important : ce code n'agit jamais sur la file, les priorités, les epochs,
+ * la concurrence IndexedDB, Leaflet ou les couches annexes. Il se contente
+ * d'observer l'état existant à intervalles espacés.
+ */
+let npfPassiveTileZoomDiagToken = 0;
+let npfPassiveTileZoomStartZoom = NaN;
+let npfPassiveTileZoomStartedAt = 0;
+
+function beginNpfPassiveTileZoomDiagnostic() {
+    npfPassiveTileZoomDiagToken += 1;
+    npfPassiveTileZoomStartZoom = Number(map?.getZoom?.());
+    npfPassiveTileZoomStartedAt = NPF_STARTUP_DIAGNOSTIC.now();
+}
+
+function scheduleNpfPassiveTileZoomDiagnostic() {
+    if (!map || !baseTileLayer) return;
+
+    const token = npfPassiveTileZoomDiagToken;
+    const fromZoom = Number(npfPassiveTileZoomStartZoom);
+    const toZoom = Number(map.getZoom?.());
+    const startedAt = Number(npfPassiveTileZoomStartedAt)
+        || NPF_STARTUP_DIAGNOSTIC.now();
+    const zoomEndedAt = NPF_STARTUP_DIAGNOSTIC.now();
+
+    if (!Number.isFinite(fromZoom) || !Number.isFinite(toZoom)) return;
+
+    const direction = toZoom > fromZoom
+        ? 'IN'
+        : (toZoom < fromZoom ? 'OUT' : 'STABLE');
+
+    let firstVisibleMs = null;
+    let maxQueued = Math.max(0, Number(directOfflineNpfReadQueue?.length || 0));
+    let maxActive = Math.max(0, Number(directOfflineNpfActiveReads || 0));
+    let maxLoaded = 0;
+    let maxTotal = 0;
+
+    const finish = (status, state, elapsedMs) => {
+        if (token !== npfPassiveTileZoomDiagToken) return;
+
+        const loaded = Math.max(0, Number(state?.loaded || 0));
+        const total = Math.max(0, Number(state?.total || 0));
+        const tileZoomReady = state?.tileZoomReady !== false;
+
+        npfDiagSiaInteraction(
+            'TUILES ZOOM PASSIF',
+            `direction=${direction} · z${fromZoom}->${toZoom} · état=${status} · première=${firstVisibleMs === null ? '—' : Math.round(firstVisibleMs) + 'ms'} · couverture=${status === 'complet' ? Math.round(elapsedMs) + 'ms' : '—'} · visibles=${loaded}/${total}`,
+            {
+                direction,
+                fromZoom,
+                toZoom,
+                zoomGestureMs: Math.round(zoomEndedAt - startedAt),
+                firstVisibleMs: firstVisibleMs === null ? -1 : Math.round(firstVisibleMs),
+                coverageMs: status === 'complet' ? Math.round(elapsedMs) : -1,
+                loaded,
+                total,
+                tileZoomReady: tileZoomReady ? 1 : 0,
+                maxLoaded,
+                maxTotal,
+                maxQueued,
+                maxActive,
+                readsQueued: Math.max(0, Number(directOfflineNpfReadQueue?.length || 0)),
+                readsActive: Math.max(0, Number(directOfflineNpfActiveReads || 0))
+            }
+        );
+    };
+
+    const check = () => {
+        if (token !== npfPassiveTileZoomDiagToken || !map || !baseTileLayer) return;
+
+        const now = NPF_STARTUP_DIAGNOSTIC.now();
+        const elapsedMs = Math.max(0, now - zoomEndedAt);
+        const state = typeof getVisibleBaseTileLoadStateForSia === 'function'
+            ? getVisibleBaseTileLoadStateForSia()
+            : {
+                total: getNpfRetainedBaseTileCount(),
+                loaded: countVisibleLoadedBaseTiles(),
+                tileZoomReady: true
+            };
+
+        const loaded = Math.max(0, Number(state?.loaded || 0));
+        const total = Math.max(0, Number(state?.total || 0));
+        maxLoaded = Math.max(maxLoaded, loaded);
+        maxTotal = Math.max(maxTotal, total);
+        maxQueued = Math.max(
+            maxQueued,
+            Math.max(0, Number(directOfflineNpfReadQueue?.length || 0))
+        );
+        maxActive = Math.max(
+            maxActive,
+            Math.max(0, Number(directOfflineNpfActiveReads || 0))
+        );
+
+        if (
+            firstVisibleMs === null
+            && state?.tileZoomReady !== false
+            && loaded > 0
+        ) {
+            firstVisibleMs = elapsedMs;
+        }
+
+        if (
+            state?.tileZoomReady !== false
+            && total > 0
+            && loaded >= total
+        ) {
+            finish('complet', state, elapsedMs);
+            return;
+        }
+
+        if (elapsedMs >= 8000) {
+            finish('timeout', state, elapsedMs);
+            return;
+        }
+
+        setTimeout(check, 80);
+    };
+
+    setTimeout(check, 0);
 }
 
 function beginBaseMapZoomStabilityGuard(reason = 'zoomstart') {
@@ -12343,117 +12468,6 @@ async function waitForNpfFinalZoomFirstTiles(options = {}) {
     return false;
 }
 
-/*
- * v16.91 — fenêtre UNIQUE de priorité au fond OFFLINE avant la transaction
- * Routes -> HT d'un zoom-out combiné.
- *
- * Contrairement aux anciennes attentes internes Routes/HT, cette attente est
- * commune, placée avant tout travail lourd et annulable dès qu'un nouveau zoom
- * commence. Le moteur de tuiles v16.75 n'est pas modifié.
- */
-async function waitForNpfZoomOutTilePriorityWindow(serialToken, options = {}) {
-    const maxWaitMs = Number.isFinite(Number(options.maxWaitMs))
-        ? Math.max(1000, Number(options.maxWaitMs))
-        : 10000;
-
-    if (
-        !offlineTilesMode
-        || typeof isNpfOfflinePackSelection !== 'function'
-        || !isNpfOfflinePackSelection()
-        || !map
-        || !baseTileLayer
-    ) {
-        return true;
-    }
-
-    const startedAt = NPF_STARTUP_DIAGNOSTIC.now();
-    let stablePasses = 0;
-    let maxQueued = 0;
-    let maxActive = 0;
-    let blankPasses = 0;
-
-    while (true) {
-        if (serialToken !== npfHeavyOverlayZoomSerialToken || !map) return false;
-
-        const tileState = typeof getVisibleBaseTileLoadStateForSia === 'function'
-            ? getVisibleBaseTileLoadStateForSia()
-            : {
-                total: getNpfRetainedBaseTileCount(),
-                loaded: countVisibleLoadedBaseTiles(),
-                tileZoomReady: true
-            };
-
-        const activeReads = Math.max(0, Number(directOfflineNpfActiveReads || 0));
-        const queuedReads = Math.max(0, Number(directOfflineNpfReadQueue?.length || 0));
-        maxQueued = Math.max(maxQueued, queuedReads);
-        maxActive = Math.max(maxActive, activeReads);
-
-        const loaded = Math.max(0, Number(tileState.loaded || 0));
-        const total = Math.max(0, Number(tileState.total || 0));
-        if (loaded === 0) blankPasses += 1;
-
-        const tilesReady = (
-            total > 0
-            && loaded >= total
-            && tileState.tileZoomReady
-            && activeReads === 0
-            && queuedReads === 0
-        );
-
-        if (tilesReady) {
-            stablePasses += 1;
-            if (stablePasses >= 2) {
-                for (let frame = 0; frame < 2; frame += 1) {
-                    await new Promise(resolve => {
-                        if (typeof requestAnimationFrame === 'function') {
-                            requestAnimationFrame(() => resolve());
-                        } else {
-                            setTimeout(resolve, 0);
-                        }
-                    });
-                    if (serialToken !== npfHeavyOverlayZoomSerialToken || !map) return false;
-                }
-
-                npfDiagSiaInteraction(
-                    'TUILES ZOOM-OUT',
-                    `état=priorité-fond-acquise · zoom=${map.getZoom()} · visibles=${countVisibleLoadedBaseTiles()}/${getNpfRetainedBaseTileCount()}`,
-                    {
-                        waitMs: Math.round(NPF_STARTUP_DIAGNOSTIC.now() - startedAt),
-                        maxQueued,
-                        maxActive,
-                        blankPasses,
-                        tilesVisible: countVisibleLoadedBaseTiles(),
-                        readsQueued: Number(directOfflineNpfReadQueue?.length || 0),
-                        readsActive: Number(directOfflineNpfActiveReads || 0)
-                    }
-                );
-                return true;
-            }
-        } else {
-            stablePasses = 0;
-        }
-
-        if (NPF_STARTUP_DIAGNOSTIC.now() - startedAt >= maxWaitMs) {
-            npfDiagSiaInteraction(
-                'TUILES ZOOM-OUT',
-                `état=timeout · zoom=${map.getZoom()} · visibles=${countVisibleLoadedBaseTiles()}/${getNpfRetainedBaseTileCount()}`,
-                {
-                    waitMs: Math.round(NPF_STARTUP_DIAGNOSTIC.now() - startedAt),
-                    maxQueued,
-                    maxActive,
-                    blankPasses,
-                    tilesVisible: countVisibleLoadedBaseTiles(),
-                    readsQueued: Number(directOfflineNpfReadQueue?.length || 0),
-                    readsActive: Number(directOfflineNpfActiveReads || 0)
-                }
-            );
-            return true;
-        }
-
-        await new Promise(resolve => setTimeout(resolve, 60));
-    }
-}
-
 async function runSerializedHeavyOverlayZoomOut(startZoom, finalZoom) {
     const token = ++npfHeavyOverlayZoomSerialToken;
 
@@ -12468,18 +12482,6 @@ async function runSerializedHeavyOverlayZoomOut(startZoom, finalZoom) {
      * force l'état ici également pour les zooms programmatiques/limites. */
     setNpfHeavyOverlayPanesHidden(true);
     recordNpfStartupDiagnosticOverlaySnapshot(`zoom-out série · panes masqués z${startZoom}->${finalZoom}`);
-
-    /*
-     * v16.91 — priorité absolue au fond : tant que les tuiles du niveau final
-     * ne sont pas réellement visibles et la file OFFLINE au repos, aucun
-     * traitement Routes/HT ne démarre. Si l'utilisateur poursuit le zoom,
-     * le token invalide immédiatement ce niveau intermédiaire.
-     */
-    const zoomOutTilesReady = await waitForNpfZoomOutTilePriorityWindow(
-        token,
-        { maxWaitMs: 10000 }
-    );
-    if (!zoomOutTilesReady || token !== npfHeavyOverlayZoomSerialToken || !map) return;
 
     await yieldRoadOverlayRenderTurn();
     if (token !== npfHeavyOverlayZoomSerialToken || !map) return;
@@ -12534,10 +12536,10 @@ async function runSerializedHeavyOverlayZoomOut(startZoom, finalZoom) {
         }
     } catch (_) {}
     /*
-     * v16.91 — la reconstruction Routes+HT reste sérialisée. Les bypass
-     * internes v16.85 sont conservés : il n'existe toujours qu'UNE seule
-     * attente tuiles, désormais commune et placée AVANT Routes puis HT.
-     * Une fois les couches reconstruites, les panes sont réaffichés.
+     * v16.85 — la reconstruction Routes+HT reste sérialisée et les deux appels
+     * internes utilisent maintenant le mode sans attente tuiles. Une fois
+     * Routes puis HT reconstruits, les panes sont réaffichés immédiatement ;
+     * le fond OFFLINE poursuit son chargement indépendamment.
      */
     if (token !== npfHeavyOverlayZoomSerialToken || !map) return;
 
