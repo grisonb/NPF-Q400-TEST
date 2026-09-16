@@ -1,71 +1,70 @@
-VERSION TEST v16.91 — PRIORITÉ TUILES AU ZOOM OUT
+VERSION TEST v16.92 — RETOUR SÛR À LA BASE TUILES v16.75 + DIAG PASSIF
 Date : 15/09/2026
-Base : TEST v16.90
-Référence moteur tuiles : v16.75
+Base fonctionnelle : TEST v16.90
+Référence carte/tuiles : v16.75
 
-CONSTAT
-Lors d'une série de zoom-out avec Routes + HT actifs, le DIAG v16.90 a montré
-un écran temporairement sans tuile visible alors que le moteur OFFLINE avait
-5 lectures actives et 25 en file. En parallèle, Routes a lancé un chargement
-tier 1 de 28 cellules qui a duré 4 021 ms. Le fond de carte pouvait donc rester
-visuellement incomplet pendant qu'une couche annexe effectuait son traitement.
+OBJECTIF
+Ne plus modifier le moteur de tuiles tant que l'écart avec la référence v16.75
+n'est pas identifié précisément.
 
-CORRECTION v16.91
+1. ANNULATION DE LA PISTE v16.91
+- v16.92 repart volontairement de v16.90 et NON de v16.91.
+- La fenêtre `TUILES ZOOM-OUT` de v16.91 est totalement absente.
+- Aucun timeout de 10 s, aucune attente commune Routes/HT et aucune nouvelle
+  condition de validation des tuiles ne sont conservés.
+- Zoom IN et zoom OUT retrouvent donc le comportement de scheduling antérieur.
 
-1. PRIORITÉ ABSOLUE AU FOND DE CARTE PENDANT UN ZOOM-OUT ROUTES + HT
-- La transaction sérialisée de zoom-out masque toujours Routes/HT pendant le geste.
-- Avant de commencer le moindre recalcul Routes ou HT, v16.91 attend désormais
-  que les tuiles visibles du nouveau niveau soient réellement chargées,
-  que le niveau de tuile corresponde au zoom courant et que la file OFFLINE
-  soit revenue au repos.
-- Deux passages stables sont exigés puis deux frames Safari sont laissées au
-  navigateur avant de lancer les couches lourdes.
-- Cette attente est asynchrone : elle ne bloque pas l'interface et ne modifie
-  pas le moteur de tuiles.
+2. MOTEUR DE TUILES PROTÉGÉ
+La comparaison statique entre v16.75 et la base v16.90 confirme que les éléments
+centraux du moteur NPF sont inchangés :
+- 5 lectures IndexedDB simultanées ;
+- file NPF et priorité par viewport ;
+- purge de file au zoomend/moveend ;
+- lecture directe IndexedDB ;
+- création des tuiles Leaflet ;
+- cache blobs ;
+- garde de stabilité du fond ;
+- nettoyage mémoire post-zoom.
+Aucune de ces fonctions n'est modifiée en v16.92.
 
-2. ANNULATION DES NIVEAUX INTERMÉDIAIRES
-- Si un nouveau zoom commence pendant cette fenêtre de priorité tuiles,
-  l'attente de l'ancien niveau est annulée par le token de transaction existant.
-- Le traitement Routes/HT prévu pour ce niveau intermédiaire n'est donc pas lancé.
-- La transaction repart uniquement sur la vue finale stabilisée.
+3. NOUVEAU DIAGNOSTIC STRICTEMENT PASSIF
+Ajout d'un événement `TUILES ZOOM PASSIF` pour mesurer un changement de zoom
+sans modifier son déroulement.
+Pour chaque zoom testé isolément, il enregistre :
+- direction IN ou OUT ;
+- échelle Leaflet de départ et d'arrivée ;
+- temps jusqu'à la première tuile visible du niveau final ;
+- temps jusqu'à la couverture complète des tuiles visibles ;
+- nombre de tuiles chargées / visibles ;
+- maximum de lectures actives et en file ;
+- éventuel timeout de mesure après 8 s.
 
-3. UNE SEULE FENÊTRE D'ATTENTE COMMUNE
-- Les bypass internes v16.85 restent conservés.
-- Routes et HT ne retrouvent donc PAS chacun leur ancienne attente de 7 s.
-- v16.91 ajoute une unique fenêtre commune avant Routes -> HT -> SIA.
-- Le SIA/VRP reste déjà verrouillé sur le Promise commun et bénéficie donc
-  automatiquement de la même priorité donnée aux tuiles.
+Le diagnostic ne :
+- bloque aucune couche ;
+- n'attend aucune tuile avant de rendre Routes/HT/SIA ;
+- ne change aucune priorité ;
+- ne purge aucune demande supplémentaire ;
+- ne modifie aucune concurrence IndexedDB.
 
-4. DIAGNOSTIC
-- Ajout d'un événement `TUILES ZOOM-OUT`.
-- Il enregistre : temps d'attente, tuiles visibles, file maximale,
-  lectures actives maximales et nombre de passages avec écran vide.
-- En cas d'absence de stabilisation après 10 s, l'événement indique un timeout ;
-  les couches annexes sont ensuite autorisées afin de ne jamais rester bloquées.
-
-5. INCHANGÉ
-- moteur OFFLINE / cache / concurrence tuiles de la référence v16.75 ;
-- corrections fluidité et libellés aérodromes v16.90 ;
-- seuil libellés aérodromes <= 2 NM ;
-- Routes : données, rendu, cache spatial et style inchangés ;
-- HT : données et rendu inchangés ;
-- SIA/VRP : données et rendu inchangés ;
+4. CONSERVÉ DE v16.90
+- correction de fluidité du pan par retrait temporaire des libellés aérodromes ;
+- suppression stricte des libellés aérodromes au-delà de 2 NM ;
 - recherche localités v16.88 ;
+- diagnostic de saccades v16.89 ;
+- Routes / HT / SIA / VRP inchangés ;
 - aucune réimportation nécessaire.
 
 VERSION
-- App : v16.91.
-- Service Worker : `sw-v16-91_zoomout_tile_priority`.
+- App : v16.92.
+- Service Worker : `sw-v16-92_tile_reference_passive_diag`.
 - Révision SIA inchangée : `15.69-radio1026-1-maplite1`.
 
 VALIDATION STATIQUE EFFECTUÉE
 - Syntaxe JavaScript Script / SIA / Service Worker vérifiée.
 - Manifest JSON vérifié.
-- Références app v16.91 vérifiées.
-- Attente commune placée AVANT tout traitement Routes/HT du zoom-out sérialisé.
-- Annulation sur nouveau zoom vérifiée via `npfHeavyOverlayZoomSerialToken`.
-- Bypass internes v16.85 conservés : pas de double attente Routes + HT.
-- Moteur tuiles v16.75 non modifié.
+- Absence du code `TUILES ZOOM-OUT` v16.91 vérifiée.
+- Moteur de tuiles non modifié par rapport à la base v16.90.
+- Diagnostic `TUILES ZOOM PASSIF` vérifié comme observation uniquement.
 
 HISTORIQUE PRÉCÉDENT CONSERVÉ INTÉGRALEMENT
 
