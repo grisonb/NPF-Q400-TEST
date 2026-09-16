@@ -1,3 +1,50 @@
+VERSION TEST v16.94 — ROUTE POSITION ACTUELLE → WP
+Date : 16/09/2026
+Base fonctionnelle : TEST v16.93
+
+OBJECTIF
+Lorsqu'un WP est créé, assurer immédiatement la continuité de route depuis la
+position actuelle vers le WP actif.
+
+1. ROUTE DIRECTE POSITION ACTUELLE → WP ACTIF
+- Le premier WP créé reste automatiquement le GoTo actif, comme auparavant.
+- Dès sa création, NPF redessine explicitement la route GPS vers le WP actif.
+- La route part en priorité de la position du marqueur avion.
+- Si le marqueur avion n'est pas encore reconstruit mais qu'une dernière
+  position GPS valide existe, cette position est utilisée immédiatement.
+- Si aucune position n'est encore disponible, la demande GPS existante est
+  conservée ; la route apparaît au premier fix reçu.
+
+2. AJOUT D'UN WP À UNE ROUTE EXISTANTE
+- Après tout ajout de WP, la route GPS vers le WP actif est resynchronisée.
+- L'ordre des WP et la logique d'acquisition restent inchangés.
+- L'ajout d'un WP supplémentaire ne change pas arbitrairement le WP actif.
+
+3. BANDEAU ROUTE WP
+- Les métriques Route / Distance / Temps utilisent le même fallback vers la
+  dernière position GPS valide si le marqueur avion n'est pas encore présent.
+
+4. PERFORMANCE / TUILES
+- Aucun changement du scheduler de tuiles.
+- La concurrence IndexedDB reste à 5 lectures.
+- Le diagnostic v16.93 des lectures IndexedDB est conservé intégralement.
+- Aucune modification Routes / HT / SIA / GPS hors liaison WP.
+- Aucune réimportation nécessaire.
+
+VERSION
+- App : v16.94.
+- Service Worker : `sw-v16-94_wp_current_position_route`.
+- Révision SIA inchangée : `15.69-radio1026-1-maplite1`.
+
+VALIDATION STATIQUE EFFECTUÉE
+- Syntaxe JavaScript Script / SIA / Service Worker : OK.
+- Manifest JSON : OK.
+- Route WP : fallback position actuelle/dernière position GPS présent.
+- Redessin de la route après chaque ajout de WP vérifié.
+- Diagnostic IndexedDB v16.93 conservé.
+
+HISTORIQUE PRÉCÉDENT CONSERVÉ INTÉGRALEMENT
+
 VERSION TEST v16.93 — DIAGNOSTIC CIBLÉ LECTURES INDEXEDDB
 Date : 16/09/2026
 Base fonctionnelle : TEST v16.92
