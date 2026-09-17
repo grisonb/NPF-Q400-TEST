@@ -1,51 +1,46 @@
-VERSION TEST v16.97 — CALCULATEUR STABLE + VERROUILLAGE LATÉRAL FdS/GAAR
+VERSION TEST v16.98 — RETOUR CALCULATEUR v16.96 / NETTOYAGE ESSAIS v16.97
 Date : 17/09/2026
 Base fonctionnelle : TEST v16.96
 
-CORRECTIONS INCLUSES
+OBJECTIF
+Revenir à une base propre après les deux essais non validés de v16.97.
 
-1. CALCULATEUR — CORRECTION DE LA « FENÊTRE QUI MONTE »
-- Le problème observé après certaines saisies iPad/Safari est traité séparément
-  des documents FdS/GAAR.
-- Le fond du calculateur n'utilise plus une hauteur `100%` susceptible de rester
-  réduite après l'ouverture/fermeture du clavier ou d'un sélecteur natif.
-- Sa hauteur est maintenant verrouillée sur `--npf-app-vh`, la hauteur stable
-  déjà calculée par NPF à partir du viewport/écran.
-- Le conteneur principal reste centré dans cette hauteur stable.
-- À l'ouverture du calculateur et après les variations `visualViewport`
-  (clavier, sélecteur, retour de focus), NPF réapplique l'ancrage haut/gauche
-  et supprime tout décalage résiduel de la page.
-- Le contenu interne conserve ses scrolls habituels ; aucun changement aux
-  tableaux, onglets ou calculs.
+1. CALCULATEUR — ROLLBACK COMPLET DE LA CORRECTION v16.97
+- Suppression du forçage de hauteur basé sur `--npf-app-vh`.
+- Suppression du réancrage artificiel top/left du calculateur.
+- Suppression des resynchronisations `visualViewport` ajoutées en v16.97.
+- Retour exact au positionnement du calculateur de v16.96.
+- Aucune compensation en pixels n'est ajoutée.
+- Le problème intermittent historique de « fenêtre qui monte » n'est PAS considéré
+  corrigé dans cette version ; il sera repris séparément avec un diagnostic ciblé.
 
-2. FdS / DIAGRAMME GAAR — VERROUILLAGE LATÉRAL
-- Le lecteur FdS/GAAR conserve le défilement vertical.
-- Les gestes horizontaux sont bloqués au niveau du stage et de l'iframe :
-  `touch-action: pan-y pinch-zoom`.
-- `overflow-x` et `overscroll-behavior-x` sont verrouillés pour empêcher le
-  document de dériver latéralement.
-- Le zoom FdS et le grossissement spécifique du diagramme GAAR restent inchangés.
-- Le défilement vertical et le pincement de zoom restent autorisés.
+2. FdS / DIAGRAMME GAAR
+- Suppression du verrouillage horizontal CSS ajouté en v16.97, car il n'empêchait
+  pas le déplacement latéral dans le lecteur PDF natif Safari.
+- Retour exact au comportement FdS/GAAR de v16.96.
+- Aucun remplacement du lecteur PDF natif n'est introduit dans cette version.
 
-3. CORRECTIONS v16.96 CONSERVÉES
+3. CORRECTIONS VALIDÉES CONSERVÉES
 - BLOC/FUEL : premier transit depuis l'OACI mémorisé au BLOC DÉPART.
-- Route WP : pointillé rouge au-dessus du trait plein.
-- Test IndexedDB : 2 lectures simultanées.
+- Route WP : pointillé rouge Avion → WP actif au-dessus du trait plein.
+- Route WP : origine fixe et premier segment éditable conservés.
+- Test IndexedDB : 2 lectures simultanées conservé.
 - Diagnostic IndexedDB détaillé conservé.
 
 VERSION
-- App : v16.97.
-- Service Worker : `sw-v16-97_calc_stable_fds_gaar_xlock`.
+- App : v16.98.
+- Service Worker : `sw-v16-98_rollback_v1697_keep_validated`.
 - Révision SIA inchangée : `15.69-radio1026-1-maplite1`.
 
 VALIDATION STATIQUE EFFECTUÉE
 - Syntaxe JavaScript Script / SIA / Service Worker : OK.
 - Manifest JSON : OK.
-- Calculateur : hauteur stable `--npf-app-vh` + resynchronisation viewport.
-- FdS/GAAR : verrouillage horizontal, pan vertical/pinch conservés.
-- Concurrence IndexedDB toujours à 2.
-- BLOC/FUEL v16.96 conservé.
-- Pointillé WP z=549 conservé.
+- Aucune trace de `resyncCalculatorModalViewport` / listeners visualViewport v16.97.
+- Aucune règle CSS de verrouillage horizontal FdS/GAAR v16.97.
+- BLOC/FUEL OACI conservé.
+- Pane pointillé WP z=549 conservé.
+- Concurrence IndexedDB NPF = 2 conservée.
+- Diagnostic IndexedDB conservé.
 - Aucun retour du wait v16.91.
 
 HISTORIQUE PRÉCÉDENT CONSERVÉ INTÉGRALEMENT
