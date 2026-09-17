@@ -1,4 +1,4 @@
-/* NPF_STYLE_BUILD_VERSION: v16.97 */
+/* NPF_STYLE_BUILD_VERSION: v16.98 */
 /* v14.83 — nettoyage des références techniques et limitation des cartouches routiers. */
 /* v14.81 — recherche phonétique nationale élargie aux fragments sur deux lettres. */
 /* v14.80 — Brive conservé uniquement sous LFSL. */
@@ -18169,70 +18169,4 @@ body.npf-calculator-modal-open {
 .sia-boundary-label-text.sia-zone-label-near .sia-boundary-label-altitude,
 .sia-boundary-label-text.sia-siv-label.sia-zone-label-near .sia-boundary-label-altitude {
     font-size: 12px !important;
-}
-
-
-/* ==========================================================================
-   v16.97 — CALCULATEUR : HAUTEUR STABLE IPAD / SAFARI
-   ========================================================================== */
-
-/*
- * `height:100%` pouvait rester basé sur un viewport visuel réduit après le
- * clavier/sélecteur iPad. `--npf-app-vh` est volontairement la hauteur stable
- * calculée par NPF et ne se réduit pas avec le clavier.
- */
-#calculator-modal {
-    position: fixed !important;
-    top: 0 !important;
-    left: 0 !important;
-    right: auto !important;
-    bottom: auto !important;
-    width: 100vw !important;
-    height: var(--npf-app-vh, 100dvh) !important;
-    min-height: var(--npf-app-vh, 100vh) !important;
-    max-height: none !important;
-    transform: none !important;
-    box-sizing: border-box !important;
-    overflow: hidden !important;
-}
-
-#calculator-modal > .main-container {
-    margin: auto !important;
-    max-height: min(95vh, calc(var(--npf-app-vh, 100vh) - 10px)) !important;
-    transform: none !important;
-}
-
-@supports (height: 100dvh) {
-    #calculator-modal > .main-container {
-        max-height: min(95dvh, calc(var(--npf-app-vh, 100dvh) - 10px)) !important;
-    }
-}
-
-
-/* ==========================================================================
-   v16.97 — FdS / GAAR : VERROUILLAGE LATÉRAL
-   ========================================================================== */
-
-/*
- * Le lecteur PDF natif Safari reste libre de défiler verticalement et de
- * pincer/zoomer, mais un glissement horizontal ne doit plus déplacer le
- * document FdS ou le diagramme GAAR.
- */
-.briefing-doc-viewer-modal,
-.briefing-doc-viewer-stage {
-    overflow-x: hidden !important;
-    overscroll-behavior-x: none !important;
-}
-
-.briefing-doc-viewer-stage,
-.briefing-doc-viewer-stage .briefing-doc-viewer-frame {
-    touch-action: pan-y pinch-zoom !important;
-    overscroll-behavior-x: none !important;
-}
-
-.briefing-doc-viewer-stage .briefing-doc-viewer-frame {
-    left: 0 !important;
-    right: auto !important;
-    margin-left: 0 !important;
-    margin-right: 0 !important;
 }
