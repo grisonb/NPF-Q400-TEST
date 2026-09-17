@@ -1,3 +1,60 @@
+VERSION TEST v16.96 — BLOC DÉPART OACI + PRIORITÉ POINTILLÉ WP + TEST IDB 2 LECTURES
+Date : 17/09/2026
+Base fonctionnelle : TEST v16.95
+
+CORRECTIONS / TESTS INCLUS
+
+1. BLOC/FUEL — ORIGINE DU PREMIER TRANSIT
+- Lorsque BLOC DÉPART est renseigné, le code OACI automatiquement figé et
+  affiché dans « BLOC DÉPART XXXX » devient la référence géographique du
+  premier transit.
+- Le calcul initial est désormais :
+      terrain OACI mémorisé au BLOC DÉPART → FEU
+  et non plus :
+      BASE sélectionnée → FEU
+- Les coordonnées utilisées sont celles du terrain correspondant à l'OACI
+  mémorisé au moment de la saisie du BLOC DÉPART.
+- L'origine reste figée même si l'avion se déplace ensuite.
+- La BASE sélectionnée reste utilisée pour les calculs de retour/BINGO Base.
+- La position GPS réelle reste réservée à l'onglet Déroutement.
+- Si aucun OACI valide n'est mémorisé au BLOC DÉPART, NPF ne remplace pas
+  silencieusement l'origine par la BASE : la distance initiale reste indisponible.
+
+2. ROUTE WP — POINTILLÉ ROUGE AU-DESSUS DU TRAIT PLEIN
+- Le trait plein de route WP reste dans `npfWaypointLinePane` z=548.
+- Le trait rouge pointillé Avion → WP actif utilise désormais un pane dédié
+  `npfWaypointGotoPane` z=549.
+- Les étiquettes de route restent au-dessus en z=550.
+- Le pointillé rouge reste donc visible lorsqu'il se superpose au trait plein.
+- Aucun changement à l'origine fixe ni à l'insertion d'un WP intermédiaire
+  introduites en v16.95.
+
+3. PERFORMANCE TUILES — TEST INDEXEDDB
+- Test A/B demandé après les ralentissements de longue session.
+- La concurrence des lectures IndexedDB NPF passe temporairement de 5 à 2.
+- Scheduler, priorité par viewEpoch, cache, purge, candidats de clés et timeouts
+  restent inchangés.
+- Le diagnostic détaillé IndexedDB de v16.93 est conservé.
+- Cette modification est un TEST : elle ne doit pas être considérée comme une
+  correction définitive avant comparaison des DIAG.
+
+VERSION
+- App : v16.96.
+- Service Worker : `sw-v16-96_bloc_oaci_wp_goto_idb2`.
+- Révision SIA inchangée : `15.69-radio1026-1-maplite1`.
+
+VALIDATION STATIQUE EFFECTUÉE
+- Syntaxe JavaScript Script / SIA / Service Worker : OK.
+- Manifest JSON : OK.
+- BLOC DÉPART : premier transit basé sur l'OACI mémorisé.
+- Aucun fallback silencieux vers la BASE pour le premier transit Suivi.
+- Pane pointillé WP z=549 > trait plein z=548 et < labels z=550.
+- Concurrence IndexedDB NPF = 2.
+- Diagnostic IndexedDB conservé.
+- Aucun retour du wait v16.91.
+
+HISTORIQUE PRÉCÉDENT CONSERVÉ INTÉGRALEMENT
+
 VERSION TEST v16.95 — ORIGINE FIXE DE ROUTE + PREMIER SEGMENT ÉDITABLE
 Date : 16/09/2026
 Base fonctionnelle : TEST v16.94
