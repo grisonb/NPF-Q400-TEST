@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v16.99';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.00';
 
 
 /*
@@ -496,6 +496,7 @@ function getNpfStartupDiagnosticOverlaySnapshot() {
         npfReadsActive: Number(directOfflineNpfActiveReads || 0),
         npfReadsQueued: Number(directOfflineNpfReadQueue?.length || 0),
         npfReadsAborted: Number(directOfflineNpfAbortedReadCount || 0),
+        npfActiveObsoleteAborts: Number(directOfflineNpfActiveObsoleteAbortCount || 0),
         npfQueuedDiscarded: Number(directOfflineNpfQueuedDiscardCount || 0),
         npfTileRetries: Number(directOfflineNpfTileRetryCount || 0),
         npfViewEpoch: Number(directOfflineTileViewPriorityEpoch || 0),
@@ -8142,6 +8143,7 @@ let npfPassiveTileZoomStartZoom = NaN;
 let npfPassiveTileZoomStartedAt = 0;
 let npfPassiveTileZoomIdbSeqStart = 0;
 let npfPassiveTileZoomLookupSeqStart = 0;
+let npfPassiveTileZoomActiveObsoleteAbortStart = 0;
 
 function beginNpfPassiveTileZoomDiagnostic() {
     npfPassiveTileZoomDiagToken += 1;
@@ -8149,6 +8151,9 @@ function beginNpfPassiveTileZoomDiagnostic() {
     npfPassiveTileZoomStartedAt = NPF_STARTUP_DIAGNOSTIC.now();
     npfPassiveTileZoomIdbSeqStart = Number(directOfflineTileIdbDiagSeq || 0);
     npfPassiveTileZoomLookupSeqStart = Number(directOfflineTileLookupDiagSeq || 0);
+    npfPassiveTileZoomActiveObsoleteAbortStart = Number(
+        directOfflineNpfActiveObsoleteAbortCount || 0
+    );
 }
 
 function scheduleNpfPassiveTileZoomDiagnostic() {
@@ -8208,6 +8213,11 @@ function scheduleNpfPassiveTileZoomDiagnostic() {
                 maxActive,
                 readsQueued: Math.max(0, Number(directOfflineNpfReadQueue?.length || 0)),
                 readsActive: Math.max(0, Number(directOfflineNpfActiveReads || 0)),
+                activeObsoleteAborts: Math.max(
+                    0,
+                    Number(directOfflineNpfActiveObsoleteAbortCount || 0)
+                    - Number(npfPassiveTileZoomActiveObsoleteAbortStart || 0)
+                ),
                 idbReads: idbSummary.count,
                 idbFound: idbSummary.found,
                 idbMiss: idbSummary.miss,
@@ -8308,9 +8318,9 @@ function beginBaseMapZoomStabilityGuard(reason = 'zoomstart') {
         && isNpfOfflinePackSelection()
     ) {
         /*
-         * v16.71 — retour au comportement v16.50 : le nouveau viewport devient
-         * prioritaire dès le début du geste. Les transactions déjà actives ne
-         * sont pas annulées.
+         * v17.00 — le nouveau viewport devient prioritaire dès le début du
+         * geste. Les transactions actives ne sont annulées qu'au zoomend/moveend
+         * si Leaflet ne retient plus réellement leur tuile.
          */
         try { markDirectOfflineNpfViewportPriority(reason); } catch (_) {}
         try { trimDirectOfflineTileBlobCache(96); } catch (_) {}
@@ -9372,9 +9382,11 @@ const DIRECT_OFFLINE_TILE_ABORTED = Symbol('direct-offline-tile-aborted');
 let directOfflineNpfActiveReads = 0;
 const directOfflineNpfReadQueue = [];
 const directOfflineNpfInflightReads = new Map();
+const directOfflineNpfActiveReadContexts = new Set();
 let directOfflineTileReadGeneration = 0;
 let directOfflineTileViewPriorityEpoch = 0;
 let directOfflineNpfAbortedReadCount = 0;
+let directOfflineNpfActiveObsoleteAbortCount = 0;
 let directOfflineNpfQueuedDiscardCount = 0;
 let directOfflineNpfTileRetryCount = 0;
 const directOfflineTileLookupHints = new Map();
@@ -9401,8 +9413,83 @@ function getDirectOfflineNpfQueueTileKey(coords) {
     return `${x}:${y}:${z}`;
 }
 
+function createDirectOfflineNpfObsoleteAbortError(reason = 'obsolete-view') {
+    const error = new Error(`Lecture tuile NPF obsolète (${reason})`);
+    error.name = 'NpfObsoleteTileReadError';
+    error.npfObsoleteTileRead = true;
+    return error;
+}
+
+function isDirectOfflineNpfObsoleteAbort(error) {
+    return !!(
+        error?.npfObsoleteTileRead
+        || String(error?.name || '') === 'NpfObsoleteTileReadError'
+    );
+}
+
+function abortDirectOfflineNpfReadContext(context, reason = 'obsolete-view') {
+    if (!context || context.aborted) return false;
+    context.aborted = true;
+    context.abortReason = String(reason || 'obsolete-view');
+
+    let didAbortTransaction = false;
+    const transactions = Array.from(context.transactions || []);
+    transactions.forEach(tx => {
+        try {
+            tx.abort();
+            didAbortTransaction = true;
+        } catch (_) {}
+    });
+
+    directOfflineNpfActiveObsoleteAbortCount += 1;
+    directOfflineNpfAbortedReadCount += 1;
+    return didAbortTransaction || true;
+}
+
+function abortDirectOfflineNpfActiveReadsForCurrentView(reason = 'view-end') {
+    if (!baseTileLayer || !map || !directOfflineNpfActiveReadContexts.size) return 0;
+
+    const retainedTiles = baseTileLayer._tiles || {};
+    const retainedKeys = new Set(Object.keys(retainedTiles));
+    const currentZoom = Math.round(Number(map.getZoom?.()));
+    let aborted = 0;
+
+    directOfflineNpfActiveReadContexts.forEach(context => {
+        if (!context || context.aborted) return;
+
+        const coords = context.coords || null;
+        const z = Number(coords?.z);
+        const tileKey = String(
+            context.tileKey || getDirectOfflineNpfQueueTileKey(coords)
+        );
+        const sameGeneration = (
+            Number(context.hardGeneration) === Number(directOfflineTileReadGeneration)
+        );
+        const sameZoom = (
+            Number.isFinite(currentZoom)
+            && Number.isFinite(z)
+            && z === currentZoom
+        );
+        const retained = !!tileKey && retainedKeys.has(tileKey);
+        const latestViewport = (
+            Number(context.viewEpoch) === Number(directOfflineTileViewPriorityEpoch)
+        );
+
+        /*
+         * Même règle que pour la file :
+         * - le viewport courant est conservé ;
+         * - un ancien epoch n'est conservé que si Leaflet retient encore la tuile.
+         */
+        if (sameGeneration && sameZoom && (latestViewport || retained)) return;
+
+        if (abortDirectOfflineNpfReadContext(context, reason)) aborted += 1;
+    });
+
+    return aborted;
+}
+
 function pruneDirectOfflineNpfQueueForCurrentView(reason = 'view-end') {
-    if (!directOfflineNpfReadQueue.length || !baseTileLayer || !map) return 0;
+    if (!baseTileLayer || !map) return 0;
 
     const retainedTiles = baseTileLayer._tiles || {};
     const currentZoom = Math.round(Number(map.getZoom?.()));
@@ -9419,12 +9506,6 @@ function pruneDirectOfflineNpfQueueForCurrentView(reason = 'view-end') {
         const retained = !!tileKey && retainedKeys.has(tileKey);
         const latestViewport = (Number(item?.viewEpoch) || 0) === directOfflineTileViewPriorityEpoch;
 
-        /*
-         * Toujours conserver les demandes créées pour le viewport courant,
-         * même si Leaflet n'a pas encore inscrit la tuile dans _tiles au même
-         * instant. Pour les anciens epochs, ne garder que les tuiles encore
-         * réellement retenues par la GridLayer.
-         */
         if (sameGeneration && sameZoom && (latestViewport || retained)) {
             kept.push(item);
         } else {
@@ -9432,17 +9513,22 @@ function pruneDirectOfflineNpfQueueForCurrentView(reason = 'view-end') {
         }
     }
 
-    if (!removed.length) return 0;
+    if (removed.length) {
+        directOfflineNpfReadQueue.length = 0;
+        directOfflineNpfReadQueue.push(...kept);
 
-    directOfflineNpfReadQueue.length = 0;
-    directOfflineNpfReadQueue.push(...kept);
-
-    for (const item of removed) {
-        directOfflineNpfQueuedDiscardCount += 1;
-        try { item.resolve(DIRECT_OFFLINE_TILE_ABORTED); } catch (_) {}
+        for (const item of removed) {
+            directOfflineNpfQueuedDiscardCount += 1;
+            try { item.resolve(DIRECT_OFFLINE_TILE_ABORTED); } catch (_) {}
+        }
     }
 
-    return removed.length;
+    /*
+     * v17.00 — une ancienne transaction déjà lancée ne doit plus monopoliser
+     * l'un des 5 slots si Leaflet ne retient plus sa tuile.
+     */
+    const activeAborted = abortDirectOfflineNpfActiveReadsForCurrentView(reason);
+    return removed.length + activeAborted;
 }
 
 function resetPendingDirectOfflineNpfReads() {
@@ -9452,6 +9538,9 @@ function resetPendingDirectOfflineNpfReads() {
      */
     directOfflineTileReadGeneration += 1;
     directOfflineTileViewPriorityEpoch += 1;
+    directOfflineNpfActiveReadContexts.forEach(context => {
+        abortDirectOfflineNpfReadContext(context, 'hard-reset');
+    });
     while (directOfflineNpfReadQueue.length) {
         const pending = directOfflineNpfReadQueue.shift();
         directOfflineNpfQueuedDiscardCount += 1;
@@ -9476,8 +9565,9 @@ function runNextDirectOfflineNpfRead() {
         && directOfflineNpfReadQueue.length
     ) {
         /*
-         * v16.46 — priorité au viewport le plus récent sans annuler les
-         * transactions déjà actives. Parmi les demandes de même priorité,
+         * v17.00 — priorité au viewport le plus récent. Les transactions déjà
+         * actives sont contrôlées au zoomend/moveend et annulées seulement si
+         * leur tuile est devenue inutile. Parmi les demandes de même priorité,
          * l'ordre FIFO de Leaflet (centre -> extérieur) est conservé.
          */
         let bestEpoch = -Infinity;
@@ -9497,10 +9587,24 @@ function runNextDirectOfflineNpfRead() {
         }
 
         directOfflineNpfActiveReads += 1;
+        const abortContext = item.abortContext || {
+            aborted: false,
+            abortReason: '',
+            transactions: new Set(),
+            hardGeneration: item.hardGeneration,
+            viewEpoch: item.viewEpoch,
+            coords: item.coords,
+            tileKey: item.tileKey
+        };
+        item.abortContext = abortContext;
+        directOfflineNpfActiveReadContexts.add(abortContext);
+
         Promise.resolve()
-            .then(item.task)
+            .then(() => item.task(abortContext))
             .then(item.resolve, item.reject)
             .finally(() => {
+                directOfflineNpfActiveReadContexts.delete(abortContext);
+                try { abortContext.transactions?.clear?.(); } catch (_) {}
                 directOfflineNpfActiveReads = Math.max(0, directOfflineNpfActiveReads - 1);
                 runNextDirectOfflineNpfRead();
             });
@@ -9837,7 +9941,14 @@ function getDirectOfflineStoredKeyCandidates(tileUrl) {
 
 function readDirectOfflineTileRecord(db, tileUrl, options = {}) {
     const allowLegacyFallback = options.allowLegacyFallback !== false;
+    const abortContext = options.abortContext || null;
     const diagStartedAt = directOfflineTileDiagNow();
+
+    if (abortContext?.aborted) {
+        return Promise.reject(
+            createDirectOfflineNpfObsoleteAbortError(abortContext.abortReason)
+        );
+    }
     let diagIndexGets = 0;
     let diagIndexDirectHits = 0;
     let diagIndexCursorFallbacks = 0;
@@ -9857,7 +9968,14 @@ function readDirectOfflineTileRecord(db, tileUrl, options = {}) {
             return;
         }
 
+        if (abortContext?.transactions) {
+            try { abortContext.transactions.add(tx); } catch (_) {}
+        }
+
         let settled = false;
+        const releaseTransaction = () => {
+            try { abortContext?.transactions?.delete?.(tx); } catch (_) {}
+        };
         const recordDiag = (outcome, error = null) => {
             recordDirectOfflineTileIdbDiagEvent({
                 startedAt: diagStartedAt,
@@ -9880,13 +9998,19 @@ function readDirectOfflineTileRecord(db, tileUrl, options = {}) {
         const finish = value => {
             if (settled) return;
             settled = true;
+            releaseTransaction();
             recordDiag(value ? 'hit' : 'miss');
             resolve(value);
         };
         const fail = error => {
             if (settled) return;
             settled = true;
-            recordDiag('error', error);
+            releaseTransaction();
+            if (isDirectOfflineNpfObsoleteAbort(error)) {
+                recordDiag('aborted', error);
+            } else {
+                recordDiag('error', error);
+            }
             reject(error);
         };
 
@@ -10032,8 +10156,20 @@ function readDirectOfflineTileRecord(db, tileUrl, options = {}) {
             request.onerror = readByLegacyKeys;
         };
 
-        tx.onerror = () => fail(tx.error || new Error('Erreur transaction tuile'));
-        tx.onabort = () => fail(tx.error || new Error('Transaction tuile annulée'));
+        tx.onerror = () => {
+            if (abortContext?.aborted) {
+                fail(createDirectOfflineNpfObsoleteAbortError(abortContext.abortReason));
+                return;
+            }
+            fail(tx.error || new Error('Erreur transaction tuile'));
+        };
+        tx.onabort = () => {
+            if (abortContext?.aborted) {
+                fail(createDirectOfflineNpfObsoleteAbortError(abortContext.abortReason));
+                return;
+            }
+            fail(tx.error || new Error('Transaction tuile annulée'));
+        };
 
         /*
          * v14.95 — les imports modernes possèdent un index `tileUrl` : une seule
@@ -10388,6 +10524,7 @@ window.getNpfTilePerformanceStatus = function getNpfTilePerformanceStatus() {
         schedulerMode: 'v16.50-priority-immediate',
         viewPriorityEpoch: directOfflineTileViewPriorityEpoch,
         abortedReads: directOfflineNpfAbortedReadCount,
+        activeObsoleteAborts: directOfflineNpfActiveObsoleteAbortCount,
         tileRetries: directOfflineNpfTileRetryCount,
         lookupHints: directOfflineTileLookupHints.size,
         blobCacheSize: directOfflineTileBlobCache.size,
@@ -10398,7 +10535,7 @@ window.getNpfTilePerformanceStatus = function getNpfTilePerformanceStatus() {
     };
 };
 
-async function findDirectOfflineTileBlobUnqueued(coords) {
+async function findDirectOfflineTileBlobUnqueued(coords, abortContext = null) {
     const lookupDiagStartedAt = directOfflineTileDiagNow();
     let lookupDiagDbAttempts = 0;
     let lookupDiagUrlAttempts = 0;
@@ -10406,6 +10543,14 @@ async function findDirectOfflineTileBlobUnqueued(coords) {
     let lookupDiagReadMs = 0;
     let lookupDiagReadTimeouts = 0;
     let lookupDiagRecorded = false;
+
+    const throwIfObsolete = () => {
+        if (abortContext?.aborted) {
+            throw createDirectOfflineNpfObsoleteAbortError(
+                abortContext.abortReason || 'obsolete-view'
+            );
+        }
+    };
 
     const recordLookupDiag = outcome => {
         if (lookupDiagRecorded) return;
@@ -10426,6 +10571,8 @@ async function findDirectOfflineTileBlobUnqueued(coords) {
             readTimeouts: lookupDiagReadTimeouts
         });
     };
+
+    throwIfObsolete();
 
     const cacheKey = [
         coords.z,
@@ -10467,6 +10614,7 @@ async function findDirectOfflineTileBlobUnqueued(coords) {
     let hadRecoverableTechnicalError = false;
 
     for (const dbName of dbNames) {
+        throwIfObsolete();
         let tileDb;
         lookupDiagDbAttempts += 1;
         const openDiagStartedAt = directOfflineTileDiagNow();
@@ -10499,13 +10647,17 @@ async function findDirectOfflineTileBlobUnqueued(coords) {
         }
 
         for (const tileUrl of tileUrls) {
+            throwIfObsolete();
             lookupDiagUrlAttempts += 1;
             const readDiagStartedAt = directOfflineTileDiagNow();
             try {
                 const readTimeoutMs = isNpfOfflinePackSelection() ? 5200 : 1800;
                 const allowLegacyFallback = String(dbName || '') === String(OFFLINE_DB_NAME || '');
                 const record = await withTimeout(
-                    readDirectOfflineTileRecord(tileDb, tileUrl, { allowLegacyFallback }),
+                    readDirectOfflineTileRecord(tileDb, tileUrl, {
+                        allowLegacyFallback,
+                        abortContext
+                    }),
                     readTimeoutMs,
                     'Timeout lecture tuile'
                 );
@@ -10540,6 +10692,12 @@ async function findDirectOfflineTileBlobUnqueued(coords) {
                     0,
                     directOfflineTileDiagNow() - readDiagStartedAt
                 );
+
+                if (isDirectOfflineNpfObsoleteAbort(error)) {
+                    recordLookupDiag('obsolete-abort');
+                    throw error;
+                }
+
                 if (/Timeout lecture tuile/i.test(String(error?.message || error || ''))) {
                     lookupDiagReadTimeouts += 1;
                 }
@@ -10597,17 +10755,38 @@ async function findDirectOfflineTileBlob(coords) {
     const existing = directOfflineNpfInflightReads.get(inflightKey);
     if (existing) return existing;
 
-    const pending = enqueueDirectOfflineNpfRead(async () => {
-        if (hardGeneration !== directOfflineTileReadGeneration) {
-            directOfflineNpfAbortedReadCount += 1;
+    const pending = enqueueDirectOfflineNpfRead(async abortContext => {
+        if (
+            hardGeneration !== directOfflineTileReadGeneration
+            || abortContext?.aborted
+        ) {
+            if (hardGeneration !== directOfflineTileReadGeneration) {
+                directOfflineNpfAbortedReadCount += 1;
+            }
             return DIRECT_OFFLINE_TILE_ABORTED;
         }
-        const blob = await findDirectOfflineTileBlobUnqueued(coords);
-        if (hardGeneration !== directOfflineTileReadGeneration) {
-            directOfflineNpfAbortedReadCount += 1;
-            return DIRECT_OFFLINE_TILE_ABORTED;
+
+        try {
+            const blob = await findDirectOfflineTileBlobUnqueued(
+                coords,
+                abortContext
+            );
+            if (
+                hardGeneration !== directOfflineTileReadGeneration
+                || abortContext?.aborted
+            ) {
+                if (hardGeneration !== directOfflineTileReadGeneration) {
+                    directOfflineNpfAbortedReadCount += 1;
+                }
+                return DIRECT_OFFLINE_TILE_ABORTED;
+            }
+            return blob;
+        } catch (error) {
+            if (isDirectOfflineNpfObsoleteAbort(error)) {
+                return DIRECT_OFFLINE_TILE_ABORTED;
+            }
+            throw error;
         }
-        return blob;
     }, { hardGeneration, viewEpoch, coords });
 
     directOfflineNpfInflightReads.set(inflightKey, pending);
@@ -17183,6 +17362,11 @@ function ensureTrafficSettingsModal() {
 
             </div>
 
+            <div class="traffic-settings-actions traffic-settings-actions-live">
+                <button type="button" id="traffic-settings-reset" class="traffic-settings-secondary">Défaut</button>
+                <button type="button" id="traffic-settings-cancel" class="traffic-settings-secondary">Annuler</button>
+            </div>
+
             <div class="traffic-tools-section traffic-own-aircraft-section">
                 <div class="traffic-tools-title">Mon avion</div>
                 <div class="traffic-own-aircraft-row">
@@ -17213,12 +17397,6 @@ function ensureTrafficSettingsModal() {
                 <div class="traffic-tools-note">
                     L'indicatif saisi sert à masquer « Mon avion » dans SafeSky et GLR pour la session courante.
                 </div>
-            </div>
-
-            <div class="traffic-settings-actions traffic-settings-actions-duplicate">
-                <button type="button" id="traffic-settings-reset-duplicate" class="traffic-settings-secondary">Défaut</button>
-                <button type="button" id="traffic-settings-cancel-duplicate" class="traffic-settings-secondary">Annuler</button>
-                <button type="button" id="traffic-settings-apply-duplicate" class="traffic-settings-primary">Appliquer</button>
             </div>
 
             <div class="traffic-tools-section">
@@ -17263,11 +17441,6 @@ function ensureTrafficSettingsModal() {
 
             <div class="traffic-settings-note">Altitude maxi vide = pas de limite haute. « Autour de mon altitude » affiche une tranche ±. « Du sol à + » ne fixe aucune limite basse. Les trafics sont recherchés dans le rayon choisi autour du centre de la carte. Les trafics au sol sont masqués par défaut et apparaissent uniquement lorsque « Afficher les trafics au sol » est coché. Rafraîchissement toutes les 5 secondes. Le déplacement intermédiaire est extrapolé localement. Les données SafeSky/ADS-B restent indicatives et non certifiées.</div>
 
-            <div class="traffic-settings-actions">
-                <button type="button" id="traffic-settings-reset" class="traffic-settings-secondary">Défaut</button>
-                <button type="button" id="traffic-settings-cancel" class="traffic-settings-secondary">Annuler</button>
-                <button type="button" id="traffic-settings-apply" class="traffic-settings-primary">Appliquer</button>
-            </div>
         </div>
     `;
 
@@ -17336,8 +17509,67 @@ function ensureTrafficSettingsModal() {
         updateAltitudeModeUi();
     };
 
+    const readTrafficSettingsFromModal = () => {
+        const radiusInput = modal.querySelector('#traffic-radius-input');
+        const minAltitudeInput = modal.querySelector('#traffic-min-altitude-input');
+        const maxAltitudeInput = modal.querySelector('#traffic-max-altitude-input');
+        const showGroundInput = modal.querySelector('#traffic-show-ground-input');
+        const altitudeModeInput = modal.querySelector('input[name="traffic-altitude-mode"]:checked');
+        const relativeBandInput = modal.querySelector('#traffic-relative-band-input');
+        const groundBandInput = modal.querySelector('#traffic-ground-band-input');
+        const altitudeLabelInput = modal.querySelector('#traffic-altitude-label-input');
+        const droneAdvisoriesInput = modal.querySelector('#traffic-drone-advisories-input');
+        const onlyTrackedInput = modal.querySelector('#traffic-only-tracked-input');
+        const onlyLightTypesInput = modal.querySelector('#traffic-only-light-types-input');
+
+        return {
+            radiusNm: radiusInput.value,
+            minAltitudeFt: minAltitudeInput.value,
+            maxAltitudeFt: maxAltitudeInput.value.trim() === ''
+                ? null
+                : maxAltitudeInput.value,
+            trafficAroundOwnPosition: false,
+            trafficAroundFire: false,
+            showGroundTraffic: !!showGroundInput.checked,
+            altitudeFilterMode: altitudeModeInput?.value || 'absolute',
+            relativeAltitudeBandFt: relativeBandInput.value,
+            groundToAboveBandFt: groundBandInput.value,
+            showAltitudeLabel: !!altitudeLabelInput.checked,
+            showDroneAdvisories: !!droneAdvisoriesInput.checked,
+            onlyTrackedIdentifiers: !!onlyTrackedInput.checked,
+            onlyNonAirplaneHelicopterTraffic: !!onlyLightTypesInput.checked
+        };
+    };
+
+    const applyTrafficSettingsFromModal = (reason = 'settings-auto') => {
+        saveTrafficSettings(readTrafficSettingsFromModal());
+        refreshTrafficButtonState(lastTrafficDisplayedCount);
+
+        if (showTrafficLayer) {
+            refreshTrafficLayer({ force: true, reason });
+        }
+        scheduleBaseMapStabilityRefresh(reason);
+    };
+
     modal.querySelectorAll('input[name="traffic-altitude-mode"]').forEach(input => {
-        input.addEventListener('change', updateAltitudeModeUi);
+        input.addEventListener('change', () => {
+            updateAltitudeModeUi();
+            applyTrafficSettingsFromModal('settings-auto-mode');
+        });
+    });
+
+    /*
+     * v17.00 — plus de bouton Appliquer.
+     * `change` est volontairement utilisé pour les champs numériques : sur iPad,
+     * la saisie est validée à la fin de l'édition sans lancer une requête réseau
+     * à chaque chiffre. Les cases/radios restent immédiates.
+     */
+    modal.querySelectorAll(
+        '.traffic-settings-grid input:not([name="traffic-altitude-mode"])'
+    ).forEach(input => {
+        input.addEventListener('change', () => {
+            applyTrafficSettingsFromModal('settings-auto');
+        });
     });
 
     modal.querySelector('#traffic-global-add-button')
@@ -17358,16 +17590,25 @@ function ensureTrafficSettingsModal() {
         });
 
     modal.querySelector('#traffic-settings-close').addEventListener('click', closeModal);
-    modal.querySelector('#traffic-settings-cancel').addEventListener('click', closeModal);
-    modal.querySelector('#traffic-settings-reset').addEventListener('click', fillDefaults);
-    modal.querySelector('#traffic-settings-cancel-duplicate')
-        .addEventListener('click', closeModal);
-    modal.querySelector('#traffic-settings-reset-duplicate')
-        .addEventListener('click', fillDefaults);
-    modal.querySelector('#traffic-settings-apply-duplicate')
-        .addEventListener('click', () => {
-            modal.querySelector('#traffic-settings-apply').click();
-        });
+
+    modal.querySelector('#traffic-settings-reset').addEventListener('click', () => {
+        fillDefaults();
+        applyTrafficSettingsFromModal('settings-default');
+    });
+
+    modal.querySelector('#traffic-settings-cancel').addEventListener('click', () => {
+        const snapshot = modal.__npfTrafficSettingsOpenSnapshot;
+        if (snapshot) {
+            saveTrafficSettings(snapshot);
+            refreshTrafficButtonState(lastTrafficDisplayedCount);
+            if (showTrafficLayer) {
+                refreshTrafficLayer({ force: true, reason: 'settings-cancel' });
+            }
+            scheduleBaseMapStabilityRefresh('settings-cancel');
+        }
+        closeModal();
+    });
+
     modal.querySelector('#traffic-own-aircraft-reset')
         .addEventListener('click', clearOwnTrafficAircraftSession);
 
@@ -17401,44 +17642,6 @@ function ensureTrafficSettingsModal() {
         if (event.target === modal) closeModal();
     });
 
-    modal.querySelector('#traffic-settings-apply').addEventListener('click', () => {
-        const radiusInput = modal.querySelector('#traffic-radius-input');
-        const minAltitudeInput = modal.querySelector('#traffic-min-altitude-input');
-        const maxAltitudeInput = modal.querySelector('#traffic-max-altitude-input');
-        const showGroundInput = modal.querySelector('#traffic-show-ground-input');
-        const altitudeModeInput = modal.querySelector('input[name="traffic-altitude-mode"]:checked');
-        const relativeBandInput = modal.querySelector('#traffic-relative-band-input');
-        const groundBandInput = modal.querySelector('#traffic-ground-band-input');
-        const altitudeLabelInput = modal.querySelector('#traffic-altitude-label-input');
-        const droneAdvisoriesInput = modal.querySelector('#traffic-drone-advisories-input');
-        const onlyTrackedInput = modal.querySelector('#traffic-only-tracked-input');
-        const onlyLightTypesInput = modal.querySelector('#traffic-only-light-types-input');
-        saveTrafficSettings({
-            radiusNm: radiusInput.value,
-            minAltitudeFt: minAltitudeInput.value,
-            maxAltitudeFt: maxAltitudeInput.value.trim() === '' ? null : maxAltitudeInput.value,
-            trafficAroundOwnPosition: false,
-            trafficAroundFire: false,
-            showGroundTraffic: !!showGroundInput.checked,
-            altitudeFilterMode: altitudeModeInput?.value || 'absolute',
-            relativeAltitudeBandFt: relativeBandInput.value,
-            groundToAboveBandFt: groundBandInput.value,
-            showAltitudeLabel: !!altitudeLabelInput.checked,
-            showDroneAdvisories: !!droneAdvisoriesInput.checked,
-            onlyTrackedIdentifiers: !!onlyTrackedInput.checked,
-            onlyNonAirplaneHelicopterTraffic: !!onlyLightTypesInput.checked
-        });
-
-        refreshTrafficButtonState(lastTrafficDisplayedCount);
-
-        if (showTrafficLayer) {
-            refreshTrafficLayer({ force: true, reason: 'settings' });
-        }
-        scheduleBaseMapStabilityRefresh('traffic-settings');
-
-        closeModal();
-    });
-
     refreshTrackedTrafficListUi();
     refreshOwnTrafficAircraftUi();
 
@@ -17448,6 +17651,14 @@ function ensureTrafficSettingsModal() {
 function openTrafficSettingsDialog() {
     const current = sanitizeTrafficSettings(trafficSettings);
     const modal = ensureTrafficSettingsModal();
+
+    /*
+     * v17.00 — Annuler doit revenir à l'état exact de l'ouverture même si les
+     * changements sont appliqués au fil de l'eau.
+     */
+    modal.__npfTrafficSettingsOpenSnapshot = {
+        ...current
+    };
 
     modal.querySelector('#traffic-radius-input').value = String(current.radiusNm);
     modal.querySelector('#traffic-min-altitude-input').value = String(current.minAltitudeFt);
@@ -26289,8 +26500,22 @@ function findSafeSkyMatchForGlobalLinkItem(item, safeSkyTraffic) {
              * géographiquement compatibles. Exception : « mon avion », dont la
              * position SafeSky est volontairement absente lorsque son plot est masqué.
              */
+            const strongPrefixAbbreviation = (
+                comparison.mode === 'same-number-prefix-abbreviation'
+            );
+
+            /*
+             * v17.00 — BENGA96 / BENGALE96, PELIC31 / PELICAN31, etc.
+             * Une abréviation forte avec même numéro final identifie déjà
+             * suffisamment le même appareil : SafeSky reste prioritaire même si
+             * les deux sources n'ont pas exactement la même position.
+             *
+             * Les fautes/similarités floues et membres de groupe GLR conservent
+             * la sécurité géographique de 3 NM.
+             */
             if (
                 comparison.fuzzy
+                && !strongPrefixAbbreviation
                 && !candidate.ownAircraft
                 && (
                     !Number.isFinite(distanceNm)
