@@ -1,3 +1,55 @@
+VERSION TEST v16.97 — CALCULATEUR STABLE + VERROUILLAGE LATÉRAL FdS/GAAR
+Date : 17/09/2026
+Base fonctionnelle : TEST v16.96
+
+CORRECTIONS INCLUSES
+
+1. CALCULATEUR — CORRECTION DE LA « FENÊTRE QUI MONTE »
+- Le problème observé après certaines saisies iPad/Safari est traité séparément
+  des documents FdS/GAAR.
+- Le fond du calculateur n'utilise plus une hauteur `100%` susceptible de rester
+  réduite après l'ouverture/fermeture du clavier ou d'un sélecteur natif.
+- Sa hauteur est maintenant verrouillée sur `--npf-app-vh`, la hauteur stable
+  déjà calculée par NPF à partir du viewport/écran.
+- Le conteneur principal reste centré dans cette hauteur stable.
+- À l'ouverture du calculateur et après les variations `visualViewport`
+  (clavier, sélecteur, retour de focus), NPF réapplique l'ancrage haut/gauche
+  et supprime tout décalage résiduel de la page.
+- Le contenu interne conserve ses scrolls habituels ; aucun changement aux
+  tableaux, onglets ou calculs.
+
+2. FdS / DIAGRAMME GAAR — VERROUILLAGE LATÉRAL
+- Le lecteur FdS/GAAR conserve le défilement vertical.
+- Les gestes horizontaux sont bloqués au niveau du stage et de l'iframe :
+  `touch-action: pan-y pinch-zoom`.
+- `overflow-x` et `overscroll-behavior-x` sont verrouillés pour empêcher le
+  document de dériver latéralement.
+- Le zoom FdS et le grossissement spécifique du diagramme GAAR restent inchangés.
+- Le défilement vertical et le pincement de zoom restent autorisés.
+
+3. CORRECTIONS v16.96 CONSERVÉES
+- BLOC/FUEL : premier transit depuis l'OACI mémorisé au BLOC DÉPART.
+- Route WP : pointillé rouge au-dessus du trait plein.
+- Test IndexedDB : 2 lectures simultanées.
+- Diagnostic IndexedDB détaillé conservé.
+
+VERSION
+- App : v16.97.
+- Service Worker : `sw-v16-97_calc_stable_fds_gaar_xlock`.
+- Révision SIA inchangée : `15.69-radio1026-1-maplite1`.
+
+VALIDATION STATIQUE EFFECTUÉE
+- Syntaxe JavaScript Script / SIA / Service Worker : OK.
+- Manifest JSON : OK.
+- Calculateur : hauteur stable `--npf-app-vh` + resynchronisation viewport.
+- FdS/GAAR : verrouillage horizontal, pan vertical/pinch conservés.
+- Concurrence IndexedDB toujours à 2.
+- BLOC/FUEL v16.96 conservé.
+- Pointillé WP z=549 conservé.
+- Aucun retour du wait v16.91.
+
+HISTORIQUE PRÉCÉDENT CONSERVÉ INTÉGRALEMENT
+
 VERSION TEST v16.96 — BLOC DÉPART OACI + PRIORITÉ POINTILLÉ WP + TEST IDB 2 LECTURES
 Date : 17/09/2026
 Base fonctionnelle : TEST v16.95
