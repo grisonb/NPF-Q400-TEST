@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v16.98';
+const NPF_SCRIPT_BUILD_VERSION = 'v16.99';
 
 
 /*
@@ -2760,6 +2760,64 @@ let safeSkyOwnPublishInProgress = false;
 let lastSafeSkyOwnPublishAt = 0;
 let lastSafeSkyOwnPublishError = '';
 let ownPublicationMotionState = null;
+
+/*
+ * v16.99 — breadcrumb minimal SafeSky.
+ * Il ne contient aucune position ni identifiant : uniquement des compteurs et
+ * la phase du rendu. Il permet de savoir, après un reload Safari, si le dernier
+ * passage s'est interrompu entre `render-start` et `render-complete`.
+ */
+const TRAFFIC_DIAG_BREADCRUMB_KEY = 'npfTrafficDiagBreadcrumbV16_99';
+const TRAFFIC_DIAG_BREADCRUMB_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+let trafficDiagRefreshSeq = 0;
+
+function getTrafficDiagLayerCount() {
+    try { return Number(trafficLayer?.getLayers?.().length || 0); }
+    catch (_) { return 0; }
+}
+
+function writeTrafficDiagBreadcrumb(payload = {}) {
+    try {
+        localStorage.setItem(
+            TRAFFIC_DIAG_BREADCRUMB_KEY,
+            JSON.stringify({
+                build: NPF_SCRIPT_BUILD_VERSION,
+                at: Date.now(),
+                ...payload
+            })
+        );
+    } catch (_) {}
+}
+
+function restoreTrafficDiagBreadcrumb() {
+    try {
+        const value = JSON.parse(
+            localStorage.getItem(TRAFFIC_DIAG_BREADCRUMB_KEY) || 'null'
+        );
+        if (
+            !value
+            || !Number.isFinite(Number(value.at))
+            || Date.now() - Number(value.at) > TRAFFIC_DIAG_BREADCRUMB_MAX_AGE_MS
+        ) {
+            return;
+        }
+
+        npfDiagSiaInteraction(
+            'TRAFIC SS RESTAURÉ',
+            `phase=${String(value.phase || 'inconnue')}`,
+            {
+                previousBuild: String(value.build || ''),
+                seq: Math.max(0, Number(value.seq) || 0),
+                raw: Math.max(0, Number(value.raw) || 0),
+                registryBefore: Math.max(0, Number(value.registryBefore) || 0),
+                registryAfter: Math.max(0, Number(value.registryAfter) || 0),
+                renderMs: Math.max(0, Number(value.renderMs) || 0)
+            }
+        );
+    } catch (_) {}
+}
+
+restoreTrafficDiagBreadcrumb();
 
 /*
  * v16.02 — diagnostic performance à la demande, sans journal ni historique
@@ -8158,6 +8216,9 @@ function scheduleNpfPassiveTileZoomDiagnostic() {
                 idbMaxMs: idbSummary.maxMs,
                 idbGe500: idbSummary.ge500,
                 idbGe1000: idbSummary.ge1000,
+                idbIndexGets: idbSummary.indexGets,
+                idbIndexDirectHits: idbSummary.indexDirectHits,
+                idbIndexCursorFallbacks: idbSummary.indexCursorFallbacks,
                 idbIndexCursorMax: idbSummary.indexCursorMax,
                 idbLegacyReads: idbSummary.legacyReads,
                 tileLookups: lookupSummary.count,
@@ -9286,13 +9347,12 @@ let directOfflineLastRecoveryReason = '';
  * 5 lectures IndexedDB simultanées fixes.
  */
 /*
- * v16.96 TEST — A/B longue session iPad/Safari.
- * Le DIAG v16.93/v16.95 montre des lectures IndexedDB individuelles pouvant
- * dériver vers plusieurs secondes après utilisation prolongée. On ne change
- * ici QUE le nombre de lectures NPF simultanées afin de tester une contention
- * Safari IndexedDB. Scheduler, cache, priorités et timeouts restent identiques.
+ * v16.99 — fin du test 2 lectures de v16.96/v16.98.
+ * Les DIAG ont montré que la latence individuelle IndexedDB restait élevée
+ * tandis que le remplissage de l'écran était mécaniquement ralenti. Retour à
+ * la référence 5 lectures simultanées ; le scheduler reste sinon inchangé.
  */
-const DIRECT_OFFLINE_NPF_MAX_CONCURRENT_READS = 2;
+const DIRECT_OFFLINE_NPF_MAX_CONCURRENT_READS = 5;
 
 /*
  * v16.89 — base v16.88.
@@ -9778,6 +9838,9 @@ function getDirectOfflineStoredKeyCandidates(tileUrl) {
 function readDirectOfflineTileRecord(db, tileUrl, options = {}) {
     const allowLegacyFallback = options.allowLegacyFallback !== false;
     const diagStartedAt = directOfflineTileDiagNow();
+    let diagIndexGets = 0;
+    let diagIndexDirectHits = 0;
+    let diagIndexCursorFallbacks = 0;
     let diagIndexCursorSteps = 0;
     let diagLegacyGets = 0;
     let diagLegacyCursorSteps = 0;
@@ -9803,6 +9866,9 @@ function readDirectOfflineTileRecord(db, tileUrl, options = {}) {
                 dbName: String(db?.name || ''),
                 tileUrl: String(tileUrl || '').slice(-160),
                 usedIndex: diagUsedIndex ? 1 : 0,
+                indexGets: diagIndexGets,
+                indexDirectHits: diagIndexDirectHits,
+                indexCursorFallbacks: diagIndexCursorFallbacks,
                 indexCursorSteps: diagIndexCursorSteps,
                 legacyGets: diagLegacyGets,
                 legacyCursorSteps: diagLegacyCursorSteps,
@@ -9824,21 +9890,13 @@ function readDirectOfflineTileRecord(db, tileUrl, options = {}) {
             reject(error);
         };
 
-        const readByTileUrlIndex = () => {
+        const readByTileUrlCursor = index => {
             if (settled) return;
-            if (!store.indexNames.contains('tileUrl')) {
-                if (allowLegacyFallback) {
-                    readByLegacyKeys();
-                } else {
-                    finish(null);
-                }
-                return;
-            }
+            diagIndexCursorFallbacks += 1;
 
-            diagUsedIndex = true;
             let request;
             try {
-                request = store.index('tileUrl').openCursor(IDBKeyRange.only(tileUrl));
+                request = index.openCursor(IDBKeyRange.only(tileUrl));
             } catch (error) {
                 fail(error);
                 return;
@@ -9862,7 +9920,54 @@ function readDirectOfflineTileRecord(db, tileUrl, options = {}) {
                 }
                 cursor.continue();
             };
-            request.onerror = () => fail(request.error || new Error('Erreur lecture index tileUrl'));
+            request.onerror = () => fail(
+                request.error || new Error('Erreur lecture curseur index tileUrl')
+            );
+        };
+
+        const readByTileUrlIndex = () => {
+            if (settled) return;
+            if (!store.indexNames.contains('tileUrl')) {
+                if (allowLegacyFallback) {
+                    readByLegacyKeys();
+                } else {
+                    finish(null);
+                }
+                return;
+            }
+
+            diagUsedIndex = true;
+
+            let index;
+            let request;
+            try {
+                index = store.index('tileUrl');
+                diagIndexGets += 1;
+                /*
+                 * v16.99 TEST — chemin rapide Safari/IndexedDB.
+                 * L'index tileUrl est non-unique : get() retourne le premier
+                 * enregistrement. S'il appartient au groupe de packs actif, on
+                 * évite complètement l'ouverture d'un curseur. Sinon on reprend
+                 * le curseur historique afin de trouver un éventuel autre record.
+                 */
+                request = index.get(tileUrl);
+            } catch (error) {
+                fail(error);
+                return;
+            }
+
+            request.onsuccess = () => {
+                const record = request.result || null;
+                if (record && isDirectOfflineTileRecordAllowed(record)) {
+                    diagIndexDirectHits += 1;
+                    finish(record);
+                    return;
+                }
+                readByTileUrlCursor(index);
+            };
+            request.onerror = () => fail(
+                request.error || new Error('Erreur lecture directe index tileUrl')
+            );
         };
 
         const exactKeys = allowLegacyFallback
@@ -10202,6 +10307,18 @@ function summarizeDirectOfflineTileIdbDiagEvents(events = []) {
         maxMs: Math.round(maxMs),
         ge500: durations.filter(value => value >= 500).length,
         ge1000: durations.filter(value => value >= 1000).length,
+        indexGets: safe.reduce(
+            (sum, event) => sum + Math.max(0, Number(event?.indexGets) || 0),
+            0
+        ),
+        indexDirectHits: safe.reduce(
+            (sum, event) => sum + Math.max(0, Number(event?.indexDirectHits) || 0),
+            0
+        ),
+        indexCursorFallbacks: safe.reduce(
+            (sum, event) => sum + Math.max(0, Number(event?.indexCursorFallbacks) || 0),
+            0
+        ),
         indexCursorMax: safe.length
             ? Math.max(...safe.map(event => Math.max(0, Number(event?.indexCursorSteps) || 0)))
             : 0,
@@ -22064,8 +22181,16 @@ function refreshTrafficButtonState(count = null) {
 }
 
 async function refreshTrafficLayer(options = {}) {
-    const { force = false } = options;
+    const { force = false, reason = '' } = options;
     if (!showTrafficLayer || !trafficLayer) return;
+
+    const trafficDiagSeq = ++trafficDiagRefreshSeq;
+    const trafficDiagStartedAt = (
+        typeof performance !== 'undefined' && performance.now
+            ? performance.now()
+            : Date.now()
+    );
+    const trafficDiagRegistryBefore = Number(trafficMarkerRegistry?.size || 0);
 
     /*
      * v14.94 — ne jamais lancer deux lectures SafeSky en parallèle.
@@ -22208,12 +22333,108 @@ async function refreshTrafficLayer(options = {}) {
 
         lastTrafficRefreshAt = Date.now();
         lastTrafficError = '';
+
+        const trafficDiagFetchDoneAt = (
+            typeof performance !== 'undefined' && performance.now
+                ? performance.now()
+                : Date.now()
+        );
+        const trafficDiagFetchMs = Math.max(
+            0,
+            trafficDiagFetchDoneAt - trafficDiagStartedAt
+        );
+
+        writeTrafficDiagBreadcrumb({
+            phase: 'render-start',
+            seq: trafficDiagSeq,
+            raw: combinedAircraft.length,
+            registryBefore: trafficDiagRegistryBefore
+        });
+
+        npfDiagSiaInteraction(
+            'TRAFIC SS',
+            `render-start · raison=${String(reason || (force ? 'force' : 'timer'))}`,
+            {
+                seq: trafficDiagSeq,
+                fetchMs: Math.round(trafficDiagFetchMs),
+                raw: combinedAircraft.length,
+                queryPoints: points.length,
+                trackedConfigured: trackedIdentifiers.length,
+                registryBefore: trafficDiagRegistryBefore,
+                trafficLayersBefore: getTrafficDiagLayerCount(),
+                leafletLayersBefore: (() => {
+                    try { return Number(Object.keys(map?._layers || {}).length || 0); }
+                    catch (_) { return 0; }
+                })()
+            }
+        );
+
+        const trafficDiagRenderStartedAt = (
+            typeof performance !== 'undefined' && performance.now
+                ? performance.now()
+                : Date.now()
+        );
+
         renderTrafficAircraft(combinedAircraft, {
             points,
             provider: { label: usedProviders.join(' + ') },
             now: lastTrafficRefreshAt,
             trackedNationalCount
         });
+
+        const trafficDiagRenderEndedAt = (
+            typeof performance !== 'undefined' && performance.now
+                ? performance.now()
+                : Date.now()
+        );
+        const trafficDiagRenderMs = Math.max(
+            0,
+            trafficDiagRenderEndedAt - trafficDiagRenderStartedAt
+        );
+        const trafficDiagRegistryAfter = Number(trafficMarkerRegistry?.size || 0);
+
+        writeTrafficDiagBreadcrumb({
+            phase: 'render-complete',
+            seq: trafficDiagSeq,
+            raw: combinedAircraft.length,
+            registryBefore: trafficDiagRegistryBefore,
+            registryAfter: trafficDiagRegistryAfter,
+            renderMs: Math.round(trafficDiagRenderMs)
+        });
+
+        /*
+         * Les premiers passages sont toujours conservés. Ensuite, on journalise
+         * seulement les rendus significatifs pour ne pas saturer le DIAG toutes
+         * les 5 secondes.
+         */
+        if (
+            trafficDiagSeq <= 8
+            || trafficDiagRenderMs >= 120
+            || combinedAircraft.length >= 60
+            || Math.abs(trafficDiagRegistryAfter - trafficDiagRegistryBefore) >= 20
+        ) {
+            npfDiagSiaInteraction(
+                'TRAFIC SS',
+                `render-complete · raison=${String(reason || (force ? 'force' : 'timer'))}`,
+                {
+                    seq: trafficDiagSeq,
+                    fetchMs: Math.round(trafficDiagFetchMs),
+                    renderMs: Math.round(trafficDiagRenderMs),
+                    raw: combinedAircraft.length,
+                    eligible: Math.max(0, Number(lastTrafficTotalEligibleCount) || 0),
+                    displayed: Math.max(0, Number(lastTrafficDisplayedCount) || 0),
+                    trackedDetected: Math.max(0, Number(lastTrafficTrackedDetectedCount) || 0),
+                    registryBefore: trafficDiagRegistryBefore,
+                    registryAfter: trafficDiagRegistryAfter,
+                    trafficLayersAfter: getTrafficDiagLayerCount(),
+                    smoothAnimation: trafficSmoothAnimationFrame ? 1 : 0,
+                    leafletLayersAfter: (() => {
+                        try { return Number(Object.keys(map?._layers || {}).length || 0); }
+                        catch (_) { return 0; }
+                    })()
+                }
+            );
+        }
     } catch (error) {
         if (
             refreshGeneration !== trafficRefreshGeneration
@@ -22224,6 +22445,34 @@ async function refreshTrafficLayer(options = {}) {
         }
         lastTrafficError = error && error.message ? error.message : String(error);
         lastTrafficDisplayedCount = 0;
+
+        writeTrafficDiagBreadcrumb({
+            phase: 'error',
+            seq: trafficDiagSeq,
+            raw: 0,
+            registryBefore: trafficDiagRegistryBefore,
+            registryAfter: Number(trafficMarkerRegistry?.size || 0)
+        });
+        npfDiagSiaInteraction(
+            'TRAFIC SS',
+            `erreur · raison=${String(reason || (force ? 'force' : 'timer'))}`,
+            {
+                seq: trafficDiagSeq,
+                elapsedMs: Math.round(Math.max(
+                    0,
+                    (
+                        typeof performance !== 'undefined' && performance.now
+                            ? performance.now()
+                            : Date.now()
+                    ) - trafficDiagStartedAt
+                )),
+                registryBefore: trafficDiagRegistryBefore,
+                registryAfter: Number(trafficMarkerRegistry?.size || 0),
+                trafficLayers: getTrafficDiagLayerCount(),
+                error: String(lastTrafficError || '').slice(0, 180)
+            }
+        );
+
         console.warn('Trafic temporairement indisponible:', error);
         clearTrafficDisplay();
         refreshTrafficButtonState(0);
