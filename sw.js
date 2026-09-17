@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v16-95_wp_fixed_origin_editable_first_leg';
-const APP_VERSION = 'v16.95';
+const SW_VERSION = 'sw-v16-96_bloc_oaci_wp_goto_idb2';
+const APP_VERSION = 'v16.96';
 const SIA_DATA_REVISION = '15.69-radio1026-1-maplite1';
 const SIA_DATA_URL = './sia.js';
 const SIA_DATA_CACHE = `npf-q400-sia-data-${SIA_DATA_REVISION}`;
