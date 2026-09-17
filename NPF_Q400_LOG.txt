@@ -1,3 +1,72 @@
+VERSION TEST v16.99 — LECTURE TUILES index.get() + DIAG SAFESKY CIBLÉ
+Date : 17/09/2026
+Base fonctionnelle : TEST v16.98
+
+OBJECTIFS
+1) traiter la lenteur de chargement des tuiles sans modifier à nouveau tout le
+   scheduler ;
+2) revenir à 5 lectures simultanées après le test v16.96→v16.98 à 2 lectures ;
+3) instrumenter précisément SafeSky après les rechargements/plantages observés.
+
+1. TUILES OFFLINE — RETOUR À 5 LECTURES
+- Le test à 2 lectures simultanées est terminé.
+- Les DIAG ont montré que les lectures IndexedDB individuelles pouvaient rester
+  très lentes tout en réduisant fortement le débit global.
+- `DIRECT_OFFLINE_NPF_MAX_CONCURRENT_READS` revient donc de 2 à 5.
+- Aucun changement du scheduler `viewEpoch`, de la purge, du cache RAM, des
+  candidats URL ou des timeouts.
+
+2. TUILES OFFLINE — ACCÈS DIRECT `index.get(tileUrl)`
+- Les imports modernes possèdent l'index IndexedDB `tileUrl`.
+- Avant d'ouvrir un curseur, NPF tente maintenant un accès direct
+  `store.index('tileUrl').get(tileUrl)`.
+- Si l'enregistrement retourné appartient à un pack actif, il est utilisé
+  immédiatement.
+- Si aucun enregistrement direct n'est exploitable, NPF retombe sur le curseur
+  indexé historique puis, si nécessaire, sur les fallbacks legacy existants.
+- La compatibilité avec les anciennes bases est donc conservée.
+- Le diagnostic IDB indique désormais aussi le nombre de `index.get()`, les hits
+  directs et les retours vers le curseur.
+
+3. DIAGNOSTIC SAFESKY CIBLÉ — AUCUN CHANGEMENT DE LOGIQUE TRAFIC
+- Ajout d'un diagnostic des rafraîchissements SafeSky : durée du fetch, nombre
+  de trafics reçus, nombre éligible, nombre affiché, marqueurs avant/après,
+  couches Leaflet trafic et état de l'animation.
+- Un petit « breadcrumb » persistant est écrit juste avant puis juste après le
+  rendu SafeSky.
+- Si Safari recharge la PWA pendant le rendu, le prochain démarrage peut donc
+  indiquer que le dernier état persistant était `render-start` sans
+  `render-complete`.
+- Les erreurs SafeSky sont aussi enregistrées avec les compteurs disponibles.
+- Ce diagnostic ne modifie ni les filtres, ni la fréquence SafeSky, ni les
+  marqueurs, ni l'animation.
+
+4. CORRECTIONS VALIDÉES CONSERVÉES
+- BLOC/FUEL : origine du premier transit = OACI mémorisé au BLOC DÉPART.
+- Route WP : origine fixe, premier segment éditable et pointillé rouge au-dessus
+  du trait plein.
+- Calculateur et FdS/GAAR : base v16.98, donc sans les essais non validés v16.97.
+- Diagnostic IndexedDB détaillé conservé.
+
+VERSION
+- App : v16.99.
+- Service Worker : `sw-v16-99_idb_get_safesky_diag`.
+- Révision SIA inchangée : `15.69-radio1026-1-maplite1`.
+
+VALIDATION STATIQUE EFFECTUÉE
+- Syntaxe JavaScript Script / SIA / Service Worker : OK.
+- Manifest JSON : OK.
+- Concurrence IndexedDB NPF = 5.
+- `index.get(tileUrl)` avant curseur, avec fallback cursor/legacy.
+- Diagnostic IDB enrichi `indexGets/directHits/cursorFallbacks`.
+- Diagnostic SafeSky + breadcrumb persistant présents.
+- BLOC/FUEL OACI conservé.
+- Pointillé WP z=549 conservé.
+- Aucun retour du wait v16.91.
+- Aucun retour des corrections calculateur/FdS non validées de v16.97.
+
+HISTORIQUE PRÉCÉDENT CONSERVÉ INTÉGRALEMENT
+
 VERSION TEST v16.98 — RETOUR CALCULATEUR v16.96 / NETTOYAGE ESSAIS v16.97
 Date : 17/09/2026
 Base fonctionnelle : TEST v16.96
