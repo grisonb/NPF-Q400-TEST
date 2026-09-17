@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v16.95';
+const NPF_SCRIPT_BUILD_VERSION = 'v16.96';
 
 
 /*
@@ -9285,7 +9285,14 @@ let directOfflineLastRecoveryReason = '';
  * v16.71 — retour ciblé au comportement de carte de v16.50 :
  * 5 lectures IndexedDB simultanées fixes.
  */
-const DIRECT_OFFLINE_NPF_MAX_CONCURRENT_READS = 5;
+/*
+ * v16.96 TEST — A/B longue session iPad/Safari.
+ * Le DIAG v16.93/v16.95 montre des lectures IndexedDB individuelles pouvant
+ * dériver vers plusieurs secondes après utilisation prolongée. On ne change
+ * ici QUE le nombre de lectures NPF simultanées afin de tester une contention
+ * Safari IndexedDB. Scheduler, cache, priorités et timeouts restent identiques.
+ */
+const DIRECT_OFFLINE_NPF_MAX_CONCURRENT_READS = 2;
 
 /*
  * v16.89 — base v16.88.
@@ -22531,7 +22538,7 @@ function selectPelicanOaciFromRoute(oaci) {
 }
 
 function drawRoute(startLatLng, endLatLng, options = {}) {
-    const { oaci, isUser, isLftwRoute, magneticBearing } = options;
+    const { oaci, isUser, isLftwRoute, magneticBearing, pane } = options;
     const distance = calculateDistanceInNm(startLatLng[0], startLatLng[1], endLatLng[0], endLatLng[1]);
     let labelText, color = 'var(--primary-color)', dashArray = '', layer = routesLayer;
 
@@ -22607,6 +22614,7 @@ function drawRoute(startLatLng, endLatLng, options = {}) {
     if (isUser) {
         /* v13.04 — route GPS -> feu rendue plus lisible : halo blanc + trait rouge épais. */
         L.polyline([startLatLng, endLatLng], {
+            ...(pane ? { pane } : {}),
             color: '#ffffff',
             weight: 9,
             opacity: 0.95,
@@ -22616,6 +22624,7 @@ function drawRoute(startLatLng, endLatLng, options = {}) {
             lineJoin: 'round'
         }).addTo(layer);
         L.polyline([startLatLng, endLatLng], {
+            ...(pane ? { pane } : {}),
             color: '#e3001b',
             weight: 5,
             opacity: 1,
@@ -27645,6 +27654,11 @@ function ensureNpfWaypointRouteLayers() {
     };
 
     ensureWaypointPane('npfWaypointLinePane', 548, 'none');
+    /*
+     * v16.96 — le pointillé rouge Avion -> WP actif doit rester visible au-dessus
+     * du trait plein de route, tout en restant sous les étiquettes.
+     */
+    ensureWaypointPane('npfWaypointGotoPane', 549, 'none');
     ensureWaypointPane('npfWaypointLabelPane', 550, 'none');
     ensureWaypointPane('npfWaypointMarkerPane', 670, 'auto');
     ensureWaypointPane('npfWaypointMovePane', 699, 'auto');
@@ -33337,10 +33351,23 @@ function drawUserToTargetRoute() {
         );
         const magneticBearing = (trueBearingToTarget - MAGNETIC_DECLINATION + 360) % 360;
 
+        /*
+         * v16.96 — navigation WP : le pointillé dynamique utilise un pane situé
+         * juste au-dessus du trait plein fixe. Les autres routes GPS conservent
+         * leur pane historique.
+         */
+        if (routeWaypointTarget && typeof ensureNpfWaypointRouteLayers === 'function') {
+            ensureNpfWaypointRouteLayers();
+        }
+
         drawRoute(
             [userLatLng.lat, userLatLng.lng],
             [target.lat, target.lon],
-            { isUser: true, magneticBearing }
+            {
+                isUser: true,
+                magneticBearing,
+                pane: routeWaypointTarget ? 'npfWaypointGotoPane' : undefined
+            }
         );
     }
     updateCommuneGpsRouteDisplay();
@@ -38709,6 +38736,16 @@ function updateSuiviTab() {
         return Math.round(calculateDistanceInNm(airport.lat, airport.lon, feuLat, feuLon));
     };
 
+    /*
+     * v16.96 — l'OACI affiché avec BLOC DÉPART est déjà figé et persistant
+     * (`bloc-depart-oaci`). Il devient l'origine géographique du premier transit.
+     * La BASE sélectionnée reste uniquement une destination de retour/BINGO.
+     */
+    const blocDepartWrapperForTransit = document.getElementById('bloc-depart');
+    const lockedBlocDepartOaci = String(
+        blocDepartWrapperForTransit?.dataset?.airportOaci || ''
+    ).trim().toUpperCase();
+
     let lastFilledRow = null;
     allRows.forEach(row => {
         if (getRowTime(row) !== null || getRowFuel(row) !== null) {
@@ -38786,9 +38823,22 @@ function updateSuiviTab() {
         preTransitForfaitReason = firstTransitAlreadyLoaded
             ? `Premier transit sans forfait : le champ RLT Départ de l’en-tête contient ${rltDepartMass} kg.`
             : `Premier transit avec forfait plein retardant de ${RETARDANT_LOADING_FORFAIT_MIN} min : le champ RLT Départ est vide.`;
-        setTransitDistancePolicy({ measuredDistance: Number.isFinite(CALCULATOR_DATA.distBaseFeu) ? CALCULATOR_DATA.distBaseFeu : null, usePelicMinimum: false });
-        transitSourceLabel = selectedBaseOACI ? `BLOC DÉPART / base (${selectedBaseOACI})` : 'BLOC DÉPART / base non renseignée';
-        transitSourceDetail = `Terrain départ retenu : ligne BLOC DÉPART / FUEL DÉPART / BASE`;
+        const blocDepartOaciForTransit = blocDepartTime !== null
+            ? lockedBlocDepartOaci
+            : '';
+        const blocDepartDistance = getDistanceFromOaciToFire(blocDepartOaciForTransit);
+
+        setTransitDistancePolicy({
+            measuredDistance: Number.isFinite(blocDepartDistance) ? blocDepartDistance : null,
+            usePelicMinimum: false
+        });
+
+        transitSourceLabel = blocDepartOaciForTransit
+            ? `BLOC DÉPART (${blocDepartOaciForTransit})`
+            : 'BLOC DÉPART — OACI non renseigné';
+        transitSourceDetail = blocDepartOaciForTransit
+            ? `Terrain départ retenu : OACI mémorisé au BLOC DÉPART (${blocDepartOaciForTransit})`
+            : `Terrain départ indisponible : aucun OACI mémorisé au BLOC DÉPART`;
     }
 
     const fuelCalculationStartsAtPelic = !!(
