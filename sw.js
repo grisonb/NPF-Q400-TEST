@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v16-97_calc_stable_fds_gaar_xlock';
-const APP_VERSION = 'v16.97';
+const SW_VERSION = 'sw-v16-98_rollback_v1697_keep_validated';
+const APP_VERSION = 'v16.98';
 const SIA_DATA_REVISION = '15.69-radio1026-1-maplite1';
 const SIA_DATA_URL = './sia.js';
 const SIA_DATA_CACHE = `npf-q400-sia-data-${SIA_DATA_REVISION}`;
