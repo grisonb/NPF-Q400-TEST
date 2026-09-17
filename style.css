@@ -1,4 +1,4 @@
-/* NPF_STYLE_BUILD_VERSION: v16.99 */
+/* NPF_STYLE_BUILD_VERSION: v17.00 */
 /* v14.83 — nettoyage des références techniques et limitation des cartouches routiers. */
 /* v14.81 — recherche phonétique nationale élargie aux fragments sur deux lettres. */
 /* v14.80 — Brive conservé uniquement sous LFSL. */
@@ -18169,4 +18169,14 @@ body.npf-calculator-modal-open {
 .sia-boundary-label-text.sia-zone-label-near .sia-boundary-label-altitude,
 .sia-boundary-label-text.sia-siv-label.sia-zone-label-near .sia-boundary-label-altitude {
     font-size: 12px !important;
+}
+
+
+/* ==========================================================================
+   v17.00 — FILTRES SAFESKY : ACTIONS LIVE AU-DESSUS DE « MON AVION »
+   ========================================================================== */
+
+.traffic-settings-actions-live {
+    margin-top: 10px;
+    margin-bottom: 10px;
 }
