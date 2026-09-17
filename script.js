@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v16.97';
+const NPF_SCRIPT_BUILD_VERSION = 'v16.98';
 
 
 /*
@@ -11331,48 +11331,13 @@ function setupEventListeners() {
     document.addEventListener('communeSelected', closeSearchAfterTargetSelection);
     document.addEventListener('airportDestinationSelected', closeSearchAfterTargetSelection);
 
-    /*
-     * v16.97 — iPad/Safari : le clavier ou un sélecteur natif peut laisser le
-     * viewport visuel décalé/réduit après fermeture. Le calculateur doit rester
-     * ancré au viewport stable NPF et ne jamais conserver cette translation.
-     */
-    const resyncCalculatorModalViewport = () => {
-        if (!calculatorModal || calculatorModal.style.display !== 'flex') return;
-        calculatorModal.style.top = '0px';
-        calculatorModal.style.left = '0px';
-        calculatorModal.style.right = 'auto';
-        calculatorModal.style.bottom = 'auto';
-        calculatorModal.style.transform = 'none';
-        try {
-            window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
-        } catch (_) {
-            try { window.scrollTo(0, 0); } catch (_) {}
-        }
-    };
-
-    let calculatorViewportResyncTimer = null;
-    const scheduleCalculatorModalViewportResync = () => {
-        if (!calculatorModal || calculatorModal.style.display !== 'flex') return;
-        if (calculatorViewportResyncTimer) clearTimeout(calculatorViewportResyncTimer);
-        requestAnimationFrame(resyncCalculatorModalViewport);
-        calculatorViewportResyncTimer = setTimeout(() => {
-            calculatorViewportResyncTimer = null;
-            resyncCalculatorModalViewport();
-        }, 180);
-    };
-
     function setCalculatorModalOpen(open) {
         if (!calculatorModal) return;
         const isOpen = open === true;
         calculatorModal.style.display = isOpen ? 'flex' : 'none';
         document.body?.classList.toggle('npf-calculator-modal-open', isOpen);
         if (isOpen) {
-            resyncCalculatorModalViewport();
-            setTimeout(resyncCalculatorModalViewport, 80);
-            setTimeout(resyncCalculatorModalViewport, 320);
-        } else if (calculatorViewportResyncTimer) {
-            clearTimeout(calculatorViewportResyncTimer);
-            calculatorViewportResyncTimer = null;
+            try { window.scrollTo({ top: 0, left: 0, behavior: 'auto' }); } catch (_) { try { window.scrollTo(0, 0); } catch (_) {} }
         }
     }
 
@@ -11419,24 +11384,6 @@ function setupEventListeners() {
     }, { passive: false });
     calculatorModal.addEventListener('touchend', () => { calculatorTouchLastY = null; }, { passive: true });
     calculatorModal.addEventListener('touchcancel', () => { calculatorTouchLastY = null; }, { passive: true });
-
-    /*
-     * v16.97 — réancrage après clavier/sélecteur iPad et après perte de focus
-     * d'un champ. Aucun redraw carte n'est déclenché ici.
-     */
-    calculatorModal.addEventListener('focusout', () => {
-        setTimeout(scheduleCalculatorModalViewportResync, 0);
-        setTimeout(scheduleCalculatorModalViewportResync, 220);
-    }, true);
-    window.addEventListener('resize', scheduleCalculatorModalViewportResync, { passive: true });
-    window.addEventListener('orientationchange', () => {
-        setTimeout(scheduleCalculatorModalViewportResync, 300);
-    }, { passive: true });
-    if (window.visualViewport) {
-        window.visualViewport.addEventListener('resize', scheduleCalculatorModalViewportResync, { passive: true });
-        window.visualViewport.addEventListener('scroll', scheduleCalculatorModalViewportResync, { passive: true });
-    }
-
     const importHelpContent = {
         'offline-maps': {
             title: 'Aide — Importer Cartes Offline',
