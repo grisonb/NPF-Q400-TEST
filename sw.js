@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v16-99_idb_get_safesky_diag';
-const APP_VERSION = 'v16.99';
+const SW_VERSION = 'sw-v17-00_obsolete_idb_abort_ss_auto_glr_dedup';
+const APP_VERSION = 'v17.00';
 const SIA_DATA_REVISION = '15.69-radio1026-1-maplite1';
 const SIA_DATA_URL = './sia.js';
 const SIA_DATA_CACHE = `npf-q400-sia-data-${SIA_DATA_REVISION}`;
