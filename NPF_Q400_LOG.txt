@@ -1,3 +1,82 @@
+VERSION TEST v17.00 — ANNULATION LECTURES TUILES OBSOLÈTES + FILTRES SS AUTO + DÉDOUBLONNAGE GLR/SS
+Date : 17/09/2026
+Base fonctionnelle : TEST v16.99
+
+CORRECTIONS INCLUSES
+
+1. TUILES OFFLINE — ANNULATION DES LECTURES INDEXEDDB ACTIVES DEVENUES OBSOLÈTES
+- La concurrence reste à 5 lectures simultanées.
+- Le chemin `index.get(tileUrl)` de v16.99 est conservé.
+- Lors d'un `zoomend` / `moveend`, NPF ne purge plus seulement les demandes
+  encore en file : il contrôle aussi les lectures IndexedDB déjà actives.
+- Une lecture active appartenant à un ancien viewport est annulée uniquement si
+  sa tuile n'est plus retenue par la GridLayer courante / n'appartient plus au
+  zoom courant.
+- Une transaction encore utile à la vue courante n'est pas annulée.
+- Une annulation pour ancien viewport n'est pas traitée comme une panne
+  IndexedDB et ne déclenche pas la récupération technique.
+- Leaflet reçoit l'état `DIRECT_OFFLINE_TILE_ABORTED` : la tuile n'est retentée
+  que si elle est encore réellement requise par la vue.
+- Nouveau compteur diagnostic :
+  `npfActiveObsoleteAborts` / `activeObsoleteAborts`.
+- Aucun changement du cache RAM, des timeouts, des candidats de packs ou de la
+  logique de récupération IndexedDB.
+
+2. FILTRES SAFESKY — APPLICATION AUTOMATIQUE
+- Le bouton « Appliquer » est supprimé.
+- Les changements de cases/radios sont appliqués immédiatement.
+- Les champs numériques sont appliqués automatiquement à leur validation
+  (`change` / fin de saisie), sans bouton supplémentaire.
+- Les boutons restants sont uniquement « Défaut » et « Annuler ».
+- Ils sont déplacés juste au-dessus de la section « Mon avion ».
+- « Défaut » applique immédiatement les valeurs par défaut.
+- « Annuler » restaure exactement les filtres présents à l'ouverture de la
+  fenêtre, même si plusieurs changements avaient déjà été appliqués.
+- La croix ferme la fenêtre en conservant les changements déjà appliqués.
+
+3. GLR / SAFESKY — PRIORITÉ SAFESKY SUR ABRÉVIATION FORTE
+- Une correspondance forte de type :
+  BENGA96 ↔ BENGALE96, PELIC31 ↔ PELICAN31, etc.
+  (même numéro final + préfixe reconnu comme abréviation forte)
+  ne dépend plus de la limite géographique de 3 NM.
+- Dans ce cas, SafeSky reste prioritaire et le plot GLR correspondant est masqué.
+- La limite de 3 NM reste obligatoire pour les rapprochements dus à une faute
+  de frappe / similarité floue et pour les membres extraits d'un groupe GLR.
+- Les correspondances exactes restent inchangées.
+
+4. SAFESKY DIAG v16.99 CONSERVÉ
+- Fetch, rendu, compteurs de trafics, registre de marqueurs et breadcrumb
+  persistant restent instrumentés.
+- Aucun changement de logique réseau ou d'animation SafeSky dans cette version.
+
+5. CORRECTIONS VALIDÉES CONSERVÉES
+- BLOC/FUEL OACI.
+- Route WP : origine fixe, premier segment éditable, pointillé rouge au-dessus.
+- Calculateur : base v16.98 (pas de correction verticale v16.97).
+- FdS/GAAR : pas de pseudo-verrouillage CSS v16.97.
+
+VERSION
+- App : v17.00.
+- Service Worker : `sw-v17-00_obsolete_idb_abort_ss_auto_glr_dedup`.
+- Révision SIA inchangée : `15.69-radio1026-1-maplite1`.
+
+VALIDATION STATIQUE EFFECTUÉE
+- Syntaxe JavaScript Script / SIA / Service Worker : OK.
+- Manifest JSON : OK.
+- IndexedDB : 5 lectures + `index.get(tileUrl)` conservés.
+- Contexte d'annulation actif + abort des transactions obsolètes présents.
+- Les aborts de viewport sont séparés des erreurs techniques.
+- DIAG `activeObsoleteAborts` présent.
+- Fenêtre Filtres SS : aucun bouton « Appliquer ».
+- « Défaut » / « Annuler » au-dessus de « Mon avion ».
+- Application automatique + restauration sur Annuler présentes.
+- Dédup GLR/SS : `same-number-prefix-abbreviation` dispense de la limite 3 NM.
+- BLOC/FUEL OACI et pane WP z=549 conservés.
+- Aucun retour du wait v16.91.
+- Aucun retour des essais calculateur/FdS non validés de v16.97.
+
+HISTORIQUE PRÉCÉDENT CONSERVÉ INTÉGRALEMENT
+
 VERSION TEST v16.99 — LECTURE TUILES index.get() + DIAG SAFESKY CIBLÉ
 Date : 17/09/2026
 Base fonctionnelle : TEST v16.98
