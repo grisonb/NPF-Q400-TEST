@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.00';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.01';
 
 
 /*
@@ -496,7 +496,6 @@ function getNpfStartupDiagnosticOverlaySnapshot() {
         npfReadsActive: Number(directOfflineNpfActiveReads || 0),
         npfReadsQueued: Number(directOfflineNpfReadQueue?.length || 0),
         npfReadsAborted: Number(directOfflineNpfAbortedReadCount || 0),
-        npfActiveObsoleteAborts: Number(directOfflineNpfActiveObsoleteAbortCount || 0),
         npfQueuedDiscarded: Number(directOfflineNpfQueuedDiscardCount || 0),
         npfTileRetries: Number(directOfflineNpfTileRetryCount || 0),
         npfViewEpoch: Number(directOfflineTileViewPriorityEpoch || 0),
@@ -7732,7 +7731,6 @@ function initMap() {
             clearTimeout(directOfflineNpfZoomSettleTimer);
             directOfflineNpfZoomSettleTimer = null;
         }
-        beginNpfPassiveTileZoomDiagnostic();
         beginBaseMapZoomStabilityGuard('zoomstart');
         beginMapVisualRenderGuard('zoomstart');
         if (showRoadOverlayLayer) {
@@ -7756,7 +7754,6 @@ function initMap() {
         }
         try { pruneDirectOfflineNpfQueueForCurrentView('zoomend'); } catch (_) {}
         try { trimDirectOfflineTileBlobCache(); } catch (_) {}
-        scheduleNpfPassiveTileZoomDiagnostic();
         scheduleBaseMapStabilityRefresh('zoomend');
         scheduleNpfOfflineZoomCleanup('zoomend');
         scheduleTrafficVisualResumeAfterMapInteraction('zoomend');
@@ -8143,7 +8140,6 @@ let npfPassiveTileZoomStartZoom = NaN;
 let npfPassiveTileZoomStartedAt = 0;
 let npfPassiveTileZoomIdbSeqStart = 0;
 let npfPassiveTileZoomLookupSeqStart = 0;
-let npfPassiveTileZoomActiveObsoleteAbortStart = 0;
 
 function beginNpfPassiveTileZoomDiagnostic() {
     npfPassiveTileZoomDiagToken += 1;
@@ -8151,9 +8147,6 @@ function beginNpfPassiveTileZoomDiagnostic() {
     npfPassiveTileZoomStartedAt = NPF_STARTUP_DIAGNOSTIC.now();
     npfPassiveTileZoomIdbSeqStart = Number(directOfflineTileIdbDiagSeq || 0);
     npfPassiveTileZoomLookupSeqStart = Number(directOfflineTileLookupDiagSeq || 0);
-    npfPassiveTileZoomActiveObsoleteAbortStart = Number(
-        directOfflineNpfActiveObsoleteAbortCount || 0
-    );
 }
 
 function scheduleNpfPassiveTileZoomDiagnostic() {
@@ -8213,11 +8206,6 @@ function scheduleNpfPassiveTileZoomDiagnostic() {
                 maxActive,
                 readsQueued: Math.max(0, Number(directOfflineNpfReadQueue?.length || 0)),
                 readsActive: Math.max(0, Number(directOfflineNpfActiveReads || 0)),
-                activeObsoleteAborts: Math.max(
-                    0,
-                    Number(directOfflineNpfActiveObsoleteAbortCount || 0)
-                    - Number(npfPassiveTileZoomActiveObsoleteAbortStart || 0)
-                ),
                 idbReads: idbSummary.count,
                 idbFound: idbSummary.found,
                 idbMiss: idbSummary.miss,
@@ -9356,12 +9344,6 @@ let directOfflineLastRecoveryReason = '';
  * v16.71 — retour ciblé au comportement de carte de v16.50 :
  * 5 lectures IndexedDB simultanées fixes.
  */
-/*
- * v16.99 — fin du test 2 lectures de v16.96/v16.98.
- * Les DIAG ont montré que la latence individuelle IndexedDB restait élevée
- * tandis que le remplissage de l'écran était mécaniquement ralenti. Retour à
- * la référence 5 lectures simultanées ; le scheduler reste sinon inchangé.
- */
 const DIRECT_OFFLINE_NPF_MAX_CONCURRENT_READS = 5;
 
 /*
@@ -9382,11 +9364,9 @@ const DIRECT_OFFLINE_TILE_ABORTED = Symbol('direct-offline-tile-aborted');
 let directOfflineNpfActiveReads = 0;
 const directOfflineNpfReadQueue = [];
 const directOfflineNpfInflightReads = new Map();
-const directOfflineNpfActiveReadContexts = new Set();
 let directOfflineTileReadGeneration = 0;
 let directOfflineTileViewPriorityEpoch = 0;
 let directOfflineNpfAbortedReadCount = 0;
-let directOfflineNpfActiveObsoleteAbortCount = 0;
 let directOfflineNpfQueuedDiscardCount = 0;
 let directOfflineNpfTileRetryCount = 0;
 const directOfflineTileLookupHints = new Map();
@@ -9413,83 +9393,8 @@ function getDirectOfflineNpfQueueTileKey(coords) {
     return `${x}:${y}:${z}`;
 }
 
-function createDirectOfflineNpfObsoleteAbortError(reason = 'obsolete-view') {
-    const error = new Error(`Lecture tuile NPF obsolète (${reason})`);
-    error.name = 'NpfObsoleteTileReadError';
-    error.npfObsoleteTileRead = true;
-    return error;
-}
-
-function isDirectOfflineNpfObsoleteAbort(error) {
-    return !!(
-        error?.npfObsoleteTileRead
-        || String(error?.name || '') === 'NpfObsoleteTileReadError'
-    );
-}
-
-function abortDirectOfflineNpfReadContext(context, reason = 'obsolete-view') {
-    if (!context || context.aborted) return false;
-    context.aborted = true;
-    context.abortReason = String(reason || 'obsolete-view');
-
-    let didAbortTransaction = false;
-    const transactions = Array.from(context.transactions || []);
-    transactions.forEach(tx => {
-        try {
-            tx.abort();
-            didAbortTransaction = true;
-        } catch (_) {}
-    });
-
-    directOfflineNpfActiveObsoleteAbortCount += 1;
-    directOfflineNpfAbortedReadCount += 1;
-    return didAbortTransaction || true;
-}
-
-function abortDirectOfflineNpfActiveReadsForCurrentView(reason = 'view-end') {
-    if (!baseTileLayer || !map || !directOfflineNpfActiveReadContexts.size) return 0;
-
-    const retainedTiles = baseTileLayer._tiles || {};
-    const retainedKeys = new Set(Object.keys(retainedTiles));
-    const currentZoom = Math.round(Number(map.getZoom?.()));
-    let aborted = 0;
-
-    directOfflineNpfActiveReadContexts.forEach(context => {
-        if (!context || context.aborted) return;
-
-        const coords = context.coords || null;
-        const z = Number(coords?.z);
-        const tileKey = String(
-            context.tileKey || getDirectOfflineNpfQueueTileKey(coords)
-        );
-        const sameGeneration = (
-            Number(context.hardGeneration) === Number(directOfflineTileReadGeneration)
-        );
-        const sameZoom = (
-            Number.isFinite(currentZoom)
-            && Number.isFinite(z)
-            && z === currentZoom
-        );
-        const retained = !!tileKey && retainedKeys.has(tileKey);
-        const latestViewport = (
-            Number(context.viewEpoch) === Number(directOfflineTileViewPriorityEpoch)
-        );
-
-        /*
-         * Même règle que pour la file :
-         * - le viewport courant est conservé ;
-         * - un ancien epoch n'est conservé que si Leaflet retient encore la tuile.
-         */
-        if (sameGeneration && sameZoom && (latestViewport || retained)) return;
-
-        if (abortDirectOfflineNpfReadContext(context, reason)) aborted += 1;
-    });
-
-    return aborted;
-}
-
 function pruneDirectOfflineNpfQueueForCurrentView(reason = 'view-end') {
-    if (!baseTileLayer || !map) return 0;
+    if (!directOfflineNpfReadQueue.length || !baseTileLayer || !map) return 0;
 
     const retainedTiles = baseTileLayer._tiles || {};
     const currentZoom = Math.round(Number(map.getZoom?.()));
@@ -9506,6 +9411,12 @@ function pruneDirectOfflineNpfQueueForCurrentView(reason = 'view-end') {
         const retained = !!tileKey && retainedKeys.has(tileKey);
         const latestViewport = (Number(item?.viewEpoch) || 0) === directOfflineTileViewPriorityEpoch;
 
+        /*
+         * Toujours conserver les demandes créées pour le viewport courant,
+         * même si Leaflet n'a pas encore inscrit la tuile dans _tiles au même
+         * instant. Pour les anciens epochs, ne garder que les tuiles encore
+         * réellement retenues par la GridLayer.
+         */
         if (sameGeneration && sameZoom && (latestViewport || retained)) {
             kept.push(item);
         } else {
@@ -9513,22 +9424,17 @@ function pruneDirectOfflineNpfQueueForCurrentView(reason = 'view-end') {
         }
     }
 
-    if (removed.length) {
-        directOfflineNpfReadQueue.length = 0;
-        directOfflineNpfReadQueue.push(...kept);
+    if (!removed.length) return 0;
 
-        for (const item of removed) {
-            directOfflineNpfQueuedDiscardCount += 1;
-            try { item.resolve(DIRECT_OFFLINE_TILE_ABORTED); } catch (_) {}
-        }
+    directOfflineNpfReadQueue.length = 0;
+    directOfflineNpfReadQueue.push(...kept);
+
+    for (const item of removed) {
+        directOfflineNpfQueuedDiscardCount += 1;
+        try { item.resolve(DIRECT_OFFLINE_TILE_ABORTED); } catch (_) {}
     }
 
-    /*
-     * v17.00 — une ancienne transaction déjà lancée ne doit plus monopoliser
-     * l'un des 5 slots si Leaflet ne retient plus sa tuile.
-     */
-    const activeAborted = abortDirectOfflineNpfActiveReadsForCurrentView(reason);
-    return removed.length + activeAborted;
+    return removed.length;
 }
 
 function resetPendingDirectOfflineNpfReads() {
@@ -9538,9 +9444,6 @@ function resetPendingDirectOfflineNpfReads() {
      */
     directOfflineTileReadGeneration += 1;
     directOfflineTileViewPriorityEpoch += 1;
-    directOfflineNpfActiveReadContexts.forEach(context => {
-        abortDirectOfflineNpfReadContext(context, 'hard-reset');
-    });
     while (directOfflineNpfReadQueue.length) {
         const pending = directOfflineNpfReadQueue.shift();
         directOfflineNpfQueuedDiscardCount += 1;
@@ -9565,9 +9468,8 @@ function runNextDirectOfflineNpfRead() {
         && directOfflineNpfReadQueue.length
     ) {
         /*
-         * v17.00 — priorité au viewport le plus récent. Les transactions déjà
-         * actives sont contrôlées au zoomend/moveend et annulées seulement si
-         * leur tuile est devenue inutile. Parmi les demandes de même priorité,
+         * v16.46 — priorité au viewport le plus récent sans annuler les
+         * transactions déjà actives. Parmi les demandes de même priorité,
          * l'ordre FIFO de Leaflet (centre -> extérieur) est conservé.
          */
         let bestEpoch = -Infinity;
@@ -9587,24 +9489,10 @@ function runNextDirectOfflineNpfRead() {
         }
 
         directOfflineNpfActiveReads += 1;
-        const abortContext = item.abortContext || {
-            aborted: false,
-            abortReason: '',
-            transactions: new Set(),
-            hardGeneration: item.hardGeneration,
-            viewEpoch: item.viewEpoch,
-            coords: item.coords,
-            tileKey: item.tileKey
-        };
-        item.abortContext = abortContext;
-        directOfflineNpfActiveReadContexts.add(abortContext);
-
         Promise.resolve()
-            .then(() => item.task(abortContext))
+            .then(item.task)
             .then(item.resolve, item.reject)
             .finally(() => {
-                directOfflineNpfActiveReadContexts.delete(abortContext);
-                try { abortContext.transactions?.clear?.(); } catch (_) {}
                 directOfflineNpfActiveReads = Math.max(0, directOfflineNpfActiveReads - 1);
                 runNextDirectOfflineNpfRead();
             });
@@ -9941,21 +9829,6 @@ function getDirectOfflineStoredKeyCandidates(tileUrl) {
 
 function readDirectOfflineTileRecord(db, tileUrl, options = {}) {
     const allowLegacyFallback = options.allowLegacyFallback !== false;
-    const abortContext = options.abortContext || null;
-    const diagStartedAt = directOfflineTileDiagNow();
-
-    if (abortContext?.aborted) {
-        return Promise.reject(
-            createDirectOfflineNpfObsoleteAbortError(abortContext.abortReason)
-        );
-    }
-    let diagIndexGets = 0;
-    let diagIndexDirectHits = 0;
-    let diagIndexCursorFallbacks = 0;
-    let diagIndexCursorSteps = 0;
-    let diagLegacyGets = 0;
-    let diagLegacyCursorSteps = 0;
-    let diagUsedIndex = false;
 
     return new Promise((resolve, reject) => {
         let tx;
@@ -9968,59 +9841,32 @@ function readDirectOfflineTileRecord(db, tileUrl, options = {}) {
             return;
         }
 
-        if (abortContext?.transactions) {
-            try { abortContext.transactions.add(tx); } catch (_) {}
-        }
-
         let settled = false;
-        const releaseTransaction = () => {
-            try { abortContext?.transactions?.delete?.(tx); } catch (_) {}
-        };
-        const recordDiag = (outcome, error = null) => {
-            recordDirectOfflineTileIdbDiagEvent({
-                startedAt: diagStartedAt,
-                durationMs: Math.max(0, directOfflineTileDiagNow() - diagStartedAt),
-                outcome,
-                dbName: String(db?.name || ''),
-                tileUrl: String(tileUrl || '').slice(-160),
-                usedIndex: diagUsedIndex ? 1 : 0,
-                indexGets: diagIndexGets,
-                indexDirectHits: diagIndexDirectHits,
-                indexCursorFallbacks: diagIndexCursorFallbacks,
-                indexCursorSteps: diagIndexCursorSteps,
-                legacyGets: diagLegacyGets,
-                legacyCursorSteps: diagLegacyCursorSteps,
-                allowLegacyFallback: allowLegacyFallback ? 1 : 0,
-                error: error ? String(error?.message || error) : ''
-            });
-        };
-
         const finish = value => {
             if (settled) return;
             settled = true;
-            releaseTransaction();
-            recordDiag(value ? 'hit' : 'miss');
             resolve(value);
         };
         const fail = error => {
             if (settled) return;
             settled = true;
-            releaseTransaction();
-            if (isDirectOfflineNpfObsoleteAbort(error)) {
-                recordDiag('aborted', error);
-            } else {
-                recordDiag('error', error);
-            }
             reject(error);
         };
 
-        const readByTileUrlCursor = index => {
+        const readByTileUrlIndex = () => {
             if (settled) return;
-            diagIndexCursorFallbacks += 1;
+            if (!store.indexNames.contains('tileUrl')) {
+                if (allowLegacyFallback) {
+                    readByLegacyKeys();
+                } else {
+                    finish(null);
+                }
+                return;
+            }
 
             let request;
             try {
-                request = index.openCursor(IDBKeyRange.only(tileUrl));
+                request = store.index('tileUrl').openCursor(IDBKeyRange.only(tileUrl));
             } catch (error) {
                 fail(error);
                 return;
@@ -10028,7 +9874,6 @@ function readDirectOfflineTileRecord(db, tileUrl, options = {}) {
 
             request.onsuccess = () => {
                 const cursor = request.result;
-                if (cursor) diagIndexCursorSteps += 1;
                 if (!cursor) {
                     if (allowLegacyFallback) {
                         readByLegacyKeys();
@@ -10044,54 +9889,7 @@ function readDirectOfflineTileRecord(db, tileUrl, options = {}) {
                 }
                 cursor.continue();
             };
-            request.onerror = () => fail(
-                request.error || new Error('Erreur lecture curseur index tileUrl')
-            );
-        };
-
-        const readByTileUrlIndex = () => {
-            if (settled) return;
-            if (!store.indexNames.contains('tileUrl')) {
-                if (allowLegacyFallback) {
-                    readByLegacyKeys();
-                } else {
-                    finish(null);
-                }
-                return;
-            }
-
-            diagUsedIndex = true;
-
-            let index;
-            let request;
-            try {
-                index = store.index('tileUrl');
-                diagIndexGets += 1;
-                /*
-                 * v16.99 TEST — chemin rapide Safari/IndexedDB.
-                 * L'index tileUrl est non-unique : get() retourne le premier
-                 * enregistrement. S'il appartient au groupe de packs actif, on
-                 * évite complètement l'ouverture d'un curseur. Sinon on reprend
-                 * le curseur historique afin de trouver un éventuel autre record.
-                 */
-                request = index.get(tileUrl);
-            } catch (error) {
-                fail(error);
-                return;
-            }
-
-            request.onsuccess = () => {
-                const record = request.result || null;
-                if (record && isDirectOfflineTileRecordAllowed(record)) {
-                    diagIndexDirectHits += 1;
-                    finish(record);
-                    return;
-                }
-                readByTileUrlCursor(index);
-            };
-            request.onerror = () => fail(
-                request.error || new Error('Erreur lecture directe index tileUrl')
-            );
+            request.onerror = () => fail(request.error || new Error('Erreur lecture index tileUrl'));
         };
 
         const exactKeys = allowLegacyFallback
@@ -10110,7 +9908,6 @@ function readDirectOfflineTileRecord(db, tileUrl, options = {}) {
             }
             request.onsuccess = () => {
                 const cursor = request.result;
-                if (cursor) diagLegacyCursorSteps += 1;
                 if (!cursor) {
                     finish(null);
                     return;
@@ -10137,7 +9934,6 @@ function readDirectOfflineTileRecord(db, tileUrl, options = {}) {
                 return;
             }
             const key = exactKeys[keyIndex++];
-            diagLegacyGets += 1;
             let request;
             try {
                 request = store.get(key);
@@ -10156,20 +9952,8 @@ function readDirectOfflineTileRecord(db, tileUrl, options = {}) {
             request.onerror = readByLegacyKeys;
         };
 
-        tx.onerror = () => {
-            if (abortContext?.aborted) {
-                fail(createDirectOfflineNpfObsoleteAbortError(abortContext.abortReason));
-                return;
-            }
-            fail(tx.error || new Error('Erreur transaction tuile'));
-        };
-        tx.onabort = () => {
-            if (abortContext?.aborted) {
-                fail(createDirectOfflineNpfObsoleteAbortError(abortContext.abortReason));
-                return;
-            }
-            fail(tx.error || new Error('Transaction tuile annulée'));
-        };
+        tx.onerror = () => fail(tx.error || new Error('Erreur transaction tuile'));
+        tx.onabort = () => fail(tx.error || new Error('Transaction tuile annulée'));
 
         /*
          * v14.95 — les imports modernes possèdent un index `tileUrl` : une seule
@@ -10524,7 +10308,6 @@ window.getNpfTilePerformanceStatus = function getNpfTilePerformanceStatus() {
         schedulerMode: 'v16.50-priority-immediate',
         viewPriorityEpoch: directOfflineTileViewPriorityEpoch,
         abortedReads: directOfflineNpfAbortedReadCount,
-        activeObsoleteAborts: directOfflineNpfActiveObsoleteAbortCount,
         tileRetries: directOfflineNpfTileRetryCount,
         lookupHints: directOfflineTileLookupHints.size,
         blobCacheSize: directOfflineTileBlobCache.size,
@@ -10535,45 +10318,7 @@ window.getNpfTilePerformanceStatus = function getNpfTilePerformanceStatus() {
     };
 };
 
-async function findDirectOfflineTileBlobUnqueued(coords, abortContext = null) {
-    const lookupDiagStartedAt = directOfflineTileDiagNow();
-    let lookupDiagDbAttempts = 0;
-    let lookupDiagUrlAttempts = 0;
-    let lookupDiagOpenMs = 0;
-    let lookupDiagReadMs = 0;
-    let lookupDiagReadTimeouts = 0;
-    let lookupDiagRecorded = false;
-
-    const throwIfObsolete = () => {
-        if (abortContext?.aborted) {
-            throw createDirectOfflineNpfObsoleteAbortError(
-                abortContext.abortReason || 'obsolete-view'
-            );
-        }
-    };
-
-    const recordLookupDiag = outcome => {
-        if (lookupDiagRecorded) return;
-        lookupDiagRecorded = true;
-        recordDirectOfflineTileLookupDiagEvent({
-            startedAt: lookupDiagStartedAt,
-            durationMs: Math.max(0, directOfflineTileDiagNow() - lookupDiagStartedAt),
-            outcome,
-            coords: {
-                z: Number(coords?.z),
-                x: Number(coords?.x),
-                y: Number(coords?.y)
-            },
-            dbAttempts: lookupDiagDbAttempts,
-            urlAttempts: lookupDiagUrlAttempts,
-            openMs: lookupDiagOpenMs,
-            readMs: lookupDiagReadMs,
-            readTimeouts: lookupDiagReadTimeouts
-        });
-    };
-
-    throwIfObsolete();
-
+async function findDirectOfflineTileBlobUnqueued(coords) {
     const cacheKey = [
         coords.z,
         coords.x,
@@ -10586,7 +10331,6 @@ async function findDirectOfflineTileBlobUnqueued(coords, abortContext = null) {
         directOfflineTileBlobCache.delete(cacheKey);
         directOfflineTileBlobCache.set(cacheKey, cachedBlob);
         resetDirectOfflineReadErrorCounter();
-        recordLookupDiag('cache-hit');
         return cachedBlob;
     }
 
@@ -10595,7 +10339,6 @@ async function findDirectOfflineTileBlobUnqueued(coords, abortContext = null) {
         if (Date.now() - cachedMissAt <= DIRECT_OFFLINE_TILE_MISS_CACHE_TTL_MS) {
             directOfflineTileMissCache.delete(cacheKey);
             directOfflineTileMissCache.set(cacheKey, cachedMissAt);
-            recordLookupDiag('miss-cache');
             return null;
         }
         directOfflineTileMissCache.delete(cacheKey);
@@ -10614,10 +10357,7 @@ async function findDirectOfflineTileBlobUnqueued(coords, abortContext = null) {
     let hadRecoverableTechnicalError = false;
 
     for (const dbName of dbNames) {
-        throwIfObsolete();
         let tileDb;
-        lookupDiagDbAttempts += 1;
-        const openDiagStartedAt = directOfflineTileDiagNow();
         try {
             const openTimeoutMs = isNpfOfflinePackSelection() ? 7000 : 2200;
             tileDb = await withTimeout(
@@ -10625,15 +10365,7 @@ async function findDirectOfflineTileBlobUnqueued(coords, abortContext = null) {
                 openTimeoutMs,
                 `Timeout ouverture ${dbName}`
             );
-            lookupDiagOpenMs += Math.max(
-                0,
-                directOfflineTileDiagNow() - openDiagStartedAt
-            );
         } catch (error) {
-            lookupDiagOpenMs += Math.max(
-                0,
-                directOfflineTileDiagNow() - openDiagStartedAt
-            );
             if (
                 isPrimaryDirectOfflineDatabaseCandidate(dbName)
                 && registerDirectOfflineReadError(
@@ -10647,23 +10379,13 @@ async function findDirectOfflineTileBlobUnqueued(coords, abortContext = null) {
         }
 
         for (const tileUrl of tileUrls) {
-            throwIfObsolete();
-            lookupDiagUrlAttempts += 1;
-            const readDiagStartedAt = directOfflineTileDiagNow();
             try {
                 const readTimeoutMs = isNpfOfflinePackSelection() ? 5200 : 1800;
                 const allowLegacyFallback = String(dbName || '') === String(OFFLINE_DB_NAME || '');
                 const record = await withTimeout(
-                    readDirectOfflineTileRecord(tileDb, tileUrl, {
-                        allowLegacyFallback,
-                        abortContext
-                    }),
+                    readDirectOfflineTileRecord(tileDb, tileUrl, { allowLegacyFallback }),
                     readTimeoutMs,
                     'Timeout lecture tuile'
-                );
-                lookupDiagReadMs += Math.max(
-                    0,
-                    directOfflineTileDiagNow() - readDiagStartedAt
                 );
                 if (!record?.tile) continue;
 
@@ -10685,22 +10407,8 @@ async function findDirectOfflineTileBlobUnqueued(coords, abortContext = null) {
                         'Mode OFFLINE — tuiles locales chargées.'
                     );
                 }
-                recordLookupDiag('idb-hit');
                 return blob;
             } catch (error) {
-                lookupDiagReadMs += Math.max(
-                    0,
-                    directOfflineTileDiagNow() - readDiagStartedAt
-                );
-
-                if (isDirectOfflineNpfObsoleteAbort(error)) {
-                    recordLookupDiag('obsolete-abort');
-                    throw error;
-                }
-
-                if (/Timeout lecture tuile/i.test(String(error?.message || error || ''))) {
-                    lookupDiagReadTimeouts += 1;
-                }
                 if (
                     isPrimaryDirectOfflineDatabaseCandidate(dbName)
                     && registerDirectOfflineReadError(
@@ -10719,7 +10427,6 @@ async function findDirectOfflineTileBlobUnqueued(coords, abortContext = null) {
      * raison technique : la récupération automatique est déjà en cours.
      */
     if (hadRecoverableTechnicalError) {
-        recordLookupDiag('technical-error');
         return null;
     }
 
@@ -10733,7 +10440,6 @@ async function findDirectOfflineTileBlobUnqueued(coords, abortContext = null) {
             'Mode OFFLINE actif — aucune tuile trouvée ici à ce niveau de zoom.'
         );
     }
-    recordLookupDiag('miss');
     return null;
 }
 
@@ -10755,38 +10461,17 @@ async function findDirectOfflineTileBlob(coords) {
     const existing = directOfflineNpfInflightReads.get(inflightKey);
     if (existing) return existing;
 
-    const pending = enqueueDirectOfflineNpfRead(async abortContext => {
-        if (
-            hardGeneration !== directOfflineTileReadGeneration
-            || abortContext?.aborted
-        ) {
-            if (hardGeneration !== directOfflineTileReadGeneration) {
-                directOfflineNpfAbortedReadCount += 1;
-            }
+    const pending = enqueueDirectOfflineNpfRead(async () => {
+        if (hardGeneration !== directOfflineTileReadGeneration) {
+            directOfflineNpfAbortedReadCount += 1;
             return DIRECT_OFFLINE_TILE_ABORTED;
         }
-
-        try {
-            const blob = await findDirectOfflineTileBlobUnqueued(
-                coords,
-                abortContext
-            );
-            if (
-                hardGeneration !== directOfflineTileReadGeneration
-                || abortContext?.aborted
-            ) {
-                if (hardGeneration !== directOfflineTileReadGeneration) {
-                    directOfflineNpfAbortedReadCount += 1;
-                }
-                return DIRECT_OFFLINE_TILE_ABORTED;
-            }
-            return blob;
-        } catch (error) {
-            if (isDirectOfflineNpfObsoleteAbort(error)) {
-                return DIRECT_OFFLINE_TILE_ABORTED;
-            }
-            throw error;
+        const blob = await findDirectOfflineTileBlobUnqueued(coords);
+        if (hardGeneration !== directOfflineTileReadGeneration) {
+            directOfflineNpfAbortedReadCount += 1;
+            return DIRECT_OFFLINE_TILE_ABORTED;
         }
+        return blob;
     }, { hardGeneration, viewEpoch, coords });
 
     directOfflineNpfInflightReads.set(inflightKey, pending);
