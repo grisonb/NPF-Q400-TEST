@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v17-02_overlay_priority_tiles_vfr_ht_routes';
-const APP_VERSION = 'v17.02';
+const SW_VERSION = 'sw-v17-03_overlay_priority_targeted';
+const APP_VERSION = 'v17.03';
 const SIA_DATA_REVISION = '15.69-radio1026-1-maplite1';
 const SIA_DATA_URL = './sia.js';
 const SIA_DATA_CACHE = `npf-q400-sia-data-${SIA_DATA_REVISION}`;
