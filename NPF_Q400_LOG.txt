@@ -1,3 +1,84 @@
+VERSION TEST v17.12 — EPOCH TUILES UNIQUE PAR GESTE + PROPOSITION VAC PREMIÈRE INSTALLATION
+Date : 18/09/2026
+Base fonctionnelle : v17.11
+
+OBJECTIFS UTILISATEUR
+- Chercher le dernier gain de fluidité sans toucher au moteur IndexedDB validé :
+  réduire les abandons/reprises de demandes de tuiles provoqués par plusieurs
+  `movestart/zoomstart` appartenant au même geste manuel.
+- À l'ouverture de NPF, si aucune carte VAC n'est installée, proposer leur
+  téléchargement avec le message exact :
+  « Télécharger cartes VAC » — boutons « Oui » / « Non ».
+
+DIAG À L'ORIGINE — v17.11 (18/09/2026 18:52)
+- Fluidité devenue proche de l'objectif avec Routes + HT actifs.
+- 538 tuiles trouvées / 0 absente, mais 689 demandes en file abandonnées,
+  10 lectures devenues obsolètes et 54 reprises.
+- Les derniers pans saccadés surviennent sans travail Routes/HT/SIA/JS notable,
+  avec la file tuiles pouvant monter à q31/a5 et parfois 0 tuile visible.
+- Le code appelait encore `beginBaseMapZoomStabilityGuard()` sur `movestart`
+  ET `zoomstart`, même lorsque le séquenceur indiquait qu'il s'agissait du même
+  geste manuel déjà verrouillé.
+
+MODIFICATIONS
+
+1. UN SEUL EPOCH DE PRIORITÉ TUILES PAR GESTE MANUEL
+- Le retour de `beginNpfMapOverlayPrioritySequence()` devient la référence :
+  `beginBaseMapZoomStabilityGuard()` n'est appelé que si ce start ouvre réellement
+  un nouveau geste.
+- Un `movestart` puis un `zoomstart` du même pinch ne recréent donc plus un second
+  epoch tuiles et ne retriment plus une seconde fois le cache blobs.
+- Les starts secondaires continuent d'annuler/maintenir les protections visuelles
+  nécessaires, mais ne rebattent plus la priorité IndexedDB.
+- Le scheduler reste à 5 lectures ; aucune transaction active n'est annulée.
+
+2. PROPOSITION VAC UNIQUEMENT SI 0 VAC INSTALLÉE
+- Après démarrage principal et disponibilité de la carte, NPF récupère le
+  manifeste VAC comme auparavant.
+- Si aucune VAC valide n'est présente dans IndexedDB et que le manifeste contient
+  des VAC à télécharger, affichage de la question :
+  « Télécharger cartes VAC » avec seulement « Oui » et « Non ».
+- « Oui » : lancement de la synchronisation en arrière-plan, avec priorité carte
+  conservée et sans ouvrir la fenêtre de gestion des cartes.
+- « Non » : aucun téléchargement automatique de VAC pendant le reste de la
+  session. Au prochain lancement, si aucune VAC n'est toujours installée, la
+  question est reproposée.
+- Un clic sur le fond de la fenêtre ne ferme pas la question : choix explicite
+  Oui/Non.
+
+3. MISES À JOUR VAC EXISTANTES INCHANGÉES
+- Dès qu'au moins une VAC est déjà installée, le fonctionnement historique reste
+  inchangé : les VAC absentes/modifiées sont synchronisées automatiquement et
+  discrètement en arrière-plan.
+- Validation PDF / taille / SHA-256 / conservation de l'ancienne VAC en cas
+  d'échec : inchangées.
+
+4. ROUTES / HT v17.11 CONSERVÉS
+- Pré-masquage tactile `display:none` avant Leaflet : inchangé.
+- Aucun retrait/rattachement de renderer pendant le geste : inchangé.
+- Swap HT atomique : inchangé.
+- Ordre Tuiles -> VFR -> HT -> Routes : inchangé.
+
+5. MOTEUR TUILES — AUCUNE AUTRE MODIFICATION
+- 5 lectures IndexedDB : inchangé.
+- Curseur indexé `tileUrl` : inchangé.
+- Pas de batch, pas de `index.get()`, pas d'annulation active.
+- KeepBuffer, updateWhenIdle/updateInterval, retry, timeout et cache : inchangés.
+
+VERSION
+- App : v17.12
+- Service Worker : `sw-v17-12_single_tile_epoch_vac_prompt`
+- SIA : strictement inchangé par rapport à v17.11.
+
+VALIDATION STATIQUE
+- Syntaxe JavaScript Script/SIA/SW : OK.
+- Script inline de l'Index : OK.
+- Manifest JSON : OK.
+- Cohérence Index / Manifest / Script / Style / SW v17.12 : OK.
+- SIA identique bit-à-bit à v17.11 : OK.
+
+======================================================================
+
 VERSION TEST v17.11 — PRÉ-MASQUAGE TACTILE + ZÉRO RETRAIT RENDERER AU GESTE
 Date : 18/09/2026
 Base fonctionnelle : v17.10
