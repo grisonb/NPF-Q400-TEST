@@ -1,3 +1,116 @@
+VERSION TEST v17.09 — ROUTES / HT DÉTACHÉS PHYSIQUEMENT PENDANT PAN / ZOOM
+Date : 18/09/2026
+Base fonctionnelle : v17.08
+
+OBJECTIF UTILISATEUR
+- Obtenir pendant chaque pan/zoom manuel la même fluidité du fond NPF avec
+  Routes ON + HT ON qu'avec Routes OFF + HT OFF.
+- Accepter que Routes et HT disparaissent pendant la manipulation et reviennent
+  seulement après les tuiles.
+- La priorité n'est plus seulement logique : pendant le geste, Routes et HT ne
+  doivent plus appartenir à la scène Leaflet.
+
+DIAG À L'ORIGINE
+- v17.08 avec calques OFF : fluidité parfaite selon le test utilisateur.
+- Routes ON : fluidité des tuiles moyenne.
+- Routes + HT ON : fluidité mauvaise.
+- Retour Routes OFF + HT OFF : fluidité redevenue correcte.
+- Le DIAG v17.08 montre pourtant pendant le pan saccadé :
+  * JS=0 ;
+  * Routes=0 ms ;
+  * HT=0 ms ;
+  * SIA=0 ms ;
+  * mais les géométries Routes/HT déjà rendues restent attachées à Leaflet.
+- Conclusion : masquer les panes et différer les recalculs ne suffit pas ;
+  les Canvas/LayerGroup déjà présents doivent eux aussi quitter la carte
+  pendant le geste.
+
+MODIFICATIONS
+
+1. DÉTACHEMENT PHYSIQUE AU PREMIER GESTE MANUEL
+- Au premier `movestart` ou `zoomstart` du verrou v17.07 :
+  * retrait de `roadOverlayLayer` de `map` ;
+  * retrait de `highVoltageLinesLayer` de `map` ;
+  * retrait des Canvas dédiés Routes casing / Routes lignes / HT s'ils sont
+    encore attachés directement à Leaflet.
+- Les données, GeoJSON, cellules, caches et objets restent en mémoire.
+- Aucun pack Routes/HT n'est rechargé à cause de ce détachement.
+
+2. CARTE SEULE PENDANT PAN / ZOOM
+- Pendant toute la séquence manuelle :
+  * aucun LayerGroup Routes n'est attaché ;
+  * aucun LayerGroup HT n'est attaché ;
+  * aucun Canvas Routes/HT dédié n'est attaché ;
+  * les tuiles NPF restent seules prioritaires avec les couches légères.
+- Les panes restent également masqués comme sécurité visuelle.
+
+3. RESTITUTION HT
+- Après stabilisation des tuiles et la fenêtre stricte v17.08 :
+  * HT est recalculé alors que son parent reste détaché ;
+  * le parent HT n'est rattaché à `map` qu'une fois le rendu prêt.
+- Un nouveau geste invalide le travail via les tokens existants.
+
+4. RESTITUTION ROUTES
+- Routes reste détaché pendant sa reconstruction.
+- Le parent Routes n'est rattaché à `map` qu'après fin du rendu du viewport
+  final.
+- L'ordre reste : Tuiles -> VFR -> HT -> Routes.
+
+5. AUCUN NETTOYAGE ROUTES AU ZOOMSTART
+- Suppression de l'ancien appel
+  `releaseRoadOverlaySourceCacheIfHeavy('zoomstart-ht-routes')`.
+- Pendant le geste, aucun nettoyage de cache Routes n'est lancé.
+- Les libérations mémoire éventuelles restent après rendu, jamais au début du
+  pinch/zoom.
+
+6. TOGGLES ET REPRISE GPS
+- Une activation Routes/HT ne rattache pas le calque si une séquence prioritaire
+  de carte est en cours.
+- Si le GPS reprend après un geste manuel, les rendus déjà calculés sont
+  rattachés sans lancer de recalcul lourd, conformément au comportement
+  v17.05/v17.07.
+- En cas d'erreur de restitution, un filet de sécurité rattache les rendus
+  existants pour éviter de laisser un calque ON invisible définitivement.
+
+7. MOTEUR TUILES INCHANGÉ
+- Scheduler : 5 lectures IndexedDB.
+- Curseur indexé `tileUrl`.
+- Aucun `index.get()`.
+- Aucune annulation active des transactions.
+- Aucun batch v17.06.
+- Files, cache blobs, packs Offline et récupération IndexedDB inchangés.
+
+8. ÉLÉMENTS NON MODIFIÉS
+- SafeSky / GLR ;
+- filtres SafeSky automatiques ;
+- déduplication BENGA96/BENGALE96 ;
+- BLOC/FUEL OACI ;
+- WP / pointillé rouge ;
+- FdS/GAAR ;
+- SIA/VAC ;
+- recherche ;
+- authentifications ;
+- calculateur.
+
+VERSION
+- App : v17.09
+- Service Worker : `sw-v17-09_heavy_overlays_detached_during_gesture`
+- SIA : strictement inchangé par rapport à v17.08 / v17.07.
+
+VALIDATION STATIQUE
+- Syntaxe JavaScript Script/SIA/SW : OK.
+- Script inline de l'Index : OK.
+- Manifest JSON : OK.
+- Cohérence Index / Manifest / Script / Style / SW v17.09 : OK.
+- SIA identique bit-à-bit à v17.08 : OK.
+- Diff v17.08 -> v17.09 limité au séquenceur/couches lourdes et aux versions :
+  moteur tuiles non modifié : OK.
+- Retrait physique Routes/HT + Canvas au début du geste : présent.
+- Reconstruction hors scène puis rattachement après fenêtre tuiles : présente.
+- Nettoyage cache Routes au zoomstart supprimé : OK.
+
+HISTORIQUE PRÉCÉDENT CONSERVÉ CI-DESSOUS
+
 VERSION TEST v17.08 — PRIORITÉ ABSOLUE TUILES / ROUTES-HT OPPORTUNISTES
 Date : 18/09/2026
 Base fonctionnelle : v17.07
