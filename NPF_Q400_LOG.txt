@@ -1,3 +1,88 @@
+VERSION TEST v17.03 — PRIORITÉ CARTE CORRIGÉE À PARTIR DES ESSAIS v16.75→v17.02
+Date : 18/09/2026
+Base : TEST v17.02
+Moteur tuiles : référence v16.75 / v17.01, strictement conservé
+
+OBJECTIF
+Corriger uniquement le séquenceur VFR/HT/Routes autour des tuiles, à partir des
+résultats observés dans les DIAG précédents, sans modifier le moteur de tuiles.
+
+ENSEIGNEMENTS PRIS EN COMPTE
+- v16.75 : fluidité carte de référence.
+- v16.96/v16.98 : réduire la concurrence à 2 n'a pas corrigé les latences IDB.
+- v16.99 : `index.get(tileUrl)` n'a pas supprimé les lectures IDB de plusieurs secondes.
+- v17.00 : annuler les transactions actives a créé du churn annulation/reprise.
+- v17.01 : retour ciblé du moteur tuiles à v16.75, à conserver.
+- v17.02 : priorité overlays pertinente, mais :
+  * zoomstart + movestart lançaient deux fois la même séquence ;
+  * le timeout de 6 s pouvait rendre VFR/HT/Routes alors que les tuiles
+    continuaient encore à charger.
+
+CORRECTIONS v17.03
+
+1. AUCUN CHANGEMENT DU MOTEUR TUILES
+- Les 6 blocs principaux restent byte-for-byte identiques à v17.02/v17.01 :
+  purge, reset, scheduler, lecture IndexedDB, recherche blob, orchestration blob.
+- 5 lectures simultanées.
+- Pas de `index.get()`.
+- Pas d'annulation des transactions actives.
+- Pas de nouveau retry.
+- Pas de modification du cache ni des epochs.
+
+2. UN SEUL DÉBUT DE SÉQUENCE PAR GESTE
+- Le couple Leaflet `zoomstart` puis `movestart` du même pinch est coalescé.
+- Une fenêtre très courte de 180 ms évite le double démarrage observé dans le
+  DIAG v17.02.
+- Un vrai nouveau geste continue à invalider immédiatement la restitution
+  précédente.
+
+3. PRIORITÉ TUILES RÉELLE, SANS TIMEOUT DE 6 S
+- La restitution VFR ne démarre plus après un délai arbitraire.
+- NPF attend :
+  * soit toutes les tuiles visibles réellement chargées ;
+  * soit que le scheduler de référence soit réellement au repos
+    (file=0 + lectures actives=0), cas nécessaire lorsqu'une coordonnée n'a
+    réellement aucune tuile disponible.
+- L'état doit être stable sur plusieurs passes avant de continuer.
+- Cette attente est en lecture seule : elle ne touche jamais au scheduler.
+
+4. VFR PUIS HT PUIS ROUTES
+- Les points VFR restent masqués pendant leur recalcul final.
+- Ils deviennent visibles seulement quand le refresh SIA est terminé.
+- Les lignes HT sont ensuite recalculées/rendues.
+- Les Routes restent strictement en dernier.
+- Le timeout SIA de 1,5 s est supprimé : on attend le vrai repos SIA ou un
+  nouveau geste qui annule proprement la séquence.
+
+5. DIAGNOSTIC PASSIF DU SÉQUENCEUR
+- Snapshots supplémentaires :
+  `priorité carte · VFR prêt`
+  `priorité carte · HT prêt`
+  `priorité carte · fin`
+- Aucun de ces diagnostics ne modifie le moteur tuiles.
+
+TOUT LE RESTE
+- Strictement conservé depuis v17.02 :
+  SafeSky/GLR, filtres SS automatiques, dédup BENGA96/BENGALE96, BLOC/FUEL,
+  WP, FdS/GAAR, SIA/VAC, recherche, authentification, calculateur.
+
+VERSION
+- App : v17.03
+- Service Worker : `sw-v17-03_overlay_priority_targeted`
+
+VALIDATION STATIQUE
+- Syntaxe JavaScript Script/SIA/SW : OK.
+- Manifest JSON : OK.
+- 6 blocs moteur tuiles identiques à v17.02 : OK.
+- `index.get()` absent : OK.
+- annulation active IDB absente : OK.
+- timeout 6 s de priorité tuiles supprimé : OK.
+- coalescence zoomstart/movestart : OK.
+- ordre Tuiles -> VFR -> HT -> Routes conservé : OK.
+- fonctions v17.02 hors séquenceur conservées : OK.
+
+HISTORIQUE PRÉCÉDENT CONSERVÉ INTÉGRALEMENT
+
 VERSION TEST v17.02 — PRIORITÉ CARTE APRÈS MOUVEMENT / ZOOM
 Date : 18/09/2026
 Base : TEST v17.01
