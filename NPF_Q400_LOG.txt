@@ -1,3 +1,76 @@
+VERSION TEST v17.04 — GPS/SIMULATION EXCLU DU SÉQUENCEUR DE CALQUES
+Date : 18/09/2026
+Base : TEST v17.03
+Moteur tuiles : référence v16.75 / v17.01, strictement conservé
+
+PROBLÈME OBSERVÉ EN v17.03
+En simulation avec suivi/recentrage de l'avion :
+- les points VFR et les lignes HT clignotaient à chaque déplacement ;
+- les Routes pouvaient ne jamais réapparaître.
+
+CAUSE
+Le recentrage automatique GPS/simulation déclenchait `movestart` très souvent.
+La v17.03 lançait alors à chaque fois la séquence :
+Tuiles -> VFR -> HT -> Routes.
+La séquence suivante pouvait commencer avant que la précédente arrive aux Routes.
+
+CORRECTION v17.04 — STRICTEMENT CIBLÉE
+
+1. RECENTRAGE GPS / SIMULATION
+- `gpsFollowPan` sort maintenant AVANT l'appel au séquenceur prioritaire.
+- Aucun masquage des points VFR.
+- Aucun masquage des lignes HT.
+- Aucun masquage des Routes.
+- Aucun appel à `scheduleNpfMapOverlayPriorityRestore()` sur `gps-moveend`.
+- Aucun nouveau travail de tuiles n'est ajouté par cette correction.
+
+2. COMPORTEMENT HISTORIQUE GPS CONSERVÉ
+- Les overlays déjà rendus restent visibles et suivent naturellement la carte.
+- SIA conserve son chemin `gps-follow`.
+- Routes conserve son mécanisme `gps-follow-edge` :
+  recalcul seulement si la couverture actuelle n'est plus suffisante.
+- HT conserve son mécanisme `gps-follow-edge` :
+  recalcul seulement si la couverture actuelle n'est plus suffisante.
+- `cancelObsoleteSiaMapMotionWork('gps-movestart')` est conservé.
+
+3. GESTES UTILISATEUR / ZOOMS
+Aucun changement par rapport à v17.03 :
+- pan manuel : Tuiles -> VFR -> HT -> Routes ;
+- zoom manuel : Tuiles -> VFR -> HT -> Routes ;
+- coalescence zoomstart + movestart conservée ;
+- attente réelle de fin des tuiles conservée.
+
+4. MOTEUR TUILES
+AUCUNE MODIFICATION :
+- 6 blocs principaux byte-for-byte identiques à v17.03/v17.01 ;
+- 5 lectures simultanées ;
+- pas de `index.get()` ;
+- pas d'annulation de transaction active ;
+- pas de nouveau retry ;
+- aucun changement du cache/IndexedDB/epochs.
+
+5. AUTRES MODULES
+Aucun changement fonctionnel :
+SafeSky/GLR, BLOC/FUEL, WP, FdS/GAAR, recherche, SIA/VAC, calculateur,
+authentifications et autres fonctions restent celles de v17.03.
+
+VERSION
+- App : v17.04
+- Service Worker : `sw-v17-04_gps_overlay_priority_exclusion`
+
+VALIDATION STATIQUE
+- Syntaxe JavaScript Script/SIA/SW : OK.
+- Manifest JSON : OK.
+- 6 blocs moteur tuiles identiques à v17.03 : OK.
+- GPS movestart : sortie avant séquenceur : OK.
+- GPS moveend : aucune restauration prioritaire : OK.
+- ancien chemin Routes `gps-follow-edge` présent : OK.
+- ancien chemin HT `gps-follow-edge` présent : OK.
+- ancien chemin SIA `gps-follow` présent : OK.
+- gestes manuels / zooms v17.03 conservés : OK.
+
+HISTORIQUE PRÉCÉDENT CONSERVÉ INTÉGRALEMENT
+
 VERSION TEST v17.03 — PRIORITÉ CARTE CORRIGÉE À PARTIR DES ESSAIS v16.75→v17.02
 Date : 18/09/2026
 Base : TEST v17.02
