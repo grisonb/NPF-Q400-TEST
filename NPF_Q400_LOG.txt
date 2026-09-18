@@ -1,3 +1,99 @@
+VERSION TEST v17.07 — ROLLBACK v17.06 + VERROU RÉEL DE GESTE
+Date : 18/09/2026
+Base fonctionnelle : v17.05
+Historique : v17.06 explicitement abandonnée
+
+DIAG À L'ORIGINE
+v17.06 avec Routes OFF et HT OFF :
+- lenteur ressentie toujours présente ;
+- 49 transactions batch / 162 lectures ;
+- moyenne batch 781 ms ;
+- maximum 4071 ms ;
+- 12 batches >= 1,2 s ;
+- aucun refresh doux déclenché ;
+- surtout, une rafale de plusieurs `movestart` / `zoomstart` en quelques
+  dixièmes de seconde redémarrait continuellement la priorité carte.
+
+DÉCISIONS
+
+1. ROLLBACK COMPLET DU BATCH INDEXEDDB v17.06
+- Le Script repart de v17.05.
+- Suppression intégrale :
+  * transactions NPF groupées ;
+  * file batch ;
+  * métriques batch ;
+  * détection slow-batch ;
+  * refresh doux automatique de connexion IDB.
+- Retour au moteur de tuiles v17.05 / v17.01 / référence v16.75 :
+  * scheduler 5 lectures ;
+  * une lecture historique par transaction ;
+  * curseur indexé `tileUrl` ;
+  * aucun `index.get()` ;
+  * aucune annulation active ;
+  * aucun retry agressif.
+
+2. VRAI VERROU DE GESTE MANUEL
+L'ancienne coalescence temporelle 180 ms est supprimée.
+
+Nouveau comportement :
+- le PREMIER `movestart` ou `zoomstart` manuel ouvre le geste ;
+- tant que ce geste n'est pas stabilisé, tous les autres starts Leaflet sont
+  ignorés pour le séquenceur ;
+- ils ne réincrémentent plus le token ;
+- ils ne réinvalident plus SIA/HT/Routes ;
+- ils ne redémarrent plus la priorité carte ;
+- un nouvel événement pendant l'attente de fin annule simplement le timer
+  de fin et prolonge le même geste.
+
+3. FIN DE GESTE = 500 ms DE CALME
+- `moveend` / `zoomend` ne déclenchent plus immédiatement la restitution.
+- NPF attend 500 ms sans nouveau start/end.
+- Ce délai couvre la rafale observée dans le DIAG v17.06 (~0,4 s).
+- Après stabilisation seulement :
+  Tuiles -> VFR -> HT -> Routes.
+- Si un vrai nouveau geste commence pendant la restitution, il crée alors une
+  nouvelle séquence et invalide proprement l'ancienne par token.
+
+4. GPS / SIMULATION
+Toutes les corrections v17.04/v17.05 sont conservées :
+- GPS exclu du séquenceur manuel ;
+- pas de clignotement VFR/HT ;
+- Routes/HT restent sur `gps-follow-edge` ;
+- si le GPS reprend pendant une restitution manuelle, celle-ci est annulée et
+  les panes sont immédiatement réaffichés.
+
+5. CE QUI N'EST PAS MODIFIÉ
+- SafeSky/GLR ;
+- filtres SafeSky automatiques ;
+- déduplication BENGA96/BENGALE96 ;
+- BLOC/FUEL OACI ;
+- WP et pointillé rouge ;
+- FdS/GAAR ;
+- SIA/VAC ;
+- recherche ;
+- authentifications ;
+- calculateur.
+
+VERSION
+- App : v17.07
+- Service Worker : `sw-v17-07_gesture_lock_tile_rollback`
+
+VALIDATION STATIQUE
+- Syntaxe JavaScript Script/SIA/SW : OK.
+- Manifest JSON : OK.
+- moteur batch v17.06 absent : OK.
+- scheduler tuiles = 5 : OK.
+- `index.get(tileUrl)` absent : OK.
+- annulation active v17.00 absente : OK.
+- anciennes constantes coalescence 180 ms absentes : OK.
+- verrou manuel présent : OK.
+- calme 500 ms avant restitution : OK.
+- correction GPS v17.05 conservée : OK.
+- ordre Tuiles -> VFR -> HT -> Routes conservé : OK.
+- fonctions SafeSky/GLR/BLOC/WP conservées : OK.
+
+HISTORIQUE PRÉCÉDENT CONSERVÉ CI-DESSOUS
+
 VERSION TEST v17.06 — CORRECTION COMBINÉE CALQUES + LATENCE TUILES LONGUE SESSION
 Date : 18/09/2026
 Base : TEST v17.05
