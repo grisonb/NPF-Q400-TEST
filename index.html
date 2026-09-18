@@ -7,8 +7,8 @@
     <title>NPF-Q400</title>
     <link rel="stylesheet" href="leaflet.css">
     <link rel="preload" href="communes_aliases.json" as="fetch" crossorigin="anonymous">
-    <link rel="stylesheet" href="style.css?appv=v17.11">
-    <link rel="manifest" href="manifest.json?appv=v17.11">
+    <link rel="stylesheet" href="style.css?appv=v17.12">
+    <link rel="manifest" href="manifest.json?appv=v17.12">
     <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192x192.png?appv=v13.92">
     <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512x512.png?appv=v13.92">
     <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png?appv=v13.92">
@@ -56,7 +56,7 @@
     </style>
 
     <script>
-        const APP_VERSION = 'v17.11';
+        const APP_VERSION = 'v17.12';
         const SERVICE_WORKER_URL = `./sw.js?appv=${encodeURIComponent(APP_VERSION)}`;
         const APP_VERSION_STORAGE_KEY = 'appVersion';
         const SW_CONTROLLER_RELOAD_GUARD_KEY = 'swControllerReloadGuard';
@@ -1112,7 +1112,7 @@
     <script src="suncalc.js"></script>
     <script src="jszip.min.js"></script>
     <script src="sia.js?siav=15.69-radio1026-1-maplite1"></script>
-    <script src="script.js?appv=v17.11"></script>
+    <script src="script.js?appv=v17.12"></script>
     
     <div id="fuel-split-modal" class="fuel-split-modal" style="display: none;">
         <div class="fuel-split-modal-content">
@@ -1481,12 +1481,11 @@
 
     <div id="vac-update-modal" class="vac-update-modal" style="display: none;" aria-hidden="true">
         <div class="vac-update-modal-content" role="dialog" aria-modal="true" aria-labelledby="vac-update-modal-title">
-            <h2 id="vac-update-modal-title">Mise à jour des cartes VAC</h2>
-            <p>Des cartes VAC ont été mises à jour. Voulez-vous les mettre à jour maintenant ?</p>
-            <div id="vac-update-detail" class="vac-update-detail"></div>
+            <h2 id="vac-update-modal-title">Télécharger cartes VAC</h2>
+            <div id="vac-update-detail" class="vac-update-detail" style="display: none;"></div>
             <div class="vac-update-modal-actions">
-                <button id="vac-update-now-button" type="button" class="vac-update-now-button">Mettre à jour</button>
-                <button id="vac-update-later-button" type="button" class="vac-update-later-button">Plus tard</button>
+                <button id="vac-update-now-button" type="button" class="vac-update-now-button">Oui</button>
+                <button id="vac-update-later-button" type="button" class="vac-update-later-button">Non</button>
             </div>
         </div>
     </div>
