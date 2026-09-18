@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.09';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.10';
 
 
 /*
@@ -7715,12 +7715,14 @@ function applyNpfMapOverlayPriorityVisibility() {
         ? Math.max(0, Math.min(3, Number(npfMapOverlayPriorityStage) || 0))
         : 3;
 
-    const setPaneVisibility = (names, visible) => {
+    const setPaneVisibility = (names, visible, { heavy = false } = {}) => {
         const visibility = visible ? 'visible' : 'hidden';
         names.forEach(name => {
             try {
                 const pane = map.getPane?.(name);
-                if (pane) pane.style.visibility = visibility;
+                if (!pane) return;
+                pane.style.visibility = visibility;
+                if (heavy) pane.style.display = visible ? '' : 'none';
             } catch (_) {}
         });
     };
@@ -7734,46 +7736,34 @@ function applyNpfMapOverlayPriorityVisibility() {
     // Étape 3 — lignes HT.
     setPaneVisibility(
         ['highVoltageLinesPane'],
-        !active || stage >= 2
+        !active || stage >= 2,
+        { heavy: true }
     );
 
     // Étape 4 — routes.
     setPaneVisibility(
         ['roadOverlayCasingPane', 'roadOverlayLinePane', 'roadOverlayLabelPane'],
-        !active || stage >= 3
+        !active || stage >= 3,
+        { heavy: true }
     );
 }
 
 
-function detachNpfHeavyOverlayLayersForMapMotion(reason = 'map-start') {
+function suspendNpfHeavyOverlayRenderersForMapMotion(reason = 'map-start') {
     if (!map) return;
 
     /*
-     * v17.09 — priorité physique au fond de carte.
+     * v17.10 — priorité physique au fond sans démontage des LayerGroup.
      *
-     * Masquer un pane ne suffit pas sur iPad : les LayerGroup et leurs Canvas
-     * restent alors attachés à Leaflet et continuent à participer aux
-     * transformations du viewport. Pour retrouver la charge de la carte seule,
-     * Routes et HT sont réellement retirés de `map` pendant le geste.
+     * v17.09 retirait `roadOverlayLayer` et `highVoltageLinesLayer` de `map`.
+     * Avec plusieurs milliers de Paths, Leaflet devait alors démonter la scène
+     * synchroniquement au début d'un pinch, ce qui pouvait figer Safari.
      *
-     * Les groupes et leurs données restent en mémoire : aucun pack n'est
-     * rechargé et aucune géométrie n'est détruite ici.
-     */
-    try {
-        if (roadOverlayLayer && map.hasLayer(roadOverlayLayer)) {
-            map.removeLayer(roadOverlayLayer);
-        }
-    } catch (_) {}
-    try {
-        if (highVoltageLinesLayer && map.hasLayer(highVoltageLinesLayer)) {
-            map.removeLayer(highVoltageLinesLayer);
-        }
-    } catch (_) {}
-
-    /*
-     * Les renderers Canvas dédiés ne sont pas enfants des LayerGroup Leaflet.
-     * Une fois les groupes retirés, on retire donc aussi leurs Canvas propres
-     * afin qu'ils ne restent pas dans les panes pendant le pan/zoom.
+     * v17.10 conserve donc les groupes et toutes leurs géométries en mémoire,
+     * mais retire uniquement les TROIS renderers Canvas lourds. C'est une
+     * opération bornée, indépendante du nombre de segments. Les panes lourds
+     * passent aussi en `display:none` pendant le geste pour supprimer leur coût
+     * de composition. Aucun recalcul Routes/HT n'est lancé ici.
      */
     [roadOverlayCasingRenderer, roadOverlayLineRenderer, highVoltageLinesRenderer]
         .forEach(renderer => {
@@ -7784,38 +7774,50 @@ function detachNpfHeavyOverlayLayersForMapMotion(reason = 'map-start') {
             } catch (_) {}
         });
 
+    [
+        'roadOverlayCasingPane',
+        'roadOverlayLinePane',
+        'roadOverlayLabelPane',
+        'highVoltageLinesPane'
+    ].forEach(name => {
+        try {
+            const pane = map.getPane?.(name);
+            if (pane) {
+                pane.style.display = 'none';
+                pane.style.visibility = 'hidden';
+            }
+        } catch (_) {}
+    });
+
     npfHeavyOverlayPanesHidden = true;
 }
 
-function reattachNpfHeavyOverlayLayersWithoutRefresh(reason = 'restore') {
+function resumeNpfHeavyOverlayRenderersWithoutRefresh(reason = 'restore') {
     if (!map) return;
 
     /*
-     * Réattache uniquement les rendus déjà présents. Aucun scan, aucune
-     * lecture de cellules Routes et aucun recalcul HT n'est lancé ici.
-     * Utilisé notamment lors d'une reprise GPS ou d'une sortie de secours.
+     * Réactive uniquement les Canvas des rendus déjà calculés. Les LayerGroup
+     * n'ayant jamais quitté `map`, aucune boucle de réattachement de milliers
+     * d'objets n'est nécessaire. Aucun scan ni recalcul n'est lancé ici.
      */
     try {
         if (
             showHighVoltageLinesLayer
             && hasLoadedHighVoltageLines
-            && highVoltageLinesLayer
-            && !map.hasLayer(highVoltageLinesLayer)
+            && highVoltageLinesRenderer
+            && !map.hasLayer(highVoltageLinesRenderer)
         ) {
-            highVoltageLinesLayer.addTo(map);
+            highVoltageLinesRenderer.addTo(map);
         }
     } catch (_) {}
 
-    try {
-        if (
-            showRoadOverlayLayer
-            && getRoadOverlayZoomTier() > 0
-            && roadOverlayLayer
-            && !map.hasLayer(roadOverlayLayer)
-        ) {
-            roadOverlayLayer.addTo(map);
-        }
-    } catch (_) {}
+    if (showRoadOverlayLayer && getRoadOverlayZoomTier() > 0) {
+        [roadOverlayCasingRenderer, roadOverlayLineRenderer].forEach(renderer => {
+            try {
+                if (renderer && !map.hasLayer(renderer)) renderer.addTo(map);
+            } catch (_) {}
+        });
+    }
 
     npfHeavyOverlayPanesHidden = false;
     applyNpfMapOverlayPriorityVisibility();
@@ -7868,15 +7870,15 @@ function beginNpfMapOverlayPrioritySequence(reason = 'map-start') {
     }
 
     if (npfHeavyOverlayZoomOutPromise || npfHeavyOverlayZoomSettleTimer) {
-        try { cancelPendingSerializedHeavyOverlayZoomOut('priorité-carte-v17.09'); }
+        try { cancelPendingSerializedHeavyOverlayZoomOut('priorité-carte-v17.10'); }
         catch (_) {}
     }
 
     /*
-     * v17.09 — ne plus seulement masquer Routes/HT : les retirer réellement
-     * de la scène Leaflet pendant toute la manipulation.
+     * v17.10 — suspendre uniquement les renderers lourds et masquer leurs panes
+     * sans démonter les milliers d'objets des LayerGroup.
      */
-    detachNpfHeavyOverlayLayersForMapMotion(reason);
+    suspendNpfHeavyOverlayRenderersForMapMotion(reason);
     applyNpfMapOverlayPriorityVisibility();
 
     if (reason) {
@@ -8035,16 +8037,16 @@ async function runNpfMapOverlayPriorityRestore(token, reason = 'map-end') {
     if (showHighVoltageLinesLayer && hasLoadedHighVoltageLines) {
         try {
             /*
-             * v17.09 — reconstruire HT hors de la scène Leaflet. Le groupe
-             * n'est rattaché qu'une fois le nouveau rendu prêt.
+             * v17.10 — HT reste masqué pendant son recalcul. Le LayerGroup n'a
+             * jamais quitté `map` ; seul son renderer Canvas a été suspendu.
              */
             await refreshVisibleHighVoltageLines('overlay-priority-ht');
             if (
                 !isCancelled()
-                && highVoltageLinesLayer
-                && !map.hasLayer(highVoltageLinesLayer)
+                && highVoltageLinesRenderer
+                && !map.hasLayer(highVoltageLinesRenderer)
             ) {
-                highVoltageLinesLayer.addTo(map);
+                highVoltageLinesRenderer.addTo(map);
             }
         } catch (error) {
             console.warn(
@@ -8070,27 +8072,39 @@ async function runNpfMapOverlayPriorityRestore(token, reason = 'map-end') {
             const tier = getRoadOverlayZoomTier();
             if (tier > 0) {
                 /*
-                 * v17.09 — reconstruire Routes hors de la scène Leaflet puis
-                 * rattacher le parent seulement lorsque le rendu est prêt.
+                 * v17.10 — reconstruire Routes panes masqués ; les groupes restent
+                 * attachés et seuls les renderers Canvas sont réactivés après rendu.
                  */
                 await refreshRoadOverlayVisibleParts(
                     'overlay-priority-routes'
                 );
-                if (
-                    !isCancelled()
-                    && roadOverlayLayer
-                    && !map.hasLayer(roadOverlayLayer)
-                ) {
-                    roadOverlayLayer.addTo(map);
+                if (!isCancelled()) {
+                    [roadOverlayCasingRenderer, roadOverlayLineRenderer]
+                        .forEach(renderer => {
+                            try {
+                                if (renderer && !map.hasLayer(renderer)) renderer.addTo(map);
+                            } catch (_) {}
+                        });
                 }
             } else {
                 roadOverlayRefreshToken += 1;
                 clearTimeout(roadOverlayRefreshTimer);
                 roadOverlayRefreshTimer = null;
-                if (roadOverlayLayer && map.hasLayer(roadOverlayLayer)) {
-                    map.removeLayer(roadOverlayLayer);
-                }
                 roadOverlayLoadedZoomTier = 0;
+
+                /*
+                 * v17.10 — au tier 0 le parent reste attaché, donc les anciennes
+                 * géométries doivent être libérées progressivement après les
+                 * tuiles. Le token série permet à un nouveau geste d'interrompre
+                 * ce nettoyage sans bloquer le pinch.
+                 */
+                if (loadedRoadOverlayParts.size || roadOverlaySourceParts.size) {
+                    const cleanupToken = npfHeavyOverlayZoomSerialToken;
+                    await clearRoadOverlayRenderedPartsProgressively(
+                        { resetTier: false, clearSources: true },
+                        cleanupToken
+                    );
+                }
             }
         } catch (error) {
             console.warn(
@@ -8152,11 +8166,11 @@ function cancelNpfMapOverlayPriorityForGpsResume(reason = 'gps-resume') {
     npfHeavyOverlayPanesHidden = false;
 
     /*
-     * v17.09 — Routes/HT ont pu être physiquement détachés par le geste
-     * manuel précédent. La reprise GPS conserve le comportement historique :
-     * réafficher immédiatement le rendu existant, sans recalcul lourd.
+     * v17.10 — les renderers Routes/HT ont pu être suspendus par le geste
+     * manuel précédent. La reprise GPS les réactive immédiatement, sans
+     * recalcul lourd ni réattachement des LayerGroup.
      */
-    reattachNpfHeavyOverlayLayersWithoutRefresh(`reprise GPS · ${reason}`);
+    resumeNpfHeavyOverlayRenderersWithoutRefresh(`reprise GPS · ${reason}`);
 
     recordNpfStartupDiagnosticOverlaySnapshot(
         `priorité carte · annulée reprise GPS · ${reason}`
@@ -8198,7 +8212,7 @@ function scheduleNpfMapOverlayPriorityRestore(reason = 'map-end') {
                 npfMapOverlayPriorityActive = false;
                 npfMapManualGestureLockActive = false;
                 applyNpfMapOverlayPriorityVisibility();
-                reattachNpfHeavyOverlayLayersWithoutRefresh('erreur restitution');
+                resumeNpfHeavyOverlayRenderersWithoutRefresh('erreur restitution');
             }
         });
     }, NPF_MAP_MANUAL_GESTURE_SETTLE_MS);
@@ -8266,6 +8280,13 @@ function initMap() {
         }
     });
     map.on('zoomstart', () => {
+        /*
+         * v17.10 — un pinch reconnu comme zoom ne doit jamais basculer ensuite
+         * en règle deux doigts, même si Safari a retardé des touchmove.
+         */
+        cancelTwoFingerRulerTimer();
+        if (!twoFingerRulerActive) twoFingerRulerStartPoints = null;
+
         beginNpfMapOverlayPrioritySequence('zoomstart');
         /* v17.07 : tous les starts secondaires du même geste restent sous le même verrou. */
 
@@ -13235,22 +13256,16 @@ async function refreshVisibleHighVoltageLines(source = 'refresh') {
         return;
     }
 
-    /* v16.58 — en zoom éloigné ou sous charge combinée, libérer l'ancien
-     * Canvas AVANT de construire le nouveau. Cela évite le pic correspondant à
-     * deux jeux HT + SIA + routes simultanés pendant un zoom out. */
-    const memorySafeReplace = Number.isFinite(zoom) && zoom <= 10
-        || !!showRoadOverlayLayer
-        || !!(siaMapAirspacesVisible && hasAnyEnabledSiaFilter());
-    if (memorySafeReplace && previousLayer) {
-        try { highVoltageLinesLayer.removeLayer(previousLayer); } catch (_) {}
-        if (highVoltageLinesRenderedGeoJsonLayer === previousLayer) {
-            highVoltageLinesRenderedGeoJsonLayer = null;
-            highVoltageLinesRenderedFeatureCount = 0;
-        }
-        await new Promise(resolve => setTimeout(resolve, 0));
-        if (token !== highVoltageLinesRefreshToken || !showHighVoltageLinesLayer) return;
-    }
-
+    /*
+     * v17.10 — swap HT atomique.
+     * L'ancien rendu n'est JAMAIS supprimé avant que le nouveau soit construit
+     * et que le token soit encore valide. Si un pan/zoom interrompt ce calcul,
+     * la fonction quitte simplement et l'ancien HT reste disponible.
+     *
+     * Le bref chevauchement mémoire ancien+nouveau se produit uniquement après
+     * la fenêtre de priorité tuiles ; pendant un geste le renderer HT est
+     * suspendu, ce qui évite le coût graphique de ce double-buffer.
+     */
     const renderGeojson = buildHighVoltageAggregatedRenderGeojson(visibleFeatures);
     if (!renderGeojson.features.length) return;
 
@@ -13264,15 +13279,19 @@ async function refreshVisibleHighVoltageLines(source = 'refresh') {
 
     if (token !== highVoltageLinesRefreshToken || !showHighVoltageLinesLayer) return;
 
-    /* Vue rapprochée légère : double-buffer visuel conservé. Vue éloignée
-     * ou combinée : l'ancien rendu a déjà été libéré ci-dessus. */
+    /*
+     * Commit atomique : nouveau d'abord, ancien ensuite. Après ce point, une
+     * interruption ne peut plus laisser la couche HT vide.
+     */
     replacementLayer.addTo(highVoltageLinesLayer);
     highVoltageLinesRenderedGeoJsonLayer = replacementLayer;
     highVoltageLinesRenderedFeatureCount = visibleFeatures.length;
     highVoltageLinesRenderedBounds = L.latLngBounds(bounds.getSouthWest(), bounds.getNorthEast());
-    if (!memorySafeReplace) {
-        try { if (previousLayer && previousLayer !== replacementLayer) highVoltageLinesLayer.removeLayer(previousLayer); } catch (_) {}
-    }
+    try {
+        if (previousLayer && previousLayer !== replacementLayer) {
+            highVoltageLinesLayer.removeLayer(previousLayer);
+        }
+    } catch (_) {}
 
     if (source !== 'map-change') {
         recordNpfStartupDiagnosticOverlaySnapshot(`lignes-ht rendu ${source}`);
