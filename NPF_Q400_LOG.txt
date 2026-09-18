@@ -1,3 +1,109 @@
+VERSION TEST v17.10 — SUSPENSION RENDERERS + SWAP HT ATOMIQUE + PROTECTION PINCH/RÈGLE
+Date : 18/09/2026
+Base fonctionnelle : v17.09
+
+OBJECTIF UTILISATEUR
+- Conserver avec Routes ON + HT ON la fluidité de référence obtenue avec les
+  deux calques OFF, en donnant toujours la priorité absolue aux tuiles NPF.
+- Corriger deux régressions observées en v17.09 :
+  * disparition des lignes HT après certains déplacements/zooms ;
+  * gel lors de certains zooms arrière, pouvant laisser apparaître la règle
+    deux doigts « Règle mobile — zoom suspendu ».
+
+DIAG À L'ORIGINE
+- DIAG v17.09 du 18/09/2026 18:13 : Routes ON + HT ON.
+- Les données HT restent chargées (13 287 tronçons connus) alors que leur
+  affichage peut disparaître : le défaut est donc dans le cycle de rendu.
+- Pendant des séquences de zoom, Routes peut conserver plusieurs milliers de
+  segments rendus/source ; retirer le LayerGroup complet au `zoomstart` impose
+  à Leaflet un démontage synchrone de très nombreux Paths.
+- Le moteur HT v16.58/v17.09 pouvait retirer l'ancien rendu avant construction
+  du nouveau. Si le token changeait pendant le `await`, la fonction quittait
+  avec l'ancien déjà supprimé.
+- La règle deux doigts s'arme après 420 ms ; un gel du thread principal pendant
+  un pinch peut retarder les `touchmove` qui auraient normalement annulé ce
+  timer.
+
+MODIFICATIONS
+
+1. PLUS AUCUN DÉMONTAGE DES LAYERGROUP ROUTES / HT AU DÉBUT DU GESTE
+- `roadOverlayLayer` et `highVoltageLinesLayer` restent attachés à `map`.
+- Aucune itération de suppression sur leurs milliers de Paths au premier
+  `movestart` / `zoomstart`.
+- Les données, cellules, GeoJSON, groupes et labels restent en mémoire.
+
+2. SUSPENSION BORNÉE DES RENDERERS LOURDS
+- Au premier geste manuel, retrait uniquement de :
+  * `roadOverlayCasingRenderer` ;
+  * `roadOverlayLineRenderer` ;
+  * `highVoltageLinesRenderer`.
+- Trois opérations Leaflet au maximum, indépendamment du nombre de segments.
+- Les panes Routes/HT passent en `display:none` + `visibility:hidden` pendant
+  la séquence afin d'éviter leur composition WebKit.
+- Aucun recalcul Routes/HT n'est lancé pendant le geste.
+
+3. RESTITUTION TOUJOURS SUBORDONNÉE AUX TUILES
+- L'ordre reste strictement : Tuiles -> VFR -> HT -> Routes.
+- La fenêtre v17.08 reste conservée : tuiles visibles prêtes, file NPF vide,
+  lectures actives à 0, puis 320 ms de calme avant tout travail lourd.
+- Les renderers sont réactivés seulement après le recalcul correspondant.
+- En reprise GPS ou filet de sécurité, seuls les renderers existants sont
+  réactivés ; les LayerGroup n'ont plus à être réattachés.
+
+4. HT — REMPLACEMENT ATOMIQUE
+- Suppression du chemin `memorySafeReplace` qui retirait l'ancien HT avant de
+  construire le nouveau.
+- Nouveau cycle :
+  * conserver l'ancien rendu ;
+  * construire le nouveau ;
+  * vérifier à nouveau le token ;
+  * ajouter le nouveau ;
+  * supprimer seulement ensuite l'ancien.
+- Si un nouveau geste invalide le calcul, l'ancien rendu reste intact : HT ON
+  ne peut plus rester invisible à cause d'une interruption entre suppression
+  et reconstruction.
+
+5. PINCH / RÈGLE DEUX DOIGTS
+- Dès que Leaflet émet `zoomstart`, le timer d'activation de la règle deux
+  doigts est annulé et ses points d'armement sont remis à zéro si la règle
+  n'est pas déjà active.
+- Un pinch reconnu comme zoom ne peut donc plus déclencher ensuite la règle à
+  cause d'événements tactiles retardés.
+- La règle elle-même et son délai d'activation normal restent inchangés.
+
+6. MOTEUR TUILES INCHANGÉ
+- Scheduler 5 lectures IndexedDB : inchangé.
+- Curseur indexé `tileUrl` : inchangé.
+- Aucun `index.get()`.
+- Aucune annulation active des transactions.
+- Aucun batch v17.06.
+- Cache blobs, packs Offline, priorité de file et récupération IndexedDB :
+  inchangés.
+
+7. ÉLÉMENTS NON MODIFIÉS
+- SafeSky / GLR ; filtres et déduplication ;
+- BLOC/FUEL OACI ; WP / pointillé rouge ;
+- FdS/GAAR ; SIA/VAC ; recherche ; authentifications ; calculateur.
+
+VERSION
+- App : v17.10
+- Service Worker : `sw-v17-10_renderer_suspend_ht_atomic_swap`
+- SIA : strictement inchangé par rapport à v17.09.
+
+VALIDATION STATIQUE
+- Syntaxe JavaScript Script/SIA/SW : OK.
+- Script inline de l'Index : OK.
+- Manifest JSON : OK.
+- Cohérence Index / Manifest / Script / Style / SW v17.10 : OK.
+- SIA identique bit-à-bit à v17.09 : OK.
+- Moteur tuiles v17.09 non modifié : OK (diff limité aux zones version/séquenceur/rendu HT/règle).
+- LayerGroup Routes/HT non retirés au début du geste : OK.
+- Renderers lourds suspendus pendant le geste : OK.
+- Swap HT atomique : OK.
+- Timer règle annulé au `zoomstart` : OK.
+
+HISTORIQUE PRÉCÉDENT CONSERVÉ CI-DESSOUS
+
 VERSION TEST v17.09 — ROUTES / HT DÉTACHÉS PHYSIQUEMENT PENDANT PAN / ZOOM
 Date : 18/09/2026
 Base fonctionnelle : v17.08
