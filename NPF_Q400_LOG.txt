@@ -1,3 +1,89 @@
+VERSION TEST v17.08 — PRIORITÉ ABSOLUE TUILES / ROUTES-HT OPPORTUNISTES
+Date : 18/09/2026
+Base fonctionnelle : v17.07
+
+OBJECTIF UTILISATEUR
+- Obtenir avec Routes ON et HT ON la même fluidité de déplacement/zoom que
+  lorsque Routes OFF et HT OFF.
+- Accepter que Routes et HT apparaissent plus tard : le fond de carte NPF est
+  prioritaire sur leur chargement, leur recalcul et leur rendu.
+
+DIAG À L'ORIGINE
+- v17.07 confirme que des lenteurs peuvent encore exister Routes OFF / HT OFF.
+- Le moteur tuiles lui-même n'est donc PAS modifié dans cette version.
+- v17.07 conservait cependant deux chemins historiques permettant à Routes/HT
+  de contourner l'attente tuiles (`zoom-out-serial-*` et
+  `overlay-priority-*`). Cette logique n'est pas conforme à la priorité absolue
+  demandée.
+
+MODIFICATIONS
+
+1. MOTEUR TUILES STRICTEMENT INCHANGÉ
+- Scheduler NPF : 5 lectures IndexedDB simultanées, inchangé.
+- Une lecture historique par transaction, inchangée.
+- Curseur indexé `tileUrl`, inchangé.
+- Aucun `index.get()`, aucune annulation active, aucun batch v17.06.
+- Files, caches, packs Offline et mécanismes de récupération inchangés.
+
+2. NOUVELLE FENÊTRE STRICTE POUR ROUTES / HT
+- Avant tout travail lourd Routes ou HT, NPF attend désormais :
+  * toutes les tuiles visibles peintes ;
+  * file IndexedDB NPF = 0 ;
+  * lectures IndexedDB NPF actives = 0 ;
+  * état stable pendant 320 ms supplémentaires.
+- Tout nouveau geste invalide le token Routes/HT et annule cette reprise avant
+  le rendu lourd.
+- Les calques peuvent donc rester absents plus longtemps si la carte travaille.
+
+3. HT
+- Suppression du contournement d'attente tuiles pour
+  `zoom-out-serial-ht` et `overlay-priority-ht`.
+- Aucun scan des 13 287 tronçons, filtrage ou création GeoJSON HT ne commence
+  tant que la fenêtre stricte tuiles n'est pas obtenue.
+- En cas d'indisponibilité, HT est simplement différé et retenté.
+
+4. ROUTES
+- La fenêtre stricte tuiles est placée AVANT les changements de tier, nettoyages,
+  lectures de cellules et rendus Routes.
+- Suppression du contournement d'attente tuiles pour
+  `zoom-out-serial-routes` et `overlay-priority-routes`.
+- Un second contrôle est conservé juste avant la reconstruction effective.
+- En cas de reprise des lectures tuiles, Routes cède immédiatement la priorité.
+
+5. ZOOM OUT COMBINÉ ROUTES + HT
+- La séquence combinée attend elle aussi le repos complet des tuiles AVANT le
+  moindre nettoyage/recalcul lourd.
+- Si cette attente est annulée ou expire, les panes ne restent pas masqués.
+
+6. SÉQUENCEUR v17.07 CONSERVÉ
+- Vrai verrou de geste manuel conservé.
+- 500 ms de calme après geste conservés.
+- Ordre conservé : Tuiles -> VFR -> HT -> Routes.
+- GPS/simulation exclus du séquenceur manuel comme en v17.05/v17.07.
+
+7. ÉLÉMENTS NON MODIFIÉS
+- SafeSky / GLR ; filtres SafeSky automatiques ;
+- déduplication BENGA96/BENGALE96 ;
+- BLOC/FUEL OACI ; WP / pointillé rouge ;
+- FdS/GAAR ; SIA/VAC ; recherche ; authentifications ; calculateur.
+
+VERSION
+- App : v17.08
+- Service Worker : `sw-v17-08_tiles_absolute_priority_overlays_deferred`
+- SIA : strictement inchangé par rapport à v17.07.
+
+VALIDATION STATIQUE
+- Syntaxe JavaScript Script/SIA/SW : OK.
+- Manifest JSON : OK.
+- Cohérence Index / Manifest / Script / Style / SW v17.08 : OK.
+- moteur tuiles v17.07 non modifié : OK.
+- bypass Routes/HT `zoom-out-serial-*` / `overlay-priority-*` supprimés : OK.
+- fenêtre tuiles + 320 ms avant Routes/HT présente : OK.
+- verrou geste 500 ms v17.07 conservé : OK.
+- SIA identique bit-à-bit à v17.07 : OK.
+
+HISTORIQUE PRÉCÉDENT CONSERVÉ CI-DESSOUS
+
 VERSION TEST v17.07 — ROLLBACK v17.06 + VERROU RÉEL DE GESTE
 Date : 18/09/2026
 Base fonctionnelle : v17.05
