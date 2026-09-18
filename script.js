@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.12';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.13';
 
 
 /*
@@ -8073,9 +8073,17 @@ async function runNpfMapOverlayPriorityRestore(token, reason = 'map-end') {
     if (showHighVoltageLinesLayer && hasLoadedHighVoltageLines) {
         try {
             /*
-             * v17.11 — HT reste masqué pendant son recalcul. LayerGroup et
-             * renderer restent attachés ; seule la visibilité CSS est coupée.
+             * v17.13 — filet de sécurité démarrage / tier précédent.
+             * Si HT a été initialisé pendant une séquence prioritaire, son
+             * LayerGroup peut contenir le rendu sans avoir encore été attaché
+             * à `map`. Le rattacher ici, pane toujours masqué, garantit que la
+             * fin de restitution l'affichera sans OFF -> ON manuel.
+             * Pendant les gestes ordinaires v17.11+, le groupe est déjà attaché
+             * et ce bloc ne fait donc strictement rien.
              */
+            if (highVoltageLinesLayer && !map.hasLayer(highVoltageLinesLayer)) {
+                highVoltageLinesLayer.addTo(map);
+            }
             await refreshVisibleHighVoltageLines('overlay-priority-ht');
         } catch (error) {
             console.warn(
@@ -8101,9 +8109,16 @@ async function runNpfMapOverlayPriorityRestore(token, reason = 'map-end') {
             const tier = getRoadOverlayZoomTier();
             if (tier > 0) {
                 /*
-                 * v17.11 — reconstruire Routes panes masqués ; groupes et
-                 * renderers restent attachés pendant toute la séquence.
+                 * v17.13 — même protection que HT : si Routes a été laissé
+                 * détaché par un démarrage/tier 0 antérieur, rattacher le
+                 * LayerGroup avant le recalcul. Le pane Routes est encore
+                 * masqué à ce stade ; le fond reste donc prioritaire.
+                 * Sur un geste normal, le groupe est déjà présent et aucun
+                 * travail supplémentaire n'est effectué.
                  */
+                if (roadOverlayLayer && !map.hasLayer(roadOverlayLayer)) {
+                    roadOverlayLayer.addTo(map);
+                }
                 await refreshRoadOverlayVisibleParts(
                     'overlay-priority-routes'
                 );
