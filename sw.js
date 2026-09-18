@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v17-10_renderer_suspend_ht_atomic_swap';
-const APP_VERSION = 'v17.10';
+const SW_VERSION = 'sw-v17-11_touch_premask_no_renderer_detach';
+const APP_VERSION = 'v17.11';
 const SIA_DATA_REVISION = '15.69-radio1026-1-maplite1';
 const SIA_DATA_URL = './sia.js';
 const SIA_DATA_CACHE = `npf-q400-sia-data-${SIA_DATA_REVISION}`;
