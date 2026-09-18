@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.10';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.11';
 
 
 /*
@@ -7696,6 +7696,9 @@ function ensureTwoFingerRulerControl() {
     if (!map || !map.getContainer || map.__npfTwoFingerRulerReady) return;
     const container = map.getContainer();
     container.addEventListener('touchstart', handleTwoFingerRulerTouchStart, { passive: false });
+    /* v17.11 — avant les handlers Leaflet/bubble : cacher Routes/HT sur le
+     * premier mouvement du même geste, sans retirer aucun renderer. */
+    container.addEventListener('touchmove', handleNpfHeavyOverlayTouchPreMask, { passive: true, capture: true });
     container.addEventListener('touchmove', handleTwoFingerRulerTouchMove, { passive: false });
     container.addEventListener('touchend', handleTwoFingerRulerTouchEnd, { passive: false });
     container.addEventListener('touchcancel', handleTwoFingerRulerTouchEnd, { passive: false });
@@ -7749,31 +7752,10 @@ function applyNpfMapOverlayPriorityVisibility() {
 }
 
 
-function suspendNpfHeavyOverlayRenderersForMapMotion(reason = 'map-start') {
+let npfHeavyOverlayTouchPreMaskRestoreTimer = null;
+
+function hideNpfHeavyOverlayPanesImmediately() {
     if (!map) return;
-
-    /*
-     * v17.10 — priorité physique au fond sans démontage des LayerGroup.
-     *
-     * v17.09 retirait `roadOverlayLayer` et `highVoltageLinesLayer` de `map`.
-     * Avec plusieurs milliers de Paths, Leaflet devait alors démonter la scène
-     * synchroniquement au début d'un pinch, ce qui pouvait figer Safari.
-     *
-     * v17.10 conserve donc les groupes et toutes leurs géométries en mémoire,
-     * mais retire uniquement les TROIS renderers Canvas lourds. C'est une
-     * opération bornée, indépendante du nombre de segments. Les panes lourds
-     * passent aussi en `display:none` pendant le geste pour supprimer leur coût
-     * de composition. Aucun recalcul Routes/HT n'est lancé ici.
-     */
-    [roadOverlayCasingRenderer, roadOverlayLineRenderer, highVoltageLinesRenderer]
-        .forEach(renderer => {
-            try {
-                if (renderer && map.hasLayer(renderer)) {
-                    map.removeLayer(renderer);
-                }
-            } catch (_) {}
-        });
-
     [
         'roadOverlayCasingPane',
         'roadOverlayLinePane',
@@ -7788,7 +7770,72 @@ function suspendNpfHeavyOverlayRenderersForMapMotion(reason = 'map-start') {
             }
         } catch (_) {}
     });
+}
 
+function scheduleNpfHeavyOverlayTouchPreMaskRestore() {
+    if (npfHeavyOverlayTouchPreMaskRestoreTimer) {
+        clearTimeout(npfHeavyOverlayTouchPreMaskRestoreTimer);
+    }
+    npfHeavyOverlayTouchPreMaskRestoreTimer = setTimeout(() => {
+        npfHeavyOverlayTouchPreMaskRestoreTimer = null;
+        if (
+            !npfMapOverlayPriorityActive
+            && !npfMapManualGestureLockActive
+            && !twoFingerRulerActive
+        ) {
+            applyNpfMapOverlayPriorityVisibility();
+        }
+    }, 260);
+}
+
+function handleNpfHeavyOverlayTouchPreMask(event) {
+    if (
+        !map
+        || !event?.touches
+        || event.touches.length < 1
+        || event.touches.length > 2
+        || twoFingerRulerActive
+    ) return;
+
+    const htHeavy = !!showHighVoltageLinesLayer && !!hasLoadedHighVoltageLines;
+    const routesHeavy = !!showRoadOverlayLayer && getRoadOverlayZoomTier() > 0;
+    if (!htHeavy && !routesHeavy) return;
+
+    /*
+     * v17.11 — pré-masquage tactile avant Leaflet.
+     *
+     * Le listener est installé en phase CAPTURE. Au tout premier `touchmove`,
+     * les panes Routes/HT passent donc en `display:none` avant que Leaflet ne
+     * traite ce même mouvement comme pan/pinch. Aucune couche, aucun renderer,
+     * aucune géométrie n'est retiré de `map` ici.
+     *
+     * Si le mouvement ne devient finalement pas un geste Leaflet, un petit
+     * filet de sécurité restaure l'affichage automatiquement.
+     */
+    hideNpfHeavyOverlayPanesImmediately();
+    scheduleNpfHeavyOverlayTouchPreMaskRestore();
+}
+
+function suspendNpfHeavyOverlayRenderersForMapMotion(reason = 'map-start') {
+    if (!map) return;
+
+    /*
+     * v17.11 — aucun démontage au premier geste.
+     *
+     * v17.10 retirait encore les trois renderers Canvas via `map.removeLayer()`.
+     * Le DIAG utilisateur montre que cette première opération pouvait consommer
+     * le premier pan/pinch : les calques disparaissaient, puis la seconde
+     * tentative devenait fluide.
+     *
+     * Les renderers, LayerGroup et Paths restent désormais attachés à Leaflet
+     * en permanence. Pendant le geste on ne fait qu'un changement CSS borné :
+     * `display:none` + `visibility:hidden` sur les panes lourds.
+     */
+    if (npfHeavyOverlayTouchPreMaskRestoreTimer) {
+        clearTimeout(npfHeavyOverlayTouchPreMaskRestoreTimer);
+        npfHeavyOverlayTouchPreMaskRestoreTimer = null;
+    }
+    hideNpfHeavyOverlayPanesImmediately();
     npfHeavyOverlayPanesHidden = true;
 }
 
@@ -7796,29 +7843,14 @@ function resumeNpfHeavyOverlayRenderersWithoutRefresh(reason = 'restore') {
     if (!map) return;
 
     /*
-     * Réactive uniquement les Canvas des rendus déjà calculés. Les LayerGroup
-     * n'ayant jamais quitté `map`, aucune boucle de réattachement de milliers
-     * d'objets n'est nécessaire. Aucun scan ni recalcul n'est lancé ici.
+     * v17.11 — rien à rattacher : les renderers n'ont jamais quitté `map`.
+     * Cette fonction ne fait que restaurer la visibilité correspondant à
+     * l'état courant du séquenceur, sans scan ni recalcul lourd.
      */
-    try {
-        if (
-            showHighVoltageLinesLayer
-            && hasLoadedHighVoltageLines
-            && highVoltageLinesRenderer
-            && !map.hasLayer(highVoltageLinesRenderer)
-        ) {
-            highVoltageLinesRenderer.addTo(map);
-        }
-    } catch (_) {}
-
-    if (showRoadOverlayLayer && getRoadOverlayZoomTier() > 0) {
-        [roadOverlayCasingRenderer, roadOverlayLineRenderer].forEach(renderer => {
-            try {
-                if (renderer && !map.hasLayer(renderer)) renderer.addTo(map);
-            } catch (_) {}
-        });
+    if (npfHeavyOverlayTouchPreMaskRestoreTimer) {
+        clearTimeout(npfHeavyOverlayTouchPreMaskRestoreTimer);
+        npfHeavyOverlayTouchPreMaskRestoreTimer = null;
     }
-
     npfHeavyOverlayPanesHidden = false;
     applyNpfMapOverlayPriorityVisibility();
 }
@@ -7870,13 +7902,14 @@ function beginNpfMapOverlayPrioritySequence(reason = 'map-start') {
     }
 
     if (npfHeavyOverlayZoomOutPromise || npfHeavyOverlayZoomSettleTimer) {
-        try { cancelPendingSerializedHeavyOverlayZoomOut('priorité-carte-v17.10'); }
+        try { cancelPendingSerializedHeavyOverlayZoomOut('priorité-carte-v17.11'); }
         catch (_) {}
     }
 
     /*
-     * v17.10 — suspendre uniquement les renderers lourds et masquer leurs panes
-     * sans démonter les milliers d'objets des LayerGroup.
+     * v17.11 — aucun retrait Leaflet : le geste ne fait que maintenir les panes
+     * lourds masqués. Le pré-masquage tactile a déjà pu les cacher avant le
+     * premier mouvement traité par Leaflet.
      */
     suspendNpfHeavyOverlayRenderersForMapMotion(reason);
     applyNpfMapOverlayPriorityVisibility();
@@ -8037,17 +8070,10 @@ async function runNpfMapOverlayPriorityRestore(token, reason = 'map-end') {
     if (showHighVoltageLinesLayer && hasLoadedHighVoltageLines) {
         try {
             /*
-             * v17.10 — HT reste masqué pendant son recalcul. Le LayerGroup n'a
-             * jamais quitté `map` ; seul son renderer Canvas a été suspendu.
+             * v17.11 — HT reste masqué pendant son recalcul. LayerGroup et
+             * renderer restent attachés ; seule la visibilité CSS est coupée.
              */
             await refreshVisibleHighVoltageLines('overlay-priority-ht');
-            if (
-                !isCancelled()
-                && highVoltageLinesRenderer
-                && !map.hasLayer(highVoltageLinesRenderer)
-            ) {
-                highVoltageLinesRenderer.addTo(map);
-            }
         } catch (error) {
             console.warn(
                 'Restitution prioritaire lignes HT impossible:',
@@ -8072,20 +8098,12 @@ async function runNpfMapOverlayPriorityRestore(token, reason = 'map-end') {
             const tier = getRoadOverlayZoomTier();
             if (tier > 0) {
                 /*
-                 * v17.10 — reconstruire Routes panes masqués ; les groupes restent
-                 * attachés et seuls les renderers Canvas sont réactivés après rendu.
+                 * v17.11 — reconstruire Routes panes masqués ; groupes et
+                 * renderers restent attachés pendant toute la séquence.
                  */
                 await refreshRoadOverlayVisibleParts(
                     'overlay-priority-routes'
                 );
-                if (!isCancelled()) {
-                    [roadOverlayCasingRenderer, roadOverlayLineRenderer]
-                        .forEach(renderer => {
-                            try {
-                                if (renderer && !map.hasLayer(renderer)) renderer.addTo(map);
-                            } catch (_) {}
-                        });
-                }
             } else {
                 roadOverlayRefreshToken += 1;
                 clearTimeout(roadOverlayRefreshTimer);
@@ -8281,7 +8299,7 @@ function initMap() {
     });
     map.on('zoomstart', () => {
         /*
-         * v17.10 — un pinch reconnu comme zoom ne doit jamais basculer ensuite
+         * v17.11 — un pinch reconnu comme zoom ne doit jamais basculer ensuite
          * en règle deux doigts, même si Safari a retardé des touchmove.
          */
         cancelTwoFingerRulerTimer();
