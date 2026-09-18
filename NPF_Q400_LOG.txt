@@ -1,3 +1,178 @@
+VERSION TEST v17.06 — CORRECTION COMBINÉE CALQUES + LATENCE TUILES LONGUE SESSION
+Date : 18/09/2026
+Base : TEST v17.05
+
+OBJECTIFS
+1. Conserver la correction v17.05 de transition geste manuel -> reprise GPS.
+2. Traiter séparément le problème encore présent de chargement des tuiles après
+   quelques minutes, sans réintroduire les essais déjà invalidés.
+
+ENSEIGNEMENTS DE TOUS LES ESSAIS PRÉCÉDENTS PRIS EN COMPTE
+- v16.75 : référence de fluidité carte.
+- concurrence 5 -> 2 : échec, retour à 5.
+- `index.get(tileUrl)` : échec, latence IDB toujours présente.
+- annulation des transactions actives : échec net, churn/reprises.
+- retour du moteur v16.75 en v17.01 : nécessaire, mais la dégradation Safari /
+  IndexedDB de longue session reste observable.
+- v17.02 -> v17.05 : séquence VFR/HT/Routes affinée et GPS exclu du masquage.
+
+CORRECTIONS v17.06
+
+A. TRANSITION GESTE MANUEL -> REPRISE GPS
+- Correction v17.05 intégralement conservée.
+- Si le GPS reprend pendant une séquence Tuiles -> VFR -> HT -> Routes :
+  la séquence de l'ancien viewport est invalidée et les panes sont réaffichés,
+  sans lancer de recalcul lourd.
+
+B. TUILES NPF — NOUVEL AXE : TRANSACTIONS INDEXEDDB GROUPÉES
+- Le scheduler reste à 5 lectures simultanées.
+- Jusqu'à 5 recherches NPF utilisent désormais UNE transaction readonly
+  `tiles` commune au lieu d'ouvrir 5 transactions séparées.
+- L'index `tileUrl` reste le curseur indexé historique de la référence.
+- Aucun `index.get()` n'est réintroduit.
+- Les anciennes compatibilités legacy restent disponibles.
+- OACI et les autres cartes gardent le chemin historique unitaire.
+
+RAISON
+Les DIAG v16.93-v17.04 ont établi que :
+- l'ouverture de la base n'était pas le coût principal ;
+- le curseur indexé trouvait généralement en une étape ;
+- la latence venait de la transaction/lecture IndexedDB elle-même.
+Le regroupement réduit donc le nombre de transactions sans modifier le nombre
+de tuiles demandées ni annuler les opérations déjà lancées.
+
+C. AUTO-RÉTABLISSEMENT DOUX DE CONNEXION IDB
+- Déclenché seulement après au moins 30 s de session.
+- Déclenché uniquement si la lenteur est répétée :
+  * 3 transactions groupées consécutives >= 1,2 s, OU
+  * 2 transactions groupées consécutives >= 2,5 s.
+- Une pointe isolée ne déclenche rien.
+- Le refresh attend obligatoirement :
+  * 0 lecture active ;
+  * file tuiles vide ;
+  * 0 transaction batch active.
+- Il ferme uniquement les connexions IndexedDB mises en cache.
+- Aucun blob RAM n'est supprimé.
+- Aucun calque n'est reconstruit.
+- Aucune transaction active n'est annulée.
+- La tuile suivante rouvrira une connexion fraîche.
+- Cooldown 30 s entre deux refresh.
+
+D. DIAGNOSTIC
+Nouvelle ligne dans le DIAG :
+`Tuiles NPF batch IDB`
+avec :
+- nombre de transactions ;
+- nombre de lectures ;
+- moyenne/max de durée batch ;
+- nombre de batches >=1,2 s ;
+- nombre de refresh doux de connexion.
+
+CE QUI N'EST PAS RÉINTRODUIT
+- pas de concurrence à 2 ;
+- pas de `index.get(tileUrl)` ;
+- pas d'annulation de transactions obsolètes ;
+- pas de retry agressif ;
+- pas de purge des blobs RAM lors du refresh doux.
+
+AUTRES MODULES
+Aucun changement fonctionnel :
+SafeSky/GLR, BLOC/FUEL, WP, FdS/GAAR, recherche, SIA/VAC, calculateur,
+authentifications et logique GPS de v17.05 sont conservés.
+
+VERSION
+- App : v17.06
+- Service Worker : `sw-v17-06_idb_batch_soft_refresh_gps_resume`
+
+VALIDATION STATIQUE
+- Syntaxe JavaScript Script/SIA/SW : OK.
+- Manifest JSON : OK.
+- Scheduler NPF = 5 : OK.
+- `index.get(tileUrl)` absent : OK.
+- annulation active obsolète v17.00 absente : OK.
+- batch NPF max 5 / transaction readonly unique : OK.
+- refresh doux uniquement à l'idle : OK.
+- cache blobs non vidé par refresh doux : OK.
+- correction v17.05 reprise GPS conservée : OK.
+- chemins SIA gps-follow / Routes-HT gps-follow-edge conservés : OK.
+- fonctions SafeSky/GLR/BLOC/WP conservées : OK.
+
+HISTORIQUE PRÉCÉDENT CONSERVÉ INTÉGRALEMENT
+
+VERSION TEST v17.05 — ANNULATION PROPRE DE LA SÉQUENCE À LA REPRISE GPS
+Date : 18/09/2026
+Base : TEST v17.04
+Moteur tuiles : référence v16.75 / v17.01, strictement conservé
+
+PROBLÈME OBSERVÉ EN v17.04
+Après un geste manuel/zoom, la séquence :
+Tuiles -> VFR -> HT -> Routes
+pouvait rester active lorsque le suivi GPS/simulation reprenait.
+
+Le viewport continuait alors à se déplacer automatiquement alors que la
+séquence attendait encore la fin correspondant à l'ancien viewport.
+Conséquence observée : restitution inachevée, notamment Routes ON mais non
+rendues et SIA absent en fin de session.
+
+CORRECTION v17.05 — STRICTEMENT CIBLÉE
+
+1. REPRISE GPS PENDANT UNE SÉQUENCE MANUELLE ACTIVE
+- Au premier `gps-movestart`, si le séquenceur est encore actif :
+  * son token est invalidé ;
+  * son timer de restitution est annulé ;
+  * la séquence est marquée terminée ;
+  * les panes VFR / HT / Routes sont immédiatement remis visibles.
+- Aucun recalcul SIA/HT/Routes n'est déclenché par cette annulation.
+- Aucun recalcul des tuiles n'est déclenché par cette annulation.
+
+2. FILET DE SÉCURITÉ SUR `gps-moveend`
+- Si un `gps-movestart` n'a pas été identifié à temps, la même annulation
+  légère est appliquée au `gps-moveend`.
+- Toujours sans recalcul lourd.
+
+3. COMPORTEMENT GPS HISTORIQUE CONSERVÉ
+- SIA : chemin `gps-follow`.
+- Routes : chemin `gps-follow-edge`.
+- HT : chemin `gps-follow-edge`.
+- Les overlays restent visibles pendant le suivi GPS/simulation.
+
+4. GESTES MANUELS / ZOOMS
+Aucun changement par rapport à v17.04 :
+- pan manuel : Tuiles -> VFR -> HT -> Routes ;
+- zoom manuel : Tuiles -> VFR -> HT -> Routes ;
+- coalescence zoomstart + movestart conservée ;
+- attente réelle de fin des tuiles conservée.
+
+5. MOTEUR TUILES
+AUCUNE MODIFICATION :
+- 6 blocs principaux byte-for-byte identiques à v17.04/v17.01 ;
+- 5 lectures simultanées ;
+- pas de `index.get()` ;
+- pas d'annulation de transaction active ;
+- pas de nouveau retry ;
+- aucun changement du cache/IndexedDB/epochs.
+
+6. AUTRES MODULES
+Aucun changement fonctionnel :
+SafeSky/GLR, BLOC/FUEL, WP, FdS/GAAR, recherche, SIA/VAC, calculateur,
+authentifications et autres fonctions restent celles de v17.04.
+
+VERSION
+- App : v17.05
+- Service Worker : `sw-v17-05_gps_resume_cancel_overlay_sequence`
+
+VALIDATION STATIQUE
+- Syntaxe JavaScript Script/SIA/SW : OK.
+- Manifest JSON : OK.
+- 6 blocs moteur tuiles identiques à v17.04 : OK.
+- GPS movestart annule une séquence manuelle encore active : OK.
+- GPS moveend possède le filet de sécurité : OK.
+- aucune fonction de refresh SIA/HT/Routes appelée par l'annulation : OK.
+- chemins historiques `gps-follow` / `gps-follow-edge` conservés : OK.
+- gestes manuels / zooms v17.04 conservés : OK.
+
+HISTORIQUE PRÉCÉDENT CONSERVÉ INTÉGRALEMENT
+
 VERSION TEST v17.04 — GPS/SIMULATION EXCLU DU SÉQUENCEUR DE CALQUES
 Date : 18/09/2026
 Base : TEST v17.03
