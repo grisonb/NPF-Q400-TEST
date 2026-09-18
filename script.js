@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.11';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.12';
 
 
 /*
@@ -2501,6 +2501,9 @@ const VAC_LEGACY_DOLE_LFSJ_SHA256 = '17c83cb0e4f607e336962e05bb593d6d80543275814
 let vacDb = null;
 let vacSyncInProgress = false;
 let pendingVacUpdateManifest = null;
+/* v17.12 — première installation VAC : décision utilisateur valable pour la session. */
+let vacInitialDownloadPromptActive = false;
+let vacInitialDownloadDeclinedForSession = false;
 let vacAutomaticSyncTimer = null;
 let vacAutomaticSyncSequence = 0;
 let vacAutomaticSyncLastAttemptAt = 0;
@@ -8284,9 +8287,17 @@ function initMap() {
          * Le premier start ouvre le verrou ; les starts suivants du même geste
          * sont ignorés jusqu'à stabilisation.
          */
-        beginNpfMapOverlayPrioritySequence('movestart');
+        const startedNewNpfManualGesture = beginNpfMapOverlayPrioritySequence('movestart');
 
-        beginBaseMapZoomStabilityGuard('movestart');
+        /*
+         * v17.12 — un seul epoch de priorité tuiles par geste manuel.
+         * `movestart` et `zoomstart` peuvent appartenir au même pinch/pan ;
+         * seul le premier start qui ouvre réellement le verrou de geste peut
+         * donc rebattre la priorité de la file IndexedDB et trimmer le cache.
+         */
+        if (startedNewNpfManualGesture) {
+            beginBaseMapZoomStabilityGuard('movestart');
+        }
         beginMapVisualRenderGuard('movestart');
         if (showRoadOverlayLayer) {
             roadOverlayRefreshToken += 1;
@@ -8305,8 +8316,8 @@ function initMap() {
         cancelTwoFingerRulerTimer();
         if (!twoFingerRulerActive) twoFingerRulerStartPoints = null;
 
-        beginNpfMapOverlayPrioritySequence('zoomstart');
-        /* v17.07 : tous les starts secondaires du même geste restent sous le même verrou. */
+        const startedNewNpfManualGesture = beginNpfMapOverlayPrioritySequence('zoomstart');
+        /* v17.12 : les starts secondaires du même geste ne recréent pas un epoch tuiles. */
 
         if (!Number.isFinite(npfHeavyOverlayZoomStartLevel)) {
             npfHeavyOverlayZoomStartLevel = Number(map.getZoom?.());
@@ -8336,7 +8347,9 @@ function initMap() {
             clearTimeout(directOfflineNpfZoomSettleTimer);
             directOfflineNpfZoomSettleTimer = null;
         }
-        beginBaseMapZoomStabilityGuard('zoomstart');
+        if (startedNewNpfManualGesture) {
+            beginBaseMapZoomStabilityGuard('zoomstart');
+        }
         beginMapVisualRenderGuard('zoomstart');
         if (showRoadOverlayLayer) {
             roadOverlayRefreshToken += 1;
@@ -12173,22 +12186,35 @@ function setupEventListeners() {
             const manifestToApply = pendingVacUpdateManifest;
             closeVacUpdatePrompt();
             if (!manifestToApply) return;
-            if (offlineMapModal) offlineMapModal.style.display = 'flex';
-            await displayVacManagementStatus();
+
+            vacInitialDownloadDeclinedForSession = false;
+            const sequence = ++vacAutomaticSyncSequence;
             try {
-                await syncVacFromManifest(manifestToApply, { source: 'startup-prompt' });
+                /*
+                 * v17.12 — le choix « Oui » lance le téléchargement hors ligne
+                 * en arrière-plan, avec la même priorité carte que l'auto-sync.
+                 */
+                await syncVacFromManifest(manifestToApply, {
+                    source: 'startup-initial-prompt',
+                    silent: true,
+                    background: true,
+                    sequence
+                });
             } catch (error) {
-                console.error('[VAC] Mise à jour depuis l’alerte impossible:', error);
-                alert(`Mise à jour des cartes VAC impossible : ${error.message || error}`);
+                console.error('[VAC] Téléchargement initial impossible:', error);
             }
         });
     }
     if (vacUpdateLaterButton) {
-        vacUpdateLaterButton.addEventListener('click', closeVacUpdatePrompt);
+        vacUpdateLaterButton.addEventListener('click', () => {
+            vacInitialDownloadDeclinedForSession = true;
+            closeVacUpdatePrompt();
+        });
     }
     if (vacUpdateModal) {
+        /* v17.12 — décision explicite Oui/Non : un clic sur le fond ne ferme pas la question. */
         vacUpdateModal.addEventListener('click', event => {
-            if (event.target === vacUpdateModal) closeVacUpdatePrompt();
+            if (event.target === vacUpdateModal) event.preventDefault();
         });
     }
 
@@ -24813,21 +24839,31 @@ function closeVacUpdatePrompt() {
         modal.style.display = 'none';
         modal.setAttribute('aria-hidden', 'true');
     }
+    vacInitialDownloadPromptActive = false;
     pendingVacUpdateManifest = null;
 }
 
 function showVacUpdatePrompt(manifest, updateCount) {
     const modal = document.getElementById('vac-update-modal');
+    const title = document.getElementById('vac-update-modal-title');
     const detail = document.getElementById('vac-update-detail');
+    const yesButton = document.getElementById('vac-update-now-button');
+    const noButton = document.getElementById('vac-update-later-button');
     if (!modal) return false;
 
+    /*
+     * v17.12 — première installation uniquement.
+     * Libellés imposés : « Télécharger cartes VAC » / « Oui » / « Non ».
+     */
     pendingVacUpdateManifest = manifest;
+    vacInitialDownloadPromptActive = true;
+    if (title) title.textContent = 'Télécharger cartes VAC';
     if (detail) {
-        const cycle = String(manifest?.sourceCycle || '').trim();
-        detail.textContent = cycle
-            ? `${updateCount} carte(s) concernée(s) — cycle ${cycle}.`
-            : `${updateCount} carte(s) concernée(s).`;
+        detail.textContent = '';
+        detail.style.display = 'none';
     }
+    if (yesButton) yesButton.textContent = 'Oui';
+    if (noButton) noButton.textContent = 'Non';
     modal.style.display = 'flex';
     modal.setAttribute('aria-hidden', 'false');
     return true;
@@ -24837,6 +24873,7 @@ async function checkVacUpdatesAtStartup(options = {}) {
     const source = String(options.source || 'startup');
     if (!navigator.onLine) return false;
     if (vacSyncInProgress) return false;
+    if (vacInitialDownloadPromptActive || vacInitialDownloadDeclinedForSession) return false;
 
     const now = Date.now();
     if (source !== 'startup' && now - vacAutomaticSyncLastAttemptAt < 2500) {
@@ -24847,9 +24884,10 @@ async function checkVacUpdatesAtStartup(options = {}) {
     const sequence = ++vacAutomaticSyncSequence;
 
     /*
-     * v16.48 — synchronisation automatique générale.
-     * Aucune confirmation : toutes les VAC publiées et absentes/modifiées sont
-     * récupérées en arrière-plan. La carte NPF garde la priorité absolue.
+     * v17.12 — contrôle VAC après disponibilité de la carte.
+     * - première installation (0 VAC locale) : demander Oui/Non ;
+     * - installation existante : conserver les mises à jour automatiques.
+     * La carte NPF garde dans tous les cas la priorité absolue.
      */
     const mapReady = await waitForVacBackgroundOpportunity({
         sequence,
@@ -24865,6 +24903,7 @@ async function checkVacUpdatesAtStartup(options = {}) {
     let manifest;
     try {
         manifest = await fetchVacManifest(9000);
+        persistVacManifestSummary(manifest);
     } catch (error) {
         console.info('[VAC] Manifest automatique indisponible:', error.message || error);
         if (navigator.onLine) {
@@ -24889,6 +24928,16 @@ async function checkVacUpdatesAtStartup(options = {}) {
             localStorage.setItem(VAC_LAST_SUCCESSFUL_SYNC_KEY, String(Date.now()));
         } catch (_) {}
         await displayVacManagementStatus();
+        return true;
+    }
+
+    const installedVacCount = localRecords.reduce(
+        (count, record) => count + (record?.blob instanceof Blob ? 1 : 0),
+        0
+    );
+    if (source === 'startup' && installedVacCount === 0) {
+        refreshUI();
+        showVacUpdatePrompt(manifest, targets.length);
         return true;
     }
 
