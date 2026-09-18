@@ -1,3 +1,88 @@
+VERSION TEST v17.11 — PRÉ-MASQUAGE TACTILE + ZÉRO RETRAIT RENDERER AU GESTE
+Date : 18/09/2026
+Base fonctionnelle : v17.10
+
+OBJECTIF UTILISATEUR
+- Conserver la bonne fluidité obtenue en v17.10 avec Routes + HT actifs.
+- Supprimer le défaut restant : la première tentative de déplacement/zoom peut
+  être absorbée par la désactivation des calques, puis la seconde fonctionne.
+- Le même premier geste doit immédiatement déplacer/zoomer la carte.
+
+DIAG À L'ORIGINE
+- DIAG v17.10 du 18/09/2026 18:35 : la fluidité finale est bonne, mais plusieurs
+  séquences montrent un premier `zoomstart` sans fin de zoom, puis un second
+  `zoomstart` qui aboutit normalement.
+- En v17.10, le premier geste exécute encore trois `map.removeLayer(renderer)`
+  synchrones pour Routes/HT. Même si ce nombre est borné, Leaflet peut devoir
+  détacher le Canvas et son état graphique au moment précis où le pinch démarre.
+- Constat utilisateur : première tentative bloquée mais les calques sont alors
+  désactivés visuellement ; seconde tentative fluide.
+
+MODIFICATIONS
+
+1. ZÉRO RETRAIT / RATTACHEMENT DES RENDERERS PENDANT PAN / ZOOM
+- Suppression de tout `map.removeLayer()` sur :
+  * `roadOverlayCasingRenderer` ;
+  * `roadOverlayLineRenderer` ;
+  * `highVoltageLinesRenderer`.
+- Suppression symétrique des `renderer.addTo(map)` de restitution.
+- Les renderers, LayerGroup, Paths et données restent attachés à Leaflet en
+  permanence pendant le geste.
+
+2. PRÉ-MASQUAGE TACTILE AVANT LE TRAITEMENT LEAFLET
+- Ajout d'un listener `touchmove` en phase `capture` sur le conteneur carte.
+- Au tout premier mouvement tactile, si Routes ou HT sont effectivement actifs,
+  leurs panes passent immédiatement en `display:none` + `visibility:hidden`.
+- Le listener ne fait aucun `preventDefault`, aucun calcul de géométrie, aucun
+  accès IndexedDB et aucun retrait de couche : le même événement tactile
+  continue ensuite vers Leaflet pour produire le pan/pinch normalement.
+- Si ce mouvement ne devient finalement pas un geste Leaflet, un filet de
+  sécurité de 260 ms restaure l'affichage automatiquement.
+
+3. SÉQUENCE PRIORITAIRE CONSERVÉE
+- Au `movestart/zoomstart`, le séquenceur ne fait plus que maintenir les panes
+  lourds masqués et invalider les anciens travaux de rendu.
+- Ordre inchangé : Tuiles -> VFR -> HT -> Routes.
+- La fenêtre de repos tuiles v17.08/v17.10 reste inchangée.
+
+4. HT ATOMIQUE CONSERVÉ
+- Le swap HT v17.10 n'est pas modifié : ancien rendu conservé jusqu'à validation
+  du nouveau, puis remplacement.
+- La correction anti-disparition HT reste donc active.
+
+5. PINCH / RÈGLE CONSERVÉ
+- L'annulation du timer de règle au `zoomstart` est conservée.
+- Aucun changement au comportement normal de la règle deux doigts.
+
+6. MOTEUR TUILES INCHANGÉ
+- Scheduler 5 lectures IndexedDB : inchangé.
+- Curseur indexé `tileUrl` : inchangé.
+- Aucun `index.get()`, aucune annulation active, aucun batch v17.06.
+- Cache blobs, file de priorité, packs Offline et récupération IDB : inchangés.
+
+7. ÉLÉMENTS NON MODIFIÉS
+- SafeSky / GLR ; filtres et déduplication ;
+- BLOC/FUEL OACI ; WP / pointillé rouge ;
+- FdS/GAAR ; SIA/VAC ; recherche ; authentifications ; calculateur.
+
+VERSION
+- App : v17.11
+- Service Worker : `sw-v17-11_touch_premask_no_renderer_detach`
+- SIA : strictement inchangé par rapport à v17.10.
+
+VALIDATION STATIQUE
+- Syntaxe JavaScript Script/SIA/SW : OK.
+- Script inline de l'Index : OK.
+- Manifest JSON : OK.
+- Cohérence Index / Manifest / Script / Style / SW v17.11 : OK.
+- SIA identique bit-à-bit à v17.10 : OK.
+- Moteur tuiles v17.10 non modifié : OK.
+- Aucun retrait/rattachement renderer Routes/HT dans le séquenceur : OK.
+- Pré-masquage `touchmove` capture installé : OK.
+- Swap HT atomique v17.10 conservé : OK.
+
+HISTORIQUE PRÉCÉDENT CONSERVÉ CI-DESSOUS
+
 VERSION TEST v17.10 — SUSPENSION RENDERERS + SWAP HT ATOMIQUE + PROTECTION PINCH/RÈGLE
 Date : 18/09/2026
 Base fonctionnelle : v17.09
