@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.13';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.14';
 
 
 /*
@@ -2301,7 +2301,7 @@ const CENTER_GPS_BUTTON_MOVE_TOLERANCE_PX = 14;
 function isNpfGpsFollowProgrammaticPan() {
     const recentProgrammaticMove = (Date.now() - Number(centerGpsFollowLastProgrammaticMoveAt || 0)) < 800;
     return !!(
-        centerGpsFollowActive
+        isCenterGpsFollowEffective()
         && (centerGpsFollowProgrammaticMove || recentProgrammaticMove)
         && !centerGpsFollowUserGestureActive
         && (Date.now() - Number(centerGpsFollowLastUserGestureAt || 0)) > 180
@@ -10202,17 +10202,96 @@ function runNextDirectOfflineNpfRead() {
         && directOfflineNpfReadQueue.length
     ) {
         /*
-         * v16.46 — priorité au viewport le plus récent sans annuler les
-         * transactions déjà actives. Parmi les demandes de même priorité,
-         * l'ordre FIFO de Leaflet (centre -> extérieur) est conservé.
+         * v17.14 — conserver la priorité d'epoch v17.12, mais ne plus traiter
+         * en FIFO aveugle les tuiles du même geste. Lors d'un pan long, les
+         * premières demandes de l'epoch peuvent être déjà loin du viewport
+         * final alors que les tuiles actuellement visibles attendent derrière.
+         *
+         * Ordre de choix dans le meilleur epoch :
+         * 1) zoom actuellement rendu par la GridLayer ;
+         * 2) tuile la plus proche du centre courant du viewport ;
+         * 3) FIFO seulement en dernier départage.
+         *
+         * Les lectures déjà actives ne sont jamais annulées et le nombre de
+         * lectures simultanées reste strictement inchangé.
          */
         let bestEpoch = -Infinity;
         for (const queued of directOfflineNpfReadQueue) {
             bestEpoch = Math.max(bestEpoch, Number(queued?.viewEpoch) || 0);
         }
-        let itemIndex = directOfflineNpfReadQueue.findIndex(
-            queued => (Number(queued?.viewEpoch) || 0) === bestEpoch
-        );
+
+        let targetZoom = Number(baseTileLayer?._tileZoom);
+        if (!Number.isFinite(targetZoom)) {
+            targetZoom = Math.round(Number(map?.getZoom?.()));
+        }
+
+        let mapCenter = null;
+        try { mapCenter = map?.getCenter?.() || null; } catch (_) {}
+        const tileSize = (() => {
+            try {
+                const size = baseTileLayer?.getTileSize?.();
+                const value = Number(size?.x || size?.y);
+                if (Number.isFinite(value) && value > 0) return value;
+            } catch (_) {}
+            return 256;
+        })();
+        const centerByZoom = new Map();
+        const getCenterTileAtZoom = (zoom) => {
+            const z = Number(zoom);
+            if (!Number.isFinite(z) || !mapCenter || !map) return null;
+            if (centerByZoom.has(z)) return centerByZoom.get(z);
+            try {
+                const projected = map.project(mapCenter, z);
+                const centerTile = {
+                    x: Number(projected?.x) / tileSize,
+                    y: Number(projected?.y) / tileSize
+                };
+                if (Number.isFinite(centerTile.x) && Number.isFinite(centerTile.y)) {
+                    centerByZoom.set(z, centerTile);
+                    return centerTile;
+                }
+            } catch (_) {}
+            centerByZoom.set(z, null);
+            return null;
+        };
+
+        let itemIndex = -1;
+        let bestZoomDelta = Infinity;
+        let bestCenterDistance = Infinity;
+
+        for (let i = 0; i < directOfflineNpfReadQueue.length; i += 1) {
+            const queued = directOfflineNpfReadQueue[i];
+            if ((Number(queued?.viewEpoch) || 0) !== bestEpoch) continue;
+
+            const coords = queued?.coords || null;
+            const z = Number(coords?.z);
+            const x = Number(coords?.x);
+            const y = Number(coords?.y);
+            const zoomDelta = Number.isFinite(targetZoom) && Number.isFinite(z)
+                ? Math.abs(z - targetZoom)
+                : 0;
+
+            let centerDistance = Infinity;
+            if ([x, y, z].every(Number.isFinite)) {
+                const centerTile = getCenterTileAtZoom(z);
+                if (centerTile) {
+                    const dx = (x + 0.5) - centerTile.x;
+                    const dy = (y + 0.5) - centerTile.y;
+                    centerDistance = dx * dx + dy * dy;
+                }
+            }
+
+            if (
+                itemIndex < 0
+                || zoomDelta < bestZoomDelta
+                || (zoomDelta === bestZoomDelta && centerDistance < bestCenterDistance)
+            ) {
+                itemIndex = i;
+                bestZoomDelta = zoomDelta;
+                bestCenterDistance = centerDistance;
+            }
+        }
+
         if (itemIndex < 0) itemIndex = 0;
         const item = directOfflineNpfReadQueue.splice(itemIndex, 1)[0];
 
@@ -33776,6 +33855,20 @@ const CENTER_GPS_FOLLOW_MIN_SIDE_MARGIN_PX = 145;
 const CENTER_GPS_FOLLOW_MIN_VERTICAL_MARGIN_PX = 105;
 const CENTER_GPS_FOLLOW_CARDINAL_EPSILON = 1e-8;
 
+/*
+ * v17.14 — en mode simulation, un avion réellement en mouvement utilise
+ * automatiquement le cadrage anticipé du mode Suivi, sans démarrer le GPS réel
+ * et sans modifier l'état visuel du bouton Suivi.
+ */
+function isCenterGpsFollowEffective() {
+    const simulationMoving = !!(
+        isSimulationMode
+        && simulationAircraftPositionReady
+        && Number(simulationSpeedKt) > 0
+    );
+    return !!(centerGpsFollowActive || simulationMoving);
+}
+
 function getCenterGpsFollowHeadingDegrees() {
     const heading = Number(lastPosition?.heading);
     if (Number.isFinite(heading)) {
@@ -33858,7 +33951,7 @@ function getCenterGpsFollowOverlayVerticalInsets(visible) {
 }
 
 function getCenterGpsFollowMapCenter(pos, zoom) {
-    if (!map || !pos || !centerGpsFollowActive) return pos;
+    if (!map || !pos || !isCenterGpsFollowEffective()) return pos;
 
     const headingDeg = getCenterGpsFollowHeadingDegrees();
     if (!Number.isFinite(headingDeg)) return pos;
@@ -33899,8 +33992,14 @@ function getCenterGpsFollowMapCenter(pos, zoom) {
         );
         const overlayInsets = getCenterGpsFollowOverlayVerticalInsets(visible);
         const aircraftClearancePx = 54;
+        /*
+         * v17.14 — une grosse zone UI détectée ne doit jamais rabattre le point
+         * anticipé exactement au centre de l'écran. Le suivi conserve au moins
+         * une vraie avance visuelle dans le sens opposé au cap.
+         */
+        const maxVerticalSafetyMargin = visible.height * 0.34;
         const topMargin = Math.min(
-            visible.height / 2,
+            maxVerticalSafetyMargin,
             Math.max(
                 CENTER_GPS_FOLLOW_MIN_VERTICAL_MARGIN_PX,
                 visible.height * CENTER_GPS_FOLLOW_SAFE_MARGIN_TOP_RATIO,
@@ -33908,7 +34007,7 @@ function getCenterGpsFollowMapCenter(pos, zoom) {
             )
         );
         const bottomMargin = Math.min(
-            visible.height / 2,
+            maxVerticalSafetyMargin,
             Math.max(
                 CENTER_GPS_FOLLOW_MIN_VERTICAL_MARGIN_PX,
                 visible.height * CENTER_GPS_FOLLOW_SAFE_MARGIN_BOTTOM_RATIO,
@@ -34004,7 +34103,7 @@ function recenterMapOnKnownGpsPosition(reason = 'manual') {
 }
 
 function scheduleCenterGpsFollowRecentering() {
-    if (!centerGpsFollowActive) return;
+    if (!isCenterGpsFollowEffective()) return;
 
     centerGpsFollowPausedUntil = Date.now() + CENTER_GPS_FOLLOW_RECENTER_DELAY_MS;
     if (centerGpsFollowPauseTimer) {
@@ -34015,7 +34114,7 @@ function scheduleCenterGpsFollowRecentering() {
     centerGpsFollowPauseTimer = setTimeout(() => {
         centerGpsFollowPauseTimer = null;
         centerGpsFollowPausedUntil = 0;
-        if (centerGpsFollowActive) {
+        if (isCenterGpsFollowEffective()) {
             recenterMapOnKnownGpsPosition('manual-delay');
         }
     }, CENTER_GPS_FOLLOW_RECENTER_DELAY_MS);
@@ -34036,7 +34135,7 @@ function installCenterGpsFollowHandlers() {
     };
 
     const markUserMapGesture = (event, { active = true } = {}) => {
-        if (!centerGpsFollowActive) return;
+        if (!isCenterGpsFollowEffective()) return;
         if (event && shouldIgnoreCenterFollowDomEvent(event)) return;
 
         centerGpsFollowUserGestureActive = active;
@@ -34052,7 +34151,7 @@ function installCenterGpsFollowHandlers() {
     };
 
     const endUserMapGesture = (event) => {
-        if (!centerGpsFollowActive) {
+        if (!isCenterGpsFollowEffective()) {
             centerGpsFollowUserGestureActive = false;
             return;
         }
@@ -34079,14 +34178,14 @@ function installCenterGpsFollowHandlers() {
     }
 
     const forcePauseForMapGesture = () => {
-        if (!centerGpsFollowActive) return;
+        if (!isCenterGpsFollowEffective()) return;
         centerGpsFollowLastUserGestureAt = Date.now();
         centerGpsFollowPausedUntil = Date.now() + CENTER_GPS_FOLLOW_RECENTER_DELAY_MS;
         scheduleCenterGpsFollowRecentering();
     };
 
     const onManualMapMove = (event) => {
-        if (!centerGpsFollowActive) return;
+        if (!isCenterGpsFollowEffective()) return;
 
         const recentDomUserGesture = Date.now() - centerGpsFollowLastUserGestureAt < 1500;
         const isUserInteraction = !!(
@@ -35107,7 +35206,7 @@ function updateUserPosition(pos) {
         updateDeroutementGpsStatus(isSimulationPosition ? 'GPS simulation' : 'GPS actualisé');
     }
 
-    if (centerGpsFollowActive) {
+    if (isCenterGpsFollowEffective()) {
         const nowForFollow = Date.now();
         const recentManualMapGesture = (nowForFollow - centerGpsFollowLastUserGestureAt) < CENTER_GPS_FOLLOW_RECENTER_DELAY_MS;
         if (!centerGpsFollowUserGestureActive && !recentManualMapGesture && nowForFollow >= centerGpsFollowPausedUntil) {
@@ -35494,6 +35593,9 @@ function enableSimulationMode() {
 
     simulationWasLiveGpsActiveBeforeSimulation = (localStorage.getItem('liveGpsActive') === 'true') || !!watchId;
     isSimulationMode = true;
+    /* v17.14 — installer seulement les gardes tactiles du suivi anticipé.
+     * Aucun watch GPS n'est lancé : la simulation reste entièrement autonome. */
+    installCenterGpsFollowHandlers();
     if (watchId && navigator.geolocation) {
         navigator.geolocation.clearWatch(watchId);
         watchId = null;
@@ -35551,6 +35653,15 @@ function disableSimulationMode({ restoreGps = true } = {}) {
     closeSimulationActionPopup();
     closeSimulationMotionModal();
     isSimulationMode = false;
+    if (!centerGpsFollowActive) {
+        centerGpsFollowPausedUntil = 0;
+        centerGpsFollowUserGestureActive = false;
+        centerGpsFollowLastUserGestureAt = 0;
+        if (centerGpsFollowPauseTimer) {
+            clearTimeout(centerGpsFollowPauseTimer);
+            centerGpsFollowPauseTimer = null;
+        }
+    }
     refreshSimulationModeButtonState();
 
     if (restoreGps) {
