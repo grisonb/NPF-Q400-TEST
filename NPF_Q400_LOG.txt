@@ -1,3 +1,63 @@
+VERSION TEST v17.13 — RATTACHEMENT FIABLE HT / ROUTES AU DÉMARRAGE
+Date : 18/09/2026
+Base fonctionnelle : v17.12
+
+OBJECTIF UTILISATEUR
+- Corriger le cas où HT et/ou Routes sont mémorisés ON mais ne sont pas visibles
+  après l'ouverture de NPF, obligeant à faire OFF puis ON.
+- Ne modifier ni la fluidité v17.12, ni le moteur tuiles, ni la logique VAC.
+
+DIAG À L'ORIGINE — v17.12 (18/09/2026 19:11)
+- Routes ON et HT ON sont bien mémorisés.
+- Une séquence « priorité carte » peut démarrer pendant le recentrage/zoom initial.
+- HT peut alors charger ses 13 287 tronçons et construire son rendu pendant que
+  `highVoltageLinesLayer` n'est pas encore attaché à `map`.
+- Routes peut aussi rester détaché après un démarrage au tier 0, puis être
+  reconstruit ultérieurement dans un LayerGroup toujours absent de `map`.
+- Le passage OFF -> ON réattache le groupe et fait réapparaître immédiatement
+  le calque, ce qui confirme le défaut de rattachement et non de données.
+
+MODIFICATIONS
+
+1. RESTITUTION HT — RATTACHEMENT GARANTI
+- Dans `runNpfMapOverlayPriorityRestore()`, juste avant le recalcul HT :
+  si `highVoltageLinesLayer` existe mais n'est pas dans `map`, il est ajouté.
+- Le pane HT est encore masqué à cette étape : aucun affichage prématuré.
+- Sur les gestes normaux v17.11/v17.12, le groupe est déjà attaché : aucun coût
+  supplémentaire.
+
+2. RESTITUTION ROUTES — RATTACHEMENT GARANTI
+- Même protection avant `refreshRoadOverlayVisibleParts()` lorsque le tier Routes
+  final est > 0 : si `roadOverlayLayer` est détaché, il est ajouté à `map`.
+- Cela couvre notamment le cas d'un démarrage à tier 0 où le parent Routes est
+  volontairement retiré, puis d'un zoom ultérieur vers tier 1/2.
+- Le pane Routes reste masqué jusqu'à l'étape Routes de la restitution.
+
+3. COMPORTEMENTS CONSERVÉS
+- v17.12 : un seul epoch de priorité tuiles par geste manuel — inchangé.
+- v17.11 : pré-masquage tactile Routes/HT — inchangé.
+- Swap HT atomique — inchangé.
+- Ordre Tuiles -> VFR -> HT -> Routes — inchangé.
+- Première installation VAC « Télécharger cartes VAC » / « Oui » / « Non » —
+  inchangée.
+
+4. MOTEUR TUILES — AUCUNE MODIFICATION
+- 5 lectures IndexedDB, queue, cache, keepBuffer, retries, timeouts : inchangés.
+
+VERSION
+- App : v17.13
+- Service Worker : `sw-v17-13_startup_overlay_reattach`
+- SIA : strictement inchangé par rapport à v17.12.
+
+VALIDATION STATIQUE
+- Syntaxe JavaScript Script/SIA/SW : OK.
+- Script inline de l'Index : OK.
+- Manifest JSON : OK.
+- Cohérence Index / Manifest / Script / Style / SW v17.13 : OK.
+- SIA identique bit-à-bit à v17.12 : OK.
+
+======================================================================
+
 VERSION TEST v17.12 — EPOCH TUILES UNIQUE PAR GESTE + PROPOSITION VAC PREMIÈRE INSTALLATION
 Date : 18/09/2026
 Base fonctionnelle : v17.11
