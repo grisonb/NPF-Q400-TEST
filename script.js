@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.06';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.07';
 
 
 /*
@@ -935,22 +935,6 @@ function buildNpfStartupDiagnosticExportText() {
         + ' événements (attente tuiles max ' + Math.round(layerDiag.filterActivationMaxWaitMs || 0)
         + ' ms / couche max ' + Math.round(layerDiag.filterLayerMaxMs || 0) + ' ms)'
     );
-    try {
-        const npfBatch = getDirectOfflineNpfBatchStatusForDiag();
-        lines.push(
-            'Tuiles NPF batch IDB : '
-            + npfBatch.transactions + ' transactions / '
-            + npfBatch.reads + ' lectures | '
-            + 'moy ' + npfBatch.avgMs + ' ms / max ' + npfBatch.maxMs + ' ms | '
-            + 'batches >=1,2s ' + npfBatch.slowBatches + ' | '
-            + 'refresh connexion ' + npfBatch.softRefreshCount
-            + (npfBatch.softRefreshScheduled ? ' (programmé)' : '')
-            + (npfBatch.lastSoftRefreshReason
-                ? ' | dernier=' + npfBatch.lastSoftRefreshReason
-                : '')
-        );
-    } catch (_) {}
-
     lines.push(
         'Charge DIAG : '
         + Math.round(runtime.diagPersistCount || 0) + ' écritures groupées | '
@@ -2628,16 +2612,20 @@ let npfMapOverlayPriorityActive = false;
 let npfMapOverlayPriorityStage = 3;
 let npfMapOverlayPriorityToken = 0;
 let npfMapOverlayPriorityRestoreTimer = null;
-let npfMapOverlayPriorityLastBeginAt = -Infinity;
-let npfMapOverlayPriorityLastBeginReason = '';
-const NPF_MAP_OVERLAY_PRIORITY_SETTLE_MS = 90;
 
 /*
- * v17.03 — un zoom Leaflet émet typiquement zoomstart puis movestart pour le
- * même geste. Une courte fenêtre de coalescence empêche de redémarrer deux fois
- * la même séquence sans empêcher un vrai geste suivant.
+ * v17.07 — vrai verrou de geste.
+ *
+ * Le premier `movestart` ou `zoomstart` manuel ouvre UNE séquence.
+ * Tous les autres starts émis par Leaflet pendant le même geste/pinch/burst
+ * sont ignorés jusqu'à stabilisation complète.
+ *
+ * Le verrou n'est libéré qu'après 500 ms sans nouvel événement start/end.
+ * Cette valeur est volontairement supérieure aux rafales observées dans le
+ * DIAG v17.06 (plusieurs starts sur ~0,4 s).
  */
-const NPF_MAP_OVERLAY_PRIORITY_START_COALESCE_MS = 180;
+let npfMapManualGestureLockActive = false;
+const NPF_MAP_MANUAL_GESTURE_SETTLE_MS = 500;
 
 /*
  * Aucun timeout forcé pour passer de Tuiles -> VFR :
@@ -7757,27 +7745,22 @@ function applyNpfMapOverlayPriorityVisibility() {
 }
 
 function beginNpfMapOverlayPrioritySequence(reason = 'map-start') {
-    const now = NPF_STARTUP_DIAGNOSTIC.now();
-    const elapsedSinceBegin = now - Number(npfMapOverlayPriorityLastBeginAt || 0);
-    const duplicateLeafletStart = (
-        npfMapOverlayPriorityActive
-        && npfMapOverlayPriorityStage === 0
-        && elapsedSinceBegin >= 0
-        && elapsedSinceBegin <= NPF_MAP_OVERLAY_PRIORITY_START_COALESCE_MS
-        && (
-            (npfMapOverlayPriorityLastBeginReason === 'zoomstart' && reason === 'movestart')
-            || (npfMapOverlayPriorityLastBeginReason === 'zoomstart' && reason === 'gps-movestart')
-            || (npfMapOverlayPriorityLastBeginReason === 'movestart' && reason === 'zoomstart')
-            || (npfMapOverlayPriorityLastBeginReason === 'gps-movestart' && reason === 'zoomstart')
-        )
-    );
-
-    if (duplicateLeafletStart) {
+    /*
+     * v17.07 — verrou de geste réel.
+     *
+     * Tant qu'un geste manuel n'est pas stabilisé, Leaflet peut émettre
+     * plusieurs movestart/zoomstart. Ils appartiennent tous à la même séquence.
+     * On ne réincrémente donc ni token, ni génération, ni epoch overlay.
+     */
+    if (npfMapManualGestureLockActive) {
+        if (npfMapOverlayPriorityRestoreTimer) {
+            clearTimeout(npfMapOverlayPriorityRestoreTimer);
+            npfMapOverlayPriorityRestoreTimer = null;
+        }
         return false;
     }
 
-    npfMapOverlayPriorityLastBeginAt = now;
-    npfMapOverlayPriorityLastBeginReason = String(reason || 'map-start');
+    npfMapManualGestureLockActive = true;
     npfMapOverlayPriorityToken += 1;
     npfMapOverlayPriorityActive = true;
     npfMapOverlayPriorityStage = 0;
@@ -7808,7 +7791,7 @@ function beginNpfMapOverlayPrioritySequence(reason = 'map-start') {
     }
 
     if (npfHeavyOverlayZoomOutPromise || npfHeavyOverlayZoomSettleTimer) {
-        try { cancelPendingSerializedHeavyOverlayZoomOut('priorité-carte-v17.02'); }
+        try { cancelPendingSerializedHeavyOverlayZoomOut('priorité-carte-v17.07'); }
         catch (_) {}
     }
 
@@ -7816,7 +7799,7 @@ function beginNpfMapOverlayPrioritySequence(reason = 'map-start') {
 
     if (reason) {
         recordNpfStartupDiagnosticOverlaySnapshot(
-            `priorité carte · début · ${reason}`
+            `priorité carte · début geste verrouillé · ${reason}`
         );
     }
 
@@ -8025,8 +8008,7 @@ async function runNpfMapOverlayPriorityRestore(token, reason = 'map-end') {
 
     npfMapOverlayPriorityStage = 3;
     npfMapOverlayPriorityActive = false;
-    npfMapOverlayPriorityLastBeginAt = -Infinity;
-    npfMapOverlayPriorityLastBeginReason = '';
+    npfMapManualGestureLockActive = false;
     applyNpfMapOverlayPriorityVisibility();
 
     /*
@@ -8064,8 +8046,7 @@ function cancelNpfMapOverlayPriorityForGpsResume(reason = 'gps-resume') {
 
     npfMapOverlayPriorityStage = 3;
     npfMapOverlayPriorityActive = false;
-    npfMapOverlayPriorityLastBeginAt = -Infinity;
-    npfMapOverlayPriorityLastBeginReason = '';
+    npfMapManualGestureLockActive = false;
 
     /*
      * Ne pas appeler setNpfHeavyOverlayPanesHidden(false) ici : pendant la
@@ -8086,12 +8067,25 @@ function scheduleNpfMapOverlayPriorityRestore(reason = 'map-end') {
     if (!npfMapOverlayPriorityActive) return;
 
     const token = npfMapOverlayPriorityToken;
+
     if (npfMapOverlayPriorityRestoreTimer) {
         clearTimeout(npfMapOverlayPriorityRestoreTimer);
+        npfMapOverlayPriorityRestoreTimer = null;
     }
 
+    /*
+     * v17.07 — ne pas considérer moveend/zoomend comme fin définitive du geste.
+     * On attend 500 ms de calme. Tout nouveau start/end repousse cette échéance.
+     *
+     * Une fois le calme confirmé, le verrou est libéré et la restitution de la
+     * vue finale peut commencer. Si un nouveau geste démarre ensuite pendant la
+     * restitution, begin() créera une nouvelle séquence et invalidera l'ancienne
+     * par son token, ce qui est le comportement voulu.
+     */
     npfMapOverlayPriorityRestoreTimer = setTimeout(() => {
         npfMapOverlayPriorityRestoreTimer = null;
+        npfMapManualGestureLockActive = false;
+
         runNpfMapOverlayPriorityRestore(token, reason).catch(error => {
             console.warn('Séquence prioritaire carte impossible:', error);
             if (
@@ -8100,10 +8094,11 @@ function scheduleNpfMapOverlayPriorityRestore(reason = 'map-end') {
             ) {
                 npfMapOverlayPriorityStage = 3;
                 npfMapOverlayPriorityActive = false;
+                npfMapManualGestureLockActive = false;
                 applyNpfMapOverlayPriorityVisibility();
             }
         });
-    }, NPF_MAP_OVERLAY_PRIORITY_SETTLE_MS);
+    }, NPF_MAP_MANUAL_GESTURE_SETTLE_MS);
 }
 
 function initMap() {
@@ -8150,9 +8145,9 @@ function initMap() {
         }
 
         /*
-         * v17.04 — la priorité stricte concerne uniquement un déplacement
-         * utilisateur. Un movestart secondaire d'un zoom manuel reste coalescé
-         * par beginNpfMapOverlayPrioritySequence().
+         * v17.07 — priorité stricte uniquement pour un déplacement utilisateur.
+         * Le premier start ouvre le verrou ; les starts suivants du même geste
+         * sont ignorés jusqu'à stabilisation.
          */
         beginNpfMapOverlayPrioritySequence('movestart');
 
@@ -8169,7 +8164,7 @@ function initMap() {
     });
     map.on('zoomstart', () => {
         beginNpfMapOverlayPrioritySequence('zoomstart');
-        /* v17.03 : le movestart Leaflet qui suit ce zoomstart ne redémarre pas la séquence. */
+        /* v17.07 : tous les starts secondaires du même geste restent sous le même verrou. */
 
         if (!Number.isFinite(npfHeavyOverlayZoomStartLevel)) {
             npfHeavyOverlayZoomStartLevel = Number(map.getZoom?.());
@@ -9809,60 +9804,6 @@ let directOfflineTileHitCount = 0;
 let directOfflineTileMissCount = 0;
 
 /*
- * v17.06 — lecture NPF par transaction IndexedDB GROUPÉE.
- *
- * Enseignements des essais précédents :
- * - concurrence 5 -> 2 : aucun gain durable ;
- * - index.get(tileUrl) : lectures toujours lentes ;
- * - annulation des transactions actives : régression par churn ;
- * - retour moteur v16.75 : nécessaire mais la latence Safari/IDB réapparaît
- *   encore après quelques minutes.
- *
- * Nouvel axe ciblé : conserver 5 tuiles en parallèle côté scheduler, mais
- * regrouper jusqu'à 5 recherches dans UNE transaction readonly `tiles`.
- * On réduit donc fortement le nombre de transactions ouvertes/fermées sans
- * annuler une lecture déjà démarrée.
- */
-const DIRECT_OFFLINE_NPF_IDB_BATCH_MAX = 5;
-const DIRECT_OFFLINE_NPF_SLOW_BATCH_MS = 1200;
-const DIRECT_OFFLINE_NPF_VERY_SLOW_BATCH_MS = 2500;
-const DIRECT_OFFLINE_NPF_SOFT_REFRESH_MIN_SESSION_MS = 30000;
-const DIRECT_OFFLINE_NPF_SOFT_REFRESH_COOLDOWN_MS = 30000;
-
-const directOfflineNpfIdbBatchStates = new WeakMap();
-let directOfflineNpfIdbBatchTransactionsActive = 0;
-let directOfflineNpfIdbBatchCount = 0;
-let directOfflineNpfIdbBatchReadCount = 0;
-let directOfflineNpfIdbBatchTotalMs = 0;
-let directOfflineNpfIdbBatchMaxMs = 0;
-let directOfflineNpfIdbSlowBatchCount = 0;
-let directOfflineNpfIdbSlowBatchStreak = 0;
-let directOfflineNpfIdbVerySlowBatchStreak = 0;
-let directOfflineNpfIdbSoftRefreshCount = 0;
-let directOfflineNpfIdbSoftRefreshScheduled = false;
-let directOfflineNpfIdbLastSoftRefreshAt = 0;
-let directOfflineNpfIdbLastSoftRefreshReason = '';
-const directOfflineNpfIdbBatchMonitoringStartedAt = Date.now();
-
-function getDirectOfflineNpfBatchStatusForDiag() {
-    return {
-        transactions: directOfflineNpfIdbBatchCount,
-        reads: directOfflineNpfIdbBatchReadCount,
-        activeTransactions: directOfflineNpfIdbBatchTransactionsActive,
-        avgMs: directOfflineNpfIdbBatchCount
-            ? Math.round(directOfflineNpfIdbBatchTotalMs / directOfflineNpfIdbBatchCount)
-            : 0,
-        maxMs: Math.round(directOfflineNpfIdbBatchMaxMs || 0),
-        slowBatches: directOfflineNpfIdbSlowBatchCount,
-        slowStreak: directOfflineNpfIdbSlowBatchStreak,
-        verySlowStreak: directOfflineNpfIdbVerySlowBatchStreak,
-        softRefreshCount: directOfflineNpfIdbSoftRefreshCount,
-        softRefreshScheduled: !!directOfflineNpfIdbSoftRefreshScheduled,
-        lastSoftRefreshReason: directOfflineNpfIdbLastSoftRefreshReason || ''
-    };
-}
-
-/*
  * v14.87 — récupération automatique après panne temporaire d'IndexedDB.
  * Safari peut invalider une connexion pendant un usage long ou sous pression
  * mémoire. Les erreurs techniques ne doivent plus être assimilées à des tuiles
@@ -10371,140 +10312,9 @@ function getDirectOfflineStoredKeyCandidates(tileUrl) {
     return keys;
 }
 
-function executeDirectOfflineTileRecordRead(
-    store,
-    tileUrl,
-    options = {},
-    finishCallback,
-    failCallback
-) {
+function readDirectOfflineTileRecord(db, tileUrl, options = {}) {
     const allowLegacyFallback = options.allowLegacyFallback !== false;
-    let settled = false;
 
-    const finish = value => {
-        if (settled) return;
-        settled = true;
-        try { finishCallback(value); } catch (_) {}
-    };
-    const fail = error => {
-        if (settled) return;
-        settled = true;
-        try { failCallback(error); } catch (_) {}
-    };
-
-    const readByTileUrlIndex = () => {
-        if (settled) return;
-        if (!store.indexNames.contains('tileUrl')) {
-            if (allowLegacyFallback) {
-                readByLegacyKeys();
-            } else {
-                finish(null);
-            }
-            return;
-        }
-
-        let request;
-        try {
-            request = store.index('tileUrl').openCursor(
-                IDBKeyRange.only(tileUrl)
-            );
-        } catch (error) {
-            fail(error);
-            return;
-        }
-
-        request.onsuccess = () => {
-            const cursor = request.result;
-            if (!cursor) {
-                if (allowLegacyFallback) {
-                    readByLegacyKeys();
-                } else {
-                    finish(null);
-                }
-                return;
-            }
-            const record = cursor.value || {};
-            if (isDirectOfflineTileRecordAllowed(record)) {
-                finish(record);
-                return;
-            }
-            cursor.continue();
-        };
-        request.onerror = () => fail(
-            request.error || new Error('Erreur lecture index tileUrl')
-        );
-    };
-
-    const exactKeys = allowLegacyFallback
-        ? getDirectOfflineStoredKeyCandidates(tileUrl)
-        : [];
-    let keyIndex = 0;
-
-    const readByLegacyCursor = () => {
-        if (settled) return;
-        let request;
-        try {
-            request = store.openCursor();
-        } catch (error) {
-            fail(error);
-            return;
-        }
-        request.onsuccess = () => {
-            const cursor = request.result;
-            if (!cursor) {
-                finish(null);
-                return;
-            }
-            const record = cursor.value || {};
-            const storedTileUrl =
-                record.tileUrl || getTileUrlFromStoredKey(record.url);
-            if (
-                storedTileUrl === tileUrl
-                && isDirectOfflineTileRecordAllowed(record)
-            ) {
-                finish(record);
-                return;
-            }
-            cursor.continue();
-        };
-        request.onerror = () => fail(
-            request.error || new Error('Erreur lecture legacy tuile')
-        );
-    };
-
-    const readByLegacyKeys = () => {
-        if (settled) return;
-        if (!allowLegacyFallback) {
-            finish(null);
-            return;
-        }
-        if (keyIndex >= exactKeys.length) {
-            readByLegacyCursor();
-            return;
-        }
-        const key = exactKeys[keyIndex++];
-        let request;
-        try {
-            request = store.get(key);
-        } catch (error) {
-            fail(error);
-            return;
-        }
-        request.onsuccess = () => {
-            const record = request.result || null;
-            if (record && isDirectOfflineTileRecordAllowed(record)) {
-                finish(record);
-                return;
-            }
-            readByLegacyKeys();
-        };
-        request.onerror = readByLegacyKeys;
-    };
-
-    readByTileUrlIndex();
-}
-
-function readDirectOfflineTileRecordSingle(db, tileUrl, options = {}) {
     return new Promise((resolve, reject) => {
         let tx;
         let store;
@@ -10528,311 +10338,116 @@ function readDirectOfflineTileRecordSingle(db, tileUrl, options = {}) {
             reject(error);
         };
 
-        tx.onerror = () => fail(
-            tx.error || new Error('Erreur transaction tuile')
-        );
-        tx.onabort = () => fail(
-            tx.error || new Error('Transaction tuile annulée')
-        );
+        const readByTileUrlIndex = () => {
+            if (settled) return;
+            if (!store.indexNames.contains('tileUrl')) {
+                if (allowLegacyFallback) {
+                    readByLegacyKeys();
+                } else {
+                    finish(null);
+                }
+                return;
+            }
 
-        executeDirectOfflineTileRecordRead(
-            store,
-            tileUrl,
-            options,
-            finish,
-            fail
-        );
-    });
-}
+            let request;
+            try {
+                request = store.index('tileUrl').openCursor(IDBKeyRange.only(tileUrl));
+            } catch (error) {
+                fail(error);
+                return;
+            }
 
-function scheduleDirectOfflineNpfSoftConnectionRefresh(
-    reason = 'slow-idb-batches'
-) {
-    if (
-        directOfflineNpfIdbSoftRefreshScheduled
-        || mapSourceMode !== 'offline'
-        || !isNpfOfflinePackSelection()
-    ) {
-        return false;
-    }
+            request.onsuccess = () => {
+                const cursor = request.result;
+                if (!cursor) {
+                    if (allowLegacyFallback) {
+                        readByLegacyKeys();
+                    } else {
+                        finish(null);
+                    }
+                    return;
+                }
+                const record = cursor.value || {};
+                if (isDirectOfflineTileRecordAllowed(record)) {
+                    finish(record);
+                    return;
+                }
+                cursor.continue();
+            };
+            request.onerror = () => fail(request.error || new Error('Erreur lecture index tileUrl'));
+        };
 
-    const now = Date.now();
-    if (
-        now - directOfflineNpfIdbBatchMonitoringStartedAt
-            < DIRECT_OFFLINE_NPF_SOFT_REFRESH_MIN_SESSION_MS
-        || now - directOfflineNpfIdbLastSoftRefreshAt
-            < DIRECT_OFFLINE_NPF_SOFT_REFRESH_COOLDOWN_MS
-    ) {
-        return false;
-    }
+        const exactKeys = allowLegacyFallback
+            ? getDirectOfflineStoredKeyCandidates(tileUrl)
+            : [];
+        let keyIndex = 0;
 
-    directOfflineNpfIdbSoftRefreshScheduled = true;
-    const requestedReason = String(reason || 'slow-idb-batches');
+        const readByLegacyCursor = () => {
+            if (settled) return;
+            let request;
+            try {
+                request = store.openCursor();
+            } catch (error) {
+                fail(error);
+                return;
+            }
+            request.onsuccess = () => {
+                const cursor = request.result;
+                if (!cursor) {
+                    finish(null);
+                    return;
+                }
+                const record = cursor.value || {};
+                const storedTileUrl = record.tileUrl || getTileUrlFromStoredKey(record.url);
+                if (storedTileUrl === tileUrl && isDirectOfflineTileRecordAllowed(record)) {
+                    finish(record);
+                    return;
+                }
+                cursor.continue();
+            };
+            request.onerror = () => fail(request.error || new Error('Erreur lecture legacy tuile'));
+        };
 
-    const tryRefreshWhenIdle = () => {
-        if (
-            mapSourceMode !== 'offline'
-            || !isNpfOfflinePackSelection()
-        ) {
-            directOfflineNpfIdbSoftRefreshScheduled = false;
-            return;
-        }
+        const readByLegacyKeys = () => {
+            if (settled) return;
+            if (!allowLegacyFallback) {
+                finish(null);
+                return;
+            }
+            if (keyIndex >= exactKeys.length) {
+                readByLegacyCursor();
+                return;
+            }
+            const key = exactKeys[keyIndex++];
+            let request;
+            try {
+                request = store.get(key);
+            } catch (error) {
+                fail(error);
+                return;
+            }
+            request.onsuccess = () => {
+                const record = request.result || null;
+                if (record && isDirectOfflineTileRecordAllowed(record)) {
+                    finish(record);
+                    return;
+                }
+                readByLegacyKeys();
+            };
+            request.onerror = readByLegacyKeys;
+        };
 
-        const schedulerIdle = (
-            directOfflineNpfActiveReads === 0
-            && directOfflineNpfReadQueue.length === 0
-            && directOfflineNpfIdbBatchTransactionsActive === 0
-        );
-
-        if (!schedulerIdle) {
-            setTimeout(tryRefreshWhenIdle, 120);
-            return;
-        }
+        tx.onerror = () => fail(tx.error || new Error('Erreur transaction tuile'));
+        tx.onabort = () => fail(tx.error || new Error('Transaction tuile annulée'));
 
         /*
-         * "Refresh doux" : fermer uniquement les connexions IDB mises en cache.
-         * Les blobs déjà en RAM restent intacts, aucune couche n'est reconstruite
-         * et aucune transaction en cours n'est annulée. La prochaine tuile
-         * ouvrira une connexion IndexedDB fraîche.
+         * v14.95 — les imports modernes possèdent un index `tileUrl` : une seule
+         * recherche indexée remplace les dizaines de `store.get()` essayées avant.
+         * Le chemin historique n'est conservé que lorsque la base peut réellement
+         * contenir d'anciens enregistrements sans champ `tileUrl`.
          */
-        closeDirectOfflineDatabaseConnectionsForStartupRetry();
-
-        directOfflineNpfIdbLastSoftRefreshAt = Date.now();
-        directOfflineNpfIdbSoftRefreshCount += 1;
-        directOfflineNpfIdbLastSoftRefreshReason = requestedReason;
-        directOfflineNpfIdbSlowBatchStreak = 0;
-        directOfflineNpfIdbVerySlowBatchStreak = 0;
-        directOfflineNpfIdbSoftRefreshScheduled = false;
-    };
-
-    setTimeout(tryRefreshWhenIdle, 0);
-    return true;
-}
-
-function noteDirectOfflineNpfBatchTransaction(durationMs) {
-    const safeMs = Math.max(0, Number(durationMs) || 0);
-
-    directOfflineNpfIdbBatchCount += 1;
-    directOfflineNpfIdbBatchTotalMs += safeMs;
-    directOfflineNpfIdbBatchMaxMs = Math.max(
-        directOfflineNpfIdbBatchMaxMs,
-        safeMs
-    );
-
-    if (safeMs >= DIRECT_OFFLINE_NPF_SLOW_BATCH_MS) {
-        directOfflineNpfIdbSlowBatchCount += 1;
-        directOfflineNpfIdbSlowBatchStreak += 1;
-    } else {
-        directOfflineNpfIdbSlowBatchStreak = 0;
-    }
-
-    if (safeMs >= DIRECT_OFFLINE_NPF_VERY_SLOW_BATCH_MS) {
-        directOfflineNpfIdbVerySlowBatchStreak += 1;
-    } else {
-        directOfflineNpfIdbVerySlowBatchStreak = 0;
-    }
-
-    /*
-     * Les DIAG précédents montrent des lectures >1 s, parfois >3 s après
-     * quelques minutes. On ne réagit qu'à une dégradation répétée :
-     * - 3 transactions consécutives >=1,2 s, ou
-     * - 2 transactions consécutives >=2,5 s.
-     *
-     * Pas de réaction à une pointe isolée.
-     */
-    if (
-        directOfflineNpfIdbSlowBatchStreak >= 3
-        || directOfflineNpfIdbVerySlowBatchStreak >= 2
-    ) {
-        scheduleDirectOfflineNpfSoftConnectionRefresh(
-            directOfflineNpfIdbVerySlowBatchStreak >= 2
-                ? '2-batches>=2500ms'
-                : '3-batches>=1200ms'
-        );
-    }
-}
-
-function flushDirectOfflineNpfTileReadBatch(db) {
-    const state = directOfflineNpfIdbBatchStates.get(db);
-    if (!state) return;
-
-    state.scheduled = false;
-    if (!state.pending.length) return;
-
-    const items = state.pending.splice(
-        0,
-        DIRECT_OFFLINE_NPF_IDB_BATCH_MAX
-    );
-
-    let tx;
-    let store;
-    try {
-        tx = db.transaction('tiles', 'readonly');
-        store = tx.objectStore('tiles');
-    } catch (error) {
-        items.forEach(item => {
-            try { item.reject(error); } catch (_) {}
-        });
-        if (state.pending.length) {
-            scheduleDirectOfflineNpfTileReadBatchFlush(db, state);
-        }
-        return;
-    }
-
-    directOfflineNpfIdbBatchTransactionsActive += 1;
-    directOfflineNpfIdbBatchReadCount += items.length;
-    const startedAt = (
-        typeof performance !== 'undefined'
-        && typeof performance.now === 'function'
-    ) ? performance.now() : Date.now();
-
-    let finalized = false;
-    let failed = false;
-
-    const rejectBatch = error => {
-        if (failed) return;
-        failed = true;
-        items.forEach(item => {
-            if (item.done) return;
-            item.done = true;
-            try { item.reject(error); } catch (_) {}
-        });
-    };
-
-    const finalize = outcome => {
-        if (finalized) return;
-        finalized = true;
-
-        const endedAt = (
-            typeof performance !== 'undefined'
-            && typeof performance.now === 'function'
-        ) ? performance.now() : Date.now();
-        const durationMs = Math.max(0, endedAt - startedAt);
-
-        directOfflineNpfIdbBatchTransactionsActive = Math.max(
-            0,
-            directOfflineNpfIdbBatchTransactionsActive - 1
-        );
-
-        if (outcome === 'complete' && !failed) {
-            noteDirectOfflineNpfBatchTransaction(durationMs);
-            items.forEach(item => {
-                if (item.done) return;
-                item.done = true;
-                try { item.resolve(item.result ?? null); } catch (_) {}
-            });
-        }
-
-        if (state.pending.length) {
-            scheduleDirectOfflineNpfTileReadBatchFlush(db, state);
-        }
-    };
-
-    tx.oncomplete = () => finalize('complete');
-    tx.onerror = () => {
-        rejectBatch(
-            tx.error || new Error('Erreur transaction groupée tuiles NPF')
-        );
-        finalize('error');
-    };
-    tx.onabort = () => {
-        rejectBatch(
-            tx.error || new Error('Transaction groupée tuiles NPF annulée')
-        );
-        finalize('abort');
-    };
-
-    items.forEach(item => {
-        executeDirectOfflineTileRecordRead(
-            store,
-            item.tileUrl,
-            item.options,
-            record => {
-                item.result = record || null;
-            },
-            error => {
-                /*
-                 * Un échec technique d'une requête rend le batch non fiable.
-                 * On annule cette transaction uniquement ; ce n'est PAS
-                 * l'annulation d'une lecture "obsolète" de v17.00.
-                 */
-                rejectBatch(error);
-                try { tx.abort(); } catch (_) {}
-            }
-        );
+        readByTileUrlIndex();
     });
-}
-
-function scheduleDirectOfflineNpfTileReadBatchFlush(db, state) {
-    if (!state || state.scheduled) return;
-    state.scheduled = true;
-
-    const run = () => {
-        try {
-            flushDirectOfflineNpfTileReadBatch(db);
-        } catch (error) {
-            state.scheduled = false;
-            const pending = state.pending.splice(0);
-            pending.forEach(item => {
-                try { item.reject(error); } catch (_) {}
-            });
-        }
-    };
-
-    if (typeof queueMicrotask === 'function') {
-        queueMicrotask(run);
-    } else {
-        Promise.resolve().then(run);
-    }
-}
-
-function queueDirectOfflineNpfTileRecordRead(
-    db,
-    tileUrl,
-    options = {}
-) {
-    return new Promise((resolve, reject) => {
-        let state = directOfflineNpfIdbBatchStates.get(db);
-        if (!state) {
-            state = {
-                pending: [],
-                scheduled: false
-            };
-            directOfflineNpfIdbBatchStates.set(db, state);
-        }
-
-        state.pending.push({
-            tileUrl,
-            options,
-            resolve,
-            reject,
-            result: null,
-            done: false
-        });
-
-        scheduleDirectOfflineNpfTileReadBatchFlush(db, state);
-    });
-}
-
-function readDirectOfflineTileRecord(db, tileUrl, options = {}) {
-    /*
-     * v17.06 — NPF uniquement : jusqu'à 5 lectures du scheduler partagent
-     * une transaction readonly. OACI et les autres cartes conservent le
-     * chemin unitaire historique.
-     */
-    if (isNpfOfflinePackSelection()) {
-        return queueDirectOfflineNpfTileRecordRead(
-            db,
-            tileUrl,
-            options
-        );
-    }
-
-    return readDirectOfflineTileRecordSingle(
-        db,
-        tileUrl,
-        options
-    );
 }
 
 function getDirectOfflineTileBlobCacheLimit() {
@@ -11184,8 +10799,7 @@ window.getNpfTilePerformanceStatus = function getNpfTilePerformanceStatus() {
         blobCacheMax: getDirectOfflineTileBlobCacheLimit(),
         tileHits: directOfflineTileHitCount,
         tileMisses: directOfflineTileMissCount,
-        visibleLoadedTiles: countVisibleLoadedBaseTiles(),
-        npfIdbBatch: getDirectOfflineNpfBatchStatusForDiag()
+        visibleLoadedTiles: countVisibleLoadedBaseTiles()
     };
 };
 
