@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v17-13_startup_overlay_reattach';
-const APP_VERSION = 'v17.13';
+const SW_VERSION = 'sw-v17-14_tile_center_priority_sim_follow';
+const APP_VERSION = 'v17.14';
 const SIA_DATA_REVISION = '15.69-radio1026-1-maplite1';
 const SIA_DATA_URL = './sia.js';
 const SIA_DATA_CACHE = `npf-q400-sia-data-${SIA_DATA_REVISION}`;
