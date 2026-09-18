@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v17-07_gesture_lock_tile_rollback';
-const APP_VERSION = 'v17.07';
+const SW_VERSION = 'sw-v17-08_tiles_absolute_priority_overlays_deferred';
+const APP_VERSION = 'v17.08';
 const SIA_DATA_REVISION = '15.69-radio1026-1-maplite1';
 const SIA_DATA_URL = './sia.js';
 const SIA_DATA_CACHE = `npf-q400-sia-data-${SIA_DATA_REVISION}`;
