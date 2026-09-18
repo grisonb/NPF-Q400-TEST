@@ -1,3 +1,59 @@
+VERSION TEST v17.02 — PRIORITÉ CARTE APRÈS MOUVEMENT / ZOOM
+Date : 18/09/2026
+Base : TEST v17.01
+
+OBJECTIF
+Conserver STRICTEMENT le moteur de tuiles de la v17.01/v16.75 et organiser les
+calques autour de lui.
+
+ORDRE DE PRIORITÉ
+1. Tuiles
+2. Points VFR
+3. Lignes HT
+4. Routes
+
+FONCTIONNEMENT
+- Dès `movestart` ou `zoomstart`, les panes Points VFR, HT et Routes sont
+  immédiatement masqués.
+- Leurs anciens refresh sont invalidés/annulés.
+- Les calques opérationnels légers restent présents : avion, feu, WP/route WP,
+  trafic, etc.
+- À la fin du mouvement/zoom :
+  1) NPF laisse d'abord les tuiles visibles se charger ;
+  2) les points VFR réapparaissent et leur vue est actualisée ;
+  3) les lignes HT sont reconstruites/réaffichées ;
+  4) les Routes sont reconstruites/réaffichées en dernier.
+- Si un nouveau geste commence pendant cette restitution, la séquence précédente
+  est immédiatement invalidée et les trois calques sont remasqués.
+- Le suivi GPS utilise la même logique.
+
+PROTECTION DU MOTEUR TUILES DE RÉFÉRENCE
+- Aucun changement des 6 blocs moteur tuiles repris de v16.75 :
+  purge, reset, scheduler, lecture IndexedDB, recherche blob, orchestration blob.
+- Aucun changement de concurrence IndexedDB.
+- Aucun `index.get()`.
+- Aucune annulation de transaction IndexedDB.
+- L'attente de priorité est uniquement une observation de l'état des tuiles
+  avant de rendre les overlays ; elle ne modifie jamais leur scheduler.
+
+AUTRES MODULES
+- SafeSky/GLR, filtres SS, BLOC/FUEL, WP, FdS/GAAR, SIA/VAC, recherche,
+  authentifications : fonctionnement v17.01 conservé.
+
+VERSION
+- App : v17.02
+- Service Worker : `sw-v17-02_overlay_priority_tiles_vfr_ht_routes`
+
+VALIDATION STATIQUE
+- Syntaxe JavaScript Script/SIA/SW : OK.
+- Manifest JSON : OK.
+- 6 blocs moteur tuiles = v17.01 exactement.
+- Ordre de restitution codé : tuiles -> VFR -> HT -> Routes.
+- VFR/HT/Routes masqués immédiatement au début des gestes.
+- Aucun changement fonctionnel des modules hors séquence d'overlays.
+
+HISTORIQUE PRÉCÉDENT CONSERVÉ INTÉGRALEMENT
+
 VERSION TEST v17.01 — RETOUR CIBLÉ MOTEUR TUILES À LA RÉFÉRENCE v16.75
 Date : 18/09/2026
 Base fonctionnelle : TEST v17.00
