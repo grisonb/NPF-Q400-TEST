@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.08';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.09';
 
 
 /*
@@ -7744,6 +7744,83 @@ function applyNpfMapOverlayPriorityVisibility() {
     );
 }
 
+
+function detachNpfHeavyOverlayLayersForMapMotion(reason = 'map-start') {
+    if (!map) return;
+
+    /*
+     * v17.09 — priorité physique au fond de carte.
+     *
+     * Masquer un pane ne suffit pas sur iPad : les LayerGroup et leurs Canvas
+     * restent alors attachés à Leaflet et continuent à participer aux
+     * transformations du viewport. Pour retrouver la charge de la carte seule,
+     * Routes et HT sont réellement retirés de `map` pendant le geste.
+     *
+     * Les groupes et leurs données restent en mémoire : aucun pack n'est
+     * rechargé et aucune géométrie n'est détruite ici.
+     */
+    try {
+        if (roadOverlayLayer && map.hasLayer(roadOverlayLayer)) {
+            map.removeLayer(roadOverlayLayer);
+        }
+    } catch (_) {}
+    try {
+        if (highVoltageLinesLayer && map.hasLayer(highVoltageLinesLayer)) {
+            map.removeLayer(highVoltageLinesLayer);
+        }
+    } catch (_) {}
+
+    /*
+     * Les renderers Canvas dédiés ne sont pas enfants des LayerGroup Leaflet.
+     * Une fois les groupes retirés, on retire donc aussi leurs Canvas propres
+     * afin qu'ils ne restent pas dans les panes pendant le pan/zoom.
+     */
+    [roadOverlayCasingRenderer, roadOverlayLineRenderer, highVoltageLinesRenderer]
+        .forEach(renderer => {
+            try {
+                if (renderer && map.hasLayer(renderer)) {
+                    map.removeLayer(renderer);
+                }
+            } catch (_) {}
+        });
+
+    npfHeavyOverlayPanesHidden = true;
+}
+
+function reattachNpfHeavyOverlayLayersWithoutRefresh(reason = 'restore') {
+    if (!map) return;
+
+    /*
+     * Réattache uniquement les rendus déjà présents. Aucun scan, aucune
+     * lecture de cellules Routes et aucun recalcul HT n'est lancé ici.
+     * Utilisé notamment lors d'une reprise GPS ou d'une sortie de secours.
+     */
+    try {
+        if (
+            showHighVoltageLinesLayer
+            && hasLoadedHighVoltageLines
+            && highVoltageLinesLayer
+            && !map.hasLayer(highVoltageLinesLayer)
+        ) {
+            highVoltageLinesLayer.addTo(map);
+        }
+    } catch (_) {}
+
+    try {
+        if (
+            showRoadOverlayLayer
+            && getRoadOverlayZoomTier() > 0
+            && roadOverlayLayer
+            && !map.hasLayer(roadOverlayLayer)
+        ) {
+            roadOverlayLayer.addTo(map);
+        }
+    } catch (_) {}
+
+    npfHeavyOverlayPanesHidden = false;
+    applyNpfMapOverlayPriorityVisibility();
+}
+
 function beginNpfMapOverlayPrioritySequence(reason = 'map-start') {
     /*
      * v17.07 — verrou de geste réel.
@@ -7791,10 +7868,15 @@ function beginNpfMapOverlayPrioritySequence(reason = 'map-start') {
     }
 
     if (npfHeavyOverlayZoomOutPromise || npfHeavyOverlayZoomSettleTimer) {
-        try { cancelPendingSerializedHeavyOverlayZoomOut('priorité-carte-v17.07'); }
+        try { cancelPendingSerializedHeavyOverlayZoomOut('priorité-carte-v17.09'); }
         catch (_) {}
     }
 
+    /*
+     * v17.09 — ne plus seulement masquer Routes/HT : les retirer réellement
+     * de la scène Leaflet pendant toute la manipulation.
+     */
+    detachNpfHeavyOverlayLayersForMapMotion(reason);
     applyNpfMapOverlayPriorityVisibility();
 
     if (reason) {
@@ -7952,13 +8034,18 @@ async function runNpfMapOverlayPriorityRestore(token, reason = 'map-end') {
      */
     if (showHighVoltageLinesLayer && hasLoadedHighVoltageLines) {
         try {
+            /*
+             * v17.09 — reconstruire HT hors de la scène Leaflet. Le groupe
+             * n'est rattaché qu'une fois le nouveau rendu prêt.
+             */
+            await refreshVisibleHighVoltageLines('overlay-priority-ht');
             if (
-                highVoltageLinesLayer
+                !isCancelled()
+                && highVoltageLinesLayer
                 && !map.hasLayer(highVoltageLinesLayer)
             ) {
                 highVoltageLinesLayer.addTo(map);
             }
-            await refreshVisibleHighVoltageLines('overlay-priority-ht');
         } catch (error) {
             console.warn(
                 'Restitution prioritaire lignes HT impossible:',
@@ -7982,12 +8069,20 @@ async function runNpfMapOverlayPriorityRestore(token, reason = 'map-end') {
         try {
             const tier = getRoadOverlayZoomTier();
             if (tier > 0) {
-                if (roadOverlayLayer && !map.hasLayer(roadOverlayLayer)) {
-                    roadOverlayLayer.addTo(map);
-                }
+                /*
+                 * v17.09 — reconstruire Routes hors de la scène Leaflet puis
+                 * rattacher le parent seulement lorsque le rendu est prêt.
+                 */
                 await refreshRoadOverlayVisibleParts(
                     'overlay-priority-routes'
                 );
+                if (
+                    !isCancelled()
+                    && roadOverlayLayer
+                    && !map.hasLayer(roadOverlayLayer)
+                ) {
+                    roadOverlayLayer.addTo(map);
+                }
             } else {
                 roadOverlayRefreshToken += 1;
                 clearTimeout(roadOverlayRefreshTimer);
@@ -8056,6 +8151,13 @@ function cancelNpfMapOverlayPriorityForGpsResume(reason = 'gps-resume') {
     applyNpfMapOverlayPriorityVisibility();
     npfHeavyOverlayPanesHidden = false;
 
+    /*
+     * v17.09 — Routes/HT ont pu être physiquement détachés par le geste
+     * manuel précédent. La reprise GPS conserve le comportement historique :
+     * réafficher immédiatement le rendu existant, sans recalcul lourd.
+     */
+    reattachNpfHeavyOverlayLayersWithoutRefresh(`reprise GPS · ${reason}`);
+
     recordNpfStartupDiagnosticOverlaySnapshot(
         `priorité carte · annulée reprise GPS · ${reason}`
     );
@@ -8096,6 +8198,7 @@ function scheduleNpfMapOverlayPriorityRestore(reason = 'map-end') {
                 npfMapOverlayPriorityActive = false;
                 npfMapManualGestureLockActive = false;
                 applyNpfMapOverlayPriorityVisibility();
+                reattachNpfHeavyOverlayLayersWithoutRefresh('erreur restitution');
             }
         });
     }, NPF_MAP_MANUAL_GESTURE_SETTLE_MS);
@@ -8184,11 +8287,11 @@ function initMap() {
              * identique à la carte seule de référence v16.75.
              */
             setNpfHeavyOverlayPanesHidden(true);
-            if (isRoadOverlayEffectiveAtCurrentZoom() && showHighVoltageLinesLayer) {
-                /* v16.62 — ne pas conserver des dizaines de milliers de tronçons
-                 * bruts Routes pendant le pinch avec HT actif. */
-                releaseRoadOverlaySourceCacheIfHeavy('zoomstart-ht-routes');
-            }
+            /*
+             * v17.09 — aucun nettoyage de cache Routes pendant le geste.
+             * La mémoire source sera éventuellement libérée après le rendu,
+             * jamais au zoomstart : pendant le geste, seule la carte travaille.
+             */
         }
         if (directOfflineNpfZoomSettleTimer) {
             clearTimeout(directOfflineNpfZoomSettleTimer);
@@ -13516,7 +13619,12 @@ async function toggleHighVoltageLinesLayer(forceState = null, options = {}) {
         return;
     }
 
-    if (highVoltageLinesLayer && map && !map.hasLayer(highVoltageLinesLayer)) {
+    if (
+        highVoltageLinesLayer
+        && map
+        && !npfMapOverlayPriorityActive
+        && !map.hasLayer(highVoltageLinesLayer)
+    ) {
         highVoltageLinesLayer.addTo(map);
     }
 
@@ -16267,7 +16375,11 @@ async function toggleRoadOverlayLayer(forceState = null, options = {}) {
                 }
             );
         } else {
-            if (roadOverlayLayer && !map.hasLayer(roadOverlayLayer)) {
+            if (
+                roadOverlayLayer
+                && !npfMapOverlayPriorityActive
+                && !map.hasLayer(roadOverlayLayer)
+            ) {
                 roadOverlayLayer.addTo(map);
             }
 
