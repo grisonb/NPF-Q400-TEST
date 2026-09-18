@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.02';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.03';
 
 
 /*
@@ -2609,9 +2609,25 @@ let npfMapOverlayPriorityActive = false;
 let npfMapOverlayPriorityStage = 3;
 let npfMapOverlayPriorityToken = 0;
 let npfMapOverlayPriorityRestoreTimer = null;
+let npfMapOverlayPriorityLastBeginAt = -Infinity;
+let npfMapOverlayPriorityLastBeginReason = '';
 const NPF_MAP_OVERLAY_PRIORITY_SETTLE_MS = 90;
-const NPF_MAP_OVERLAY_PRIORITY_TILE_MAX_WAIT_MS = 6000;
-const NPF_MAP_OVERLAY_PRIORITY_SIA_MAX_WAIT_MS = 1500;
+
+/*
+ * v17.03 — un zoom Leaflet émet typiquement zoomstart puis movestart pour le
+ * même geste. Une courte fenêtre de coalescence empêche de redémarrer deux fois
+ * la même séquence sans empêcher un vrai geste suivant.
+ */
+const NPF_MAP_OVERLAY_PRIORITY_START_COALESCE_MS = 180;
+
+/*
+ * Aucun timeout forcé pour passer de Tuiles -> VFR :
+ * on attend soit toutes les tuiles visibles, soit l'arrêt réel du scheduler
+ * tuiles (file=0 + lectures actives=0) stabilisé sur plusieurs passes.
+ */
+const NPF_MAP_OVERLAY_PRIORITY_TILE_POLL_MS = 60;
+const NPF_MAP_OVERLAY_PRIORITY_TILE_STABLE_PASSES = 3;
+const NPF_MAP_OVERLAY_PRIORITY_SIA_POLL_MS = 35;
 
 const NPF_HEAVY_OVERLAY_ZOOM_SETTLE_MS = 360;
 const ROAD_OVERLAY_SOURCE_FEATURE_SOFT_LIMIT = 12000;
@@ -7722,6 +7738,27 @@ function applyNpfMapOverlayPriorityVisibility() {
 }
 
 function beginNpfMapOverlayPrioritySequence(reason = 'map-start') {
+    const now = NPF_STARTUP_DIAGNOSTIC.now();
+    const elapsedSinceBegin = now - Number(npfMapOverlayPriorityLastBeginAt || 0);
+    const duplicateLeafletStart = (
+        npfMapOverlayPriorityActive
+        && npfMapOverlayPriorityStage === 0
+        && elapsedSinceBegin >= 0
+        && elapsedSinceBegin <= NPF_MAP_OVERLAY_PRIORITY_START_COALESCE_MS
+        && (
+            (npfMapOverlayPriorityLastBeginReason === 'zoomstart' && reason === 'movestart')
+            || (npfMapOverlayPriorityLastBeginReason === 'zoomstart' && reason === 'gps-movestart')
+            || (npfMapOverlayPriorityLastBeginReason === 'movestart' && reason === 'zoomstart')
+            || (npfMapOverlayPriorityLastBeginReason === 'gps-movestart' && reason === 'zoomstart')
+        )
+    );
+
+    if (duplicateLeafletStart) {
+        return false;
+    }
+
+    npfMapOverlayPriorityLastBeginAt = now;
+    npfMapOverlayPriorityLastBeginReason = String(reason || 'map-start');
     npfMapOverlayPriorityToken += 1;
     npfMapOverlayPriorityActive = true;
     npfMapOverlayPriorityStage = 0;
@@ -7763,11 +7800,89 @@ function beginNpfMapOverlayPrioritySequence(reason = 'map-start') {
             `priorité carte · début · ${reason}`
         );
     }
+
+    return true;
+}
+
+/*
+ * v17.03 — attente dédiée à la priorité carte.
+ * IMPORTANT : lecture seule de l'état des tuiles. Cette fonction ne modifie
+ * ni la file, ni les epochs, ni IndexedDB, ni le cache.
+ */
+async function waitForNpfMapOverlayPriorityTilesSettled(token) {
+    let stablePasses = 0;
+
+    while (
+        token === npfMapOverlayPriorityToken
+        && npfMapOverlayPriorityActive
+    ) {
+        const state = typeof getVisibleBaseTileLoadStateForSia === 'function'
+            ? getVisibleBaseTileLoadStateForSia()
+            : {
+                total: getNpfRetainedBaseTileCount(),
+                loaded: countVisibleLoadedBaseTiles(),
+                tileZoomReady: true
+            };
+
+        const queued = Math.max(
+            0,
+            Number(directOfflineNpfReadQueue?.length || 0)
+        );
+        const activeReads = Math.max(
+            0,
+            Number(directOfflineNpfActiveReads || 0)
+        );
+
+        const allVisibleLoaded = (
+            state.total > 0
+            && state.loaded >= state.total
+            && state.tileZoomReady
+        );
+
+        /*
+         * Si certaines coordonnées ne possèdent réellement aucune tuile,
+         * loaded peut rester inférieur à total. Dans ce cas, "terminé" signifie
+         * que le moteur de référence n'a strictement plus rien à lire.
+         */
+        const schedulerIdle = (
+            queued === 0
+            && activeReads === 0
+            && state.tileZoomReady
+        );
+
+        if (allVisibleLoaded || schedulerIdle) {
+            stablePasses += 1;
+            if (
+                stablePasses
+                >= NPF_MAP_OVERLAY_PRIORITY_TILE_STABLE_PASSES
+            ) {
+                await new Promise(resolve => {
+                    if (typeof requestAnimationFrame === 'function') {
+                        requestAnimationFrame(() => resolve());
+                    } else {
+                        setTimeout(resolve, 0);
+                    }
+                });
+
+                return (
+                    token === npfMapOverlayPriorityToken
+                    && npfMapOverlayPriorityActive
+                );
+            }
+        } else {
+            stablePasses = 0;
+        }
+
+        await new Promise(resolve => setTimeout(
+            resolve,
+            NPF_MAP_OVERLAY_PRIORITY_TILE_POLL_MS
+        ));
+    }
+
+    return false;
 }
 
 async function waitForNpfMapOverlayPrioritySiaIdle(token) {
-    const startedAt = NPF_STARTUP_DIAGNOSTIC.now();
-
     while (
         token === npfMapOverlayPriorityToken
         && npfMapOverlayPriorityActive
@@ -7776,13 +7891,10 @@ async function waitForNpfMapOverlayPrioritySiaIdle(token) {
             || siaRefreshInProgress
         )
     ) {
-        if (
-            NPF_STARTUP_DIAGNOSTIC.now() - startedAt
-            >= NPF_MAP_OVERLAY_PRIORITY_SIA_MAX_WAIT_MS
-        ) {
-            break;
-        }
-        await new Promise(resolve => setTimeout(resolve, 35));
+        await new Promise(resolve => setTimeout(
+            resolve,
+            NPF_MAP_OVERLAY_PRIORITY_SIA_POLL_MS
+        ));
     }
 
     return (
@@ -7808,21 +7920,15 @@ async function runNpfMapOverlayPriorityRestore(token, reason = 'map-end') {
      * Lecture seule de l'état Leaflet/DOM : aucune priorité, aucun epoch,
      * aucune transaction IndexedDB et aucun scheduler de tuiles n'est modifié.
      */
-    await waitForNpfVisibleBaseTilesReady({
-        maxWaitMs: NPF_MAP_OVERLAY_PRIORITY_TILE_MAX_WAIT_MS,
-        pollMs: 60,
-        isCancelled
-    });
-    if (isCancelled()) return;
+    const tilesSettled = await waitForNpfMapOverlayPriorityTilesSettled(token);
+    if (!tilesSettled || isCancelled()) return;
 
     /*
      * 2 — POINTS VFR
-     * L'ancien rendu réapparaît immédiatement ; le moteur SIA remet ensuite
-     * la vue à jour. On attend sa transaction avant de passer aux gros Canvas.
+     * Le pane reste encore masqué pendant la reconstruction SIA. Les points
+     * n'apparaissent qu'une fois la vue finale recalculée : aucun ancien rendu
+     * VFR n'est brièvement montré avant le nouveau.
      */
-    npfMapOverlayPriorityStage = 1;
-    applyNpfMapOverlayPriorityVisibility();
-
     if (typeof hasAnyEnabledSiaFilter !== 'function' || hasAnyEnabledSiaFilter()) {
         try {
             scheduleSiaLayerRefresh('overlay-priority-vfr');
@@ -7830,6 +7936,12 @@ async function runNpfMapOverlayPriorityRestore(token, reason = 'map-end') {
         } catch (_) {}
     }
     if (isCancelled()) return;
+
+    npfMapOverlayPriorityStage = 1;
+    applyNpfMapOverlayPriorityVisibility();
+    recordNpfStartupDiagnosticOverlaySnapshot(
+        `priorité carte · VFR prêt · ${reason}`
+    );
 
     /*
      * 3 — LIGNES HT
@@ -7856,6 +7968,9 @@ async function runNpfMapOverlayPriorityRestore(token, reason = 'map-end') {
 
     npfMapOverlayPriorityStage = 2;
     applyNpfMapOverlayPriorityVisibility();
+    recordNpfStartupDiagnosticOverlaySnapshot(
+        `priorité carte · HT prêt · ${reason}`
+    );
 
     /*
      * 4 — ROUTES
@@ -7891,6 +8006,8 @@ async function runNpfMapOverlayPriorityRestore(token, reason = 'map-end') {
 
     npfMapOverlayPriorityStage = 3;
     npfMapOverlayPriorityActive = false;
+    npfMapOverlayPriorityLastBeginAt = -Infinity;
+    npfMapOverlayPriorityLastBeginReason = '';
     applyNpfMapOverlayPriorityVisibility();
 
     /*
@@ -7951,6 +8068,7 @@ function initMap() {
         beginNpfMapOverlayPrioritySequence(
             gpsFollowPan ? 'gps-movestart' : 'movestart'
         );
+        /* v17.03 : un movestart secondaire d'un zoom est coalescé dans begin(). */
 
         /*
          * v16.55 — un PAN, manuel ou GPS, ne touche jamais à la génération
@@ -7983,6 +8101,7 @@ function initMap() {
     });
     map.on('zoomstart', () => {
         beginNpfMapOverlayPrioritySequence('zoomstart');
+        /* v17.03 : le movestart Leaflet qui suit ce zoomstart ne redémarre pas la séquence. */
 
         if (!Number.isFinite(npfHeavyOverlayZoomStartLevel)) {
             npfHeavyOverlayZoomStartLevel = Number(map.getZoom?.());
