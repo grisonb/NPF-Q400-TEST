@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.07';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.08';
 
 
 /*
@@ -9008,6 +9008,85 @@ async function waitForNpfLayerActivationTileWindow(layerKey, options = {}) {
     }
 }
 
+
+/*
+ * v17.08 — Routes/HT strictement opportunistes.
+ *
+ * Objectif opérationnel : Routes ON / HT ON ne doivent jamais retirer de
+ * fluidité au fond NPF par rapport à Routes OFF / HT OFF.
+ *
+ * Une couche lourde n'est autorisée à commencer son travail que lorsque :
+ * - toutes les tuiles visibles sont peintes ;
+ * - la file IndexedDB NPF est vide ;
+ * - aucune lecture NPF n'est active ;
+ * - cet état reste calme pendant 320 ms supplémentaires.
+ *
+ * Tout nouveau geste invalide les tokens Routes/HT existants : l'attente se
+ * termine alors sans aucun rendu lourd. Le fond de carte reste prioritaire.
+ */
+const NPF_HEAVY_OVERLAY_POST_TILE_QUIET_MS = 320;
+
+async function waitForNpfHeavyOverlayTileWindow(layerKey, options = {}) {
+    const isCancelled = typeof options.isCancelled === 'function'
+        ? options.isCancelled
+        : () => false;
+    const maxWaitMs = Number.isFinite(Number(options.maxWaitMs))
+        ? Math.max(1000, Number(options.maxWaitMs))
+        : 30000;
+
+    const ready = await waitForNpfLayerActivationTileWindow(layerKey, {
+        maxWaitMs,
+        isCancelled
+    });
+    if (!ready || isCancelled()) return false;
+
+    const directNpfOffline = !!(
+        offlineTilesMode
+        && typeof isNpfOfflinePackSelection === 'function'
+        && isNpfOfflinePackSelection()
+    );
+    if (!directNpfOffline) return !isCancelled();
+
+    const nowMs = () => (
+        typeof performance !== 'undefined' && performance.now
+            ? performance.now()
+            : Date.now()
+    );
+    const startedAt = nowMs();
+    let stableSince = startedAt;
+
+    while (true) {
+        if (isCancelled()) return false;
+
+        const tileState = typeof getVisibleBaseTileLoadStateForSia === 'function'
+            ? getVisibleBaseTileLoadStateForSia()
+            : {
+                total: getNpfRetainedBaseTileCount(),
+                loaded: countVisibleLoadedBaseTiles(),
+                tileZoomReady: true
+            };
+        const activeReads = Math.max(0, Number(directOfflineNpfActiveReads || 0));
+        const queuedReads = Math.max(0, Number(directOfflineNpfReadQueue?.length || 0));
+        const tilesStillReady = (
+            Number(tileState.total || 0) > 0
+            && Number(tileState.loaded || 0) >= Number(tileState.total || 0)
+            && tileState.tileZoomReady
+            && activeReads === 0
+            && queuedReads === 0
+        );
+
+        const now = nowMs();
+        if (!tilesStillReady) {
+            stableSince = now;
+        } else if (now - stableSince >= NPF_HEAVY_OVERLAY_POST_TILE_QUIET_MS) {
+            return !isCancelled();
+        }
+
+        if (now - startedAt >= maxWaitMs) return false;
+        await new Promise(resolve => setTimeout(resolve, 70));
+    }
+}
+
 let npfOfflineZoomCleanupToken = 0;
 let npfZoomMemoryDiagTimer = null;
 
@@ -13008,29 +13087,24 @@ async function refreshVisibleHighVoltageLines(source = 'refresh') {
     const token = ++highVoltageLinesRefreshToken;
 
     /*
-     * v16.85 — pendant la transaction sérialisée Routes+HT, les panes sont
-     * déjà masqués et le fond OFFLINE continue de charger en parallèle.
-     * Ne pas bloquer HT jusqu'à 7 s sur les tuiles : reconstruire directement
-     * le viewport final. Les autres appels HT conservent leur garde-fou.
+     * v17.08 — priorité absolue au fond NPF.
+     * Aucun scan, filtrage ni rendu HT ne commence tant que les tuiles ne sont
+     * pas totalement peintes et le scheduler IndexedDB au repos, puis calme
+     * pendant 320 ms. Cela vaut aussi pour les chemins sérialisés et pour la
+     * restitution Tuiles -> VFR -> HT -> Routes.
      */
-    const bypassTileWait = (
-        source === 'zoom-out-serial-ht'
-        || source === 'overlay-priority-ht'
-    );
-    if (!bypassTileWait) {
-        const tilesReady = await waitForNpfVisibleBaseTilesReady({
-            maxWaitMs: 7000,
-            isCancelled: () => (
-                token !== highVoltageLinesRefreshToken
-                || !showHighVoltageLinesLayer
-            )
-        });
-        if (!tilesReady) {
-            if (token === highVoltageLinesRefreshToken && showHighVoltageLinesLayer) {
-                scheduleHighVoltageLinesRefresh('tile-priority-retry');
-            }
-            return;
+    const tilesReady = await waitForNpfHeavyOverlayTileWindow('HT', {
+        maxWaitMs: 30000,
+        isCancelled: () => (
+            token !== highVoltageLinesRefreshToken
+            || !showHighVoltageLinesLayer
+        )
+    });
+    if (!tilesReady) {
+        if (token === highVoltageLinesRefreshToken && showHighVoltageLinesLayer) {
+            scheduleHighVoltageLinesRefresh('tile-priority-retry');
         }
+        return;
     }
 
     const zoom = Number(map.getZoom?.());
@@ -13201,6 +13275,21 @@ async function runSerializedHeavyOverlayZoomOut(startZoom, finalZoom) {
     setNpfHeavyOverlayPanesHidden(true);
     recordNpfStartupDiagnosticOverlaySnapshot(`zoom-out série · panes masqués z${startZoom}->${finalZoom}`);
 
+    /*
+     * v17.08 — même la séquence combinée Routes+HT attend désormais le repos
+     * complet des tuiles avant le moindre nettoyage/recalcul lourd.
+     */
+    const heavyWindowReady = await waitForNpfHeavyOverlayTileWindow('Routes+HT', {
+        maxWaitMs: 30000,
+        isCancelled: () => token !== npfHeavyOverlayZoomSerialToken || !map
+    });
+    if (!heavyWindowReady || token !== npfHeavyOverlayZoomSerialToken || !map) {
+        if (token === npfHeavyOverlayZoomSerialToken && map) {
+            setNpfHeavyOverlayPanesHidden(false);
+        }
+        return;
+    }
+
     await yieldRoadOverlayRenderTurn();
     if (token !== npfHeavyOverlayZoomSerialToken || !map) return;
 
@@ -13254,10 +13343,9 @@ async function runSerializedHeavyOverlayZoomOut(startZoom, finalZoom) {
         }
     } catch (_) {}
     /*
-     * v16.85 — la reconstruction Routes+HT reste sérialisée et les deux appels
-     * internes utilisent maintenant le mode sans attente tuiles. Une fois
-     * Routes puis HT reconstruits, les panes sont réaffichés immédiatement ;
-     * le fond OFFLINE poursuit son chargement indépendamment.
+     * v17.08 — la reconstruction Routes+HT reste sérialisée, mais elle ne
+     * démarre qu'après repos complet du fond NPF. Le fond conserve donc la
+     * priorité absolue ; les panes ne reviennent qu'après reconstruction.
      */
     if (token !== npfHeavyOverlayZoomSerialToken || !map) return;
 
@@ -15832,6 +15920,26 @@ async function refreshRoadOverlayVisibleParts(source = 'refresh') {
     const forceRefresh = source !== 'map-change';
     let trafficSuspendedForRoad = false;
 
+    /*
+     * v17.08 — même règle que HT : Routes ne font absolument aucun travail
+     * lourd tant que le fond NPF n'est pas entièrement prêt et au repos.
+     * Le contrôle est placé AVANT les nettoyages/changements de tier afin que
+     * Routes ON ne coûte rien à la fluidité d'un pan/zoom par rapport à OFF.
+     */
+    const heavyTileWindowReady = await waitForNpfHeavyOverlayTileWindow('Routes', {
+        maxWaitMs: 30000,
+        isCancelled: () => (
+            token !== roadOverlayRefreshToken
+            || !showRoadOverlayLayer
+        )
+    });
+    if (!heavyTileWindowReady) {
+        if (token === roadOverlayRefreshToken && showRoadOverlayLayer) {
+            scheduleRoadOverlayRefresh('tile-priority-retry');
+        }
+        return;
+    }
+
     const suspendTrafficForRoadWork = () => {
         if (trafficSuspendedForRoad) return;
         trafficSuspendedForRoad = true;
@@ -15942,24 +16050,16 @@ async function refreshRoadOverlayVisibleParts(source = 'refresh') {
 
         if (featureSelectionChanged) {
             /*
-             * v16.85 — même principe que HT : pendant la séquence sérialisée
-             * Routes+HT, le fond OFFLINE charge déjà en parallèle et les panes
-             * sont masqués. Ne pas attendre jusqu'à 7 s les tuiles visibles
-             * avant de reconstruire Routes. Les autres refresh conservent leur
-             * priorité tuiles historique.
+             * v17.08 — recontrôle juste avant la reconstruction effective.
+             * Si de nouvelles lectures tuiles ont commencé depuis la fenêtre
+             * calme initiale, Routes cèdent immédiatement la priorité.
              */
-            const bypassTileWait = (
-                source === 'zoom-out-serial-routes'
-                || source === 'overlay-priority-routes'
-            );
-            if (!bypassTileWait) {
-                const tilesReady = await waitForRoadOverlayOfflineTiles(token);
-                if (!tilesReady) {
-                    if (token === roadOverlayRefreshToken && showRoadOverlayLayer) {
-                        scheduleRoadOverlayRefresh('tile-priority-retry');
-                    }
-                    return;
+            const tilesReady = await waitForRoadOverlayOfflineTiles(token);
+            if (!tilesReady) {
+                if (token === roadOverlayRefreshToken && showRoadOverlayLayer) {
+                    scheduleRoadOverlayRefresh('tile-priority-retry');
                 }
+                return;
             }
             if (
                 token !== roadOverlayRefreshToken
