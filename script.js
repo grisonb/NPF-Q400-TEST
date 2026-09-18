@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.03';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.04';
 
 
 /*
@@ -2596,11 +2596,14 @@ let npfHeavyOverlayPanesHidden = false;
 /*
  * v17.02 — priorité d'affichage pendant les gestes carte.
  *
- * Ordre de restitution après moveend/zoomend :
+ * Ordre de restitution après moveend/zoomend MANUEL :
  * 0. fond/tuiles seules,
  * 1. points VFR (SIA points),
  * 2. lignes HT,
  * 3. routes.
+ *
+ * v17.04 : les recentrages automatiques GPS/simulation sont explicitement
+ * exclus de ce séquenceur afin d'éviter tout clignotement des overlays.
  *
  * Les calques opérationnels légers (avion, feu, WP, trafic, etc.) ne sont pas
  * concernés. Le moteur de tuiles reste strictement celui de v16.75/v17.01.
@@ -8062,31 +8065,31 @@ function initMap() {
         const gpsFollowPan = isNpfGpsFollowProgrammaticPan();
 
         /*
-         * v17.02 — quel que soit l'origine du mouvement (manuel ou suivi GPS),
-         * masquer immédiatement VFR/HT/Routes et laisser le fond travailler seul.
-         */
-        beginNpfMapOverlayPrioritySequence(
-            gpsFollowPan ? 'gps-movestart' : 'movestart'
-        );
-        /* v17.03 : un movestart secondaire d'un zoom est coalescé dans begin(). */
-
-        /*
-         * v16.55 — un PAN, manuel ou GPS, ne touche jamais à la génération
-         * des lectures de tuiles NPF. Les transactions IndexedDB déjà lancées
-         * terminent normalement. La purge ciblée reste réservée à moveend et
-         * uniquement pour les demandes réellement devenues hors vue.
+         * v16.55 / v17.04 — le recentrage automatique GPS/simulation ne doit
+         * JAMAIS entrer dans le séquenceur Tuiles -> VFR -> HT -> Routes.
+         *
+         * Les calques déjà rendus restent visibles et se déplacent naturellement
+         * avec Leaflet. Routes/HT ne seront recalculés par leur mécanisme
+         * historique que si leur couverture devient insuffisante.
          */
         if (gpsFollowPan) {
             /*
-             * v16.55 — arrêter uniquement un ancien travail SIA issu du
-             * mouvement carte. Une action explicite filtre/zoom/utilisateur
-             * n'est jamais annulée par le suivi GPS. Les tuiles restent intactes.
+             * Conserver le comportement historique SIA : arrêter uniquement
+             * un ancien travail SIA issu du mouvement carte, sans masquer les
+             * points déjà visibles et sans toucher aux tuiles.
              */
             if (typeof cancelObsoleteSiaMapMotionWork === 'function') {
                 cancelObsoleteSiaMapMotionWork('gps-movestart');
             }
             return;
         }
+
+        /*
+         * v17.04 — la priorité stricte concerne uniquement un déplacement
+         * utilisateur. Un movestart secondaire d'un zoom manuel reste coalescé
+         * par beginNpfMapOverlayPrioritySequence().
+         */
+        beginNpfMapOverlayPrioritySequence('movestart');
 
         beginBaseMapZoomStabilityGuard('movestart');
         beginMapVisualRenderGuard('movestart');
@@ -8161,15 +8164,21 @@ function initMap() {
     });
     map.on('moveend', () => {
         const gpsFollowPan = isNpfGpsFollowProgrammaticPan();
-        if (!gpsFollowPan) {
-            try { pruneDirectOfflineNpfQueueForCurrentView('moveend'); } catch (_) {}
-        }
-        scheduleNpfMapOverlayPriorityRestore(
-            gpsFollowPan ? 'gps-moveend' : 'moveend'
-        );
-        if (!gpsFollowPan) {
-            scheduleTrafficVisualResumeAfterMapInteraction('moveend');
-        }
+
+        /*
+         * v17.04 — recentrage automatique GPS/simulation :
+         * - aucune purge tuiles ajoutée ;
+         * - aucune séquence de masquage/restauration overlays ;
+         * - aucun traitement visuel manuel.
+         *
+         * Les handlers historiques SIA / HT / Routes restent libres de gérer
+         * seulement les changements de couverture nécessaires.
+         */
+        if (gpsFollowPan) return;
+
+        try { pruneDirectOfflineNpfQueueForCurrentView('moveend'); } catch (_) {}
+        scheduleNpfMapOverlayPriorityRestore('moveend');
+        scheduleTrafficVisualResumeAfterMapInteraction('moveend');
     });
     L.control.zoom({ position: 'bottomleft' }).addTo(map);
     ensureNauticalScaleControl();
