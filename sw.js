@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v17-04_gps_overlay_priority_exclusion';
-const APP_VERSION = 'v17.04';
+const SW_VERSION = 'sw-v17-06_idb_batch_soft_refresh_gps_resume';
+const APP_VERSION = 'v17.06';
 const SIA_DATA_REVISION = '15.69-radio1026-1-maplite1';
 const SIA_DATA_URL = './sia.js';
 const SIA_DATA_CACHE = `npf-q400-sia-data-${SIA_DATA_REVISION}`;
