@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.01';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.02';
 
 
 /*
@@ -2592,6 +2592,27 @@ let npfHeavyOverlayPendingStartZoom = null;
 let npfHeavyOverlayPendingFinalZoom = null;
 let npfHeavyOverlayPendingResolve = null;
 let npfHeavyOverlayPanesHidden = false;
+
+/*
+ * v17.02 — priorité d'affichage pendant les gestes carte.
+ *
+ * Ordre de restitution après moveend/zoomend :
+ * 0. fond/tuiles seules,
+ * 1. points VFR (SIA points),
+ * 2. lignes HT,
+ * 3. routes.
+ *
+ * Les calques opérationnels légers (avion, feu, WP, trafic, etc.) ne sont pas
+ * concernés. Le moteur de tuiles reste strictement celui de v16.75/v17.01.
+ */
+let npfMapOverlayPriorityActive = false;
+let npfMapOverlayPriorityStage = 3;
+let npfMapOverlayPriorityToken = 0;
+let npfMapOverlayPriorityRestoreTimer = null;
+const NPF_MAP_OVERLAY_PRIORITY_SETTLE_MS = 90;
+const NPF_MAP_OVERLAY_PRIORITY_TILE_MAX_WAIT_MS = 6000;
+const NPF_MAP_OVERLAY_PRIORITY_SIA_MAX_WAIT_MS = 1500;
+
 const NPF_HEAVY_OVERLAY_ZOOM_SETTLE_MS = 360;
 const ROAD_OVERLAY_SOURCE_FEATURE_SOFT_LIMIT = 12000;
 
@@ -7658,6 +7679,256 @@ function ensureTwoFingerRulerControl() {
     map.__npfTwoFingerRulerReady = true;
 }
 
+
+function isNpfMapOverlayPrioritySequenceActive() {
+    return !!npfMapOverlayPriorityActive;
+}
+
+function applyNpfMapOverlayPriorityVisibility() {
+    if (!map) return;
+
+    const active = !!npfMapOverlayPriorityActive;
+    const stage = active
+        ? Math.max(0, Math.min(3, Number(npfMapOverlayPriorityStage) || 0))
+        : 3;
+
+    const setPaneVisibility = (names, visible) => {
+        const visibility = visible ? 'visible' : 'hidden';
+        names.forEach(name => {
+            try {
+                const pane = map.getPane?.(name);
+                if (pane) pane.style.visibility = visibility;
+            } catch (_) {}
+        });
+    };
+
+    // Étape 2 — points VFR.
+    setPaneVisibility(
+        ['siaPointPane', 'siaPointTouchPane'],
+        !active || stage >= 1
+    );
+
+    // Étape 3 — lignes HT.
+    setPaneVisibility(
+        ['highVoltageLinesPane'],
+        !active || stage >= 2
+    );
+
+    // Étape 4 — routes.
+    setPaneVisibility(
+        ['roadOverlayCasingPane', 'roadOverlayLinePane', 'roadOverlayLabelPane'],
+        !active || stage >= 3
+    );
+}
+
+function beginNpfMapOverlayPrioritySequence(reason = 'map-start') {
+    npfMapOverlayPriorityToken += 1;
+    npfMapOverlayPriorityActive = true;
+    npfMapOverlayPriorityStage = 0;
+
+    if (npfMapOverlayPriorityRestoreTimer) {
+        clearTimeout(npfMapOverlayPriorityRestoreTimer);
+        npfMapOverlayPriorityRestoreTimer = null;
+    }
+
+    /*
+     * Toute reconstruction ancienne devient inutile pendant le geste.
+     * On annule uniquement les travaux VFR/HT/Routes, jamais les lectures
+     * de tuiles IndexedDB.
+     */
+    clearTimeout(roadOverlayRefreshTimer);
+    roadOverlayRefreshTimer = null;
+    roadOverlayRefreshToken += 1;
+
+    clearTimeout(highVoltageLinesRefreshTimer);
+    highVoltageLinesRefreshTimer = null;
+    highVoltageLinesRefreshToken += 1;
+
+    window.__npfSiaRefreshGeneration =
+        (Number(window.__npfSiaRefreshGeneration) || 0) + 1;
+    if (siaRefreshTimer) {
+        clearTimeout(siaRefreshTimer);
+        siaRefreshTimer = null;
+    }
+
+    if (npfHeavyOverlayZoomOutPromise || npfHeavyOverlayZoomSettleTimer) {
+        try { cancelPendingSerializedHeavyOverlayZoomOut('priorité-carte-v17.02'); }
+        catch (_) {}
+    }
+
+    applyNpfMapOverlayPriorityVisibility();
+
+    if (reason) {
+        recordNpfStartupDiagnosticOverlaySnapshot(
+            `priorité carte · début · ${reason}`
+        );
+    }
+}
+
+async function waitForNpfMapOverlayPrioritySiaIdle(token) {
+    const startedAt = NPF_STARTUP_DIAGNOSTIC.now();
+
+    while (
+        token === npfMapOverlayPriorityToken
+        && npfMapOverlayPriorityActive
+        && (
+            siaRefreshTimer
+            || siaRefreshInProgress
+        )
+    ) {
+        if (
+            NPF_STARTUP_DIAGNOSTIC.now() - startedAt
+            >= NPF_MAP_OVERLAY_PRIORITY_SIA_MAX_WAIT_MS
+        ) {
+            break;
+        }
+        await new Promise(resolve => setTimeout(resolve, 35));
+    }
+
+    return (
+        token === npfMapOverlayPriorityToken
+        && npfMapOverlayPriorityActive
+    );
+}
+
+async function runNpfMapOverlayPriorityRestore(token, reason = 'map-end') {
+    if (
+        token !== npfMapOverlayPriorityToken
+        || !npfMapOverlayPriorityActive
+        || !map
+    ) return;
+
+    const isCancelled = () => (
+        token !== npfMapOverlayPriorityToken
+        || !npfMapOverlayPriorityActive
+    );
+
+    /*
+     * 1 — TUILES
+     * Lecture seule de l'état Leaflet/DOM : aucune priorité, aucun epoch,
+     * aucune transaction IndexedDB et aucun scheduler de tuiles n'est modifié.
+     */
+    await waitForNpfVisibleBaseTilesReady({
+        maxWaitMs: NPF_MAP_OVERLAY_PRIORITY_TILE_MAX_WAIT_MS,
+        pollMs: 60,
+        isCancelled
+    });
+    if (isCancelled()) return;
+
+    /*
+     * 2 — POINTS VFR
+     * L'ancien rendu réapparaît immédiatement ; le moteur SIA remet ensuite
+     * la vue à jour. On attend sa transaction avant de passer aux gros Canvas.
+     */
+    npfMapOverlayPriorityStage = 1;
+    applyNpfMapOverlayPriorityVisibility();
+
+    if (typeof hasAnyEnabledSiaFilter !== 'function' || hasAnyEnabledSiaFilter()) {
+        try {
+            scheduleSiaLayerRefresh('overlay-priority-vfr');
+            await waitForNpfMapOverlayPrioritySiaIdle(token);
+        } catch (_) {}
+    }
+    if (isCancelled()) return;
+
+    /*
+     * 3 — LIGNES HT
+     * Le pane reste caché pendant la reconstruction, puis est révélé une fois
+     * le rendu du viewport final terminé.
+     */
+    if (showHighVoltageLinesLayer && hasLoadedHighVoltageLines) {
+        try {
+            if (
+                highVoltageLinesLayer
+                && !map.hasLayer(highVoltageLinesLayer)
+            ) {
+                highVoltageLinesLayer.addTo(map);
+            }
+            await refreshVisibleHighVoltageLines('overlay-priority-ht');
+        } catch (error) {
+            console.warn(
+                'Restitution prioritaire lignes HT impossible:',
+                error
+            );
+        }
+    }
+    if (isCancelled()) return;
+
+    npfMapOverlayPriorityStage = 2;
+    applyNpfMapOverlayPriorityVisibility();
+
+    /*
+     * 4 — ROUTES
+     * Dernier calque lourd réactivé/reconstruit.
+     */
+    if (showRoadOverlayLayer) {
+        try {
+            const tier = getRoadOverlayZoomTier();
+            if (tier > 0) {
+                if (roadOverlayLayer && !map.hasLayer(roadOverlayLayer)) {
+                    roadOverlayLayer.addTo(map);
+                }
+                await refreshRoadOverlayVisibleParts(
+                    'overlay-priority-routes'
+                );
+            } else {
+                roadOverlayRefreshToken += 1;
+                clearTimeout(roadOverlayRefreshTimer);
+                roadOverlayRefreshTimer = null;
+                if (roadOverlayLayer && map.hasLayer(roadOverlayLayer)) {
+                    map.removeLayer(roadOverlayLayer);
+                }
+                roadOverlayLoadedZoomTier = 0;
+            }
+        } catch (error) {
+            console.warn(
+                'Restitution prioritaire Routes impossible:',
+                error
+            );
+        }
+    }
+    if (isCancelled()) return;
+
+    npfMapOverlayPriorityStage = 3;
+    npfMapOverlayPriorityActive = false;
+    applyNpfMapOverlayPriorityVisibility();
+
+    /*
+     * Réinitialiser l'ancien état de zoom lourd afin qu'il ne puisse pas
+     * déclencher ensuite une séquence Routes/HT héritée.
+     */
+    npfHeavyOverlayZoomStartLevel = null;
+    npfHeavyOverlayPanesHidden = false;
+
+    recordNpfStartupDiagnosticOverlaySnapshot(
+        `priorité carte · fin · ${reason}`
+    );
+}
+
+function scheduleNpfMapOverlayPriorityRestore(reason = 'map-end') {
+    if (!npfMapOverlayPriorityActive) return;
+
+    const token = npfMapOverlayPriorityToken;
+    if (npfMapOverlayPriorityRestoreTimer) {
+        clearTimeout(npfMapOverlayPriorityRestoreTimer);
+    }
+
+    npfMapOverlayPriorityRestoreTimer = setTimeout(() => {
+        npfMapOverlayPriorityRestoreTimer = null;
+        runNpfMapOverlayPriorityRestore(token, reason).catch(error => {
+            console.warn('Séquence prioritaire carte impossible:', error);
+            if (
+                token === npfMapOverlayPriorityToken
+                && npfMapOverlayPriorityActive
+            ) {
+                npfMapOverlayPriorityStage = 3;
+                npfMapOverlayPriorityActive = false;
+                applyNpfMapOverlayPriorityVisibility();
+            }
+        });
+    }, NPF_MAP_OVERLAY_PRIORITY_SETTLE_MS);
+}
+
 function initMap() {
     if (map) return;
     map = L.map('map', {
@@ -7672,6 +7943,14 @@ function initMap() {
 
     map.on('movestart', () => {
         const gpsFollowPan = isNpfGpsFollowProgrammaticPan();
+
+        /*
+         * v17.02 — quel que soit l'origine du mouvement (manuel ou suivi GPS),
+         * masquer immédiatement VFR/HT/Routes et laisser le fond travailler seul.
+         */
+        beginNpfMapOverlayPrioritySequence(
+            gpsFollowPan ? 'gps-movestart' : 'movestart'
+        );
 
         /*
          * v16.55 — un PAN, manuel ou GPS, ne touche jamais à la génération
@@ -7703,6 +7982,8 @@ function initMap() {
         }
     });
     map.on('zoomstart', () => {
+        beginNpfMapOverlayPrioritySequence('zoomstart');
+
         if (!Number.isFinite(npfHeavyOverlayZoomStartLevel)) {
             npfHeavyOverlayZoomStartLevel = Number(map.getZoom?.());
         }
@@ -7756,12 +8037,20 @@ function initMap() {
         try { trimDirectOfflineTileBlobCache(); } catch (_) {}
         scheduleBaseMapStabilityRefresh('zoomend');
         scheduleNpfOfflineZoomCleanup('zoomend');
+        scheduleNpfMapOverlayPriorityRestore('zoomend');
         scheduleTrafficVisualResumeAfterMapInteraction('zoomend');
     });
     map.on('moveend', () => {
-        if (isNpfGpsFollowProgrammaticPan()) return;
-        try { pruneDirectOfflineNpfQueueForCurrentView('moveend'); } catch (_) {}
-        scheduleTrafficVisualResumeAfterMapInteraction('moveend');
+        const gpsFollowPan = isNpfGpsFollowProgrammaticPan();
+        if (!gpsFollowPan) {
+            try { pruneDirectOfflineNpfQueueForCurrentView('moveend'); } catch (_) {}
+        }
+        scheduleNpfMapOverlayPriorityRestore(
+            gpsFollowPan ? 'gps-moveend' : 'moveend'
+        );
+        if (!gpsFollowPan) {
+            scheduleTrafficVisualResumeAfterMapInteraction('moveend');
+        }
     });
     L.control.zoom({ position: 'bottomleft' }).addTo(map);
     ensureNauticalScaleControl();
@@ -7966,6 +8255,12 @@ function initMap() {
     map.on('moveend zoomend', event => {
         const gpsFollowPan = event?.type === 'moveend' && isNpfGpsFollowProgrammaticPan();
         const zoomEnded = event?.type === 'zoomend';
+
+        /*
+         * v17.02 — la restitution VFR -> HT -> Routes est pilotée par le
+         * séquenceur prioritaire. Ne pas lancer en parallèle l'ancien chemin.
+         */
+        if (isNpfMapOverlayPrioritySequenceActive()) return;
         const finalZoom = Number(map.getZoom?.());
         const startZoom = Number(npfHeavyOverlayZoomStartLevel);
         const combinedZoomOut = !!(
@@ -8088,25 +8383,24 @@ function beginMapVisualRenderGuard(reason = 'map-start') {
     suspendTrafficVisualUpdates('map-interaction');
 
     /*
-     * Un rendu routier lancé pour l'ancienne vue n'a plus d'intérêt. L'annuler
-     * évite qu'il continue à parser/créer des couches pendant le nouveau geste.
+     * v17.02 — VFR/HT/Routes ont déjà été invalidés par
+     * beginNpfMapOverlayPrioritySequence(). Ne pas incrémenter deux fois les
+     * tokens/générations. La suspension visuelle du trafic reste inchangée.
      */
-    clearTimeout(roadOverlayRefreshTimer);
-    roadOverlayRefreshTimer = null;
-    roadOverlayRefreshToken += 1;
-    clearTimeout(highVoltageLinesRefreshTimer);
-    highVoltageLinesRefreshTimer = null;
-    highVoltageLinesRefreshToken += 1;
+    if (!npfMapOverlayPriorityActive) {
+        clearTimeout(roadOverlayRefreshTimer);
+        roadOverlayRefreshTimer = null;
+        roadOverlayRefreshToken += 1;
+        clearTimeout(highVoltageLinesRefreshTimer);
+        highVoltageLinesRefreshTimer = null;
+        highVoltageLinesRefreshToken += 1;
 
-    /*
-     * v15.82 — un nouveau geste invalide aussi bien le refresh SIA différé
-     * qu'une reconstruction déjà commencée. Celle-ci s'arrêtera à la prochaine
-     * respiration du thread principal.
-     */
-    window.__npfSiaRefreshGeneration = (Number(window.__npfSiaRefreshGeneration) || 0) + 1;
-    if (siaRefreshTimer) {
-        clearTimeout(siaRefreshTimer);
-        siaRefreshTimer = null;
+        window.__npfSiaRefreshGeneration =
+            (Number(window.__npfSiaRefreshGeneration) || 0) + 1;
+        if (siaRefreshTimer) {
+            clearTimeout(siaRefreshTimer);
+            siaRefreshTimer = null;
+        }
     }
     if (isRoadOverlayLoading) {
         isRoadOverlayLoading = false;
@@ -12528,7 +12822,10 @@ async function refreshVisibleHighVoltageLines(source = 'refresh') {
      * Ne pas bloquer HT jusqu'à 7 s sur les tuiles : reconstruire directement
      * le viewport final. Les autres appels HT conservent leur garde-fou.
      */
-    const bypassTileWait = source === 'zoom-out-serial-ht';
+    const bypassTileWait = (
+        source === 'zoom-out-serial-ht'
+        || source === 'overlay-priority-ht'
+    );
     if (!bypassTileWait) {
         const tilesReady = await waitForNpfVisibleBaseTilesReady({
             maxWaitMs: 7000,
@@ -14937,6 +15234,16 @@ function isRoadOverlayCoverageValidForCurrentView() {
 }
 
 function setNpfHeavyOverlayPanesHidden(hidden) {
+    /*
+     * v17.02 — pendant la séquence prioritaire, elle seule décide quand HT et
+     * Routes redeviennent visibles. Un ancien appel `hidden=false` ne doit pas
+     * court-circuiter l'ordre tuiles -> VFR -> HT -> Routes.
+     */
+    if (npfMapOverlayPriorityActive) {
+        applyNpfMapOverlayPriorityVisibility();
+        return;
+    }
+
     const shouldHide = !!hidden;
     if (npfHeavyOverlayPanesHidden === shouldHide) return;
     npfHeavyOverlayPanesHidden = shouldHide;
@@ -15450,7 +15757,10 @@ async function refreshRoadOverlayVisibleParts(source = 'refresh') {
              * avant de reconstruire Routes. Les autres refresh conservent leur
              * priorité tuiles historique.
              */
-            const bypassTileWait = source === 'zoom-out-serial-routes';
+            const bypassTileWait = (
+                source === 'zoom-out-serial-routes'
+                || source === 'overlay-priority-routes'
+            );
             if (!bypassTileWait) {
                 const tilesReady = await waitForRoadOverlayOfflineTiles(token);
                 if (!tilesReady) {
@@ -48822,6 +49132,16 @@ function initializeSiaSystem() {
                 return;
             }
             const gpsFollowMoveend = sample?.source === 'gps-follow' || isNpfGpsFollowProgrammaticPan();
+
+            if (isNpfMapOverlayPrioritySequenceActive()) {
+                npfDiagSiaInteraction(
+                    'SIA RAFRAÎCHISSEMENT',
+                    `raison=moveend · différé par priorité carte v17.02 · zoom=${map.getZoom()}`,
+                    { totalMs: 0 }
+                );
+                return;
+            }
+
             /* v16.58 — Leaflet peut émettre moveend au milieu d'un pinch/zoom.
              * Aucun rendu SIA intermédiaire : seul zoomend reconstruira la vue. */
             if (siaZoomGestureActive) {
@@ -48873,6 +49193,15 @@ function initializeSiaSystem() {
                 });
                 npfDiagZoomStartedAt = 0;
             }
+            if (isNpfMapOverlayPrioritySequenceActive()) {
+                npfDiagSiaInteraction(
+                    'SIA RAFRAÎCHISSEMENT',
+                    `raison=zoomend · différé par priorité carte v17.02 · zoom=${map.getZoom()}`,
+                    { totalMs: 0 }
+                );
+                return;
+            }
+
             const heavyZoomPromise = npfHeavyOverlayZoomOutPromise;
             if (heavyZoomPromise) {
                 /* v16.62 — tous les zoomend intermédiaires observent le même
