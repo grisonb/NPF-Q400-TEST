@@ -1,3 +1,73 @@
+VERSION TEST v17.14 — PRIORITÉ TUILES VIEWPORT + SUIVI ANTICIPÉ SIMULATION
+Date : 18/09/2026
+Base fonctionnelle : v17.13
+
+OBJECTIFS UTILISATEUR
+- Réduire les derniers trous de fluidité observés alors que Routes/HT/SIA/JS sont
+  inactifs pendant le geste et que la file tuiles reste chargée.
+- En mode simulation avec avion en mouvement, placer automatiquement l'avion
+  en position anticipée selon le cap (cap Nord : avion vers le bas de l'écran),
+  comme le mode Suivi, sans réactiver le GPS réel.
+
+DIAG À L'ORIGINE — v17.13 (18/09/2026 19:37)
+- VAC terminées : 415 / 415, donc la synchronisation VAC n'explique plus les
+  lenteurs restantes.
+- Pan réellement saccadé : JS=0, SIA=0, Routes=0, HT=0, GPS=0.
+- Pendant ce pan : file tuiles q32 / 5 lectures actives et tuiles visibles 5 -> 0.
+- Le scheduler v17.12/v17.13 conserve un seul epoch par geste, mais traite encore
+  en FIFO les demandes appartenant au même epoch. Sur un pan long, les tuiles
+  demandées au début du geste peuvent donc passer avant celles du viewport final.
+
+MODIFICATIONS
+
+1. TUILES — PRIORITÉ AU VIEWPORT COURANT DANS UN MÊME EPOCH
+- `runNextDirectOfflineNpfRead()` conserve strictement la priorité d'epoch issue
+  de v17.12.
+- Parmi les demandes du meilleur epoch, l'ordre devient :
+  1) zoom actuellement rendu par la GridLayer ;
+  2) proximité de la tuile avec le centre actuel du viewport ;
+  3) FIFO uniquement en dernier départage.
+- Les lectures IndexedDB déjà actives ne sont jamais annulées.
+- Le nombre de lectures simultanées reste 5.
+- Aucun changement des timeouts, retries, cache, keepBuffer ou méthode IndexedDB.
+
+2. SIMULATION — SUIVI ANTICIPÉ AUTOMATIQUE EN MOUVEMENT
+- Un avion simulé en mouvement est désormais considéré comme utilisant le cadrage
+  anticipé, même si le bouton Suivi GPS n'a pas été activé manuellement.
+- Aucun watch GPS réel n'est démarré par cette fonction.
+- La position anticipée continue d'utiliser le cap de `lastPosition` / route SIM.
+- Les gardes tactiles du Suivi sont installés en mode simulation : un geste manuel
+  sur la carte suspend temporairement le recentrage automatique comme en Suivi.
+- Les recentrages de simulation sont reconnus comme programmatiques afin de ne
+  pas déclencher le séquenceur lourd Tuiles -> VFR -> HT -> Routes.
+
+3. SIMULATION — GARANTIE D'UNE VRAIE ANTICIPATION VERTICALE
+- La marge de sécurité verticale liée aux bandeaux ne peut plus atteindre 50 %
+  de la hauteur visible et rabattre l'avion exactement au centre.
+- Elle est plafonnée à 34 % de la hauteur visible ; le cadrage conserve donc une
+  avance réelle tout en respectant les bandeaux autant que possible.
+
+4. COMPORTEMENTS CONSERVÉS
+- v17.13 : rattachement fiable HT / Routes au démarrage — inchangé.
+- v17.12 : un seul epoch de priorité tuiles par geste — conservé.
+- v17.11 : pré-masquage tactile Routes/HT — inchangé.
+- Première installation VAC et synchronisation VAC — inchangées.
+- SIA — strictement inchangé.
+
+VERSION
+- App : v17.14
+- Service Worker : `sw-v17-14_tile_center_priority_sim_follow`
+- SIA : strictement inchangé par rapport à v17.13.
+
+VALIDATION STATIQUE
+- Syntaxe JavaScript Script/SIA/SW : OK.
+- Script inline de l'Index : OK.
+- Manifest JSON : OK.
+- Cohérence Index / Manifest / Script / Style / SW v17.14 : OK.
+- SIA identique bit-à-bit à v17.13 : OK.
+
+======================================================================
+
 VERSION TEST v17.13 — RATTACHEMENT FIABLE HT / ROUTES AU DÉMARRAGE
 Date : 18/09/2026
 Base fonctionnelle : v17.12
