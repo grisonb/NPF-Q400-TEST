@@ -1,3 +1,69 @@
+VERSION TEST v17.01 — RETOUR CIBLÉ MOTEUR TUILES À LA RÉFÉRENCE v16.75
+Date : 18/09/2026
+Base fonctionnelle : TEST v17.00
+Référence carte/tuiles : v16.75
+
+IMPORTANT
+Cette version ne modifie QUE ce qui concerne le chargement des tuiles offline,
+plus les numéros de version indispensables à la livraison.
+
+AUCUNE modification fonctionnelle n'est faite sur SafeSky, GLR, BLOC/FUEL,
+routes/HT, WP, FdS/GAAR, SIA, VAC, calculateur, recherche, GPS ou autres modules.
+
+1. MOTEUR TUILES — RETOUR À LA RÉFÉRENCE v16.75
+- Scheduler de lectures NPF repris de v16.75.
+- Purge de la file reprise de v16.75.
+- Reset des lectures en attente repris de v16.75.
+- 5 lectures IndexedDB simultanées, comme v16.75.
+- Lecture `tileUrl` remise au curseur indexé
+  `openCursor(IDBKeyRange.only(tileUrl))`, comme v16.75.
+- Suppression du test `index.get(tileUrl)` introduit en v16.99.
+- Suppression complète de l'annulation des transactions actives obsolètes
+  introduite en v17.00.
+- Recherche/orchestration des blobs de tuiles reprise de v16.75.
+- Cache, candidats de bases/packs, mécanisme de récupération IndexedDB et
+  compatibilité legacy reviennent au comportement de référence de v16.75.
+
+2. DIAGNOSTIC TUILES
+- Les deux déclenchements du diagnostic passif de zoom tuiles ajoutés après
+  v16.75 sont désactivés pour que le test de fluidité soit le plus proche
+  possible de la référence.
+- Le reste du diagnostic général NPF est conservé.
+- Les compteurs spécifiques à l'essai d'annulation active v17.00 sont retirés.
+
+3. TOUT LE RESTE RESTE IDENTIQUE À v17.00
+Notamment, sans modification :
+- Filtres SafeSky à validation automatique.
+- Boutons « Défaut » / « Annuler » au-dessus de « Mon avion ».
+- Déduplication SafeSky/GLR de type BENGA96 ↔ BENGALE96.
+- Diagnostic SafeSky.
+- BLOC/FUEL OACI.
+- Route WP et pointillé rouge.
+- Routes et lignes HT.
+- Authentification BFG/NPF et GLR.
+- FdS/GAAR.
+- SIA/VAC.
+
+VERSION
+- App : v17.01.
+- Service Worker : `sw-v17-01_tiles_v1675_reference`.
+- Révision SIA inchangée.
+
+VALIDATION STATIQUE EFFECTUÉE
+- Syntaxe JavaScript Script / SIA / Service Worker : OK.
+- Manifest JSON : OK.
+- Les 6 blocs comportementaux principaux du moteur tuiles correspondent à v16.75 :
+  purge, reset, scheduler, lecture IndexedDB, recherche blob, orchestration blob.
+- `index.get(tileUrl)` absent.
+- Annulation active des transactions v17.00 absente.
+- Déclenchements du diagnostic passif zoom-tuiles absents.
+- Concurrence = 5.
+- Fonctions SafeSky/GLR v17.00 conservées.
+- BLOC/FUEL OACI conservé.
+- Pane WP z=549 conservé.
+
+HISTORIQUE PRÉCÉDENT CONSERVÉ INTÉGRALEMENT
+
 VERSION TEST v17.00 — ANNULATION LECTURES TUILES OBSOLÈTES + FILTRES SS AUTO + DÉDOUBLONNAGE GLR/SS
 Date : 17/09/2026
 Base fonctionnelle : TEST v16.99
