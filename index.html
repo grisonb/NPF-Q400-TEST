@@ -6,8 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>NPF-Q400</title>
     <link rel="stylesheet" href="leaflet.css">
-    <link rel="stylesheet" href="style.css?appv=v17.19">
-    <link rel="manifest" href="manifest.json?appv=v17.19">
+    <link rel="stylesheet" href="style.css?appv=v17.20">
+    <link rel="manifest" href="manifest.json?appv=v17.20">
     <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192x192.png?appv=v13.92">
     <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512x512.png?appv=v13.92">
     <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png?appv=v13.92">
@@ -53,9 +53,533 @@
             transition: opacity .18s ease;
         }
     </style>
+</head>
+<body>
 
+    <div id="app-boot-screen" aria-live="polite">
+        <div class="boot-card">
+            <div>Chargement NPF-Q400…</div>
+            <div class="boot-version">Patience, je réfléchis ...</div>
+        </div>
+    </div>
+    <div id="map"></div>
+    <div id="left-map-action-buttons">
+        <button id="high-voltage-lines-button" class="left-map-action-button high-voltage-map-button" title="Afficher/Masquer les lignes haute tension RTE" aria-label="Afficher/Masquer les lignes haute tension RTE">
+            <span class="powerline-icon" aria-hidden="true">
+                <svg viewBox="0 0 64 64" focusable="false" role="img">
+                    <path class="powerline-tower" d="M32 6 L18 58 H46 Z M32 6 V58 M23 38 H41 M26 26 H38 M20 18 H44"/>
+                    <path class="powerline-wire" d="M4 18 C15 14 22 14 32 18 C42 22 49 22 60 18"/>
+                    <path class="powerline-wire" d="M7 27 C17 24 24 24 32 27 C40 30 47 30 57 27"/>
+                </svg>
+            </span>
+        </button>
+        <button id="road-overlay-button" class="left-map-action-button road-overlay-map-button"
+                title="Afficher/Masquer le calque routier A / N / D / M / T"
+                aria-label="Afficher/Masquer le calque routier autoroutes, nationales, départementales, métropolitaines et territoriales">
+            <span class="road-overlay-icon" aria-hidden="true">
+                <svg viewBox="0 0 72 72" focusable="false" role="img">
+                    <path class="road-overlay-road-casing" d="M12 63 C20 50 20 35 31 23 C39 14 48 12 60 8"/>
+                    <path class="road-overlay-road-line" d="M12 63 C20 50 20 35 31 23 C39 14 48 12 60 8"/>
+                    <rect class="road-overlay-shield road-overlay-shield-a" x="35" y="39" width="28" height="17" rx="5"/>
+                    <text class="road-overlay-shield-text" x="49" y="51">A7</text>
+                    <rect class="road-overlay-shield road-overlay-shield-d" x="7" y="10" width="36" height="17" rx="5"/>
+                    <text class="road-overlay-shield-text road-overlay-shield-text-dark" x="25" y="22">D559</text>
+                </svg>
+            </span>
+            <span id="road-overlay-button-status" class="road-overlay-button-status">—</span>
+        </button>
+        <button id="ops-frequencies-pdf-button" class="left-map-action-button ops-frequencies-map-button" title="Ouvrir la carte fréquences OPS" aria-label="Ouvrir la carte fréquences OPS">
+            <span class="radio-frequency-icon" aria-hidden="true">
+                <svg viewBox="0 0 64 64" focusable="false" role="img">
+                    <path class="radio-dish-bowl" d="M8 22 C9 40 22 53 42 56 L58 46 L20 8 Z"/>
+                    <path class="radio-dish-rim" d="M8 22 C9 40 22 53 42 56"/>
+                    <path class="radio-dish-arm" d="M38 35 L48 25"/>
+                    <circle class="radio-dish-node" cx="50" cy="23" r="3.8"/>
+                    <path class="radio-wave" d="M54 18 C58 21 60 25 60 30"/>
+                    <path class="radio-wave" d="M50 11 C59 15 64 23 64 32"/>
+                    <path class="radio-wave" d="M47 4 C61 8 70 20 70 34"/>
+                    <path class="radio-dish-foot" d="M23 52 L15 62 H38 L31 55"/>
+                </svg>
+            </span>
+        </button>
+        <div class="quick-offline-map-control">
+            <button id="quick-offline-map-button"
+                    class="left-map-action-button quick-offline-map-button"
+                    type="button"
+                    title="Choisir rapidement une carte offline"
+                    aria-label="Choisir rapidement une carte offline">
+                <span class="quick-offline-france-icon" aria-hidden="true">
+                    <svg viewBox="0 0 100 100" focusable="false" role="img">
+                        <path class="quick-offline-france-shape"
+                              d="M 58.3 9.5 L 52.3 11.0 L 50.8 13.0 L 50.1 19.3 L 48.0 20.8 L 43.8 21.7 L 41.5 22.8 L 40.2 25.1 L 40.7 26.9 L 38.1 27.5 L 33.5 26.5 L 32.8 25.9 L 32.4 23.2 L 28.1 22.6 L 27.3 24.8 L 27.8 26.6 L 29.4 28.7 L 29.5 33.1 L 30.0 34.1 L 27.3 33.4 L 24.1 33.5 L 22.6 34.2 L 21.0 32.3 L 16.5 31.7 L 15.7 32.9 L 10.5 33.0 L 8.5 34.3 L 8.0 36.2 L 9.7 37.5 L 10.1 38.5 L 9.2 38.9 L 9.1 40.0 L 10.8 42.3 L 11.7 42.6 L 13.1 41.7 L 18.1 43.3 L 19.6 45.1 L 21.1 44.7 L 23.0 45.5 L 22.8 46.7 L 24.5 47.5 L 25.6 48.9 L 24.8 49.3 L 24.8 50.7 L 25.9 53.1 L 27.9 54.8 L 31.1 56.2 L 31.3 57.3 L 30.2 59.9 L 31.7 61.9 L 31.0 62.4 L 30.5 62.1 L 31.0 62.5 L 29.8 67.8 L 30.1 69.6 L 29.2 74.8 L 28.8 74.8 L 28.9 76.7 L 28.2 79.0 L 26.0 81.5 L 26.4 82.4 L 28.5 83.1 L 28.8 84.4 L 32.4 85.1 L 33.8 86.3 L 36.5 86.4 L 39.3 87.6 L 41.2 87.3 L 43.0 86.3 L 46.2 87.7 L 46.0 88.4 L 48.8 89.9 L 51.4 89.7 L 53.1 90.5 L 55.3 90.4 L 56.7 89.5 L 59.2 89.5 L 59.4 88.3 L 58.3 85.8 L 58.5 83.2 L 59.5 81.9 L 63.6 79.5 L 65.0 79.3 L 67.4 80.6 L 71.9 81.2 L 73.1 82.7 L 74.9 82.9 L 75.9 83.9 L 79.4 84.0 L 82.1 82.7 L 82.6 81.3 L 84.7 80.2 L 85.3 79.1 L 87.4 78.3 L 89.7 73.9 L 88.7 72.7 L 85.7 73.1 L 84.2 72.1 L 83.9 70.5 L 85.0 68.4 L 82.8 65.8 L 84.2 65.4 L 85.3 64.4 L 85.4 62.6 L 83.8 60.1 L 84.5 59.7 L 84.7 58.3 L 83.4 56.6 L 83.5 54.5 L 82.5 53.6 L 81.1 53.5 L 79.8 54.1 L 78.3 55.7 L 79.2 54.5 L 79.6 52.2 L 81.2 51.2 L 81.3 50.1 L 84.2 46.9 L 83.9 45.7 L 86.5 45.6 L 87.9 44.3 L 88.5 38.6 L 90.2 34.3 L 91.8 32.3 L 92.0 30.7 L 88.0 29.7 L 86.6 28.7 L 82.8 28.4 L 81.2 25.8 L 74.7 24.8 L 71.6 22.3 L 71.0 18.9 L 69.6 18.6 L 68.3 20.4 L 67.6 20.4 L 66.9 17.9 L 64.8 17.4 L 64.6 16.7 L 62.8 15.9 L 62.1 14.1 L 59.4 13.7 Z"/>
+                    </svg>
+                </span>
+            </button>
+            <button id="quick-sia-vrp-toggle"
+                    class="quick-sia-vrp-toggle"
+                    type="button"
+                    aria-pressed="true"
+                    title="Masquer les points VFR / VRP"
+                    aria-label="Masquer les points VFR / VRP">
+                <span aria-hidden="true">N</span>
+            </button>
+            <button id="quick-sia-zones-toggle"
+                    class="quick-sia-zones-toggle"
+                    type="button"
+                    aria-pressed="false"
+                    title="Masquer temporairement les zones SIA de la carte"
+                    aria-label="Masquer temporairement les zones SIA de la carte">
+                <svg viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+                    <path class="quick-sia-eye-outline" d="M3 16 C7.2 9.7 11.5 7 16 7 C20.5 7 24.8 9.7 29 16 C24.8 22.3 20.5 25 16 25 C11.5 25 7.2 22.3 3 16 Z"/>
+                    <circle class="quick-sia-eye-pupil" cx="16" cy="16" r="4.2"/>
+                    <path class="quick-sia-eye-slash" d="M5 5 L27 27"/>
+                </svg>
+            </button>
+        </div>
+        <button id="briefing-docs-map-button"
+                class="left-map-action-button briefing-docs-group-map-button briefing-docs-none-loaded"
+                type="button"
+                title="FdS / GAAR — ouvrir les documents opérationnels"
+                aria-label="FdS / GAAR — ouvrir les documents opérationnels">
+            <span id="briefing-docs-main-fds-label" class="briefing-docs-main-line briefing-doc-missing">FdS</span>
+            <span id="briefing-docs-main-gaar-label" class="briefing-docs-main-line briefing-doc-missing">GAAR</span>
+        </button>
+        <button id="global-link-layer-button"
+                class="left-map-action-button global-link-map-button global-link-auth-needed"
+                type="button"
+                title="Global Link — connexion requise"
+                aria-label="Global Link — afficher ou masquer les appareils suivis">
+            <span class="global-link-map-label">GLR</span>
+            <span id="global-link-off-button-count" class="global-link-off-button-count" style="display:none;">0</span>
+            <span id="global-link-button-count" class="global-link-button-count" style="display:none;">0</span>
+        </button>
+        <button id="traffic-layer-button" class="left-map-action-button traffic-map-button" title="SafeSky — afficher/masquer le trafic aérien indicatif — appui long : filtres" aria-label="SafeSky — afficher ou masquer le trafic aérien indicatif">
+            <span class="traffic-icon traffic-safesky-icon" aria-hidden="true"></span>
+            <span id="traffic-tracked-button-count" class="traffic-tracked-button-count" style="display:none;">0</span>
+            <span id="traffic-button-count" class="traffic-button-count">0</span>
+        </button>
+        <button id="simulation-motion-button" class="left-map-action-button simulation-motion-map-button" type="button" hidden
+                title="Régler la vitesse et la route de l’avion simulé"
+                aria-label="Régler la vitesse et la route de l’avion simulé">
+            <span class="simulation-motion-glyph" aria-hidden="true">✈</span>
+            <span id="simulation-motion-button-summary" class="simulation-motion-button-summary">0 kt · 000°</span>
+        </button>
+        <button id="npf-startup-diag-button"
+                class="left-map-action-button npf-startup-diag-button"
+                type="button"
+                title="Diagnostic du chargement de la carte"
+                aria-label="Ouvrir le diagnostic du chargement">
+            <span class="npf-startup-diag-button-label">DIAG</span>
+        </button>
+    </div>
+    <button id="yul-trace-button"
+            class="npf-trace-record-button"
+            type="button"
+            title="TRACE — démarrer ou arrêter l’enregistrement GPS via le raccourci NPF Trace"
+            aria-label="TRACE — démarrer ou arrêter l’enregistrement GPS">
+        <span class="npf-trace-record-icon" aria-hidden="true"></span>
+    </button>
+    <div id="traffic-status-display" class="traffic-status-display" style="display: none;"></div>
+
+    <button id="sia-profile-swipe-handle"
+            class="sia-profile-swipe-handle"
+            type="button"
+            aria-label="Faire glisser vers le haut pour ouvrir le profil des espaces"
+            title="Glisser vers le haut : PROFIL ESPACES">
+        <span aria-hidden="true"></span>
+    </button>
+
+    <div id="sia-profile-panel" class="sia-profile-panel" hidden aria-hidden="true">
+        <div class="sia-profile-header">
+            <div>
+                <div class="sia-profile-title">PROFIL ESPACES</div>
+                <div id="sia-profile-subtitle" class="sia-profile-subtitle">Coupe verticale devant l'avion</div>
+            </div>
+            <div class="sia-profile-controls">
+                <button type="button" class="sia-profile-range-button active" data-profile-range="25">25 NM</button>
+                <button type="button" class="sia-profile-range-button" data-profile-range="50">50 NM</button>
+                <button type="button" class="sia-profile-range-button" data-profile-range="100">100 NM</button>
+                <button id="sia-profile-close" type="button" class="sia-profile-close" aria-label="Fermer le profil">&times;</button>
+            </div>
+        </div>
+        <div class="sia-profile-zone-toolbar">
+            <div class="sia-profile-zone-toolbar-main">
+                <span class="sia-profile-zone-toolbar-title">Zones du profil</span>
+                <div id="sia-profile-zone-filters" class="sia-profile-zone-filters" aria-label="Sélection des zones affichées dans le profil"></div>
+            </div>
+            <button id="sia-profile-map-zones-toggle"
+                    type="button"
+                    class="sia-profile-map-zones-toggle"
+                    aria-pressed="false"
+                    title="Masquer temporairement les zones de la carte sans modifier les filtres">Masquer zones</button>
+        </div>
+        <div id="sia-profile-chart" class="sia-profile-chart"></div>
+        <div class="sia-profile-note">FL représentés à 100 ft/FL ; SFC/AGL sans profil de relief.</div>
+    </div>
+
+    <div id="briefing-doc-selector-modal"
+         class="briefing-doc-selector-modal"
+         style="display: none;"
+         aria-hidden="true">
+        <div class="briefing-doc-selector-modal-content"
+             role="dialog"
+             aria-modal="true"
+             aria-labelledby="briefing-doc-selector-title">
+            <button id="close-briefing-doc-selector-modal"
+                    class="briefing-doc-selector-modal-close"
+                    type="button"
+                    aria-label="Fermer">&times;</button>
+            <h2 id="briefing-doc-selector-title">FdS / GAAR</h2>
+            <p class="briefing-doc-selector-help">Sélectionne le document à ouvrir. La couleur indique si le document du jour est déjà chargé.</p>
+            <div class="briefing-doc-selector-list">
+                <button id="briefing-fds-map-button"
+                        class="briefing-doc-map-button briefing-doc-selector-choice briefing-doc-missing"
+                        type="button"
+                        title="FdS du jour non téléchargée"
+                        aria-label="FdS du jour non téléchargée">
+                    <span class="briefing-doc-selector-choice-name">FdS</span>
+                    <span id="briefing-fds-selector-status" class="briefing-doc-selector-choice-status">Non téléchargée</span>
+                </button>
+                <button id="briefing-gaar-map-button"
+                        class="briefing-doc-map-button briefing-doc-selector-choice briefing-doc-missing"
+                        type="button"
+                        title="GAAR du jour non téléchargé"
+                        aria-label="GAAR du jour non téléchargé">
+                    <span class="briefing-doc-selector-choice-name">GAAR</span>
+                    <span id="briefing-gaar-selector-status" class="briefing-doc-selector-choice-status">Non téléchargé</span>
+                </button>
+            </div>
+            <div class="briefing-doc-selector-bfg-row">
+                <button id="briefing-docs-bfg-pair-button"
+                        class="briefing-doc-selector-bfg-button"
+                        type="button"
+                        title="Associer BFG à NPF"
+                        aria-label="Associer BFG à NPF">BFG</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="global-link-password-modal"
+         class="global-link-auth-modal"
+         style="display: none;"
+         aria-hidden="true">
+        <div class="global-link-auth-dialog" role="dialog" aria-modal="true" aria-labelledby="global-link-password-title">
+            <button id="global-link-password-close" class="global-link-auth-close" type="button" aria-label="Fermer">×</button>
+            <h3 id="global-link-password-title">Global Link Rescue</h3>
+            <p class="global-link-auth-explain">Saisis le mot de passe NPF pour accéder à Global Link.</p>
+            <input id="global-link-password-input"
+                   class="global-link-password-input"
+                   type="password"
+                   autocomplete="current-password"
+                   autocapitalize="none"
+                   spellcheck="false"
+                   placeholder="Mot de passe NPF"
+                   aria-label="Mot de passe NPF Global Link" />
+            <div id="global-link-password-status" class="global-link-auth-status" aria-live="polite"></div>
+            <div class="global-link-auth-actions">
+                <button id="global-link-password-submit" type="button" class="global-link-primary-button">Continuer</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="global-link-auth-modal"
+         class="global-link-auth-modal"
+         style="display: none;"
+         aria-hidden="true">
+        <div class="global-link-auth-dialog" role="dialog" aria-modal="true" aria-labelledby="global-link-auth-title">
+            <button id="global-link-auth-close" class="global-link-auth-close" type="button" aria-label="Fermer">×</button>
+            <h3 id="global-link-auth-title">Global Link Rescue</h3>
+            <p class="global-link-auth-explain">Recopie le code de sécurité affiché ci-dessous pour autoriser le suivi Global Link.</p>
+            <div class="global-link-captcha-frame">
+                <img id="global-link-captcha-image" alt="Code de sécurité Global Link" />
+            </div>
+            <input id="global-link-captcha-input"
+                   class="global-link-captcha-input"
+                   type="text"
+                   inputmode="numeric"
+                   autocomplete="off"
+                   maxlength="8"
+                   placeholder="Code de sécurité" />
+            <div id="global-link-auth-status" class="global-link-auth-status" aria-live="polite"></div>
+            <div class="global-link-auth-actions">
+                <button id="global-link-captcha-refresh" type="button" class="global-link-secondary-button">Nouveau code</button>
+                <button id="global-link-auth-submit" type="button" class="global-link-primary-button">Connexion</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="briefing-docs-password-modal"
+         class="briefing-docs-password-modal"
+         style="display: none;"
+         aria-hidden="true">
+        <div class="briefing-docs-password-dialog"
+             role="dialog"
+             aria-modal="true"
+             aria-labelledby="briefing-docs-password-title">
+            <button id="briefing-docs-password-close"
+                    class="briefing-docs-password-close"
+                    type="button"
+                    aria-label="Fermer">&times;</button>
+            <h2 id="briefing-docs-password-title">Accès FdS / GAAR</h2>
+            <p id="briefing-docs-password-help">Si BFG a déjà autorisé NPF aujourd’hui, l’accès est automatique. Sinon utilise le mot de passe NPF ou, pour la première association seulement, le code BFG.</p>
+            <input id="briefing-docs-password-input"
+                   type="password"
+                   autocomplete="current-password"
+                   placeholder="Mot de passe NPF"
+                   aria-label="Mot de passe FdS et GAAR">
+            <button id="briefing-docs-authorize-button"
+                    type="button"
+                    class="briefing-docs-password-submit">Autoriser jusqu’à minuit</button>
+            <div class="briefing-docs-bfg-pairing-separator">Première association BFG ↔ NPF</div>
+            <input id="briefing-docs-bfg-code-input"
+                   type="text"
+                   inputmode="numeric"
+                   autocomplete="one-time-code"
+                   maxlength="8"
+                   placeholder="Code BFG à 8 chiffres"
+                   aria-label="Code d'association BFG">
+            <button id="briefing-docs-bfg-code-button"
+                    type="button"
+                    class="briefing-docs-password-submit briefing-docs-bfg-code-submit">Associer avec le code BFG</button>
+            <button id="briefing-docs-password-fallback-button"
+                    type="button"
+                    class="briefing-docs-password-fallback-button"
+                    style="display:none;">Utiliser le mot de passe NPF</button>
+            <div id="briefing-docs-password-status"
+                 class="briefing-docs-password-status"
+                 aria-live="polite"></div>
+        </div>
+    </div>
+
+    <div id="briefing-doc-viewer-modal"
+         class="briefing-doc-viewer-modal"
+         style="display: none;"
+         aria-hidden="true">
+        <div class="briefing-doc-viewer-toolbar">
+            <div class="briefing-doc-viewer-heading">
+                <strong id="briefing-doc-viewer-title">FdS / GAAR</strong>
+                <span id="briefing-doc-viewer-meta"></span>
+            </div>
+            <div class="briefing-doc-viewer-actions">
+                <button id="briefing-doc-viewer-refresh"
+                        type="button"
+                        class="briefing-doc-viewer-refresh">Maj</button>
+                <button id="briefing-doc-viewer-close"
+                        type="button"
+                        class="briefing-doc-viewer-close">Fermer</button>
+            </div>
+        </div>
+        <div id="briefing-doc-viewer-status"
+             class="briefing-doc-viewer-status"
+             aria-live="polite"></div>
+        <div id="briefing-doc-viewer-stage" class="briefing-doc-viewer-stage">
+            <iframe id="briefing-doc-viewer-frame"
+                    class="briefing-doc-viewer-frame"
+                    title="Document FdS ou GAAR"
+                    src="about:blank"></iframe>
+        </div>
+    </div>
+
+    <div id="quick-offline-map-modal"
+         class="quick-offline-map-modal"
+         style="display: none;"
+         aria-hidden="true">
+        <div class="quick-offline-map-modal-content"
+             role="dialog"
+             aria-modal="true"
+             aria-labelledby="quick-offline-map-modal-title">
+            <button id="close-quick-offline-map-modal"
+                    class="quick-offline-map-modal-close"
+                    type="button"
+                    aria-label="Fermer">&times;</button>
+            <h2 id="quick-offline-map-modal-title">Cartes Offline</h2>
+            <p class="quick-offline-map-help">Sélectionne directement la carte à afficher. Un nouvel appui sur la carte déjà active force sa réouverture.</p>
+            <div id="quick-offline-map-list" class="quick-offline-map-list" aria-live="polite"></div>
+            <div id="quick-offline-map-status" class="quick-offline-map-status" aria-live="polite"></div>
+        </div>
+    </div>
+
+    <div id="simulation-motion-modal" class="simulation-motion-modal" style="display: none;" aria-hidden="true">
+        <div class="simulation-motion-modal-content" role="dialog" aria-modal="true" aria-labelledby="simulation-motion-modal-title">
+            <button id="close-simulation-motion-modal" class="simulation-motion-modal-close" type="button" aria-label="Fermer">&times;</button>
+            <h2 id="simulation-motion-modal-title">Déplacement simulation</h2>
+
+            <div class="simulation-motion-fields">
+                <label class="simulation-motion-field" for="simulation-speed-input">
+                    <span>Vitesse</span>
+                    <div class="simulation-motion-input-unit">
+                        <input id="simulation-speed-input" type="text" inputmode="decimal" autocomplete="off"
+                               autocapitalize="off" spellcheck="false" maxlength="6" value="0">
+                        <span>kt</span>
+                    </div>
+                </label>
+
+                <label class="simulation-motion-field" for="simulation-route-input">
+                    <span>Route</span>
+                    <div class="simulation-motion-input-unit">
+                        <input id="simulation-route-input" type="text" inputmode="numeric" autocomplete="off"
+                               autocapitalize="off" spellcheck="false" maxlength="3" value="0">
+                        <span>°</span>
+                    </div>
+                </label>
+
+                <label class="simulation-motion-field" for="simulation-altitude-input">
+                    <span>Altitude</span>
+                    <div class="simulation-motion-input-unit">
+                        <input id="simulation-altitude-input" type="text" inputmode="decimal" autocomplete="off"
+                               autocapitalize="off" spellcheck="false" maxlength="6" value="0">
+                        <span>ft</span>
+                    </div>
+                </label>
+            </div>
+
+            <p class="simulation-motion-help">
+                Le déplacement commence dès que l’avion est positionné sur la carte. Une vitesse de 0 kt maintient l’avion immobile. L’altitude simulée sert de référence pour la couleur des trafics réels.
+                <span class="simulation-finger-only-note">Stylet désactivé dans toute l’application — saisie au doigt uniquement.</span>
+            </p>
+
+            <div class="simulation-motion-actions">
+                <button id="apply-simulation-motion" class="simulation-motion-apply-button" type="button">Appliquer</button>
+                <button id="quit-simulation-mode" class="simulation-motion-quit-button" type="button">Quitter mode simulation</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="main-action-buttons">
+        <button id="toggle-search-button" title="Rechercher une commune"><img class="map-action-icon search-commune-icon" src="icons/search-commune-icon.png?appv=v12.13-offline-progress-waterpoints-startup" alt=""></button>
+        <button id="calculator-button" title="Ouvrir le calculateur de mission" aria-label="Calculateur"><img class="map-action-icon calculator-fms-icon" src="icons/calculator-fms-icon.png?appv=v12.13-offline-progress-waterpoints-startup" alt=""></button>
+        <button id="bloc-fuel-shortcut-button" title="Ouvrir directement BLOC / FUEL" aria-label="BLOC / FUEL"><img class="bloc-fuel-shortcut-img" src="icons/bloc-fuel-shortcut-icon.png?appv=v12.13-offline-progress-waterpoints-startup" alt=""></button>
+        <button id="gps-feu-button" title="Créer un feu à ma position"><span class="gps-feu-icon-glyph" aria-hidden="true">🎯</span></button>
+        <button id="center-gps-button"
+                title="Clic : centrer sur ma position · Appui long : activer le suivi"
+                aria-label="Centrer sur ma position ; appui long pour activer le suivi"
+                aria-pressed="false">
+            <img class="map-action-icon center-gps-icon"
+                 src="icons/center-gps-icon.png?appv=v12.13-offline-progress-waterpoints-startup"
+                 alt="">
+        </button>
+        <button id="chat-toggle-button" title="Ouvrir/Fermer le chat équipe">💬<span id="chat-alert-badge" style="display:none;">0</span><span id="chat-offline-badge" aria-hidden="true">✕</span></button>
+        <div id="app-version-display" class="version-display">--</div>
+    </div>
+      <div id="bingo-map-display" style="display: none;">
+        <span id="map-bingo-lftw"></span>
+        <span id="map-bingo-pelic"></span>
+    </div>
+    <div id="commune-info-display"></div>
+    <div id="nearest-commune-display" class="gps-waiting" style="position:fixed;display:flex;visibility:visible;opacity:1;z-index:2147483000;right:16px;bottom:16px;">📍 Survolée: <b>GPS en attente</b></div>
+    <div id="team-chat-panel" style="display: none;">
+        <div class="chat-header">
+            <span id="chat-online-users">Vus <30 min: --</span>
+            <div class="chat-header-actions">
+                <span id="chat-connection-state">Hors ligne</span>
+                <button id="chat-clear-button" title="Supprimer les messages">🗑️</button>
+                <button id="chat-minimize-button" title="Réduire/Agrandir le chat">—</button>
+            </div>
+        </div>
+        <div class="chat-config-row">
+            <label class="chat-config-cell" for="chat-room-input">
+                <span>Canal</span>
+                <input type="text" id="chat-room-input" maxlength="32" value="Milan" autocomplete="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true">
+            </label>
+            <label class="chat-config-cell" for="chat-user-input">
+                <span>Pseudo</span>
+                <input type="text" id="chat-user-input" maxlength="24" value="" autocomplete="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true">
+            </label>
+            <button id="chat-connect-button">Connexion</button>
+        </div>
+        <div id="chat-messages"></div>
+        <div class="chat-send-row">
+            <input type="text" id="chat-message-input" maxlength="280" placeholder="Message..." autocomplete="one-time-code" autocorrect="off" autocapitalize="sentences" spellcheck="false" data-lpignore="true" data-1p-ignore="true">
+            <button id="chat-send-button">Envoyer</button>
+        </div>
+    </div>
+
+    <div id="chat-connect-modal"
+         class="chat-connect-modal"
+         style="display: none;"
+         aria-hidden="true">
+        <div class="chat-connect-modal-content"
+             role="dialog"
+             aria-modal="true"
+             aria-labelledby="chat-connect-modal-title">
+            <h3 id="chat-connect-modal-title">Connexion au chat</h3>
+
+            <label class="chat-connect-gps-row" for="chat-connect-gps-checkbox">
+                <span>Activer localisation GPS</span>
+                <input type="checkbox"
+                       id="chat-connect-gps-checkbox">
+            </label>
+
+            <div class="chat-connect-summary" aria-live="polite">
+                <div><span>Canal</span><strong id="chat-connect-room-summary">Milan</strong></div>
+                <div><span>Pseudo</span><strong id="chat-connect-user-summary">—</strong></div>
+            </div>
+
+            <div id="chat-connect-modal-status"
+                 class="chat-connect-modal-status"
+                 aria-live="polite"></div>
+
+            <div class="chat-connect-modal-actions">
+                <button id="chat-connect-modal-cancel"
+                        type="button"
+                        class="chat-connect-modal-secondary">Annuler</button>
+                <button id="chat-connect-modal-confirm"
+                        type="button"
+                        class="chat-connect-modal-primary">Valider et se connecter</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="chat-clear-modal" class="chat-clear-modal" style="display: none;">
+        <div class="chat-clear-modal-content">
+            <h3>Suppression des messages</h3>
+            <p>Choisissez l’action à effectuer :</p>
+            <div class="chat-clear-modal-actions">
+                <button id="chat-clear-local-button" class="chat-clear-option">Supprimer localement</button>
+                <button id="chat-clear-channel-button" class="chat-clear-option chat-clear-option-danger">Local + canal</button>
+                <button id="chat-clear-cancel-button" class="chat-clear-option">Annuler</button>
+            </div>
+        </div>
+    </div>
+    <div id="ui-overlay">
+        <div id="status-message">Chargement des données...</div>
+        <div id="search-section" style="display: none;">
+            <div class="controls-container">
+                <div class="search-wrapper">
+                    <input type="text" id="search-input" placeholder="Rechercher une commune ou un OACI..." autocomplete="off">
+                    <span id="clear-search">×</span>
+                </div>
+                <button id="live-gps-button" title="Activer/Désactiver le suivi GPS">🛰️</button>
+                <div class="airport-controls">
+                    <label for="airport-count">Nbr Pélic.</label>
+                    <input type="number" id="airport-count" value="3" min="0" max="10">
+                </div>
+            </div>
+            <ul id="results-list" style="display: none;"></ul>
+               
+<div class="extra-controls extra-controls-grid">
+                <button id="gaar-mode-button" class="toggle-button" title="Afficher/Masquer les circuits GAAR">Circuits<br>GAAR</button>
+                <button id="departments-layer-button" class="toggle-button" title="Afficher/Masquer les contours de départements">Départements</button>
+                <button id="communes-layer-button" class="toggle-button" title="Afficher/Masquer les contours de communes">Communes</button>
+                <button id="water-points-button" class="toggle-button" title="Afficher/Masquer les 3 plans d'eau les plus proches">Plan<br>d'eau</button>
+                <button id="offline-maps-button" class="toggle-button" title="Gérer les cartes hors-ligne">Cartes</button>
+            </div>
+
+  
+                
+<div id="gaar-controls" style="display: none;">
+                <button id="edit-circuits-button" class="gaar-action-button gaar-edit-button">Créer/Modifier</button>
+                <button id="delete-circuits-btn" class="gaar-action-button gaar-delete-button">Supprimer Circuits</button>
+                <p id="gaar-status"></p>
+            </div>
+
+            <div id="offline-status"></div>
+        </div>
+    </div>
+
+    <!-- v17.20 — le splash est parsé avant le gros contrôleur PWA afin de réduire le blanc initial Safari. -->
     <script>
-        const APP_VERSION = 'v17.19';
+        const APP_VERSION = 'v17.20';
         const SERVICE_WORKER_URL = `./sw.js?appv=${encodeURIComponent(APP_VERSION)}`;
         const APP_VERSION_STORAGE_KEY = 'appVersion';
         const SW_CONTROLLER_RELOAD_GUARD_KEY = 'swControllerReloadGuard';
@@ -648,534 +1172,11 @@
             }
         });
     </script>
-</head>
-<body>
-
-    <div id="app-boot-screen" aria-live="polite">
-        <div class="boot-card">
-            <div>Chargement NPF-Q400…</div>
-            <div class="boot-version">Patience, je réfléchis ...</div>
-        </div>
-    </div>
-    <div id="map"></div>
-    <div id="left-map-action-buttons">
-        <button id="high-voltage-lines-button" class="left-map-action-button high-voltage-map-button" title="Afficher/Masquer les lignes haute tension RTE" aria-label="Afficher/Masquer les lignes haute tension RTE">
-            <span class="powerline-icon" aria-hidden="true">
-                <svg viewBox="0 0 64 64" focusable="false" role="img">
-                    <path class="powerline-tower" d="M32 6 L18 58 H46 Z M32 6 V58 M23 38 H41 M26 26 H38 M20 18 H44"/>
-                    <path class="powerline-wire" d="M4 18 C15 14 22 14 32 18 C42 22 49 22 60 18"/>
-                    <path class="powerline-wire" d="M7 27 C17 24 24 24 32 27 C40 30 47 30 57 27"/>
-                </svg>
-            </span>
-        </button>
-        <button id="road-overlay-button" class="left-map-action-button road-overlay-map-button"
-                title="Afficher/Masquer le calque routier A / N / D / M / T"
-                aria-label="Afficher/Masquer le calque routier autoroutes, nationales, départementales, métropolitaines et territoriales">
-            <span class="road-overlay-icon" aria-hidden="true">
-                <svg viewBox="0 0 72 72" focusable="false" role="img">
-                    <path class="road-overlay-road-casing" d="M12 63 C20 50 20 35 31 23 C39 14 48 12 60 8"/>
-                    <path class="road-overlay-road-line" d="M12 63 C20 50 20 35 31 23 C39 14 48 12 60 8"/>
-                    <rect class="road-overlay-shield road-overlay-shield-a" x="35" y="39" width="28" height="17" rx="5"/>
-                    <text class="road-overlay-shield-text" x="49" y="51">A7</text>
-                    <rect class="road-overlay-shield road-overlay-shield-d" x="7" y="10" width="36" height="17" rx="5"/>
-                    <text class="road-overlay-shield-text road-overlay-shield-text-dark" x="25" y="22">D559</text>
-                </svg>
-            </span>
-            <span id="road-overlay-button-status" class="road-overlay-button-status">—</span>
-        </button>
-        <button id="ops-frequencies-pdf-button" class="left-map-action-button ops-frequencies-map-button" title="Ouvrir la carte fréquences OPS" aria-label="Ouvrir la carte fréquences OPS">
-            <span class="radio-frequency-icon" aria-hidden="true">
-                <svg viewBox="0 0 64 64" focusable="false" role="img">
-                    <path class="radio-dish-bowl" d="M8 22 C9 40 22 53 42 56 L58 46 L20 8 Z"/>
-                    <path class="radio-dish-rim" d="M8 22 C9 40 22 53 42 56"/>
-                    <path class="radio-dish-arm" d="M38 35 L48 25"/>
-                    <circle class="radio-dish-node" cx="50" cy="23" r="3.8"/>
-                    <path class="radio-wave" d="M54 18 C58 21 60 25 60 30"/>
-                    <path class="radio-wave" d="M50 11 C59 15 64 23 64 32"/>
-                    <path class="radio-wave" d="M47 4 C61 8 70 20 70 34"/>
-                    <path class="radio-dish-foot" d="M23 52 L15 62 H38 L31 55"/>
-                </svg>
-            </span>
-        </button>
-        <div class="quick-offline-map-control">
-            <button id="quick-offline-map-button"
-                    class="left-map-action-button quick-offline-map-button"
-                    type="button"
-                    title="Choisir rapidement une carte offline"
-                    aria-label="Choisir rapidement une carte offline">
-                <span class="quick-offline-france-icon" aria-hidden="true">
-                    <svg viewBox="0 0 100 100" focusable="false" role="img">
-                        <path class="quick-offline-france-shape"
-                              d="M 58.3 9.5 L 52.3 11.0 L 50.8 13.0 L 50.1 19.3 L 48.0 20.8 L 43.8 21.7 L 41.5 22.8 L 40.2 25.1 L 40.7 26.9 L 38.1 27.5 L 33.5 26.5 L 32.8 25.9 L 32.4 23.2 L 28.1 22.6 L 27.3 24.8 L 27.8 26.6 L 29.4 28.7 L 29.5 33.1 L 30.0 34.1 L 27.3 33.4 L 24.1 33.5 L 22.6 34.2 L 21.0 32.3 L 16.5 31.7 L 15.7 32.9 L 10.5 33.0 L 8.5 34.3 L 8.0 36.2 L 9.7 37.5 L 10.1 38.5 L 9.2 38.9 L 9.1 40.0 L 10.8 42.3 L 11.7 42.6 L 13.1 41.7 L 18.1 43.3 L 19.6 45.1 L 21.1 44.7 L 23.0 45.5 L 22.8 46.7 L 24.5 47.5 L 25.6 48.9 L 24.8 49.3 L 24.8 50.7 L 25.9 53.1 L 27.9 54.8 L 31.1 56.2 L 31.3 57.3 L 30.2 59.9 L 31.7 61.9 L 31.0 62.4 L 30.5 62.1 L 31.0 62.5 L 29.8 67.8 L 30.1 69.6 L 29.2 74.8 L 28.8 74.8 L 28.9 76.7 L 28.2 79.0 L 26.0 81.5 L 26.4 82.4 L 28.5 83.1 L 28.8 84.4 L 32.4 85.1 L 33.8 86.3 L 36.5 86.4 L 39.3 87.6 L 41.2 87.3 L 43.0 86.3 L 46.2 87.7 L 46.0 88.4 L 48.8 89.9 L 51.4 89.7 L 53.1 90.5 L 55.3 90.4 L 56.7 89.5 L 59.2 89.5 L 59.4 88.3 L 58.3 85.8 L 58.5 83.2 L 59.5 81.9 L 63.6 79.5 L 65.0 79.3 L 67.4 80.6 L 71.9 81.2 L 73.1 82.7 L 74.9 82.9 L 75.9 83.9 L 79.4 84.0 L 82.1 82.7 L 82.6 81.3 L 84.7 80.2 L 85.3 79.1 L 87.4 78.3 L 89.7 73.9 L 88.7 72.7 L 85.7 73.1 L 84.2 72.1 L 83.9 70.5 L 85.0 68.4 L 82.8 65.8 L 84.2 65.4 L 85.3 64.4 L 85.4 62.6 L 83.8 60.1 L 84.5 59.7 L 84.7 58.3 L 83.4 56.6 L 83.5 54.5 L 82.5 53.6 L 81.1 53.5 L 79.8 54.1 L 78.3 55.7 L 79.2 54.5 L 79.6 52.2 L 81.2 51.2 L 81.3 50.1 L 84.2 46.9 L 83.9 45.7 L 86.5 45.6 L 87.9 44.3 L 88.5 38.6 L 90.2 34.3 L 91.8 32.3 L 92.0 30.7 L 88.0 29.7 L 86.6 28.7 L 82.8 28.4 L 81.2 25.8 L 74.7 24.8 L 71.6 22.3 L 71.0 18.9 L 69.6 18.6 L 68.3 20.4 L 67.6 20.4 L 66.9 17.9 L 64.8 17.4 L 64.6 16.7 L 62.8 15.9 L 62.1 14.1 L 59.4 13.7 Z"/>
-                    </svg>
-                </span>
-            </button>
-            <button id="quick-sia-vrp-toggle"
-                    class="quick-sia-vrp-toggle"
-                    type="button"
-                    aria-pressed="true"
-                    title="Masquer les points VFR / VRP"
-                    aria-label="Masquer les points VFR / VRP">
-                <span aria-hidden="true">N</span>
-            </button>
-            <button id="quick-sia-zones-toggle"
-                    class="quick-sia-zones-toggle"
-                    type="button"
-                    aria-pressed="false"
-                    title="Masquer temporairement les zones SIA de la carte"
-                    aria-label="Masquer temporairement les zones SIA de la carte">
-                <svg viewBox="0 0 32 32" aria-hidden="true" focusable="false">
-                    <path class="quick-sia-eye-outline" d="M3 16 C7.2 9.7 11.5 7 16 7 C20.5 7 24.8 9.7 29 16 C24.8 22.3 20.5 25 16 25 C11.5 25 7.2 22.3 3 16 Z"/>
-                    <circle class="quick-sia-eye-pupil" cx="16" cy="16" r="4.2"/>
-                    <path class="quick-sia-eye-slash" d="M5 5 L27 27"/>
-                </svg>
-            </button>
-        </div>
-        <button id="briefing-docs-map-button"
-                class="left-map-action-button briefing-docs-group-map-button briefing-docs-none-loaded"
-                type="button"
-                title="FdS / GAAR — ouvrir les documents opérationnels"
-                aria-label="FdS / GAAR — ouvrir les documents opérationnels">
-            <span id="briefing-docs-main-fds-label" class="briefing-docs-main-line briefing-doc-missing">FdS</span>
-            <span id="briefing-docs-main-gaar-label" class="briefing-docs-main-line briefing-doc-missing">GAAR</span>
-        </button>
-        <button id="global-link-layer-button"
-                class="left-map-action-button global-link-map-button global-link-auth-needed"
-                type="button"
-                title="Global Link — connexion requise"
-                aria-label="Global Link — afficher ou masquer les appareils suivis">
-            <span class="global-link-map-label">GLR</span>
-            <span id="global-link-off-button-count" class="global-link-off-button-count" style="display:none;">0</span>
-            <span id="global-link-button-count" class="global-link-button-count" style="display:none;">0</span>
-        </button>
-        <button id="traffic-layer-button" class="left-map-action-button traffic-map-button" title="SafeSky — afficher/masquer le trafic aérien indicatif — appui long : filtres" aria-label="SafeSky — afficher ou masquer le trafic aérien indicatif">
-            <span class="traffic-icon traffic-safesky-icon" aria-hidden="true"></span>
-            <span id="traffic-tracked-button-count" class="traffic-tracked-button-count" style="display:none;">0</span>
-            <span id="traffic-button-count" class="traffic-button-count">0</span>
-        </button>
-        <button id="simulation-motion-button" class="left-map-action-button simulation-motion-map-button" type="button" hidden
-                title="Régler la vitesse et la route de l’avion simulé"
-                aria-label="Régler la vitesse et la route de l’avion simulé">
-            <span class="simulation-motion-glyph" aria-hidden="true">✈</span>
-            <span id="simulation-motion-button-summary" class="simulation-motion-button-summary">0 kt · 000°</span>
-        </button>
-        <button id="npf-startup-diag-button"
-                class="left-map-action-button npf-startup-diag-button"
-                type="button"
-                title="Diagnostic du chargement de la carte"
-                aria-label="Ouvrir le diagnostic du chargement">
-            <span class="npf-startup-diag-button-label">DIAG</span>
-        </button>
-    </div>
-    <button id="yul-trace-button"
-            class="npf-trace-record-button"
-            type="button"
-            title="TRACE — démarrer ou arrêter l’enregistrement GPS via le raccourci NPF Trace"
-            aria-label="TRACE — démarrer ou arrêter l’enregistrement GPS">
-        <span class="npf-trace-record-icon" aria-hidden="true"></span>
-    </button>
-    <div id="traffic-status-display" class="traffic-status-display" style="display: none;"></div>
-
-    <button id="sia-profile-swipe-handle"
-            class="sia-profile-swipe-handle"
-            type="button"
-            aria-label="Faire glisser vers le haut pour ouvrir le profil des espaces"
-            title="Glisser vers le haut : PROFIL ESPACES">
-        <span aria-hidden="true"></span>
-    </button>
-
-    <div id="sia-profile-panel" class="sia-profile-panel" hidden aria-hidden="true">
-        <div class="sia-profile-header">
-            <div>
-                <div class="sia-profile-title">PROFIL ESPACES</div>
-                <div id="sia-profile-subtitle" class="sia-profile-subtitle">Coupe verticale devant l'avion</div>
-            </div>
-            <div class="sia-profile-controls">
-                <button type="button" class="sia-profile-range-button active" data-profile-range="25">25 NM</button>
-                <button type="button" class="sia-profile-range-button" data-profile-range="50">50 NM</button>
-                <button type="button" class="sia-profile-range-button" data-profile-range="100">100 NM</button>
-                <button id="sia-profile-close" type="button" class="sia-profile-close" aria-label="Fermer le profil">&times;</button>
-            </div>
-        </div>
-        <div class="sia-profile-zone-toolbar">
-            <div class="sia-profile-zone-toolbar-main">
-                <span class="sia-profile-zone-toolbar-title">Zones du profil</span>
-                <div id="sia-profile-zone-filters" class="sia-profile-zone-filters" aria-label="Sélection des zones affichées dans le profil"></div>
-            </div>
-            <button id="sia-profile-map-zones-toggle"
-                    type="button"
-                    class="sia-profile-map-zones-toggle"
-                    aria-pressed="false"
-                    title="Masquer temporairement les zones de la carte sans modifier les filtres">Masquer zones</button>
-        </div>
-        <div id="sia-profile-chart" class="sia-profile-chart"></div>
-        <div class="sia-profile-note">FL représentés à 100 ft/FL ; SFC/AGL sans profil de relief.</div>
-    </div>
-
-    <div id="briefing-doc-selector-modal"
-         class="briefing-doc-selector-modal"
-         style="display: none;"
-         aria-hidden="true">
-        <div class="briefing-doc-selector-modal-content"
-             role="dialog"
-             aria-modal="true"
-             aria-labelledby="briefing-doc-selector-title">
-            <button id="close-briefing-doc-selector-modal"
-                    class="briefing-doc-selector-modal-close"
-                    type="button"
-                    aria-label="Fermer">&times;</button>
-            <h2 id="briefing-doc-selector-title">FdS / GAAR</h2>
-            <p class="briefing-doc-selector-help">Sélectionne le document à ouvrir. La couleur indique si le document du jour est déjà chargé.</p>
-            <div class="briefing-doc-selector-list">
-                <button id="briefing-fds-map-button"
-                        class="briefing-doc-map-button briefing-doc-selector-choice briefing-doc-missing"
-                        type="button"
-                        title="FdS du jour non téléchargée"
-                        aria-label="FdS du jour non téléchargée">
-                    <span class="briefing-doc-selector-choice-name">FdS</span>
-                    <span id="briefing-fds-selector-status" class="briefing-doc-selector-choice-status">Non téléchargée</span>
-                </button>
-                <button id="briefing-gaar-map-button"
-                        class="briefing-doc-map-button briefing-doc-selector-choice briefing-doc-missing"
-                        type="button"
-                        title="GAAR du jour non téléchargé"
-                        aria-label="GAAR du jour non téléchargé">
-                    <span class="briefing-doc-selector-choice-name">GAAR</span>
-                    <span id="briefing-gaar-selector-status" class="briefing-doc-selector-choice-status">Non téléchargé</span>
-                </button>
-            </div>
-            <div class="briefing-doc-selector-bfg-row">
-                <button id="briefing-docs-bfg-pair-button"
-                        class="briefing-doc-selector-bfg-button"
-                        type="button"
-                        title="Associer BFG à NPF"
-                        aria-label="Associer BFG à NPF">BFG</button>
-            </div>
-        </div>
-    </div>
-
-    <div id="global-link-password-modal"
-         class="global-link-auth-modal"
-         style="display: none;"
-         aria-hidden="true">
-        <div class="global-link-auth-dialog" role="dialog" aria-modal="true" aria-labelledby="global-link-password-title">
-            <button id="global-link-password-close" class="global-link-auth-close" type="button" aria-label="Fermer">×</button>
-            <h3 id="global-link-password-title">Global Link Rescue</h3>
-            <p class="global-link-auth-explain">Saisis le mot de passe NPF pour accéder à Global Link.</p>
-            <input id="global-link-password-input"
-                   class="global-link-password-input"
-                   type="password"
-                   autocomplete="current-password"
-                   autocapitalize="none"
-                   spellcheck="false"
-                   placeholder="Mot de passe NPF"
-                   aria-label="Mot de passe NPF Global Link" />
-            <div id="global-link-password-status" class="global-link-auth-status" aria-live="polite"></div>
-            <div class="global-link-auth-actions">
-                <button id="global-link-password-submit" type="button" class="global-link-primary-button">Continuer</button>
-            </div>
-        </div>
-    </div>
-
-    <div id="global-link-auth-modal"
-         class="global-link-auth-modal"
-         style="display: none;"
-         aria-hidden="true">
-        <div class="global-link-auth-dialog" role="dialog" aria-modal="true" aria-labelledby="global-link-auth-title">
-            <button id="global-link-auth-close" class="global-link-auth-close" type="button" aria-label="Fermer">×</button>
-            <h3 id="global-link-auth-title">Global Link Rescue</h3>
-            <p class="global-link-auth-explain">Recopie le code de sécurité affiché ci-dessous pour autoriser le suivi Global Link.</p>
-            <div class="global-link-captcha-frame">
-                <img id="global-link-captcha-image" alt="Code de sécurité Global Link" />
-            </div>
-            <input id="global-link-captcha-input"
-                   class="global-link-captcha-input"
-                   type="text"
-                   inputmode="numeric"
-                   autocomplete="off"
-                   maxlength="8"
-                   placeholder="Code de sécurité" />
-            <div id="global-link-auth-status" class="global-link-auth-status" aria-live="polite"></div>
-            <div class="global-link-auth-actions">
-                <button id="global-link-captcha-refresh" type="button" class="global-link-secondary-button">Nouveau code</button>
-                <button id="global-link-auth-submit" type="button" class="global-link-primary-button">Connexion</button>
-            </div>
-        </div>
-    </div>
-
-    <div id="briefing-docs-password-modal"
-         class="briefing-docs-password-modal"
-         style="display: none;"
-         aria-hidden="true">
-        <div class="briefing-docs-password-dialog"
-             role="dialog"
-             aria-modal="true"
-             aria-labelledby="briefing-docs-password-title">
-            <button id="briefing-docs-password-close"
-                    class="briefing-docs-password-close"
-                    type="button"
-                    aria-label="Fermer">&times;</button>
-            <h2 id="briefing-docs-password-title">Accès FdS / GAAR</h2>
-            <p id="briefing-docs-password-help">Si BFG a déjà autorisé NPF aujourd’hui, l’accès est automatique. Sinon utilise le mot de passe NPF ou, pour la première association seulement, le code BFG.</p>
-            <input id="briefing-docs-password-input"
-                   type="password"
-                   autocomplete="current-password"
-                   placeholder="Mot de passe NPF"
-                   aria-label="Mot de passe FdS et GAAR">
-            <button id="briefing-docs-authorize-button"
-                    type="button"
-                    class="briefing-docs-password-submit">Autoriser jusqu’à minuit</button>
-            <div class="briefing-docs-bfg-pairing-separator">Première association BFG ↔ NPF</div>
-            <input id="briefing-docs-bfg-code-input"
-                   type="text"
-                   inputmode="numeric"
-                   autocomplete="one-time-code"
-                   maxlength="8"
-                   placeholder="Code BFG à 8 chiffres"
-                   aria-label="Code d'association BFG">
-            <button id="briefing-docs-bfg-code-button"
-                    type="button"
-                    class="briefing-docs-password-submit briefing-docs-bfg-code-submit">Associer avec le code BFG</button>
-            <button id="briefing-docs-password-fallback-button"
-                    type="button"
-                    class="briefing-docs-password-fallback-button"
-                    style="display:none;">Utiliser le mot de passe NPF</button>
-            <div id="briefing-docs-password-status"
-                 class="briefing-docs-password-status"
-                 aria-live="polite"></div>
-        </div>
-    </div>
-
-    <div id="briefing-doc-viewer-modal"
-         class="briefing-doc-viewer-modal"
-         style="display: none;"
-         aria-hidden="true">
-        <div class="briefing-doc-viewer-toolbar">
-            <div class="briefing-doc-viewer-heading">
-                <strong id="briefing-doc-viewer-title">FdS / GAAR</strong>
-                <span id="briefing-doc-viewer-meta"></span>
-            </div>
-            <div class="briefing-doc-viewer-actions">
-                <button id="briefing-doc-viewer-refresh"
-                        type="button"
-                        class="briefing-doc-viewer-refresh">Maj</button>
-                <button id="briefing-doc-viewer-close"
-                        type="button"
-                        class="briefing-doc-viewer-close">Fermer</button>
-            </div>
-        </div>
-        <div id="briefing-doc-viewer-status"
-             class="briefing-doc-viewer-status"
-             aria-live="polite"></div>
-        <div id="briefing-doc-viewer-stage" class="briefing-doc-viewer-stage">
-            <iframe id="briefing-doc-viewer-frame"
-                    class="briefing-doc-viewer-frame"
-                    title="Document FdS ou GAAR"
-                    src="about:blank"></iframe>
-        </div>
-    </div>
-
-    <div id="quick-offline-map-modal"
-         class="quick-offline-map-modal"
-         style="display: none;"
-         aria-hidden="true">
-        <div class="quick-offline-map-modal-content"
-             role="dialog"
-             aria-modal="true"
-             aria-labelledby="quick-offline-map-modal-title">
-            <button id="close-quick-offline-map-modal"
-                    class="quick-offline-map-modal-close"
-                    type="button"
-                    aria-label="Fermer">&times;</button>
-            <h2 id="quick-offline-map-modal-title">Cartes Offline</h2>
-            <p class="quick-offline-map-help">Sélectionne directement la carte à afficher. Un nouvel appui sur la carte déjà active force sa réouverture.</p>
-            <div id="quick-offline-map-list" class="quick-offline-map-list" aria-live="polite"></div>
-            <div id="quick-offline-map-status" class="quick-offline-map-status" aria-live="polite"></div>
-        </div>
-    </div>
-
-    <div id="simulation-motion-modal" class="simulation-motion-modal" style="display: none;" aria-hidden="true">
-        <div class="simulation-motion-modal-content" role="dialog" aria-modal="true" aria-labelledby="simulation-motion-modal-title">
-            <button id="close-simulation-motion-modal" class="simulation-motion-modal-close" type="button" aria-label="Fermer">&times;</button>
-            <h2 id="simulation-motion-modal-title">Déplacement simulation</h2>
-
-            <div class="simulation-motion-fields">
-                <label class="simulation-motion-field" for="simulation-speed-input">
-                    <span>Vitesse</span>
-                    <div class="simulation-motion-input-unit">
-                        <input id="simulation-speed-input" type="text" inputmode="decimal" autocomplete="off"
-                               autocapitalize="off" spellcheck="false" maxlength="6" value="0">
-                        <span>kt</span>
-                    </div>
-                </label>
-
-                <label class="simulation-motion-field" for="simulation-route-input">
-                    <span>Route</span>
-                    <div class="simulation-motion-input-unit">
-                        <input id="simulation-route-input" type="text" inputmode="numeric" autocomplete="off"
-                               autocapitalize="off" spellcheck="false" maxlength="3" value="0">
-                        <span>°</span>
-                    </div>
-                </label>
-
-                <label class="simulation-motion-field" for="simulation-altitude-input">
-                    <span>Altitude</span>
-                    <div class="simulation-motion-input-unit">
-                        <input id="simulation-altitude-input" type="text" inputmode="decimal" autocomplete="off"
-                               autocapitalize="off" spellcheck="false" maxlength="6" value="0">
-                        <span>ft</span>
-                    </div>
-                </label>
-            </div>
-
-            <p class="simulation-motion-help">
-                Le déplacement commence dès que l’avion est positionné sur la carte. Une vitesse de 0 kt maintient l’avion immobile. L’altitude simulée sert de référence pour la couleur des trafics réels.
-                <span class="simulation-finger-only-note">Stylet désactivé dans toute l’application — saisie au doigt uniquement.</span>
-            </p>
-
-            <div class="simulation-motion-actions">
-                <button id="apply-simulation-motion" class="simulation-motion-apply-button" type="button">Appliquer</button>
-                <button id="quit-simulation-mode" class="simulation-motion-quit-button" type="button">Quitter mode simulation</button>
-            </div>
-        </div>
-    </div>
-
-    <div id="main-action-buttons">
-        <button id="toggle-search-button" title="Rechercher une commune"><img class="map-action-icon search-commune-icon" src="icons/search-commune-icon.png?appv=v12.13-offline-progress-waterpoints-startup" alt=""></button>
-        <button id="calculator-button" title="Ouvrir le calculateur de mission" aria-label="Calculateur"><img class="map-action-icon calculator-fms-icon" src="icons/calculator-fms-icon.png?appv=v12.13-offline-progress-waterpoints-startup" alt=""></button>
-        <button id="bloc-fuel-shortcut-button" title="Ouvrir directement BLOC / FUEL" aria-label="BLOC / FUEL"><img class="bloc-fuel-shortcut-img" src="icons/bloc-fuel-shortcut-icon.png?appv=v12.13-offline-progress-waterpoints-startup" alt=""></button>
-        <button id="gps-feu-button" title="Créer un feu à ma position"><span class="gps-feu-icon-glyph" aria-hidden="true">🎯</span></button>
-        <button id="center-gps-button"
-                title="Clic : centrer sur ma position · Appui long : activer le suivi"
-                aria-label="Centrer sur ma position ; appui long pour activer le suivi"
-                aria-pressed="false">
-            <img class="map-action-icon center-gps-icon"
-                 src="icons/center-gps-icon.png?appv=v12.13-offline-progress-waterpoints-startup"
-                 alt="">
-        </button>
-        <button id="chat-toggle-button" title="Ouvrir/Fermer le chat équipe">💬<span id="chat-alert-badge" style="display:none;">0</span><span id="chat-offline-badge" aria-hidden="true">✕</span></button>
-        <div id="app-version-display" class="version-display">--</div>
-    </div>
-      <div id="bingo-map-display" style="display: none;">
-        <span id="map-bingo-lftw"></span>
-        <span id="map-bingo-pelic"></span>
-    </div>
-    <div id="commune-info-display"></div>
-    <div id="nearest-commune-display" class="gps-waiting" style="position:fixed;display:flex;visibility:visible;opacity:1;z-index:2147483000;right:16px;bottom:16px;">📍 Survolée: <b>GPS en attente</b></div>
-    <div id="team-chat-panel" style="display: none;">
-        <div class="chat-header">
-            <span id="chat-online-users">Vus <30 min: --</span>
-            <div class="chat-header-actions">
-                <span id="chat-connection-state">Hors ligne</span>
-                <button id="chat-clear-button" title="Supprimer les messages">🗑️</button>
-                <button id="chat-minimize-button" title="Réduire/Agrandir le chat">—</button>
-            </div>
-        </div>
-        <div class="chat-config-row">
-            <label class="chat-config-cell" for="chat-room-input">
-                <span>Canal</span>
-                <input type="text" id="chat-room-input" maxlength="32" value="Milan" autocomplete="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true">
-            </label>
-            <label class="chat-config-cell" for="chat-user-input">
-                <span>Pseudo</span>
-                <input type="text" id="chat-user-input" maxlength="24" value="" autocomplete="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true">
-            </label>
-            <button id="chat-connect-button">Connexion</button>
-        </div>
-        <div id="chat-messages"></div>
-        <div class="chat-send-row">
-            <input type="text" id="chat-message-input" maxlength="280" placeholder="Message..." autocomplete="one-time-code" autocorrect="off" autocapitalize="sentences" spellcheck="false" data-lpignore="true" data-1p-ignore="true">
-            <button id="chat-send-button">Envoyer</button>
-        </div>
-    </div>
-
-    <div id="chat-connect-modal"
-         class="chat-connect-modal"
-         style="display: none;"
-         aria-hidden="true">
-        <div class="chat-connect-modal-content"
-             role="dialog"
-             aria-modal="true"
-             aria-labelledby="chat-connect-modal-title">
-            <h3 id="chat-connect-modal-title">Connexion au chat</h3>
-
-            <label class="chat-connect-gps-row" for="chat-connect-gps-checkbox">
-                <span>Activer localisation GPS</span>
-                <input type="checkbox"
-                       id="chat-connect-gps-checkbox">
-            </label>
-
-            <div class="chat-connect-summary" aria-live="polite">
-                <div><span>Canal</span><strong id="chat-connect-room-summary">Milan</strong></div>
-                <div><span>Pseudo</span><strong id="chat-connect-user-summary">—</strong></div>
-            </div>
-
-            <div id="chat-connect-modal-status"
-                 class="chat-connect-modal-status"
-                 aria-live="polite"></div>
-
-            <div class="chat-connect-modal-actions">
-                <button id="chat-connect-modal-cancel"
-                        type="button"
-                        class="chat-connect-modal-secondary">Annuler</button>
-                <button id="chat-connect-modal-confirm"
-                        type="button"
-                        class="chat-connect-modal-primary">Valider et se connecter</button>
-            </div>
-        </div>
-    </div>
-
-    <div id="chat-clear-modal" class="chat-clear-modal" style="display: none;">
-        <div class="chat-clear-modal-content">
-            <h3>Suppression des messages</h3>
-            <p>Choisissez l’action à effectuer :</p>
-            <div class="chat-clear-modal-actions">
-                <button id="chat-clear-local-button" class="chat-clear-option">Supprimer localement</button>
-                <button id="chat-clear-channel-button" class="chat-clear-option chat-clear-option-danger">Local + canal</button>
-                <button id="chat-clear-cancel-button" class="chat-clear-option">Annuler</button>
-            </div>
-        </div>
-    </div>
-    <div id="ui-overlay">
-        <div id="status-message">Chargement des données...</div>
-        <div id="search-section" style="display: none;">
-            <div class="controls-container">
-                <div class="search-wrapper">
-                    <input type="text" id="search-input" placeholder="Rechercher une commune ou un OACI..." autocomplete="off">
-                    <span id="clear-search">×</span>
-                </div>
-                <button id="live-gps-button" title="Activer/Désactiver le suivi GPS">🛰️</button>
-                <div class="airport-controls">
-                    <label for="airport-count">Nbr Pélic.</label>
-                    <input type="number" id="airport-count" value="3" min="0" max="10">
-                </div>
-            </div>
-            <ul id="results-list" style="display: none;"></ul>
-               
-<div class="extra-controls extra-controls-grid">
-                <button id="gaar-mode-button" class="toggle-button" title="Afficher/Masquer les circuits GAAR">Circuits<br>GAAR</button>
-                <button id="departments-layer-button" class="toggle-button" title="Afficher/Masquer les contours de départements">Départements</button>
-                <button id="communes-layer-button" class="toggle-button" title="Afficher/Masquer les contours de communes">Communes</button>
-                <button id="water-points-button" class="toggle-button" title="Afficher/Masquer les 3 plans d'eau les plus proches">Plan<br>d'eau</button>
-                <button id="offline-maps-button" class="toggle-button" title="Gérer les cartes hors-ligne">Cartes</button>
-            </div>
-
-  
-                
-<div id="gaar-controls" style="display: none;">
-                <button id="edit-circuits-button" class="gaar-action-button gaar-edit-button">Créer/Modifier</button>
-                <button id="delete-circuits-btn" class="gaar-action-button gaar-delete-button">Supprimer Circuits</button>
-                <p id="gaar-status"></p>
-            </div>
-
-            <div id="offline-status"></div>
-        </div>
-    </div>
     <script src="leaflet.min.js"></script>
     <script src="suncalc.js"></script>
     <script src="jszip.min.js"></script>
     <script src="sia.js?siav=15.69-radio1026-1-maplite1"></script>
-    <script src="script.js?appv=v17.19"></script>
+    <script src="script.js?appv=v17.20"></script>
     
     <div id="fuel-split-modal" class="fuel-split-modal" style="display: none;">
         <div class="fuel-split-modal-content">
