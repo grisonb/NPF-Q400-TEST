@@ -1,3 +1,58 @@
+VERSION TEST v17.17 — ORTHODROMIE AVION→CIBLE + ALERTE MAJ MONOTONE
+Date : 19/09/2026
+Base fonctionnelle : v17.16
+
+OBJECTIFS UTILISATEUR
+- Supprimer l'écart visuel résiduel entre le cap simulé et le trait rouge vers
+  la cible lorsque les deux affichent la même route magnétique.
+- Empêcher le message « Mise à jour installée » de réapparaître pour une version
+  qui avait déjà été installée/annoncée.
+
+MODIFICATIONS
+
+1. TRAIT ROUGE AVION → CIBLE EN ORTHODROMIE
+- Le trait dynamique avion → cible n'est plus dessiné comme une simple corde
+  Mercator entre deux coordonnées éloignées.
+- Sa géométrie suit maintenant l'orthodromie réelle entre la position avion et
+  la cible à partir du relèvement vrai initial.
+- Leaflet conserve un seul objet polyline continu : aucune cassure, aucun
+  segment distinct visible, même halo blanc, même trait rouge et mêmes pointillés.
+- Des sommets géographiques invisibles sont calculés environ tous les 10 NM,
+  avec un maximum de 48 segments pour borner le coût.
+- Le dernier point est toujours exactement la position réelle de la cible.
+- Seul le trait dynamique avion → cible est modifié. Les routes PÉLIC, Feu→Base,
+  WP fixes et autres tracés restent inchangés.
+- Le calcul/affichage magnétique introduit en v17.16 reste inchangé.
+
+2. MESSAGE « MISE À JOUR INSTALLÉE » — VERSION MONOTONE
+- La version mémorisée par NPF ne peut plus régresser lorsqu'une ancienne page
+  est momentanément resservie par Safari/PWA.
+- Une notification n'est armée que pour une montée réelle de version.
+- Une version inférieure à la version la plus élevée déjà vue ne peut plus
+  déclencher de nouvelle notification ni écraser la version mémorisée.
+- Une notification déjà affichée pour la même version ou une version supérieure
+  est automatiquement ignorée.
+- Une notification en attente pour une version supérieure n'est jamais remplacée
+  par une version plus ancienne.
+- Le mécanisme de Service Worker lui-même n'est pas modifié ; seule la décision
+  d'afficher l'alerte et de mémoriser la version est sécurisée.
+
+3. PÉRIMÈTRE STRICT
+- Les optimisations simulation v17.16 sont conservées sans autre modification.
+- Moteur de tuiles, snapshot zoom, IndexedDB, Routes, HT, VAC et SIA inchangés.
+- La modification séparée évoquée sur les décorations SIA à 5 NM n'est pas
+  intégrée dans cette livraison.
+
+VALIDATION AVANT LIVRAISON
+- Syntaxe Script / SIA / SW : OK.
+- Scripts inline Index : OK.
+- Manifest JSON : OK.
+- Références de version : v17.17 cohérentes.
+- SIA : strictement identique à v17.16.
+- Diff contrôlé : aucun changement du scheduler de tuiles, du snapshot zoom,
+  d'IndexedDB, des moteurs Routes/HT/VAC ni des données SIA.
+
+
 VERSION TEST v17.16 — SIMULATION : CAP MAGNÉTIQUE + FLUIDITÉ + RECENTRAGE
 Date : 19/09/2026
 Base fonctionnelle : v17.15
