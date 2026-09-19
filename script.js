@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.23';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.24';
 
 
 /*
@@ -8358,6 +8358,19 @@ async function runNpfMapOverlayPriorityRestore(token, reason = 'map-end') {
                     retry: true,
                     source: 'overlay-priority-scale-enter'
                 });
+                /* v17.24 — au premier passage 50 -> 20 NM, le chargement HT a
+                 * lieu alors que la séquence prioritaire est encore active.
+                 * `toggleHighVoltageLinesLayer()` construit le rendu mais ne peut
+                 * pas rattacher son groupe parent dans cet état. Le rattacher ici,
+                 * pane encore masqué, avant l'étape qui révèle les HT. */
+                if (
+                    !isCancelled()
+                    && hasLoadedHighVoltageLines
+                    && highVoltageLinesLayer
+                    && !map.hasLayer(highVoltageLinesLayer)
+                ) {
+                    highVoltageLinesLayer.addTo(map);
+                }
             } else if (hasLoadedHighVoltageLines) {
                 highVoltageLinesScaleSuppressed = false;
                 if (highVoltageLinesLayer && !map.hasLayer(highVoltageLinesLayer)) {
@@ -10626,13 +10639,14 @@ const DIRECT_OFFLINE_NPF_TILE_CACHE_MAX = 160;
  */
 const DIRECT_OFFLINE_NPF_ZOOM_RETURN_CACHE_MAX = 128;
 /*
- * v17.23 — les niveaux opérationnels 50 NM (z7) et 20 NM (z8) restent
- * protégés dans le cache retour pendant toute la session. Ils ne comptent pas
- * dans les 4 niveaux récents ordinaires et sont évincés en dernier recours
- * seulement si, à eux seuls, ils dépassaient la limite globale de 128 blobs.
+ * v17.23/v17.24 — les niveaux opérationnels 50 NM (z7), 20 NM (z8) et
+ * 10 NM (z9) restent protégés dans le cache retour pendant toute la session.
+ * Ils ne comptent pas dans les 4 niveaux récents ordinaires et sont évincés en
+ * dernier recours seulement si, à eux seuls, ils dépassaient la limite globale
+ * de 128 blobs.
  */
 const DIRECT_OFFLINE_NPF_ZOOM_RETURN_LEVELS = 4;
-const DIRECT_OFFLINE_NPF_ZOOM_RETURN_PROTECTED_LEVELS = new Set([7, 8]);
+const DIRECT_OFFLINE_NPF_ZOOM_RETURN_PROTECTED_LEVELS = new Set([7, 8, 9]);
 const DIRECT_OFFLINE_TILE_MISS_CACHE_MAX = 512;
 const DIRECT_OFFLINE_TILE_MISS_CACHE_TTL_MS = 30000;
 const directOfflineTileBlobCache = new Map();
@@ -11451,9 +11465,9 @@ function clearDirectOfflineNpfZoomReturnCache() {
 
 function trimDirectOfflineNpfZoomReturnCache() {
     /*
-     * v17.23 — z7 (50 NM) et z8 (20 NM) sont des niveaux de retour
-     * opérationnels : ils restent protégés même lorsque quatre niveaux plus
-     * rapprochés ont été visités ensuite.
+     * v17.23/v17.24 — z7 (50 NM), z8 (20 NM) et z9 (10 NM) sont des niveaux
+     * de retour opérationnels : ils restent protégés même lorsque quatre niveaux
+     * plus rapprochés ont été visités ensuite.
      */
     const recentOrdinaryLevels = directOfflineNpfZoomReturnLevelOrder.filter(zoom =>
         !DIRECT_OFFLINE_NPF_ZOOM_RETURN_PROTECTED_LEVELS.has(Number(zoom))
