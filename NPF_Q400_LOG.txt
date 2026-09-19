@@ -1,3 +1,633 @@
+================================================================================
+NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
+Mise à jour : 19/09/2026
+Version de travail actuelle : TEST v17.21
+IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
+intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
+================================================================================
+
+
+0. RÈGLES DU CHAT / CONTRAT DE TRAVAIL — PRIORITAIRES
+=====================================================
+Révision documentaire : 19/09/2026 — aucune modification de code liée à cette
+révision du fichier `1_Modifications`.
+
+Ces règles doivent être lues AVANT toute analyse ou modification. Elles priment
+sur le réflexe de proposer ou de générer du code trop tôt.
+
+A. AUCUN CODE SANS DEMANDE EXPLICITE DE L'UTILISATEUR
+- Une question, une remarque, une hypothèse, une comparaison, un DIAG ou une
+  demande d'analyse N'AUTORISE PAS à modifier le code.
+- Tant que l'utilisateur n'a pas explicitement demandé de modifier / corriger /
+  intégrer / produire les fichiers, rester au stade analyse, diagnostic et
+  proposition.
+- Exemples d'autorisation explicite : « fais-le », « modifie », « corrige »,
+  « intègre », « donne-moi les .txt » après qu'une modification a été discutée.
+- « Donne-moi les .txt » autorise uniquement l'implémentation des changements
+  explicitement discutés et retenus dans l'échange immédiatement concerné.
+- Ne jamais profiter d'une livraison pour intégrer une autre idée, même logique,
+  utile ou déjà évoquée, si elle n'a pas été demandée pour cette livraison.
+- Un DIAG seul doit d'abord être analysé. Il ne déclenche pas automatiquement une
+  nouvelle version ni une modification du code.
+
+B. SOURCE DE VÉRITÉ
+- Toujours travailler à partir des fichiers source RÉELS de la version courante.
+- Ne jamais reconstruire `Index`, `Script`, `SIA`, `Style`, `SW` ou `Manifest`
+  depuis la mémoire, ce fichier Modifications, une ancienne version ou un extrait.
+- Inspecter le code réel avant de conclure sur son fonctionnement ou de le modifier.
+- Si un fichier nécessaire n'est pas disponible, le récupérer/lire avant de coder.
+- `1_Modifications` est un journal et une fiche de reprise ; il ne remplace jamais
+  les sources exécutables.
+
+C. PÉRIMÈTRE DES MODIFICATIONS
+- Modifier uniquement ce qui a été explicitement demandé et ce qui est strictement
+  nécessaire à cette correction.
+- Tout le reste doit rester inchangé.
+- Préserver toutes les fonctions déjà validées et éviter toute régression.
+- Ne pas faire de « nettoyage », refactorisation opportuniste ou changement de
+  comportement annexe pendant une correction ciblée.
+- Ne pas réintroduire une piste abandonnée sans nouvelle justification et preuve
+  par DIAG.
+- Ne pas intégrer un sujet provenant d'un autre chat ou d'un autre chantier sans
+  nouvelle demande explicite dans ce chantier NPF.
+- Le fonctionnement OFFLINE est prioritaire et doit rester pleinement utilisable.
+
+D. VERSION DE TRAVAIL
+- Pendant les échanges d'analyse et les itérations intermédiaires, conserver la
+  même version TEST.
+- Ne pas incrémenter la version à chaque message ou essai.
+- Une nouvelle version est créée lors d'une vraie livraison complète demandée par
+  l'utilisateur.
+- Lors d'une livraison, toutes les références APP/SW/Manifest/Style/Script doivent
+  être cohérentes avec la nouvelle version.
+
+E. ORDRE ET CONTENU DES 7 FICHIERS `.txt` — ORDRE ABSOLU DE LIVRAISON
+1. `1_Modifications_vXX.XX.txt`
+   - fiche de reprise actuelle ;
+   - règles du chat ;
+   - remarques ouvertes/non implémentées ;
+   - historique cumulatif complet des versions.
+2. `2_Index_vXX.XX.txt`      = `index.html`
+3. `3_Manifest_vXX.XX.txt`   = `manifest.json`
+4. `4_Script_vXX.XX.txt`     = `script.js`
+5. `5_SIA_vXX.XX.txt`        = `sia.js`
+6. `6_Style_vXX.XX.txt`      = `style.css`
+7. `7_Sw_vXX.XX.txt`         = `sw.js`
+
+- Toujours fournir les fichiers dans cet ordre.
+- Lorsqu'une livraison complète est demandée, fournir des fichiers COMPLETS de
+  remplacement, jamais des patchs ou des instructions de modification manuelle.
+- Ne pas demander à l'utilisateur de modifier lui-même quelques lignes du code.
+
+F. `1_Modifications` EST OBLIGATOIREMENT CUMULATIF
+- Ne jamais supprimer ou tronquer l'historique antérieur.
+- La version / fiche la plus récente se trouve en tête.
+- L'historique complet est conservé dessous, y compris les essais ratés, rollbacks,
+  versions abandonnées, raisons techniques et conclusions DIAG.
+- Toute remarque importante doit être consignée même si elle ne produit AUCUNE
+  modification de code.
+- Une remarque non implémentée doit porter un statut clair :
+  `NON IMPLÉMENTÉ`, `À MESURER`, `À DÉCIDER`, `ABANDONNÉ`, `À REVOIR` ou `VALIDÉ`.
+- Si une remarque est ensuite traitée, ne pas l'effacer : indiquer dans quelle
+  version elle a été traitée et conserver le contexte qui a conduit à la décision.
+
+G. DIAGNOSTICS / REMARQUES UTILISATEUR
+- Un DIAG doit être lu avant de proposer une correction.
+- Distinguer ce qui est mesuré de ce qui n'est qu'une hypothèse.
+- Une remarque utilisateur révélant un problème, une préférence opérationnelle,
+  une régression, une piste ou une piste à abandonner doit être ajoutée à cette
+  fiche même si aucun code n'est créé.
+- Les remarques ouvertes ne doivent jamais être transformées automatiquement en
+  code lors d'une livraison ultérieure sans demande explicite ou nouvelle preuve.
+
+H. VALIDATION AVANT LIVRAISON
+- Vérifier la syntaxe JavaScript de `Script`, `SIA` et `SW`.
+- Vérifier tous les scripts inline de l'Index concernés par les modifications.
+- Vérifier le JSON du Manifest.
+- Vérifier la cohérence des versions, URLs, paramètres `appv`, caches et SW.
+- Vérifier que la modification demandée est réellement présente.
+- Vérifier qu'aucune fonction validée n'a manifestement disparu.
+- Lorsque `sia.js` n'est pas censé changer, vérifier qu'il est strictement identique
+  à la version de référence.
+- Pour les modifications cartographiques sensibles, comparer les constantes du
+  moteur tuiles avec la version de référence si elles sont annoncées inchangées.
+
+I. PRIORITÉ OPÉRATIONNELLE CARTE
+- Exigence de référence : la fluidité du fond NPF doit rester prioritaire, y compris
+  lorsque Routes et HT sont activés.
+- Il est acceptable de retarder/masquer temporairement Routes/HT pour protéger les
+  tuiles ; il n'est pas acceptable de dégrader le fond pour préserver un overlay.
+- Ne pas modifier le moteur direct offline, ses lectures, caches, keepBuffer,
+  timeouts ou scheduler sans demande explicite et éléments DIAG suffisants.
+
+J. RÈGLE DE REPRISE D'UN CHAT / D'UNE SESSION
+- Lire d'abord cette fiche de reprise puis les sources actuelles.
+- Ne pas supposer qu'une remarque discutée précédemment a été implémentée : vérifier
+  son statut dans cette fiche puis dans le code réel.
+- Ne pas supposer qu'une ancienne version « fonctionnait mieux » sans relire son
+  historique et les raisons d'un éventuel abandon/rollback.
+
+
+0 BIS. STATUT GLOBAL DES REMARQUES IMPORTANTES DE CE CHAT AU 19/09/2026
+=======================================================================
+Toutes les remarques de ce chat n'ont PAS été transformées en code. Certaines ont
+été volontairement conservées comme points ouverts ou pistes conditionnelles.
+
+IMPLÉMENTÉ / INTÉGRÉ :
+- v17.18 : orthodromie généralisée aux tracés de navigation NPF, y compris ligne
+  de foi / vecteur avion, Feu→PÉLIC, Feu→Base et branches WP ;
+- v17.19 : suppression de reconstructions de GridLayer devenues redondantes,
+  conservation du splash jusqu'à la première tuile et report des alias ;
+- v17.20 : priorité de démarrage renforcée, limitation du second recadrage GPS,
+  communes retardées derrière la première tuile, porte post-core et déplacement
+  du gros script PWA pour permettre un splash plus précoce ;
+- v17.21 : noyau initial de tuiles avant parsing communes, plans d'eau repoussés
+  après priorité carte, cache séparé de retour de zoom pour les derniers niveaux
+  NPF déjà affichés et HT automatiquement masquées à l'échelle 50 NM ou plus.
+
+NON IMPLÉMENTÉ / OUVERT :
+- écart ligne de foi jaune / route rouge alors que les deux affichent 277° :
+  hypothèse principale = arrondi du relèvement affiché ; aucune compensation codée ;
+- comportement SIA à 5 NM sous charge combinée Zones + Routes + HT : la suppression
+  anticipée de certaines décorations reste présente ;
+- suppression complète des lectures de tuiles des niveaux intermédiaires pendant
+  un pinch OUT : piste désormais documentée mais NON implémentée ;
+- optimisation des tuiles absentes via limites géographiques des packs : évoquée,
+  non implémentée ;
+- augmentation de concurrence IndexedDB / modification keepBuffer / timeouts :
+  non retenue sans nouvelle preuve DIAG.
+
+À MESURER :
+- efficacité réelle du cache retour zoom v17.21 : vérifier dans le prochain DIAG
+  la nouvelle métrique « cache retour zoom / hits » et surtout les temps OUT ;
+- effet du report des plans d'eau sur le blocage JS ~1,9 s encore observé en v17.20 ;
+- comportement HT lors du passage 50 NM -> 20 NM -> 50 NM : préférence utilisateur
+  doit rester ON, rendu absent à 50 NM+, puis retour automatique sous 50 NM.
+
+IMPORTANT : cette liste de statut ne remplace pas les sections détaillées plus bas.
+Elle sert à savoir immédiatement ce qui est réellement codé, ce qui reste ouvert
+et ce qui ne doit pas être intégré automatiquement.
+
+1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
+------------------------------------
+Version : TEST v17.21
+Date : 19/09/2026
+Base : v17.20
+
+Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
+1_Modifications_v17.21.txt
+2_Index_v17.21.txt
+3_Manifest_v17.21.txt
+4_Script_v17.21.txt
+5_SIA_v17.21.txt
+6_Style_v17.21.txt
+7_Sw_v17.21.txt
+
+Références de version cohérentes :
+- Index : APP_VERSION = v17.21
+- Manifest : start_url = ./index.html?appv=v17.21
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.21
+- Style : NPF_STYLE_BUILD_VERSION = v17.21
+- Service Worker : sw-v17-21_startup_zoomout_return_cache_ht50
+- SIA_DATA_REVISION : 15.69-radio1026-1-maplite1
+- sia.js v17.21 : strictement identique à v17.20.
+
+STATUT DE VALIDATION :
+- validation statique v17.21 effectuée avant livraison : Script/SIA/SW OK, scripts
+  inline Index OK, Manifest JSON OK et cohérence versions OK ;
+- v17.20 a désormais un DIAG réel d'ouverture et un DIAG réel de zooms ;
+- v17.21 doit être validée sur iPad avant de considérer ses gains acquis.
+
+2. PROTOCOLE DE TRAVAIL À RESPECTER
+-----------------------------------
+- Toujours partir des fichiers réels de la version courante.
+- Ne jamais reconstruire un fichier à partir de mémoire, de ce journal ou d'un
+  ancien extrait.
+- Modifier uniquement ce qui est demandé ou ce qui est explicitement nécessaire
+  à la correction ciblée.
+- Préserver toutes les fonctions déjà validées.
+- Ne pas réintroduire une piste historique abandonnée sans justification nouvelle
+  et preuve par DIAG.
+- Pendant une itération de diagnostic, garder la même version TEST tant qu'une
+  livraison complète n'est pas demandée.
+- Lors d'une livraison : fournir les 7 fichiers complets, jamais des patchs à
+  appliquer manuellement.
+- Conserver ce fichier `1_Modifications` cumulatif : nouvelle fiche/version en
+  tête, historique antérieur jamais tronqué.
+- Avant livraison : vérifier syntaxe JS Script/SIA/SW, scripts inline Index,
+  Manifest JSON, versions/URLs/caches et absence de perte fonctionnelle évidente.
+
+
+3. EXIGENCE OPÉRATIONNELLE CENTRALE — PRIORITÉ ABSOLUE À LA CARTE
+-----------------------------------------------------------------
+Exigence utilisateur de référence :
+« je veux que la fluidité tout calques OFF soit la même avec routes et HT et cela
+au détriment de l'affichage de ces calques pour donner priorité aux tuiles ».
+
+Conséquences :
+- les tuiles du fond NPF sont prioritaires sur Routes, HT, SIA décoratif et autres
+  enrichissements lourds ;
+- Routes/HT peuvent être temporairement masqués, différés ou reconstruits après
+  stabilisation ;
+- une optimisation qui accélère un overlay mais ralentit le pan/zoom du fond NPF
+  est à considérer comme une régression ;
+- ne pas augmenter la charge IndexedDB ou les redraws du fond sans DIAG démontrant
+  un bénéfice réel sur iPad/Safari.
+
+
+4. MOTEUR TUILES DIRECT OFFLINE — ÉTAT DE RÉFÉRENCE À NE PAS MODIFIER À L'AVEUGLE
+---------------------------------------------------------------------------------
+Réglages actuels v17.20 :
+- DIRECT_OFFLINE_TILE_CACHE_MAX = 256
+- DIRECT_OFFLINE_NPF_TILE_CACHE_MAX = 160
+- DIRECT_OFFLINE_TILE_MISS_CACHE_TTL_MS = 30000
+- DIRECT_OFFLINE_NPF_MAX_CONCURRENT_READS = 5
+- DIRECT_OFFLINE_NPF_MAX_QUEUED_READS = 160
+- OFFLINE_TILE_KEEP_BUFFER = 4
+- NPF_OFFLINE_TILE_KEEP_BUFFER = 2
+- OFFLINE_TILE_UPDATE_INTERVAL_MS = 80
+- intervalle direct NPF dans GridLayer = 60 ms
+- DIRECT_OFFLINE_NPF_ZOOM_SETTLE_MS = 240 ms
+- updateWhenZooming = false
+- updateWhenIdle = false pour le GridLayer NPF direct
+- une lecture historique par transaction readonly avec curseur indexé `tileUrl` ;
+- Blob/ObjectURL pour l'affichage des tuiles ;
+- file NPF bornée et purge des demandes devenues inutiles ;
+- les lectures actives ne sont pas annulées lors d'un simple changement de vue ;
+- priorité dynamique au viewport/zoom courant sans augmenter les 5 lectures.
+
+Ajout v17.21, explicitement demandé pour le zoom OUT :
+- cache de retour de zoom NPF séparé du cache principal : 128 entrées maximum ;
+- maximum 4 niveaux de zoom récemment peints ;
+- le cache principal historique reste à 160 entrées ;
+- aucune lecture active n'est annulée ; aucune concurrence supplémentaire ;
+- les Blob déjà chargés sont seulement conservés par référence pour permettre un
+  retour rapide vers un niveau précédemment visible après un zoom IN.
+
+Pistes historiquement testées et à NE PAS réintroduire sans nouvelle preuve :
+- réduction de 5 à 2 lectures simultanées : débit global dégradé ;
+- accès `index.get(tileUrl)` : abandonné après régressions/lenteurs ;
+- annulation active des transactions/lectures en cours : abandonnée ;
+- batch IndexedDB v17.06 : abandonné et rollback complet ;
+- redraw systématique des tuiles : abandonné ;
+- invalidation agressive des lectures actives : abandonnée.
+
+v17.06 est explicitement ABANDONNÉE.
+v17.09 ne doit pas être reprise telle quelle : détachement physique Routes/HT,
+race HT et gels zoom/règle ont conduit aux corrections v17.10/v17.11.
+
+
+5. GÉOMÉTRIE DES ROUTES / NAVIGATION — ÉTAT ACTUEL
+--------------------------------------------------
+Depuis v17.18, toute géométrie de NAVIGATION doit utiliser une logique
+orthodromique cohérente :
+- avion -> cible/feu/WP ;
+- Feu -> PÉLIC ;
+- Feu -> Base ;
+- origine -> WP1 ;
+- WP -> WP ;
+- ligne de foi / vecteur avion 2/5/10 min.
+
+Principe : une seule L.polyline continue par tracé visuel, avec sommets
+intermédiaires géographiques invisibles. Le coût reste volontairement borné.
+Ne PAS appliquer cette règle aux géométries non-navigation : routes routières,
+HT, limites SIA, communes, départements, etc.
+
+Simulation depuis v17.16 :
+- la route saisie par l'utilisateur est magnétique ;
+- le déplacement géographique interne utilise une route vraie obtenue en ajoutant
+  la déclinaison magnétique ;
+- l'affichage utilisateur reste magnétique ;
+- ne pas ajouter de compensation arbitraire en degrés sans démonstration.
+
+
+6. REMARQUE OUVERTE NON TRANSFORMÉE EN MODIFICATION — ÉCART 277° / 277°
+-----------------------------------------------------------------------
+Observation utilisateur du 19/09/2026 : même après orthodromie généralisée, une
+capture montre la ligne de foi jaune et la route rouge légèrement séparées alors
+que les deux affichent 277°.
+
+Constat fait dans le code :
+- la route vers la cible calcule un relèvement exact puis l'affichage passe par
+  `Math.round()` ;
+- un affichage `277°` peut donc correspondre à environ 276,50...277,49° ;
+- la simulation saisie à 277° correspond à 277,00° magnétique ;
+- deux textes `277°` ne garantissent donc pas deux routes mathématiquement égales.
+
+Ordre de grandeur expliqué :
+- écart maximal lié à l'arrondi : presque 0,5° ;
+- à environ 33 NM (10 min à ~200 kt), 0,5° produit ~0,29 NM d'écart latéral,
+  donc plusieurs centaines de mètres et un écart visuel net à l'échelle 2 NM.
+
+AUCUNE correction de code n'a été intégrée pour ce point à ce jour.
+Avant toute correction, privilégier un DIAG temporaire du type :
+- route exacte cible magnétique : xxx.xx° ;
+- simulation exacte magnétique : xxx.xx° ;
+- delta : x.xx°.
+
+Options évoquées mais NON décidées / NON implémentées :
+- afficher des dixièmes de degré ;
+- lorsque la simulation saisie correspond au degré entier affiché de la cible,
+  utiliser en interne le relèvement exact de cette cible ;
+- conserver la saisie entière exacte et accepter l'écart graphique dû à l'arrondi.
+
+NE PAS appliquer une correction artificielle de +1°/-1°.
+
+
+7. SIA À 5 NM — COMPORTEMENT OUVERT / NON CORRIGÉ DANS LES VERSIONS 17.16–17.21
+--------------------------------------------------------------------------------
+Historique : les bandes/bordures intérieures SIA à 5 NM ont été rétablies dans
+les versions 16.x après une régression antérieure.
+
+État actuel du Script v17.21 vérifié :
+- SIA_DECORATION_LIGHTWEIGHT_SCALE_NM = 10 ;
+- MAIS lorsque la charge combinée Zones + Routes + HT est considérée lourde,
+  `combinedHeavyLightweight` devient vrai dès échelle >= 5 NM ;
+- dans les deux chemins de décoration (synchrone et progressif), cette condition
+  provoque un retour sans décorations/libellés internes.
+
+Donc à 5–<10 NM :
+- sans charge combinée lourde, les décorations peuvent rester présentes ;
+- avec Zones + Routes + HT simultanément actifs, elles peuvent être volontairement
+  omises par le mode allégé combiné.
+
+Ce point a été identifié mais AUCUNE modification récente n'a été intégrée.
+Si l'utilisateur demande de le corriger :
+- modifier les DEUX chemins de décoration concernés ;
+- conserver le seuil global 10 NM ;
+- ne pas toucher aux contours principaux ni aux données SIA ;
+- valider la fluidité Routes+HT avant de considérer la correction acquise.
+
+
+8. DIAG v17.20 — OUVERTURE : MESURES VALIDÉES ET POINT RESTANT
+-----------------------------------------------------------------
+DIAG d'ouverture du 19/09/2026 10:28, build v17.20, carte NPF OFFLINE.
+
+Mesures importantes :
+- Script exécuté : 1,71 s ; DOM prêt : 1,84 s ; carte ajoutée : 1,86 s ;
+- IndexedDB prête : 2,16 s ;
+- première tuile affichée : 2,76 s ;
+- communes prêtes : 4,35 s ; index recherche : 4,62 s ;
+- PÉLIC affichés / démarrage principal prêt : 4,96 s ;
+- GPS réel : recadrage évité à 6,45 s, donc la correction v17.20 fonctionne ;
+- priorité fond de carte libérée : 8,31 s avec 30/30 tuiles, 30 visibles, file 0/0 ;
+- 0 demande en file abandonnée à l'ouverture, 0 lecture obsolète, 0 reprise ;
+- blocage JavaScript restant : ~1904 ms vers +5,61 s.
+
+Conclusion ouverture :
+- v17.20 est nettement meilleure que v17.19 pour le premier affichage ;
+- le second recadrage GPS n'est plus le problème principal ;
+- le blocage ~1,9 s se produit juste après le core_ready ; le rendu des plans d'eau,
+  encore lancé peu après la restauration du feu, est désormais repoussé et mesuré
+  en v17.21 afin de vérifier s'il participe à ce blocage ;
+- v17.21 laisse également un noyau de 9 tuiles se charger après la première tuile
+  avant de lancer le parsing/indexage des 34 935 communes.
+
+
+9. DIAG v17.20 — ZOOMS : IN CORRECT / OUT PARFOIS LOURD
+-------------------------------------------------------
+Observation utilisateur : « le IN marche assez bien mais le OUT est parfois lourd ».
+Le DIAG zooms 10:34 confirme cette asymétrie.
+
+Mesures globales :
+- 413 tuiles IDB trouvées ;
+- 353 demandes en file abandonnées au fil des changements de niveaux ;
+- 0 lecture active devenue obsolète ; 0 reprise ;
+- 8 snapshots avec zéro tuile visible ;
+- 9 zooms enregistrés ;
+- les saccades ne sont pas expliquées par Routes/HT/SIA pendant le geste : plusieurs
+  séquences montrent JS=0, SIA=0, Routes=0, HT=0 alors que les tuiles travaillent.
+
+Séquences caractéristiques :
+- zoom IN vers z10 : 16 tuiles encore visibles, file 4 ;
+- zoom IN vers z12 : 5 tuiles encore visibles, file 15 ;
+- OUT z12 -> z9 : 0 visible, 5 actives, 25 en file ; retour complet observé environ
+  11 s plus tard dans une séquence ;
+- autre OUT vers z8 : 0 visible, 5 actives, 25 en file ; retour complet ~4,4 s ;
+- autre OUT z12 -> z9 : même départ 0/25 mais récupération ~2 s.
+
+Interprétation retenue :
+- le caractère « parfois » lourd vient surtout du fait que les tuiles du niveau
+  inférieur déjà vues lors du zoom IN peuvent avoir quitté le LRU principal ;
+- `beginBaseMapZoomStabilityGuard()` réduit temporairement le cache principal à
+  96 entrées pendant le geste ; après plusieurs niveaux IN, un retour OUT peut donc
+  nécessiter de relire 25–30 tuiles depuis IndexedDB ;
+- les nombreuses demandes abandonnées concernent surtout des demandes intermédiaires
+  devenues inutiles, sans annulation des lectures actives.
+
+Correction v17.21 :
+- ajout d'un cache « retour zoom » séparé, 128 entrées / 4 niveaux, alimenté par
+  les niveaux réellement peints avant réduction du LRU et après chargement complet ;
+- un hit de ce cache réinjecte immédiatement le Blob dans le LRU principal ;
+- nouvelle métrique DIAG : taille du cache retour zoom + nombre de hits ;
+- le scheduler, les 5 lectures, la file 160, les timeouts, keepBuffer et la purge
+  historique restent inchangés.
+
+Piste NON IMPLÉMENTÉE à ce stade :
+- ne lancer aucune lecture des niveaux intermédiaires pendant un pinch OUT et
+  attendre le niveau final stabilisé. Potentiellement efficace, mais plus intrusive
+  dans le moteur tuiles ; attendre le DIAG v17.21 avant de la reprendre.
+
+Préférence opérationnelle utilisateur ajoutée le 19/09/2026 :
+- à l'échelle nautique « 50 NM », les lignes HT peuvent être désactivées.
+- v17.21 applique donc un masquage automatique à 50 NM et au-delà sans changer
+  la préférence HT mémorisée. Sous 50 NM, elles reviennent automatiquement.
+- à 50 NM+, si les données HT ne sont pas encore chargées, leur chargement est
+  différé : gain attendu au démarrage lorsque l'ouverture se fait à cette échelle.
+
+Pistes toujours NON implémentées :
+- accélérer la conclusion « tuile absente » via limites géographiques des packs ;
+- augmenter la concurrence IndexedDB ;
+- réduire keepBuffer ou modifier les timeouts.
+
+10. SPLASH / PAGE BLANCHE — ÉTAT
+--------------------------------
+Avant v17.20 :
+- le splash existait mais son élément body était rencontré après un gros bloc JS
+  inline de contrôle PWA/mise à jour ;
+- Safari pouvait donc afficher du blanc avant même de pouvoir peindre le splash.
+
+v17.19 :
+- le splash reste visible jusqu'à la première vraie tuile ;
+- secours à 6,5 s si aucune tuile n'arrive.
+
+v17.20 :
+- le gros script PWA inline est déplacé hors du <head>, après le contenu principal
+  et avant les scripts applicatifs ;
+- objectif : permettre au navigateur de peindre le splash plus tôt.
+
+STATUT : v17.20 mesurée avec première tuile à 2,76 s. v17.21 conserve ce mécanisme
+et ajoute le noyau initial de tuiles avant parsing des communes.
+
+
+11. ROUTES / HT — INVARIANTS ACTUELS
+------------------------------------
+- priorité aux tuiles pendant tout geste manuel ;
+- ne pas démonter massivement des milliers de Paths au début d'un geste ;
+- ne pas réintroduire le détachement complet v17.09 ;
+- restauration des overlays après stabilisation seulement ;
+- HT doit conserver un swap atomique : ne pas supprimer l'ancien rendu avant que
+  le nouveau soit prêt si un changement de token peut interrompre le traitement ;
+- les états mémorisés Routes ON / HT ON doivent être réellement restaurés ;
+- v17.21 : HT ON reste mémorisé mais le rendu est automatiquement absent à
+  l'échelle 50 NM et au-delà ; sous 50 NM il doit revenir sans OFF/ON manuel ;
+- si les panes ont été prémasqués pendant un geste, leur état final doit rester
+  cohérent avec le bouton utilisateur.
+
+
+12. FONCTIONS / CORRECTIONS RÉCENTES À PRÉSERVER
+-------------------------------------------------
+- v17.11 : prémasquage CSS Routes/HT sans retrait/rattachement renderer pendant
+  le geste ;
+- v17.12 : réduction des epochs tuiles redondantes, une logique par geste physique ;
+- v17.13 : réattachement fiable des groupes Routes/HT restaurés ON au démarrage ;
+- v17.14 : sélection dynamique des demandes dans l'epoch courant, priorité zoom
+  utile puis proximité centre viewport ;
+- v17.15 : snapshot visuel temporaire pendant zoom pour continuité ;
+- v17.16 : simulation magnétique -> vraie en interne, throttling des calculs,
+  suivi simulation ~5 s après geste manuel ; GPS réel ~10 s ;
+- v17.17 : message « Mise à jour installée » monotone, pas de réarmement par une
+  vieille page ; orthodromie avion->cible ;
+- v17.18 : orthodromie commune à toutes les routes aéronautiques + ligne de foi ;
+- v17.19 : suppression des reconstructions GridLayer redondantes si plage zoom
+  inchangée, 0 demandes abandonnées dans le DIAG mesuré ;
+- v17.20 : priorisation renforcée du premier affichage, validée par DIAG réel ;
+- v17.21 : noyau initial de tuiles, plans d'eau différés, cache retour zoom et
+  masquage HT automatique à 50 NM+.
+
+
+13. ÉLÉMENTS À NE PAS CONFONDRE / À NE PAS INTÉGRER SANS NOUVELLE DEMANDE
+------------------------------------------------------------------------
+- Une demande SUP AIP évoquée dans un autre échange n'appartient pas à cette
+  séquence NPF : ne pas la réintroduire ici sans nouvelle demande explicite.
+- Le passage futur PWA -> application Apple native est un chantier séparé ; ne
+  pas modifier l'architecture PWA actuelle au prétexte de cette migration.
+- Les remarques/diagnostics listés comme « non implémentés » dans cette fiche ne
+  doivent pas être transformés automatiquement en code : attendre la demande ou
+  un DIAG qui justifie la correction.
+
+
+14. RÈGLE POUR LES PROCHAINES REMARQUES UTILISATEUR
+---------------------------------------------------
+À partir de cette version, toute remarque importante qui :
+- révèle un comportement anormal ;
+- suggère une piste de correction ;
+- invalide une hypothèse ;
+- signale une régression ;
+- fixe une préférence opérationnelle ;
+- ou conclut qu'une piste ne doit PAS être retenue,
+
+doit être ajoutée à cette fiche même si elle ne débouche sur AUCUNE modification
+immédiate du code.
+
+Pour chaque remarque non implémentée, noter autant que possible :
+- date/version concernée ;
+- observation utilisateur ;
+- constat technique vérifié ;
+- hypothèse ou calcul associé ;
+- statut : NON IMPLÉMENTÉ / À MESURER / ABANDONNÉ / À REVOIR ;
+- condition qui justifierait de la reprendre.
+
+================================================================================
+HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
+================================================================================
+
+VERSION TEST v17.21 — DÉMARRAGE NOYAU TUILES / ZOOM OUT RAPIDE / HT OFF À 50 NM
+Date : 19/09/2026
+Base fonctionnelle : v17.20
+
+DEMANDES UTILISATEUR
+- Améliorer encore le démarrage.
+- Améliorer les zooms OUT, alors que le zoom IN est jugé assez bon.
+- À l'échelle nautique « 50 NM », désactiver les lignes HT.
+
+DIAG À L'ORIGINE — v17.20
+Ouverture 10:28 :
+- première tuile 2,76 s ; démarrage principal 4,96 s ;
+- GPS réel recadrage évité ; viewport complet 30/30 à 8,31 s ;
+- blocage JS restant ~1904 ms vers +5,61 s.
+Zooms 10:34 :
+- 413 tuiles trouvées, 353 demandes en file abandonnées ;
+- 0 lecture active obsolète, 0 reprise ;
+- IN conserve souvent des tuiles visibles ;
+- plusieurs OUT terminent avec 0 visible + 5 actives + 25 en file ;
+- récupération d'un OUT vers un niveau déjà vu variable d'environ 2 à 11 s.
+
+MODIFICATIONS
+
+1. DÉMARRAGE — NOYAU DE 9 TUILES AVANT COMMUNES
+- La première tuile reste le déclencheur initial.
+- Après cette première tuile, NPF attend jusqu'à 9 tuiles visibles/chargées du
+  viewport, ou scheduler au repos, ou 1,4 s maximum.
+- Ensuite seulement démarre le parsing/indexage des 34 935 communes.
+- Aucun changement du nombre de lectures IndexedDB ni du scheduler.
+
+2. DÉMARRAGE — PLANS D'EAU REPOUSSÉS APRÈS PRIORITÉ CARTE
+- L'état du bouton Plans d'eau est restauré immédiatement.
+- Le dessin Leaflet des plans d'eau attend désormais la libération de la porte
+  de priorité carte puis 1,2 s supplémentaires.
+- Le temps du dessin est ajouté au DIAG sous « Plans d’eau — début/terminé ».
+- Objectif : vérifier/supprimer le blocage JS ~1,9 s observé juste après core_ready.
+
+3. ZOOM OUT — CACHE DE RETOUR DE ZOOM NPF
+- Nouveau cache séparé du LRU principal : 128 Blob maximum, 4 niveaux de zoom.
+- Les tuiles réellement peintes du niveau courant sont mémorisées avant la
+  réduction temporaire du LRU à 96 au début d'un geste.
+- Un niveau complètement chargé est également mémorisé sur l'événement `load`
+  de la GridLayer.
+- Lors d'un retour OUT vers un niveau récemment affiché, NPF consulte ce cache
+  avant IndexedDB et réinjecte le Blob dans le cache principal.
+- Les Blob ne sont pas dupliqués physiquement lors de la capture : le cache garde
+  des références séparées afin qu'ils survivent à l'éviction du LRU principal.
+- Ce cache est vidé lors des vrais changements/récupérations de source offline.
+
+4. DIAG ZOOM OUT
+- `Mémoire carte` expose maintenant :
+  * taille du cache retour zoom ;
+  * nombre cumulé de hits du cache retour zoom.
+- `getNpfTilePerformanceStatus()` expose les mêmes compteurs.
+
+5. HT — MASQUAGE AUTOMATIQUE À 50 NM ET AU-DELÀ
+- `showHighVoltageLinesLayer` reste la préférence utilisateur mémorisée.
+- À échelle 50 NM ou plus :
+  * aucun rendu HT ;
+  * le LayerGroup HT est retiré de la carte ;
+  * le rendu courant est vidé ;
+  * si les données ne sont pas chargées, leur chargement est différé.
+- En revenant sous 50 NM avec HT toujours ON : chargement/rendu automatiques.
+- À 50 NM, HT n'est plus considéré comme overlay lourd pour le prémasquage ni
+  pour le séquenceur combiné Routes+HT.
+- Le bouton reste ON mais son info-bulle indique que HT est masqué à cette échelle.
+
+6. MOTEUR TUILES — CE QUI RESTE INCHANGÉ
+- 5 lectures IndexedDB simultanées ;
+- file max 160 ;
+- cache principal NPF 160 ;
+- cache général 256 ;
+- miss cache 512 / TTL 30 s ;
+- keepBuffer NPF 2 ;
+- updateWhenZooming=false ; updateWhenIdle=false ; intervalle direct 60 ms ;
+- timeouts IDB et récupération inchangés ;
+- aucune annulation active des lectures pendant un geste ;
+- logique de purge des demandes intermédiaires inchangée.
+
+7. NON MODIFIÉ
+- Orthodromie v17.18 ;
+- simulation v17.16 ;
+- SIA 5 NM : point ouvert inchangé ;
+- VAC, SafeSky/GLR, FdS/GAAR, calculateur, WP, routes aéronautiques inchangés ;
+- `sia.js` strictement identique à v17.20.
+
+VALIDATION AVANT LIVRAISON
+- Syntaxe Script / SIA / SW : OK.
+- Scripts inline Index : OK.
+- Manifest JSON : OK.
+- Références de version : v17.21 cohérentes.
+- SIA : strictement identique à v17.20.
+- Constantes historiques moteur tuiles : inchangées ; seul le cache retour zoom
+  séparé demandé pour OUT est ajouté.
+
+
 VERSION TEST v17.20 — PRIORITÉ CARTE AU DÉMARRAGE / RECENTRAGE GPS STABILISÉ
 Date : 19/09/2026
 Base fonctionnelle : v17.19
