@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.19';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.20';
 
 
 /*
@@ -5341,6 +5341,130 @@ function computeConvexHull(latLngPoints) {
 // LOGIQUE PRINCIPALE DE L'APPLICATION
 // =========================================================================
 
+/*
+ * v17.20 — porte de priorité du fond de carte au démarrage.
+ * Objectif : laisser Safari/IndexedDB produire d'abord une carte utile avant
+ * le parsing des communes et avant les enrichissements non indispensables.
+ * Aucun paramètre du moteur de tuiles (concurrence, file, keepBuffer, timeout)
+ * n'est modifié ici.
+ */
+let npfStartupMapPriorityPromise = null;
+
+function getNpfStartupTilePriorityState() {
+    let total = 0;
+    let loaded = 0;
+    let visible = 0;
+    try {
+        const coverage = getNpfCurrentZoomVisibleTileCoverage();
+        total = Math.max(0, Number(coverage?.total) || 0);
+        loaded = Math.max(0, Number(coverage?.loaded) || 0);
+    } catch (_) {}
+    try { visible = Math.max(0, Number(countVisibleLoadedBaseTiles()) || 0); } catch (_) {}
+
+    return {
+        total,
+        loaded,
+        visible,
+        active: Math.max(0, Number(directOfflineNpfActiveReads) || 0),
+        queued: Math.max(0, Number(directOfflineNpfReadQueue?.length) || 0)
+    };
+}
+
+function waitForNpfStartupFirstTile(timeoutMs = 4500) {
+    try {
+        if (npfStartupDiagHasMark('first_tile') || countVisibleLoadedBaseTiles() > 0) {
+            return Promise.resolve(true);
+        }
+    } catch (_) {}
+
+    return new Promise(resolve => {
+        let settled = false;
+        let pollTimer = null;
+        let safetyTimer = null;
+        const finish = value => {
+            if (settled) return;
+            settled = true;
+            if (pollTimer) clearTimeout(pollTimer);
+            if (safetyTimer) clearTimeout(safetyTimer);
+            try { window.removeEventListener('npf-startup-first-tile', onFirstTile); } catch (_) {}
+            resolve(value);
+        };
+        const onFirstTile = () => finish(true);
+        const poll = () => {
+            if (settled) return;
+            try {
+                if (npfStartupDiagHasMark('first_tile') || countVisibleLoadedBaseTiles() > 0) {
+                    finish(true);
+                    return;
+                }
+            } catch (_) {}
+            pollTimer = setTimeout(poll, 100);
+        };
+        try { window.addEventListener('npf-startup-first-tile', onFirstTile, { once: true }); } catch (_) {}
+        safetyTimer = setTimeout(() => finish(false), Math.max(500, Number(timeoutMs) || 4500));
+        pollTimer = setTimeout(poll, 100);
+    });
+}
+
+function waitForNpfStartupMapPriorityRelease({ timeoutMs = 8000, minCoverageRatio = 0.80 } = {}) {
+    if (npfStartupMapPriorityPromise) return npfStartupMapPriorityPromise;
+
+    npfStartupMapPriorityPromise = new Promise(resolve => {
+        const startedAt = Date.now();
+        let pollTimer = null;
+        let settled = false;
+        const finish = (reason, state) => {
+            if (settled) return;
+            settled = true;
+            if (pollTimer) clearTimeout(pollTimer);
+            npfStartupDiagMark(
+                'startup_map_priority_release',
+                'Priorité fond de carte libérée',
+                `${reason} · ${state.loaded}/${state.total} couverture · ${state.visible} visibles · file ${state.active}/${state.queued}`
+            );
+            resolve({ reason, ...state });
+        };
+        const check = () => {
+            if (settled) return;
+            const state = getNpfStartupTilePriorityState();
+            const coverageRatio = state.total > 0 ? state.loaded / state.total : 0;
+            const schedulerIdle = state.visible > 0 && state.active === 0 && state.queued === 0;
+            const coverageReady = state.total > 0 && coverageRatio >= minCoverageRatio;
+            if (schedulerIdle || coverageReady) {
+                finish(schedulerIdle ? 'scheduler-idle' : 'coverage-80%', state);
+                return;
+            }
+            if (Date.now() - startedAt >= timeoutMs) {
+                finish('timeout', state);
+                return;
+            }
+            pollTimer = setTimeout(check, 140);
+        };
+        check();
+    });
+
+    return npfStartupMapPriorityPromise;
+}
+
+function runNpfStartupMeasuredSync(key, label, callback) {
+    const startedAt = typeof performance !== 'undefined' && performance.now
+        ? performance.now()
+        : Date.now();
+    npfStartupDiagMark(`${key}_start`, `${label} — début`);
+    try {
+        return callback();
+    } finally {
+        const endedAt = typeof performance !== 'undefined' && performance.now
+            ? performance.now()
+            : Date.now();
+        npfStartupDiagMark(
+            `${key}_ready`,
+            `${label} — terminé`,
+            `${Math.max(0, Math.round(endedAt - startedAt))} ms`
+        );
+    }
+}
+
 async function initializeApp() {
     npfStartupDiagMark('init_start', 'Initialisation NPF');
     const statusMessage = document.getElementById('status-message');
@@ -5531,9 +5655,18 @@ async function initializeApp() {
     });
 
     /*
-     * v15.96 — PRIORITÉ 2 : recherche communes + alias.
-     * Cette phase démarre immédiatement après le premier rendu de la carte.
+     * v17.20 — PRIORITÉ 2 : la base communes ne concurrence plus la toute
+     * première tuile. La recherche devient disponible juste après le premier
+     * rendu cartographique, avec un timeout de secours si aucune tuile n'existe.
      */
+    npfStartupDiagMark('communes_wait_first_tile', 'Communes — attente première tuile');
+    const startupFirstTileReady = await waitForNpfStartupFirstTile(4500);
+    npfStartupDiagMark(
+        'communes_first_tile_gate',
+        'Communes — priorité carte libérée',
+        startupFirstTileReady ? 'première tuile affichée' : 'timeout sécurité'
+    );
+
     let communesLoadError = null;
     npfStartupDiagMark('communes_start', 'Communes — chargement');
     try {
@@ -5683,58 +5816,68 @@ async function initializeApp() {
     setTimeout(scheduleAliasesWhenViewportReady, 350);
 
     /*
-     * Toutes les tâches suivantes sont explicitement postérieures aux trois
-     * priorités. Elles restent asynchrones/différées pour ne pas reprendre le
-     * thread principal juste après l'affichage des PÉLIC.
+     * v17.20 — le fond de carte conserve la priorité CPU/IndexedDB après
+     * core_ready. Les tâches réellement coûteuses attendent 80 % du viewport,
+     * un scheduler tuiles au repos, ou 8 s au maximum. Les calques HT/Routes
+     * gardent leur temporisation historique interne et ne sont pas avancés.
      */
-    setTimeout(() => {
-        try { drawNpfRunwayMapLayer(); } catch (_) {}
-        try { drawFireHistoryMarkers(); } catch (_) {}
-        try { redrawGaarCircuits(); } catch (_) {}
-    }, 180);
+    const startupMapPriorityGate = waitForNpfStartupMapPriorityRelease({
+        timeoutMs: 8000,
+        minCoverageRatio: 0.80
+    });
 
-    /*
-     * v16.02 — étaler les enrichissements post-core au lieu de lancer calques,
-     * chat et SIA dans la même tranche CPU juste après l'affichage PÉLIC.
-     */
+    startupMapPriorityGate.then(() => {
+        setTimeout(() => {
+            try {
+                runNpfStartupMeasuredSync('startup_runways', 'Pistes carte', () => drawNpfRunwayMapLayer());
+                runNpfStartupMeasuredSync('startup_fire_history', 'Historique feux', () => drawFireHistoryMarkers());
+                runNpfStartupMeasuredSync('startup_gaar', 'Circuits GAAR', () => redrawGaarCircuits());
+            } catch (_) {}
+        }, 120);
+
+        setTimeout(() => {
+            try {
+                runNpfStartupMeasuredSync('startup_chat', 'Chat équipe', () => initializeTeamChat());
+            } catch (chatInitError) {
+                console.warn('Initialisation chat différée:', chatInitError);
+            }
+        }, 420);
+
+        setTimeout(() => {
+            npfStartupDiagMark('sia_init_start', 'SIA — initialisation');
+            try {
+                initializeSiaSystem();
+                npfStartupDiagMark('sia_init_ready', 'SIA — initialisation prête');
+            } catch (siaInitError) {
+                npfStartupDiagMark('sia_init_error', 'SIA — initialisation en erreur', siaInitError?.message || siaInitError);
+                console.error('[SIA] Erreur initialisation système:', siaInitError);
+            }
+        }, 650);
+
+        setTimeout(showPostUpdateRestartNoticeIfNeeded, 650);
+    });
+
+    /* Les calques annexes ont déjà un délai offline de 6,5 s : conserver ce
+     * séquenceur sans ajouter un second délai complet. */
     setTimeout(() => {
         npfStartupDiagMark('aux_schedule', 'Couches annexes programmées');
         try { scheduleStartupAuxiliaryLayers(); } catch (_) {}
     }, 420);
 
-    setTimeout(() => {
-        try {
-            initializeTeamChat();
-        } catch (chatInitError) {
-            console.warn('Initialisation chat différée:', chatInitError);
-        }
-    }, 700);
-
-    setTimeout(() => {
-        npfStartupDiagMark('sia_init_start', 'SIA — initialisation');
-        try {
-            initializeSiaSystem();
-            npfStartupDiagMark('sia_init_ready', 'SIA — initialisation prête');
-        } catch (siaInitError) {
-            npfStartupDiagMark('sia_init_error', 'SIA — initialisation en erreur', siaInitError?.message || siaInitError);
-            console.error('[SIA] Erreur initialisation système:', siaInitError);
-        }
-    }, 900);
-
-    setTimeout(showPostUpdateRestartNoticeIfNeeded, 900);
-
     /*
      * v15.99 — autorisation BFG -> NPF silencieuse et non bloquante.
      * Elle reste postérieure à carte -> recherche/alias -> PÉLIC.
      */
-    setTimeout(() => {
-        tryAuthorizeBriefingDocsFromBfgBridge({ silent: true })
-            .then(async () => {
-                await refreshBriefingDocMapButtons().catch(() => {});
-                await syncNpfBfgNotamsFromNas({ silent: true }).catch(() => false);
-            })
-            .catch(() => {});
-    }, 2200);
+    startupMapPriorityGate.then(() => {
+        setTimeout(() => {
+            tryAuthorizeBriefingDocsFromBfgBridge({ silent: true })
+                .then(async () => {
+                    await refreshBriefingDocMapButtons().catch(() => {});
+                    await syncNpfBfgNotamsFromNas({ silent: true }).catch(() => false);
+                })
+                .catch(() => {});
+        }, 1600);
+    });
 
     // v16.06 — si BFG a été utilisé pendant que NPF était en arrière-plan,
     // le retour au premier plan récupère automatiquement le snapshot NAS.
@@ -5749,16 +5892,18 @@ async function initializeApp() {
      * Le contrôle est lancé après le cœur de démarrage, puis attend lui-même
      * que les tuiles NPF visibles soient au repos avant tout téléchargement.
      */
-    setTimeout(() => {
-        reconcileVacInstalledIndexFromDb()
-            .then(() => {
-                refreshUI();
-                return checkVacUpdatesAtStartup({ source: 'startup' });
-            })
-            .catch(error => {
-                console.warn('[VAC] Initialisation automatique différée indisponible:', error);
-            });
-    }, 2500);
+    startupMapPriorityGate.then(() => {
+        setTimeout(() => {
+            reconcileVacInstalledIndexFromDb()
+                .then(() => {
+                    refreshUI();
+                    return checkVacUpdatesAtStartup({ source: 'startup' });
+                })
+                .catch(error => {
+                    console.warn('[VAC] Initialisation automatique différée indisponible:', error);
+                });
+        }, 2200);
+    });
 
     window.addEventListener('online', () => {
         scheduleAutomaticVacSync(VAC_AUTO_SYNC_ONLINE_DELAY_MS, 'online');
@@ -5767,14 +5912,16 @@ async function initializeApp() {
     /*
      * FdS / GAAR : lecture locale différée, aucun contrôle réseau au démarrage.
      */
-    setTimeout(() => {
-        refreshBriefingDocMapButtons().catch(error => {
-            console.info(
-                '[FDS/GAAR] Lecture locale de démarrage ignorée:',
-                error?.message || error
-            );
-        });
-    }, 1200);
+    startupMapPriorityGate.then(() => {
+        setTimeout(() => {
+            refreshBriefingDocMapButtons().catch(error => {
+                console.info(
+                    '[FDS/GAAR] Lecture locale de démarrage ignorée:',
+                    error?.message || error
+                );
+            });
+        }, 900);
+    });
 
     setTimeout(() => {
         scheduleOfflineTileWake('startup-post-core-v15.96');
@@ -5787,24 +5934,26 @@ async function initializeApp() {
      * carte -> recherche/alias -> PÉLIC. Ils servent ensuite à la commune
      * survolée et au positionnement précis des feux manuels.
      */
-    setTimeout(() => {
-        npfStartupDiagMark('commune_polygons_start', 'Polygones communes — chargement');
-        ensureCommunesLayerDataLoaded()
-            .then(() => {
-                npfStartupDiagMark('commune_polygons_ready', 'Polygones communes prêts');
-                repairManualFireCommuneLabelsFromPolygons();
-                if (typeof refreshNearestCommuneDisplayFromKnownGps === 'function') {
-                    refreshNearestCommuneDisplayFromKnownGps();
-                }
-            })
-            .catch((error) => {
-                npfStartupDiagMark('commune_polygons_error', 'Polygones communes en erreur', error?.message || error);
-                console.warn('Préchargement polygones communes impossible:', error);
-                if (typeof refreshNearestCommuneDisplayFromKnownGps === 'function') {
-                    refreshNearestCommuneDisplayFromKnownGps();
-                }
-            });
-    }, 650);
+    startupMapPriorityGate.then(() => {
+        setTimeout(() => {
+            npfStartupDiagMark('commune_polygons_start', 'Polygones communes — chargement');
+            ensureCommunesLayerDataLoaded()
+                .then(() => {
+                    npfStartupDiagMark('commune_polygons_ready', 'Polygones communes prêts');
+                    repairManualFireCommuneLabelsFromPolygons();
+                    if (typeof refreshNearestCommuneDisplayFromKnownGps === 'function') {
+                        refreshNearestCommuneDisplayFromKnownGps();
+                    }
+                })
+                .catch((error) => {
+                    npfStartupDiagMark('commune_polygons_error', 'Polygones communes en erreur', error?.message || error);
+                    console.warn('Préchargement polygones communes impossible:', error);
+                    if (typeof refreshNearestCommuneDisplayFromKnownGps === 'function') {
+                        refreshNearestCommuneDisplayFromKnownGps();
+                    }
+                });
+        }, 500);
+    });
 
     /*
      * v16.32 — la base nationale de localités n'est plus préparée au démarrage.
@@ -5833,19 +5982,25 @@ async function initializeApp() {
         );
     }
 
-    primeGpsFromStoredPosition();
+    runNpfStartupMeasuredSync(
+        'startup_prime_gps',
+        'Position GPS mémorisée',
+        () => primeGpsFromStoredPosition()
+    );
 
-    setTimeout(() => {
-        if (typeof refreshNearestCommuneDisplayFromKnownGps === 'function') {
-            refreshNearestCommuneDisplayFromKnownGps();
-        }
-    }, 1050);
+    startupMapPriorityGate.then(() => {
+        setTimeout(() => {
+            if (typeof refreshNearestCommuneDisplayFromKnownGps === 'function') {
+                refreshNearestCommuneDisplayFromKnownGps();
+            }
+        }, 700);
 
-    setTimeout(() => {
-        if (typeof refreshNearestCommuneDisplayFromKnownGps === 'function') {
-            refreshNearestCommuneDisplayFromKnownGps();
-        }
-    }, 2750);
+        setTimeout(() => {
+            if (typeof refreshNearestCommuneDisplayFromKnownGps === 'function') {
+                refreshNearestCommuneDisplayFromKnownGps();
+            }
+        }, 2200);
+    });
 
     if (localStorage.getItem('liveGpsActive') === 'true') {
         restartLiveGpsWatch({ silent: true });
@@ -5867,7 +6022,11 @@ async function initializeApp() {
                  * v17.19 — le cadrage feu/GPS/PÉLIC a déjà été appliqué avant
                  * l'ajout des tuiles : restaurer seulement les dessins et calculs.
                  */
-                displayCommuneDetails(currentCommune, false);
+                runNpfStartupMeasuredSync(
+                    'startup_saved_fire',
+                    'Restauration feu mémorisé',
+                    () => displayCommuneDetails(currentCommune, false)
+                );
             } else {
                 displayCommuneDetails(currentCommune, true);
                 setTimeout(
@@ -11884,6 +12043,7 @@ function setupBaseTileLayer() {
         try {
             baseTileLayer.once('tileload', () => {
                 npfStartupDiagMark('first_tile', 'Première tuile affichée');
+                try { window.dispatchEvent(new CustomEvent('npf-startup-first-tile')); } catch (_) {}
                 try { window.markNpfAppReady?.(); } catch (_) {}
             });
             baseTileLayer.once('load', () => {
@@ -33911,6 +34071,36 @@ function applyStartupGpsAutoCenter(lat, lng, { source = 'real', force = false } 
     if (isRealPosition) {
         if (startupGpsAutoCenteredWithRealPosition && !force) return false;
         startupGpsAutoCenteredWithRealPosition = true;
+
+        /*
+         * v17.20 — le cadrage pré-tuiles de v17.19 reste la référence. Si le
+         * premier GPS réel tombe déjà dans les 70 % centraux du viewport, on
+         * déplace uniquement l'avion : aucun setView/fitBounds, donc aucune
+         * seconde vague de tuiles. Un GPS réellement hors cadre conserve le
+         * comportement historique de recentrage.
+         */
+        if (!force && startupGpsStoredCenterAppliedAt) {
+            try {
+                const point = map.latLngToContainerPoint([numericLat, numericLng]);
+                const size = map.getSize();
+                const marginX = size.x * 0.15;
+                const marginY = size.y * 0.15;
+                const insideCentralViewport = (
+                    point.x >= marginX
+                    && point.x <= size.x - marginX
+                    && point.y >= marginY
+                    && point.y <= size.y - marginY
+                );
+                if (insideCentralViewport) {
+                    npfStartupDiagMark(
+                        'gps_real_recenter_skipped',
+                        'GPS réel — recadrage évité',
+                        'position déjà dans les 70 % centraux du viewport'
+                    );
+                    return true;
+                }
+            } catch (_) {}
+        }
     } else {
         if (startupGpsAutoCenteredWithRealPosition) return false;
         if (startupGpsStoredCenterAppliedAt && !force) return false;
