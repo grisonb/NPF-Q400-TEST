@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v17-16_simulation_consistency_performance';
-const APP_VERSION = 'v17.16';
+const SW_VERSION = 'sw-v17-17_geodesic_update_notice_monotonic';
+const APP_VERSION = 'v17.17';
 const SIA_DATA_REVISION = '15.69-radio1026-1-maplite1';
 const SIA_DATA_URL = './sia.js';
 const SIA_DATA_CACHE = `npf-q400-sia-data-${SIA_DATA_REVISION}`;
