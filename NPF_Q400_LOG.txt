@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 19/09/2026
-Version de travail actuelle : TEST v17.22
+Version de travail actuelle : TEST v17.23
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -147,6 +147,8 @@ IMPLÉMENTÉ / INTÉGRÉ :
 - v17.22 : retour au démarrage v17.20 pour les communes, conservation des plans
   d'eau différés et HT 50 NM, suppression du trim LRU à 96 et fast-path RAM avant
   le scheduler IndexedDB avec compteurs séparés RAM principal/retour/IDB.
+- v17.23 : politique du cache retour corrigée : z7 (50 NM) et z8 (20 NM)
+  restent protégés pendant la session, en plus des 4 niveaux récents ordinaires.
 
 NON IMPLÉMENTÉ / OUVERT :
 - écart ligne de foi jaune / route rouge alors que les deux affichent 277° :
@@ -161,9 +163,11 @@ NON IMPLÉMENTÉ / OUVERT :
   non retenue sans nouvelle preuve DIAG.
 
 À MESURER :
-- v17.22 : vérifier qu'un OUT vers un niveau déjà vu produit des `hits RAM principal`
-  ou `hits retour` AVANT toute augmentation des `accès IDB`, et réduit les périodes
-  `0 visible + 5 actives + 25 en file` ;
+- v17.22 : MESURÉ. Les OUT z12->z10 restent fluides via RAM principal, mais z8/20 NM
+  devient lourd et z7/50 NM très lourd ; 95 entrées cache retour mais 0 hit retour,
+  car les niveaux z7/z8 avaient été évincés par la politique « 4 niveaux récents » ;
+- v17.23 : vérifier que les retours vers z8 puis z7 produisent enfin des `hits retour`,
+  évitent `0 visible + 5 actives + 30 en file` et réduisent fortement les accès IDB ;
 - effet du report des plans d'eau sur les blocages JS de démarrage ;
 - comportement HT lors du passage 50 NM -> 20 NM -> 50 NM : préférence utilisateur
   doit rester ON, rendu absent à 50 NM+, puis retour automatique sous 50 NM.
@@ -174,36 +178,36 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.22
+Version : TEST v17.23
 Date : 19/09/2026
-Base : v17.21
+Base : v17.22
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.22.txt
-2_Index_v17.22.txt
-3_Manifest_v17.22.txt
-4_Script_v17.22.txt
-5_SIA_v17.22.txt
-6_Style_v17.22.txt
-7_Sw_v17.22.txt
+1_Modifications_v17.23.txt
+2_Index_v17.23.txt
+3_Manifest_v17.23.txt
+4_Script_v17.23.txt
+5_SIA_v17.23.txt
+6_Style_v17.23.txt
+7_Sw_v17.23.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.22
-- Manifest : start_url = ./index.html?appv=v17.22
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.22
-- Style : NPF_STYLE_BUILD_VERSION = v17.22
-- Service Worker : `sw-v17-22_ram_fastpath_zoomout_startup_v20_ht50`
+- Index : APP_VERSION = v17.23
+- Manifest : start_url = ./index.html?appv=v17.23
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.23
+- Style : NPF_STYLE_BUILD_VERSION = v17.23
+- Service Worker : `sw-v17-23_zoomout_protect_z7_z8`
 - SIA_DATA_REVISION : 15.69-radio1026-1-maplite1
-- sia.js v17.22 : strictement identique à v17.21 (et donc aux données v17.20).
+- sia.js v17.23 : strictement identique à v17.22 (et donc aux données v17.20).
 
 STATUT DE VALIDATION :
-- validation statique v17.22 effectuée avant livraison : Script/SIA/SW OK, script
+- validation statique v17.23 effectuée avant livraison : Script/SIA/SW OK, script
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
-- `sia.js` v17.22 est bit-à-bit identique à v17.21 ;
-- constantes historiques du moteur tuiles comparées à v17.21 : 5 lectures, file
+- `sia.js` v17.23 est bit-à-bit identique à v17.22 ;
+- constantes historiques du moteur tuiles comparées à v17.22 : 5 lectures, file
   160, cache principal 160, cache général 256, keepBuffer 4/2, TTL/timeouts et
   settle 240 ms inchangés ;
-- v17.21 dispose d'un DIAG réel ; v17.22 reste À MESURER sur iPad.
+- v17.22 dispose de DIAG réels ouverture + zoom ; v17.23 est À MESURER sur iPad.
 
 2. PROTOCOLE DE TRAVAIL À RESPECTER
 -----------------------------------
@@ -549,7 +553,9 @@ v17.21 est abandonné en v17.22 ; on revient à première tuile -> communes imm�
 - v17.20 : priorisation renforcée du premier affichage, validée par DIAG réel ;
 - v17.21 : essai noyau tuiles + plans d'eau différés + cache retour + HT 50 NM ;
 - v17.22 : noyau retiré, plans d'eau/HT conservés, fast-path RAM avant scheduler,
-  cache principal maintenu à 160 pendant les gestes.
+  cache principal maintenu à 160 pendant les gestes ;
+- v17.23 : cache retour protégé spécifiquement pour les niveaux z7/50 NM et z8/20 NM,
+  sans modifier la concurrence IndexedDB ni le cache principal.
 
 
 13. ÉLÉMENTS À NE PAS CONFONDRE / À NE PAS INTÉGRER SANS NOUVELLE DEMANDE
@@ -587,6 +593,71 @@ Pour chaque remarque non implémentée, noter autant que possible :
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.23 — CACHE RETOUR PROTÉGÉ 20 NM / 50 NM
+Date : 19/09/2026
+Base fonctionnelle : v17.22
+
+DEMANDE UTILISATEUR
+- Fournir les .txt après le test zoom v17.22 : OUT 20 NM « un peu lourd » et
+  OUT 50 NM « beaucoup plus lourd ».
+
+DIAG À L'ORIGINE — v17.22 (12:37)
+- IN puis premiers OUT z13->z12->z11->z10 : restitution globalement bonne,
+  avec 30/25/25 tuiles visibles au zoomend ;
+- retour z9 : seulement 2 tuiles visibles, 5 lectures actives et 20 en file ;
+- retour z8 / ~20 NM : 0 visible, 5 actives, 30 en file ;
+- retour z7 / ~50 NM : 0 visible, 5 actives, 30 en file ;
+- 177 hits RAM principal mais 95 entrées dans le cache retour et 0 hit retour ;
+- 329 accès IndexedDB et 146 demandes intermédiaires abandonnées ;
+- HT déjà masquées à 50 NM : la lourdeur z7 provient donc du fond de carte,
+  pas du rendu HT.
+
+CAUSE RETENUE
+- Le fast-path RAM v17.22 fonctionne.
+- Le cache retour v17.22 conservait seulement les 4 niveaux les plus récents.
+- Après une montée jusqu'à z13, les niveaux opérationnels éloignés z8 puis z7
+  avaient donc été évincés avant le retour OUT, exactement quand ils devenaient
+  utiles.
+
+MODIFICATIONS
+
+1. ZOOM OUT — NIVEAUX z7 / 50 NM ET z8 / 20 NM PROTÉGÉS
+- Le cache retour conserve désormais z7 et z8 pendant toute la session tant que
+  la limite globale permet de les garder.
+- Ces deux niveaux ne comptent plus dans la limite des 4 niveaux récents ordinaires.
+- La vue courante d'un z7/z8 remplace toujours l'ancienne vue du même niveau :
+  le cache ne cumule pas indéfiniment les déplacements géographiques.
+
+2. LIMITE MÉMOIRE INCHANGÉE
+- Cache retour maximum : 128 blobs, inchangé.
+- Si la limite est dépassée, NPF évince d'abord les tuiles des niveaux ordinaires.
+- Les niveaux z7/z8 ne sont évincés qu'en dernier recours pour respecter la limite
+  absolue de 128.
+- Cache principal NPF 160 et cache général 256 inchangés.
+
+3. FAST-PATH v17.22 CONSERVÉ
+- Ordre inchangé : RAM principal -> cache retour -> scheduler IndexedDB.
+- Aucun changement des 5 lectures simultanées, de la file 160, des timeouts,
+  du keepBuffer, du scheduler ou des transactions IndexedDB.
+- Le DIAG existant `hits RAM principal / hits retour / accès IDB` reste la mesure
+  de validation du prochain test.
+
+4. HT 50 NM / DÉMARRAGE
+- HT masquées/différées à 50 NM+ : inchangé et validé.
+- Démarrage v17.22 : inchangé et considéré validé par le DIAG ouverture 12:34.
+- Aucun changement communes, splash, GPS, plans d'eau, SIA, Routes ou trafic.
+
+VALIDATION AVANT LIVRAISON
+- Syntaxe Script / SIA / SW : OK.
+- Script inline Index : OK.
+- Manifest JSON : OK.
+- Cohérence versions/caches : OK.
+- SIA bit-à-bit identique à v17.22 : OK.
+- Constantes critiques du moteur tuiles inchangées : OK.
+- z7/z8 explicitement présents dans les niveaux protégés : OK.
+- limite cache retour toujours 128 : OK.
+
 
 VERSION TEST v17.22 — FAST-PATH RAM ZOOM OUT / RETOUR DÉMARRAGE v17.20 / HT 50 NM
 Date : 19/09/2026
