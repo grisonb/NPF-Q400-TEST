@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 19/09/2026
-Version de travail actuelle : TEST v17.24
+Version de travail actuelle : TEST v17.25
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -152,6 +152,9 @@ IMPLÉMENTÉ / INTÉGRÉ :
 - v17.24 : z9 (10 NM) ajouté aux niveaux de retour protégés ; correction du
   premier affichage HT après passage 50 NM -> 20 NM en rattachant explicitement
   le groupe HT pendant la séquence prioritaire, avant révélation du pane.
+- v17.25 : densité des cartouches routiers augmentée uniquement à z13 / ~0,5 NM :
+  seuil des départementales abaissé et plafond global relevé, sans changement
+  des priorités de classes ni de l'anti-collision.
 
 NON IMPLÉMENTÉ / OUVERT :
 - écart ligne de foi jaune / route rouge alors que les deux affichent 277° :
@@ -173,8 +176,11 @@ NON IMPLÉMENTÉ / OUVERT :
   visibles au zoomend et z7/50 NM avec 20/30 visibles. Le cache protégé fonctionne.
   Reste un petit ralentissement utilisateur au retour 5 NM -> 10 NM (z9), niveau
   non protégé en v17.23 ;
-- v17.24 : vérifier que z9/10 NM profite du cache protégé et que les HT apparaissent
-  automatiquement au premier passage 50 NM -> 20 NM sans OFF/ON manuel ;
+- v17.24 : MESURÉ. HT chargées/rendues automatiquement sous 50 NM sans OFF/ON ;
+  le DIAG multi-zoom reste chargé et ne justifie pas de nouvelle modification
+  du moteur de tuiles à ce stade ;
+- v17.25 : À MESURER. Vérifier visuellement à ~0,5 NM que davantage de références
+  départementales sont affichées sans surcharge excessive de la carte ;
 - effet du report des plans d'eau sur les blocages JS de démarrage ;
 - comportement HT lors du passage 50 NM -> 20 NM -> 50 NM : préférence utilisateur
   doit rester ON, rendu absent à 50 NM+, puis retour automatique sous 50 NM.
@@ -185,36 +191,36 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.24
+Version : TEST v17.25
 Date : 19/09/2026
-Base : v17.23
+Base : v17.24
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.24.txt
-2_Index_v17.24.txt
-3_Manifest_v17.24.txt
-4_Script_v17.24.txt
-5_SIA_v17.24.txt
-6_Style_v17.24.txt
-7_Sw_v17.24.txt
+1_Modifications_v17.25.txt
+2_Index_v17.25.txt
+3_Manifest_v17.25.txt
+4_Script_v17.25.txt
+5_SIA_v17.25.txt
+6_Style_v17.25.txt
+7_Sw_v17.25.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.24
-- Manifest : start_url = ./index.html?appv=v17.24
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.24
-- Style : NPF_STYLE_BUILD_VERSION = v17.24
-- Service Worker : `sw-v17-24_ht_first_attach_zoomout_z7_z8_z9`
+- Index : APP_VERSION = v17.25
+- Manifest : start_url = ./index.html?appv=v17.25
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.25
+- Style : NPF_STYLE_BUILD_VERSION = v17.25
+- Service Worker : `sw-v17-25_road_labels_z13`
 - SIA_DATA_REVISION : 15.69-radio1026-1-maplite1
-- sia.js v17.24 : strictement identique à v17.23 (et donc aux données v17.20).
+- sia.js v17.25 : strictement identique à v17.24 (et donc aux données v17.20).
 
 STATUT DE VALIDATION :
-- validation statique v17.24 effectuée avant livraison : Script/SIA/SW OK, script
+- validation statique v17.25 effectuée avant livraison : Script/SIA/SW OK, script
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
-- `sia.js` v17.24 est bit-à-bit identique à v17.23 ;
-- constantes historiques du moteur tuiles comparées à v17.23 : 5 lectures, file
+- `sia.js` v17.25 est bit-à-bit identique à v17.24 ;
+- constantes historiques du moteur tuiles comparées à v17.24 : 5 lectures, file
   160, cache principal 160, cache général 256, keepBuffer 4/2, TTL/timeouts et
   settle 240 ms inchangés ;
-- v17.23 dispose d’un DIAG réel ouverture/zoom ; v17.24 est À MESURER sur iPad.
+- v17.24 dispose d’un DIAG réel multi-zoom ; v17.25 est À MESURER sur iPad.
 
 2. PROTOCOLE DE TRAVAIL À RESPECTER
 -----------------------------------
@@ -600,6 +606,60 @@ Pour chaque remarque non implémentée, noter autant que possible :
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.25 — DENSITÉ CARTOUCHES ROUTIERS À ~0,5 NM
+Date : 19/09/2026
+Base fonctionnelle : v17.24
+
+DEMANDE UTILISATEUR
+- Après essai des différents zooms v17.24, l'utilisateur joint une capture à
+  ~0,5 NM et indique que la carte manque globalement d'étiquettes sur les
+  routes départementales.
+- Après analyse du DIAG et du code réel, demande explicite : « donne moi les .txt ».
+
+CONSTAT TECHNIQUE — v17.24
+- Les routes départementales sont bien présentes et rendues à cette échelle ;
+  le manque concerne principalement leurs cartouches de référence `Dxxx`.
+- À z13, le moteur de labels appliquait :
+  - priorité de classe D derrière A, N/T et M ;
+  - longueur visible minimale D = 260 px ;
+  - plafond absolu = 22 cartouches ;
+  - densité = 1 cartouche / 52 000 px² avant anti-collision.
+- Le DIAG v17.24 montre un rendu Routes avec 734 segments et 22 cartouches : le
+  plafond de z13 était donc effectivement atteint dans la vue testée.
+- L'anti-collision existant est utile et doit rester inchangé.
+
+MODIFICATIONS
+
+1. ROUTES — PLUS DE CARTOUCHES À z13 / ~0,5 NM UNIQUEMENT
+- Longueur visible minimale des départementales D à z13 : 260 px -> 180 px.
+- Plafond absolu z13 : 22 -> 30 cartouches.
+- Densité z13 : 52 000 -> 45 000 px² par cartouche afin que le plafond de 30
+  puisse réellement être approché sur l'iPad de référence.
+- z12 et z14+ ne sont pas modifiés par cette livraison.
+
+2. RÈGLES DE SÉLECTION CONSERVÉES
+- Priorité des classes inchangée : A, N/T, M, D.
+- Priorité des axes principaux sur les branches inchangée.
+- Anti-collision des cartouches inchangé.
+- Placement sur portion visible, marges écran et style des cartouches inchangés.
+
+3. TOUT LE RESTE INCHANGÉ
+- Aucun changement du moteur de tuiles OFFLINE, cache retour, scheduler,
+  concurrence IndexedDB, keepBuffer, timeouts ou snapshots.
+- Aucun changement HT, SIA, GPS, PÉLIC, communes, trafic ou logique métier.
+- SIA copié bit-à-bit depuis v17.24.
+
+VALIDATION AVANT LIVRAISON
+- Syntaxe Script / SIA / SW : OK.
+- Scripts inline Index : OK.
+- Manifest JSON : OK.
+- Cohérence versions/caches : OK.
+- SIA bit-à-bit identique à v17.24 : OK.
+- Constantes critiques du moteur tuiles inchangées : OK.
+- Modifications cartouches limitées à `getRoadOverlayMinimumLabelLength()` et
+  `getRoadOverlayMaximumLabelCount()` : OK.
+
 
 VERSION TEST v17.24 — HT PREMIER PASSAGE 50→20 NM / CACHE RETOUR z9
 Date : 19/09/2026
