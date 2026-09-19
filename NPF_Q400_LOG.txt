@@ -1,3 +1,69 @@
+VERSION TEST v17.19 — DÉMARRAGE CARTE / SPLASH / PRIORITÉ TUILES
+Date : 19/09/2026
+Base fonctionnelle : v17.18
+
+OBJECTIFS UTILISATEUR
+- Accélérer l'affichage utile de la carte à l'ouverture.
+- Limiter le temps de page blanche en conservant un écran de chargement jusqu'à
+  la première tuile réellement affichée.
+- Éviter que les traitements secondaires concurrencent les tuiles au démarrage.
+- Conserver strictement le moteur de lecture des tuiles NPF (5 lectures, file,
+  IndexedDB, caches, timeouts, keepBuffer) inchangé.
+
+MODIFICATIONS
+
+1. CADRAGE FINAL AVANT LE PREMIER CHARGEMENT DE TUILES
+- Le feu mémorisé est restauré en mémoire avant la création de Leaflet.
+- `initMap()` applique désormais le cadrage initial avant `setupBaseTileLayer()` :
+  feu + position GPS mémorisée + PÉLIC lorsque le contexte feu existe ; sinon
+  position GPS mémorisée au zoom de démarrage ; vue France uniquement en secours.
+- Les recentrages de démarrage devenus redondants sont supprimés lorsque ce
+  cadrage a déjà été appliqué avant les tuiles.
+- Le GPS réel conserve la possibilité de corriger ensuite le cadrage si sa
+  position diffère de la position mémorisée.
+
+2. SPLASH CONSERVÉ JUSQU'À LA PREMIÈRE TUILE
+- L'écran « Chargement NPF-Q400… » n'est plus retiré arbitrairement 250 ms après
+  `initializeApp()`.
+- Il disparaît au premier événement `tileload`, donc lorsque le fond de carte a
+  réellement commencé à être peint.
+- Sécurité : retrait forcé après 6,5 s si aucune tuile n'est disponible.
+
+3. ALIAS COMMUNES APRÈS LE VIEWPORT
+- Suppression du `<link rel=preload>` de `communes_aliases.json`.
+- Les 6 616 alias ne sont plus parsés pendant le remplissage initial du fond.
+- Leur chargement attend que toutes les tuiles du viewport courant soient
+  chargées, puis passe par `requestIdleCallback`.
+- Délai de secours : 12 s afin de ne jamais bloquer durablement les alias.
+- La recherche standard sur les 34 935 communes reste disponible avant les alias.
+
+4. SUPPRESSION DES RECONSTRUCTIONS DE TUILES REDONDANTES
+- `updateBaseTileNativeZoomFromAvailability()` accepte `rebuildLayer`.
+- La fonction indique maintenant si la plage min/max native a réellement changé.
+- Au démarrage, aucune reconstruction n'est faite si cette plage est inchangée.
+- Les chemins qui reconstruisent déjà explicitement la couche (changement de
+  source/groupe) désactivent la reconstruction interne pour éviter le double
+  `setupBaseTileLayer()`.
+- Les opérations qui comptaient sur la reconstruction interne (ex. purge)
+  conservent le comportement précédent par défaut.
+
+5. INCHANGÉ
+- Scheduler tuiles v17.14 : inchangé.
+- Snapshot visuel de zoom v17.15 : inchangé.
+- Simulation v17.16 : inchangée.
+- Alerte MAJ + orthodromies v17.17/v17.18 : inchangées.
+- Routes routières, HT, SIA, VAC, trafic : logique fonctionnelle inchangée.
+- `sia.js` strictement identique à v17.18.
+
+VALIDATION AVANT LIVRAISON
+- Syntaxe Script / SIA / SW : OK.
+- Scripts inline Index : OK.
+- Manifest JSON : OK.
+- Références de version : v17.19 cohérentes.
+- SIA : strictement identique à v17.18.
+- Constantes critiques tuiles NPF inchangées.
+
+
 VERSION TEST v17.18 — ORTHODROMIE COMMUNE À TOUTES LES ROUTES DE NAVIGATION
 Date : 19/09/2026
 Base fonctionnelle : v17.17
