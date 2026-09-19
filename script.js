@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.20';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.21';
 
 
 /*
@@ -500,6 +500,8 @@ function getNpfStartupDiagnosticOverlaySnapshot() {
         npfTileRetries: Number(directOfflineNpfTileRetryCount || 0),
         npfViewEpoch: Number(directOfflineTileViewPriorityEpoch || 0),
         tileBlobCache: Number(directOfflineTileBlobCache?.size || 0),
+        tileZoomReturnCache: Number(directOfflineNpfZoomReturnBlobCache?.size || 0),
+        tileZoomReturnHits: Number(directOfflineNpfZoomReturnCacheHitCount || 0),
         leafletLayers: (() => {
             try { return Number(Object.keys(map?._layers || {}).length || 0); }
             catch (_) { return 0; }
@@ -738,6 +740,8 @@ function getNpfStartupDiagnosticRuntimeInfo() {
         npfTileRetries: layers.npfTileRetries,
         npfViewEpoch: layers.npfViewEpoch,
         tileBlobCacheSize: layers.tileBlobCache,
+        tileZoomReturnCacheSize: layers.tileZoomReturnCache,
+        tileZoomReturnCacheHits: layers.tileZoomReturnHits,
         leafletLayerCount: layers.leafletLayers,
         runwayLayerCount: layers.runwayLayers,
         siaLayerCount: layers.siaLayers,
@@ -837,6 +841,8 @@ function buildNpfStartupDiagnosticExportText() {
         + runtime.npfReadsAborted + ' lectures devenues obsolètes / '
         + runtime.npfTileRetries + ' reprises | '
         + runtime.tileBlobCacheSize + ' blobs cache | '
+        + runtime.tileZoomReturnCacheSize + ' cache retour zoom / '
+        + runtime.tileZoomReturnCacheHits + ' hits | '
         + runtime.leafletLayerCount + ' calques Leaflet totaux | '
         + runtime.runwayLayerCount + ' couches pistes | '
         + runtime.siaLayerCount + ' couches SIA'
@@ -2577,7 +2583,12 @@ const WATER_POINTS_LAYER_KEY = 'showWaterPointsLayer';
 let showWaterPointsLayer = localStorage.getItem(WATER_POINTS_LAYER_KEY) === 'true';
 const HIGH_VOLTAGE_LINES_LAYER_KEY = 'showHighVoltageLinesLayer';
 const HIGH_VOLTAGE_LINES_GEOJSON_URL = 'lignes_ht_rte_simplifiees.geojson';
+/* v17.21 — à l'échelle nautique 50 NM et au-delà, les HT restent mémorisées
+ * ON mais ne sont ni chargées ni rendues. Elles reviennent automatiquement
+ * sous 50 NM si l'utilisateur a laissé le bouton HT actif. */
+const HIGH_VOLTAGE_LINES_HIDE_SCALE_NM = 50;
 let showHighVoltageLinesLayer = localStorage.getItem(HIGH_VOLTAGE_LINES_LAYER_KEY) === 'true';
+let highVoltageLinesScaleSuppressed = false;
 let hasLoadedHighVoltageLines = false;
 let isHighVoltageLinesLoading = false;
 let highVoltageLinesFeatureCount = 0;
@@ -5406,6 +5417,50 @@ function waitForNpfStartupFirstTile(timeoutMs = 4500) {
     });
 }
 
+/*
+ * v17.21 — après la première tuile, laisser encore un petit noyau central du
+ * viewport se remplir avant de parser/indexer les 34 935 communes. Cela évite
+ * qu'une phase JavaScript lourde reprenne immédiatement la main après le tout
+ * premier tileload. Aucun réglage du scheduler IndexedDB n'est modifié.
+ */
+function waitForNpfStartupTileNucleus({ timeoutMs = 1400, minVisible = 9 } = {}) {
+    return new Promise(resolve => {
+        const startedAt = Date.now();
+        let pollTimer = null;
+        let settled = false;
+        const finish = (reason, state) => {
+            if (settled) return;
+            settled = true;
+            if (pollTimer) clearTimeout(pollTimer);
+            resolve({ reason, ...state });
+        };
+        const check = () => {
+            if (settled) return;
+            const state = getNpfStartupTilePriorityState();
+            const availableCount = Math.max(state.loaded, state.visible);
+            const requestedTarget = Math.max(1, Number(minVisible) || 9);
+            const target = state.total > 0
+                ? Math.max(1, Math.min(requestedTarget, state.total))
+                : requestedTarget;
+
+            if (availableCount >= target) {
+                finish('noyau-prêt', state);
+                return;
+            }
+            if (state.visible > 0 && state.active === 0 && state.queued === 0) {
+                finish('scheduler-idle', state);
+                return;
+            }
+            if (Date.now() - startedAt >= Math.max(300, Number(timeoutMs) || 1400)) {
+                finish('timeout', state);
+                return;
+            }
+            pollTimer = setTimeout(check, 70);
+        };
+        check();
+    });
+}
+
 function waitForNpfStartupMapPriorityRelease({ timeoutMs = 8000, minCoverageRatio = 0.80 } = {}) {
     if (npfStartupMapPriorityPromise) return npfStartupMapPriorityPromise;
 
@@ -5663,8 +5718,18 @@ async function initializeApp() {
     const startupFirstTileReady = await waitForNpfStartupFirstTile(4500);
     npfStartupDiagMark(
         'communes_first_tile_gate',
-        'Communes — priorité carte libérée',
+        'Communes — première tuile disponible',
         startupFirstTileReady ? 'première tuile affichée' : 'timeout sécurité'
+    );
+
+    const startupTileNucleus = await waitForNpfStartupTileNucleus({
+        timeoutMs: 1400,
+        minVisible: 9
+    });
+    npfStartupDiagMark(
+        'communes_tile_nucleus_gate',
+        'Communes — noyau tuiles prioritaire',
+        `${startupTileNucleus.reason} · ${startupTileNucleus.loaded}/${startupTileNucleus.total} couverture · ${startupTileNucleus.visible} visibles · file ${startupTileNucleus.active}/${startupTileNucleus.queued}`
     );
 
     let communesLoadError = null;
@@ -6048,12 +6113,23 @@ async function initializeApp() {
         }
     }, 750);
 
-    setTimeout(() => {
-        try {
-            refreshWaterPointsButtonState();
-            drawWaterPointMarkersForCommune(currentCommune);
-        } catch (_) {}
-    }, 250);
+    /*
+     * v17.21 — le rendu de tous les plans d'eau est non essentiel au premier
+     * viewport. L'état du bouton est restauré immédiatement mais le dessin
+     * Leaflet attend la libération de la priorité carte et est chronométré.
+     */
+    try { refreshWaterPointsButtonState(); } catch (_) {}
+    startupMapPriorityGate.then(() => {
+        setTimeout(() => {
+            try {
+                runNpfStartupMeasuredSync(
+                    'startup_water_points',
+                    'Plans d’eau',
+                    () => drawWaterPointMarkersForCommune(currentCommune)
+                );
+            } catch (_) {}
+        }, 1200);
+    });
 
     if (communesLoadError) {
         setTimeout(() => {
@@ -8046,7 +8122,9 @@ function handleNpfHeavyOverlayTouchPreMask(event) {
         || twoFingerRulerActive
     ) return;
 
-    const htHeavy = !!showHighVoltageLinesLayer && !!hasLoadedHighVoltageLines;
+    const htHeavy = !!showHighVoltageLinesLayer
+        && !!hasLoadedHighVoltageLines
+        && isHighVoltageLayerEffectiveAtCurrentScale();
     const routesHeavy = !!showRoadOverlayLayer && getRoadOverlayZoomTier() > 0;
     if (!htHeavy && !routesHeavy) return;
 
@@ -8316,21 +8394,25 @@ async function runNpfMapOverlayPriorityRestore(token, reason = 'map-end') {
      * Le pane reste caché pendant la reconstruction, puis est révélé une fois
      * le rendu du viewport final terminé.
      */
-    if (showHighVoltageLinesLayer && hasLoadedHighVoltageLines) {
+    if (showHighVoltageLinesLayer) {
         try {
-            /*
-             * v17.13 — filet de sécurité démarrage / tier précédent.
-             * Si HT a été initialisé pendant une séquence prioritaire, son
-             * LayerGroup peut contenir le rendu sans avoir encore été attaché
-             * à `map`. Le rattacher ici, pane toujours masqué, garantit que la
-             * fin de restitution l'affichera sans OFF -> ON manuel.
-             * Pendant les gestes ordinaires v17.11+, le groupe est déjà attaché
-             * et ce bloc ne fait donc strictement rien.
-             */
-            if (highVoltageLinesLayer && !map.hasLayer(highVoltageLinesLayer)) {
-                highVoltageLinesLayer.addTo(map);
+            if (!isHighVoltageLayerEffectiveAtCurrentScale()) {
+                suppressHighVoltageLinesForWideScale('overlay-priority-ht');
+            } else if (!hasLoadedHighVoltageLines && !isHighVoltageLinesLoading) {
+                /* v17.21 — retour sous 50 NM : charger HT seulement maintenant. */
+                highVoltageLinesScaleSuppressed = false;
+                await toggleHighVoltageLinesLayer(true, {
+                    silent: true,
+                    retry: true,
+                    source: 'overlay-priority-scale-enter'
+                });
+            } else if (hasLoadedHighVoltageLines) {
+                highVoltageLinesScaleSuppressed = false;
+                if (highVoltageLinesLayer && !map.hasLayer(highVoltageLinesLayer)) {
+                    highVoltageLinesLayer.addTo(map);
+                }
+                await refreshVisibleHighVoltageLines('overlay-priority-ht');
             }
-            await refreshVisibleHighVoltageLines('overlay-priority-ht');
         } catch (error) {
             console.warn(
                 'Restitution prioritaire lignes HT impossible:',
@@ -9141,6 +9223,7 @@ function initMap() {
             && showRoadOverlayLayer
             && showHighVoltageLinesLayer
             && hasLoadedHighVoltageLines
+            && isHighVoltageLayerEffectiveAtCurrentScale()
             && Number.isFinite(startZoom)
             && Number.isFinite(finalZoom)
             && finalZoom < startZoom - 0.01
@@ -9213,11 +9296,24 @@ function initMap() {
                 }
             }
         }
-        if (showHighVoltageLinesLayer && hasLoadedHighVoltageLines) {
-            if (highVoltageLinesLayer && !map.hasLayer(highVoltageLinesLayer)) highVoltageLinesLayer.addTo(map);
-            if (!gpsFollowPan || !isHighVoltageCoverageValidForCurrentView()) {
-                scheduleHighVoltageLinesRefresh(gpsFollowPan ? 'gps-follow-edge' : 'map-change');
+        if (showHighVoltageLinesLayer) {
+            if (!isHighVoltageLayerEffectiveAtCurrentScale()) {
+                suppressHighVoltageLinesForWideScale(zoomEnded ? 'zoomend' : 'moveend');
+            } else if (!hasLoadedHighVoltageLines && !isHighVoltageLinesLoading) {
+                highVoltageLinesScaleSuppressed = false;
+                toggleHighVoltageLinesLayer(true, {
+                    silent: true,
+                    retry: true,
+                    source: 'scale-enter'
+                }).catch(() => {});
+            } else if (hasLoadedHighVoltageLines) {
+                highVoltageLinesScaleSuppressed = false;
+                if (highVoltageLinesLayer && !map.hasLayer(highVoltageLinesLayer)) highVoltageLinesLayer.addTo(map);
+                if (!gpsFollowPan || !isHighVoltageCoverageValidForCurrentView()) {
+                    scheduleHighVoltageLinesRefresh(gpsFollowPan ? 'gps-follow-edge' : 'map-change');
+                }
             }
+            refreshHighVoltageLinesButtonState();
         }
     });
 
@@ -9478,6 +9574,9 @@ function beginBaseMapZoomStabilityGuard(reason = 'zoomstart') {
          * si Leaflet ne retient plus réellement leur tuile.
          */
         try { markDirectOfflineNpfViewportPriority(reason); } catch (_) {}
+        /* v17.21 — protéger le niveau déjà peint avant que le LRU principal ne
+         * soit réduit à 96 entrées pendant le geste. */
+        try { rememberCurrentNpfZoomLevelForFastReturn(`before-${reason}`); } catch (_) {}
         try { trimDirectOfflineTileBlobCache(96); } catch (_) {}
     }
 }
@@ -10325,6 +10424,7 @@ function rebuildRememberedOfflineMapAfterDatabaseReady(reason, readyDatabase) {
     if (mapSourceMode !== 'offline' || !map) return false;
 
     directOfflineTileBlobCache.clear();
+    clearDirectOfflineNpfZoomReturnCache();
     directOfflineTileMissCache.clear();
     directOfflineTileHitCount = 0;
     directOfflineTileMissCount = 0;
@@ -10484,7 +10584,7 @@ function scheduleStartupAuxiliaryLayers() {
         }, baseDelay + 1400);
     }
 
-    if (showHighVoltageLinesLayer) {
+    if (showHighVoltageLinesLayer && isHighVoltageLayerEffectiveAtCurrentScale()) {
         setTimeout(() => {
             npfStartupDiagMark('layer_ht_start', 'Lignes HT — début');
             try {
@@ -10493,6 +10593,12 @@ function scheduleStartupAuxiliaryLayers() {
                 npfStartupDiagMark('layer_ht_called', 'Lignes HT — commande terminée');
             }
         }, baseDelay + 2200);
+    } else if (showHighVoltageLinesLayer) {
+        npfStartupDiagMark(
+            'layer_ht_scale_deferred',
+            'Lignes HT — différées',
+            'échelle 50 NM ou plus'
+        );
     }
 
     if (showRoadOverlayLayer) {
@@ -10556,9 +10662,21 @@ function rebuildBaseTileLayerAfterOfflineSwitch(reason = 'offline-switch') {
  */
 const DIRECT_OFFLINE_TILE_CACHE_MAX = 256;
 const DIRECT_OFFLINE_NPF_TILE_CACHE_MAX = 160;
+/*
+ * v17.21 — cache de retour de zoom NPF, séparé du LRU principal.
+ * Le cache historique reste strictement à 160 entrées ; ce cache conserve des
+ * références Blob des derniers niveaux déjà peints pour accélérer un zoom OUT
+ * vers une échelle récemment affichée sans relecture IndexedDB.
+ */
+const DIRECT_OFFLINE_NPF_ZOOM_RETURN_CACHE_MAX = 128;
+const DIRECT_OFFLINE_NPF_ZOOM_RETURN_LEVELS = 4;
 const DIRECT_OFFLINE_TILE_MISS_CACHE_MAX = 512;
 const DIRECT_OFFLINE_TILE_MISS_CACHE_TTL_MS = 30000;
 const directOfflineTileBlobCache = new Map();
+const directOfflineNpfZoomReturnBlobCache = new Map();
+const directOfflineNpfZoomReturnLevelKeys = new Map();
+const directOfflineNpfZoomReturnLevelOrder = [];
+let directOfflineNpfZoomReturnCacheHitCount = 0;
 const directOfflineTileMissCache = new Map();
 const directOfflineDbPromises = new Map();
 let directOfflineTileHitCount = 0;
@@ -10623,6 +10741,19 @@ let directOfflineNpfLastSuccessfulLookup = null;
 function markDirectOfflineNpfViewportPriority(reason = 'view-change') {
     directOfflineTileViewPriorityEpoch += 1;
     return directOfflineTileViewPriorityEpoch;
+}
+
+function buildDirectOfflineTileBlobCacheKey(coords) {
+    const z = Number(coords?.z);
+    const x = Number(coords?.x);
+    const y = Number(coords?.y);
+    if (![z, x, y].every(Number.isFinite)) return '';
+    return [
+        z,
+        x,
+        y,
+        ...(Array.isArray(activeOfflinePacks) ? activeOfflinePacks : [])
+    ].join('|');
 }
 
 function getDirectOfflineNpfQueueTileKey(coords) {
@@ -11311,6 +11442,87 @@ function rememberDirectOfflineTileBlob(cacheKey, blob) {
     trimDirectOfflineTileBlobCache();
 }
 
+function clearDirectOfflineNpfZoomReturnCache() {
+    directOfflineNpfZoomReturnBlobCache.clear();
+    directOfflineNpfZoomReturnLevelKeys.clear();
+    directOfflineNpfZoomReturnLevelOrder.length = 0;
+    directOfflineNpfZoomReturnCacheHitCount = 0;
+}
+
+function trimDirectOfflineNpfZoomReturnCache() {
+    while (directOfflineNpfZoomReturnLevelOrder.length > DIRECT_OFFLINE_NPF_ZOOM_RETURN_LEVELS) {
+        const oldZoom = directOfflineNpfZoomReturnLevelOrder.shift();
+        const oldKeys = directOfflineNpfZoomReturnLevelKeys.get(oldZoom);
+        if (oldKeys) {
+            for (const key of oldKeys) directOfflineNpfZoomReturnBlobCache.delete(key);
+        }
+        directOfflineNpfZoomReturnLevelKeys.delete(oldZoom);
+    }
+
+    while (directOfflineNpfZoomReturnBlobCache.size > DIRECT_OFFLINE_NPF_ZOOM_RETURN_CACHE_MAX) {
+        const oldestKey = directOfflineNpfZoomReturnBlobCache.keys().next().value;
+        directOfflineNpfZoomReturnBlobCache.delete(oldestKey);
+        for (const [zoom, keys] of directOfflineNpfZoomReturnLevelKeys.entries()) {
+            if (!keys.delete(oldestKey)) continue;
+            if (!keys.size) {
+                directOfflineNpfZoomReturnLevelKeys.delete(zoom);
+                const orderIndex = directOfflineNpfZoomReturnLevelOrder.indexOf(zoom);
+                if (orderIndex >= 0) directOfflineNpfZoomReturnLevelOrder.splice(orderIndex, 1);
+            }
+            break;
+        }
+    }
+}
+
+function rememberCurrentNpfZoomLevelForFastReturn(reason = 'grid-ready') {
+    if (
+        !baseTileLayer
+        || !map
+        || !offlineTilesMode
+        || !isNpfOfflinePackSelection()
+    ) return 0;
+
+    const tileZoom = Number(baseTileLayer?._tileZoom);
+    if (!Number.isFinite(tileZoom)) return 0;
+
+    const nextKeys = new Set();
+    const entries = Object.values(baseTileLayer?._tiles || {});
+    for (const entry of entries) {
+        const coords = entry?.coords;
+        const tile = entry?.el;
+        if (!coords || Number(coords.z) !== tileZoom || !tile) continue;
+        const loaded = tile.classList?.contains('leaflet-tile-loaded')
+            || (tile.complete && Number(tile.naturalWidth) > 0);
+        if (!loaded) continue;
+
+        const cacheKey = buildDirectOfflineTileBlobCacheKey(coords);
+        if (!cacheKey) continue;
+        const blob = directOfflineTileBlobCache.get(cacheKey)
+            || directOfflineNpfZoomReturnBlobCache.get(cacheKey);
+        if (!blob) continue;
+
+        directOfflineNpfZoomReturnBlobCache.delete(cacheKey);
+        directOfflineNpfZoomReturnBlobCache.set(cacheKey, blob);
+        nextKeys.add(cacheKey);
+    }
+
+    if (!nextKeys.size) return 0;
+
+    const previousKeys = directOfflineNpfZoomReturnLevelKeys.get(tileZoom);
+    if (previousKeys) {
+        for (const key of previousKeys) {
+            if (!nextKeys.has(key)) directOfflineNpfZoomReturnBlobCache.delete(key);
+        }
+    }
+    directOfflineNpfZoomReturnLevelKeys.set(tileZoom, nextKeys);
+
+    const previousOrderIndex = directOfflineNpfZoomReturnLevelOrder.indexOf(tileZoom);
+    if (previousOrderIndex >= 0) directOfflineNpfZoomReturnLevelOrder.splice(previousOrderIndex, 1);
+    directOfflineNpfZoomReturnLevelOrder.push(tileZoom);
+    trimDirectOfflineNpfZoomReturnCache();
+    return nextKeys.size;
+}
+
 function rememberDirectOfflineTileMiss(cacheKey) {
     if (!cacheKey) return;
     directOfflineTileMissCache.delete(cacheKey);
@@ -11389,6 +11601,7 @@ async function recoverDirectOfflineTileReader(reason = 'read-error') {
         resetPendingDirectOfflineNpfReads();
         closeDirectOfflineDatabaseConnectionsForStartupRetry();
         directOfflineTileBlobCache.clear();
+        clearDirectOfflineNpfZoomReturnCache();
         directOfflineTileMissCache.clear();
         directOfflineTileLookupHints.clear();
         directOfflineNpfLastSuccessfulLookup = null;
@@ -11637,6 +11850,9 @@ window.getNpfTilePerformanceStatus = function getNpfTilePerformanceStatus() {
         lookupHints: directOfflineTileLookupHints.size,
         blobCacheSize: directOfflineTileBlobCache.size,
         blobCacheMax: getDirectOfflineTileBlobCacheLimit(),
+        zoomReturnCacheSize: directOfflineNpfZoomReturnBlobCache.size,
+        zoomReturnCacheMax: DIRECT_OFFLINE_NPF_ZOOM_RETURN_CACHE_MAX,
+        zoomReturnCacheHits: directOfflineNpfZoomReturnCacheHitCount,
         tileHits: directOfflineTileHitCount,
         tileMisses: directOfflineTileMissCount,
         visibleLoadedTiles: countVisibleLoadedBaseTiles()
@@ -11644,17 +11860,22 @@ window.getNpfTilePerformanceStatus = function getNpfTilePerformanceStatus() {
 };
 
 async function findDirectOfflineTileBlobUnqueued(coords) {
-    const cacheKey = [
-        coords.z,
-        coords.x,
-        coords.y,
-        ...(Array.isArray(activeOfflinePacks) ? activeOfflinePacks : [])
-    ].join('|');
+    const cacheKey = buildDirectOfflineTileBlobCacheKey(coords);
 
     if (directOfflineTileBlobCache.has(cacheKey)) {
         const cachedBlob = directOfflineTileBlobCache.get(cacheKey);
         directOfflineTileBlobCache.delete(cacheKey);
         directOfflineTileBlobCache.set(cacheKey, cachedBlob);
+        resetDirectOfflineReadErrorCounter();
+        return cachedBlob;
+    }
+
+    if (directOfflineNpfZoomReturnBlobCache.has(cacheKey)) {
+        const cachedBlob = directOfflineNpfZoomReturnBlobCache.get(cacheKey);
+        directOfflineNpfZoomReturnBlobCache.delete(cacheKey);
+        directOfflineNpfZoomReturnBlobCache.set(cacheKey, cachedBlob);
+        directOfflineNpfZoomReturnCacheHitCount += 1;
+        rememberDirectOfflineTileBlob(cacheKey, cachedBlob);
         resetDirectOfflineReadErrorCounter();
         return cachedBlob;
     }
@@ -12038,6 +12259,12 @@ function setupBaseTileLayer() {
     baseTileLayer = offlineTilesMode
         ? buildDirectOfflineLeafletLayer(tileLayerOptions)
         : L.tileLayer(tileLayerUrl, tileLayerOptions);
+
+    if (isNpfDirectOfflineLayer) {
+        baseTileLayer.on('load', () => {
+            try { rememberCurrentNpfZoomLevelForFastReturn('grid-load'); } catch (_) {}
+        });
+    }
 
     if (!npfStartupDiagHasMark('first_tile')) {
         try {
@@ -13701,16 +13928,50 @@ function getHighVoltageLineStyle(feature) {
     };
 }
 
+function isHighVoltageLayerEffectiveAtCurrentScale() {
+    if (!map) return false;
+    const scaleNm = getCurrentNpfScaleNm();
+    if (!Number.isFinite(scaleNm)) return true;
+    return scaleNm < HIGH_VOLTAGE_LINES_HIDE_SCALE_NM - 0.000001;
+}
+
+function suppressHighVoltageLinesForWideScale(source = 'scale-50nm') {
+    if (!map || !highVoltageLinesLayer || isHighVoltageLayerEffectiveAtCurrentScale()) return false;
+
+    const hadVisual = !!(
+        map.hasLayer(highVoltageLinesLayer)
+        || highVoltageLinesRenderedGeoJsonLayer
+        || highVoltageLinesRenderedFeatureCount > 0
+    );
+    highVoltageLinesScaleSuppressed = true;
+    highVoltageLinesRefreshToken += 1;
+    clearTimeout(highVoltageLinesRefreshTimer);
+    highVoltageLinesRefreshTimer = null;
+    clearRenderedHighVoltageLines();
+    try {
+        if (map.hasLayer(highVoltageLinesLayer)) map.removeLayer(highVoltageLinesLayer);
+    } catch (_) {}
+    refreshHighVoltageLinesButtonState();
+    if (hadVisual) {
+        recordNpfStartupDiagnosticOverlaySnapshot(`lignes-ht masquées 50 NM · ${source}`);
+    }
+    return true;
+}
+
 function refreshHighVoltageLinesButtonState() {
     const button = document.getElementById('high-voltage-lines-button');
     if (!button) return;
 
+    const scaleSuppressed = showHighVoltageLinesLayer
+        && !isHighVoltageLayerEffectiveAtCurrentScale();
     button.classList.toggle('active', showHighVoltageLinesLayer);
     button.classList.toggle('loading', isHighVoltageLinesLoading);
     button.disabled = isHighVoltageLinesLoading;
     button.title = isHighVoltageLinesLoading
         ? 'Chargement des lignes haute tension RTE…'
-        : 'Afficher/Masquer les lignes haute tension RTE';
+        : scaleSuppressed
+            ? 'Lignes HT activées — masquées à l’échelle 50 NM ou plus'
+            : 'Afficher/Masquer les lignes haute tension RTE';
 }
 
 async function fetchHighVoltageLinesGeojson() {
@@ -13872,6 +14133,11 @@ function isHighVoltageCoverageValidForCurrentView() {
 
 async function refreshVisibleHighVoltageLines(source = 'refresh') {
     if (!map || !highVoltageLinesLayer || !showHighVoltageLinesLayer || !hasLoadedHighVoltageLines) return;
+    if (!isHighVoltageLayerEffectiveAtCurrentScale()) {
+        suppressHighVoltageLinesForWideScale(source);
+        return;
+    }
+    highVoltageLinesScaleSuppressed = false;
 
     const token = ++highVoltageLinesRefreshToken;
 
@@ -14105,12 +14371,18 @@ async function runSerializedHeavyOverlayZoomOut(startZoom, finalZoom) {
 
     /* 2 — HT seulement après Routes. Son ancien rendu reste caché pendant la
      * suppression ; un frame est rendu avant la reconstruction du viewport. */
-    if (showHighVoltageLinesLayer && hasLoadedHighVoltageLines) {
+    if (
+        showHighVoltageLinesLayer
+        && hasLoadedHighVoltageLines
+        && isHighVoltageLayerEffectiveAtCurrentScale()
+    ) {
         clearRenderedHighVoltageLines();
         await yieldRoadOverlayRenderTurn();
         if (token !== npfHeavyOverlayZoomSerialToken) return;
         await refreshVisibleHighVoltageLines('zoom-out-serial-ht');
         if (token !== npfHeavyOverlayZoomSerialToken) return;
+    } else if (showHighVoltageLinesLayer) {
+        suppressHighVoltageLinesForWideScale('zoom-out-serial-ht');
     }
 
     await yieldRoadOverlayRenderTurn();
@@ -14125,7 +14397,13 @@ async function runSerializedHeavyOverlayZoomOut(startZoom, finalZoom) {
         } catch (_) {}
     }
     try {
-        if (showHighVoltageLinesLayer && hasLoadedHighVoltageLines && highVoltageLinesLayer && !map.hasLayer(highVoltageLinesLayer)) {
+        if (
+            showHighVoltageLinesLayer
+            && hasLoadedHighVoltageLines
+            && isHighVoltageLayerEffectiveAtCurrentScale()
+            && highVoltageLinesLayer
+            && !map.hasLayer(highVoltageLinesLayer)
+        ) {
             highVoltageLinesLayer.addTo(map);
         }
     } catch (_) {}
@@ -14293,6 +14571,7 @@ async function toggleHighVoltageLinesLayer(forceState = null, options = {}) {
     refreshHighVoltageLinesButtonState();
 
     if (!showHighVoltageLinesLayer) {
+        highVoltageLinesScaleSuppressed = false;
         highVoltageLinesRefreshToken += 1;
         highVoltageLinesRetryToken += 1;
         clearTimeout(highVoltageLinesRefreshTimer);
@@ -14302,6 +14581,15 @@ async function toggleHighVoltageLinesLayer(forceState = null, options = {}) {
         recordNpfStartupDiagnosticOverlaySnapshot(`lignes-ht OFF · ${options.source || 'toggle'}`);
         return;
     }
+
+    if (!isHighVoltageLayerEffectiveAtCurrentScale()) {
+        suppressHighVoltageLinesForWideScale(options.source || 'toggle');
+        recordNpfStartupDiagnosticOverlaySnapshot(
+            `lignes-ht ON mémorisé · masquées 50 NM · ${options.source || 'toggle'}`
+        );
+        return;
+    }
+    highVoltageLinesScaleSuppressed = false;
 
     if (
         highVoltageLinesLayer
@@ -15567,7 +15855,7 @@ function isRoadOverlayEffectiveAtCurrentZoom() {
 
 function hasEffectiveHeavyOverlayAtCurrentZoom() {
     return !!(
-        showHighVoltageLinesLayer
+        (showHighVoltageLinesLayer && isHighVoltageLayerEffectiveAtCurrentScale())
         || isRoadOverlayEffectiveAtCurrentZoom()
     );
 }
@@ -39101,6 +39389,7 @@ async function forceQuickOfflineMapGroupReload(groupName, packNames) {
         resetPendingDirectOfflineNpfReads();
         closeDirectOfflineDatabaseConnectionsForStartupRetry();
         directOfflineTileBlobCache.clear();
+        clearDirectOfflineNpfZoomReturnCache();
         directOfflineTileMissCache.clear();
         directOfflineTileLookupHints.clear();
         directOfflineNpfLastSuccessfulLookup = null;
@@ -39167,6 +39456,7 @@ async function selectQuickOfflineMapGroup(groupName) {
     resetPendingDirectOfflineNpfReads();
     closeDirectOfflineDatabaseConnectionsForStartupRetry();
     directOfflineTileBlobCache.clear();
+    clearDirectOfflineNpfZoomReturnCache();
     directOfflineTileMissCache.clear();
     directOfflineTileLookupHints.clear();
         directOfflineNpfLastSuccessfulLookup = null;
