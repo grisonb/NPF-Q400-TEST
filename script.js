@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.22';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.23';
 
 
 /*
@@ -10625,7 +10625,14 @@ const DIRECT_OFFLINE_NPF_TILE_CACHE_MAX = 160;
  * vers une échelle récemment affichée sans relecture IndexedDB.
  */
 const DIRECT_OFFLINE_NPF_ZOOM_RETURN_CACHE_MAX = 128;
+/*
+ * v17.23 — les niveaux opérationnels 50 NM (z7) et 20 NM (z8) restent
+ * protégés dans le cache retour pendant toute la session. Ils ne comptent pas
+ * dans les 4 niveaux récents ordinaires et sont évincés en dernier recours
+ * seulement si, à eux seuls, ils dépassaient la limite globale de 128 blobs.
+ */
 const DIRECT_OFFLINE_NPF_ZOOM_RETURN_LEVELS = 4;
+const DIRECT_OFFLINE_NPF_ZOOM_RETURN_PROTECTED_LEVELS = new Set([7, 8]);
 const DIRECT_OFFLINE_TILE_MISS_CACHE_MAX = 512;
 const DIRECT_OFFLINE_TILE_MISS_CACHE_TTL_MS = 30000;
 const directOfflineTileBlobCache = new Map();
@@ -11443,20 +11450,51 @@ function clearDirectOfflineNpfZoomReturnCache() {
 }
 
 function trimDirectOfflineNpfZoomReturnCache() {
-    while (directOfflineNpfZoomReturnLevelOrder.length > DIRECT_OFFLINE_NPF_ZOOM_RETURN_LEVELS) {
-        const oldZoom = directOfflineNpfZoomReturnLevelOrder.shift();
+    /*
+     * v17.23 — z7 (50 NM) et z8 (20 NM) sont des niveaux de retour
+     * opérationnels : ils restent protégés même lorsque quatre niveaux plus
+     * rapprochés ont été visités ensuite.
+     */
+    const recentOrdinaryLevels = directOfflineNpfZoomReturnLevelOrder.filter(zoom =>
+        !DIRECT_OFFLINE_NPF_ZOOM_RETURN_PROTECTED_LEVELS.has(Number(zoom))
+    );
+
+    while (recentOrdinaryLevels.length > DIRECT_OFFLINE_NPF_ZOOM_RETURN_LEVELS) {
+        const oldZoom = recentOrdinaryLevels.shift();
         const oldKeys = directOfflineNpfZoomReturnLevelKeys.get(oldZoom);
         if (oldKeys) {
             for (const key of oldKeys) directOfflineNpfZoomReturnBlobCache.delete(key);
         }
         directOfflineNpfZoomReturnLevelKeys.delete(oldZoom);
+        const orderIndex = directOfflineNpfZoomReturnLevelOrder.indexOf(oldZoom);
+        if (orderIndex >= 0) directOfflineNpfZoomReturnLevelOrder.splice(orderIndex, 1);
     }
 
     while (directOfflineNpfZoomReturnBlobCache.size > DIRECT_OFFLINE_NPF_ZOOM_RETURN_CACHE_MAX) {
-        const oldestKey = directOfflineNpfZoomReturnBlobCache.keys().next().value;
-        directOfflineNpfZoomReturnBlobCache.delete(oldestKey);
+        let evictKey = null;
+
+        /* Évacuer d'abord une tuile d'un niveau ordinaire. */
+        for (const key of directOfflineNpfZoomReturnBlobCache.keys()) {
+            let keyZoom = null;
+            for (const [zoom, keys] of directOfflineNpfZoomReturnLevelKeys.entries()) {
+                if (keys.has(key)) {
+                    keyZoom = Number(zoom);
+                    break;
+                }
+            }
+            if (!DIRECT_OFFLINE_NPF_ZOOM_RETURN_PROTECTED_LEVELS.has(keyZoom)) {
+                evictKey = key;
+                break;
+            }
+        }
+
+        /* Secours borné : respecter malgré tout la limite absolue de 128. */
+        if (!evictKey) evictKey = directOfflineNpfZoomReturnBlobCache.keys().next().value;
+        if (!evictKey) break;
+
+        directOfflineNpfZoomReturnBlobCache.delete(evictKey);
         for (const [zoom, keys] of directOfflineNpfZoomReturnLevelKeys.entries()) {
-            if (!keys.delete(oldestKey)) continue;
+            if (!keys.delete(evictKey)) continue;
             if (!keys.size) {
                 directOfflineNpfZoomReturnLevelKeys.delete(zoom);
                 const orderIndex = directOfflineNpfZoomReturnLevelOrder.indexOf(zoom);
