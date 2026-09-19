@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.17';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.18';
 
 
 /*
@@ -23796,13 +23796,13 @@ function selectPelicanOaciFromRoute(oaci) {
 }
 
 /*
- * v17.17 — orthodromie du trait dynamique avion -> cible.
+ * v17.18 — géométrie orthodromique commune à toutes les routes de navigation NPF.
  * Leaflet reçoit toujours UNE seule polyline continue ; les points intermédiaires
- * ne sont que des sommets géographiques invisibles qui empêchent la projection
- * Mercator de transformer une route orthodromique longue en simple corde écran.
- * Environ un sommet tous les 10 NM suffit largement à l'échelle France.
+ * sont des sommets géographiques invisibles. Les tracés avion, Feu/PÉLIC/Base et
+ * les branches de route WP utilisent ainsi exactement la même logique.
+ * Environ un sommet tous les 10 NM, avec un maximum de 48 segments.
  */
-function buildUserTargetGreatCircleLatLngs(startLatLng, endLatLng, distanceNm = null) {
+function buildNpfGreatCircleLatLngs(startLatLng, endLatLng, distanceNm = null) {
     const startLat = Number(startLatLng?.[0]);
     const startLon = Number(startLatLng?.[1]);
     const endLat = Number(endLatLng?.[0]);
@@ -23853,6 +23853,8 @@ function buildUserTargetGreatCircleLatLngs(startLatLng, endLatLng, distanceNm = 
 function drawRoute(startLatLng, endLatLng, options = {}) {
     const { oaci, isUser, isLftwRoute, magneticBearing, pane } = options;
     const distance = calculateDistanceInNm(startLatLng[0], startLatLng[1], endLatLng[0], endLatLng[1]);
+    /* v17.18 — toutes les routes de navigation dessinées ici partagent la même orthodromie. */
+    const routeLatLngs = buildNpfGreatCircleLatLngs(startLatLng, endLatLng, distance);
     let labelText, color = 'var(--primary-color)', dashArray = '', layer = routesLayer;
 
     if (isUser) {
@@ -23877,7 +23879,7 @@ function drawRoute(startLatLng, endLatLng, options = {}) {
             : '';
         labelText = `${baseFlag}<div class="route-label-oaci">${oaci}</div><div class="route-label-sub">${Math.round(distance)} Nm / ${formatFlightTimeLabel(distance)}</div>`;
 
-        L.polyline([startLatLng, endLatLng], {
+        L.polyline(routeLatLngs, {
             color: '#ffffff',
             weight: 9,
             opacity: 1,
@@ -23885,7 +23887,7 @@ function drawRoute(startLatLng, endLatLng, options = {}) {
             lineCap: 'round',
             lineJoin: 'round'
         }).addTo(layer);
-        L.polyline([startLatLng, endLatLng], {
+        L.polyline(routeLatLngs, {
             color,
             weight: 5,
             opacity: 1,
@@ -23894,7 +23896,7 @@ function drawRoute(startLatLng, endLatLng, options = {}) {
             lineJoin: 'round'
         }).addTo(layer);
 
-        const hitbox = L.polyline([startLatLng, endLatLng], { color: 'transparent', weight: 24, opacity: 0 }).addTo(layer);
+        const hitbox = L.polyline(routeLatLngs, { color: 'transparent', weight: 24, opacity: 0 }).addTo(layer);
         const selectPelicRoute = (event) => {
             try {
                 if (event && event.originalEvent && typeof event.originalEvent.stopPropagation === 'function') {
@@ -23926,15 +23928,10 @@ function drawRoute(startLatLng, endLatLng, options = {}) {
 
     if (isUser) {
         /*
-         * v17.17 — même apparence qu'avant, mais géométrie orthodromique réelle.
+         * v17.18 — le trait rouge utilise la géométrie orthodromique commune NPF.
          * Le halo et le trait rouge utilisent exactement la même polyline continue.
          */
-        const userRouteLatLngs = buildUserTargetGreatCircleLatLngs(
-            startLatLng,
-            endLatLng,
-            distance
-        );
-        L.polyline(userRouteLatLngs, {
+        L.polyline(routeLatLngs, {
             ...(pane ? { pane } : {}),
             color: '#ffffff',
             weight: 9,
@@ -23944,7 +23941,7 @@ function drawRoute(startLatLng, endLatLng, options = {}) {
             lineCap: 'round',
             lineJoin: 'round'
         }).addTo(layer);
-        L.polyline(userRouteLatLngs, {
+        L.polyline(routeLatLngs, {
             ...(pane ? { pane } : {}),
             color: '#e3001b',
             weight: 5,
@@ -23960,7 +23957,7 @@ function drawRoute(startLatLng, endLatLng, options = {}) {
 
     if (isLftwRoute) {
         /* v15.44 — route Feu -> Base : pointillés plus épais et bordés de blanc. */
-        L.polyline([startLatLng, endLatLng], {
+        L.polyline(routeLatLngs, {
             color: '#ffffff',
             weight: 9,
             opacity: 1,
@@ -23969,7 +23966,7 @@ function drawRoute(startLatLng, endLatLng, options = {}) {
             lineCap: 'round',
             lineJoin: 'round'
         }).addTo(layer);
-        L.polyline([startLatLng, endLatLng], {
+        L.polyline(routeLatLngs, {
             color,
             weight: 5,
             opacity: 1,
@@ -23979,7 +23976,7 @@ function drawRoute(startLatLng, endLatLng, options = {}) {
             lineJoin: 'round'
         }).addTo(layer);
     } else {
-        L.polyline([startLatLng, endLatLng], { color, weight: 3, opacity: 0.8, dashArray }).addTo(layer);
+        L.polyline(routeLatLngs, { color, weight: 3, opacity: 0.8, dashArray }).addTo(layer);
     }
 
     if (isLftwRoute) {
@@ -29369,7 +29366,10 @@ function drawNpfWaypointRouteLines() {
     for (let i = 0; i < routePoints.length - 1; i += 1) {
         const from = routePoints[i];
         const to = routePoints[i + 1];
-        const latlngs = [[from.lat, from.lon], [to.lat, to.lon]];
+        const latlngs = buildNpfGreatCircleLatLngs(
+            [from.lat, from.lon],
+            [to.lat, to.lon]
+        );
         L.polyline(latlngs, {
             pane: 'npfWaypointLinePane',
             color: '#ffffff',
@@ -35389,9 +35389,18 @@ function updateOwnGpsVector(latitude, longitude, headingDeg, speedMps) {
     const maxMinutes = Math.max(...timeMarksMinutes);
     const endDistanceMeters = speedMps * maxMinutes * 60;
     const end = calculateDestinationLatLng(latitude, longitude, headingDeg, endDistanceMeters);
+    /*
+     * v17.18 — la ligne de foi/vecteur temps suit la même orthodromie que les
+     * routes NPF. Les repères 2/5/10 min restent à leurs positions exactes.
+     */
+    const vectorLatLngs = buildNpfGreatCircleLatLngs(
+        start,
+        end,
+        endDistanceMeters / 1852
+    );
 
-    /* v13.04 — vecteur de position plus visible : halo noir + trait jaune. */
-    L.polyline([start, end], {
+    /* v13.04 — vecteur de position plus visible : halo noir + jaune. */
+    L.polyline(vectorLatLngs, {
         pane: 'ownAircraftPane',
         color: '#111827',
         weight: 9,
@@ -35402,7 +35411,7 @@ function updateOwnGpsVector(latitude, longitude, headingDeg, speedMps) {
         lineJoin: 'round'
     }).addTo(layer);
 
-    const vectorLine = L.polyline([start, end], {
+    const vectorLine = L.polyline(vectorLatLngs, {
         pane: 'ownAircraftPane',
         color: '#ffea00',
         weight: 5,
