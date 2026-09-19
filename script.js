@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.24';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.25';
 
 
 /*
@@ -16313,7 +16313,10 @@ function getRoadOverlayMinimumLabelLength(roadClass, zoom) {
     if (roadClass === 'M') {
         return zoom >= 13 ? 120 : 260;
     }
-    return zoom >= 14 ? 120 : (zoom >= 13 ? 260 : 520);
+    /* v17.25 — à z13 (~0,5 NM sur la configuration iPad de référence),
+     * rendre davantage de références départementales candidates sans toucher
+     * aux autres niveaux de zoom. L'anti-collision reste inchangé. */
+    return zoom >= 14 ? 120 : (zoom >= 13 ? 180 : 520);
 }
 
 function getRoadOverlayMaximumLabelCount() {
@@ -16323,8 +16326,11 @@ function getRoadOverlayMaximumLabelCount() {
     const size = map.getSize();
     const area = Math.max(1, Number(size.x) * Number(size.y));
 
-    const absoluteLimit = zoom >= 14 ? 30 : (zoom >= 13 ? 22 : 14);
-    const areaPerLabel = zoom >= 14 ? 39000 : (zoom >= 13 ? 52000 : 76000);
+    /* v17.25 — z13 : plafond relevé pour permettre environ 30 cartouches
+     * sur l'iPad de référence. Les priorités A/N/T/M/D et l'anti-collision
+     * restent inchangés ; z12 et z14+ conservent leur comportement propre. */
+    const absoluteLimit = zoom >= 14 ? 30 : (zoom >= 13 ? 30 : 14);
+    const areaPerLabel = zoom >= 14 ? 39000 : (zoom >= 13 ? 45000 : 76000);
     const areaLimit = Math.max(8, Math.floor(area / areaPerLabel));
 
     return Math.max(8, Math.min(absoluteLimit, areaLimit));
