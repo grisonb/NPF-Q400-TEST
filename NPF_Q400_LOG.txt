@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 19/09/2026
-Version de travail actuelle : TEST v17.21
+Version de travail actuelle : TEST v17.22
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -141,9 +141,12 @@ IMPLÉMENTÉ / INTÉGRÉ :
 - v17.20 : priorité de démarrage renforcée, limitation du second recadrage GPS,
   communes retardées derrière la première tuile, porte post-core et déplacement
   du gros script PWA pour permettre un splash plus précoce ;
-- v17.21 : noyau initial de tuiles avant parsing communes, plans d'eau repoussés
-  après priorité carte, cache séparé de retour de zoom pour les derniers niveaux
-  NPF déjà affichés et HT automatiquement masquées à l'échelle 50 NM ou plus.
+- v17.21 : essai noyau initial de tuiles, plans d'eau différés, cache retour zoom
+  et HT masquées à 50 NM+ ; le DIAG a montré que le noyau ralentissait le core et
+  que le cache retour, consulté trop tard, produisait 0 hit ;
+- v17.22 : retour au démarrage v17.20 pour les communes, conservation des plans
+  d'eau différés et HT 50 NM, suppression du trim LRU à 96 et fast-path RAM avant
+  le scheduler IndexedDB avec compteurs séparés RAM principal/retour/IDB.
 
 NON IMPLÉMENTÉ / OUVERT :
 - écart ligne de foi jaune / route rouge alors que les deux affichent 277° :
@@ -158,9 +161,10 @@ NON IMPLÉMENTÉ / OUVERT :
   non retenue sans nouvelle preuve DIAG.
 
 À MESURER :
-- efficacité réelle du cache retour zoom v17.21 : vérifier dans le prochain DIAG
-  la nouvelle métrique « cache retour zoom / hits » et surtout les temps OUT ;
-- effet du report des plans d'eau sur le blocage JS ~1,9 s encore observé en v17.20 ;
+- v17.22 : vérifier qu'un OUT vers un niveau déjà vu produit des `hits RAM principal`
+  ou `hits retour` AVANT toute augmentation des `accès IDB`, et réduit les périodes
+  `0 visible + 5 actives + 25 en file` ;
+- effet du report des plans d'eau sur les blocages JS de démarrage ;
 - comportement HT lors du passage 50 NM -> 20 NM -> 50 NM : préférence utilisateur
   doit rester ON, rendu absent à 50 NM+, puis retour automatique sous 50 NM.
 
@@ -170,33 +174,36 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.21
+Version : TEST v17.22
 Date : 19/09/2026
-Base : v17.20
+Base : v17.21
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.21.txt
-2_Index_v17.21.txt
-3_Manifest_v17.21.txt
-4_Script_v17.21.txt
-5_SIA_v17.21.txt
-6_Style_v17.21.txt
-7_Sw_v17.21.txt
+1_Modifications_v17.22.txt
+2_Index_v17.22.txt
+3_Manifest_v17.22.txt
+4_Script_v17.22.txt
+5_SIA_v17.22.txt
+6_Style_v17.22.txt
+7_Sw_v17.22.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.21
-- Manifest : start_url = ./index.html?appv=v17.21
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.21
-- Style : NPF_STYLE_BUILD_VERSION = v17.21
-- Service Worker : sw-v17-21_startup_zoomout_return_cache_ht50
+- Index : APP_VERSION = v17.22
+- Manifest : start_url = ./index.html?appv=v17.22
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.22
+- Style : NPF_STYLE_BUILD_VERSION = v17.22
+- Service Worker : `sw-v17-22_ram_fastpath_zoomout_startup_v20_ht50`
 - SIA_DATA_REVISION : 15.69-radio1026-1-maplite1
-- sia.js v17.21 : strictement identique à v17.20.
+- sia.js v17.22 : strictement identique à v17.21 (et donc aux données v17.20).
 
 STATUT DE VALIDATION :
-- validation statique v17.21 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.22 effectuée avant livraison : Script/SIA/SW OK, script
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
-- v17.20 a désormais un DIAG réel d'ouverture et un DIAG réel de zooms ;
-- v17.21 doit être validée sur iPad avant de considérer ses gains acquis.
+- `sia.js` v17.22 est bit-à-bit identique à v17.21 ;
+- constantes historiques du moteur tuiles comparées à v17.21 : 5 lectures, file
+  160, cache principal 160, cache général 256, keepBuffer 4/2, TTL/timeouts et
+  settle 240 ms inchangés ;
+- v17.21 dispose d'un DIAG réel ; v17.22 reste À MESURER sur iPad.
 
 2. PROTOCOLE DE TRAVAIL À RESPECTER
 -----------------------------------
@@ -237,7 +244,7 @@ Conséquences :
 
 4. MOTEUR TUILES DIRECT OFFLINE — ÉTAT DE RÉFÉRENCE À NE PAS MODIFIER À L'AVEUGLE
 ---------------------------------------------------------------------------------
-Réglages actuels v17.20 :
+Réglages actuels v17.22 :
 - DIRECT_OFFLINE_TILE_CACHE_MAX = 256
 - DIRECT_OFFLINE_NPF_TILE_CACHE_MAX = 160
 - DIRECT_OFFLINE_TILE_MISS_CACHE_TTL_MS = 30000
@@ -256,13 +263,15 @@ Réglages actuels v17.20 :
 - les lectures actives ne sont pas annulées lors d'un simple changement de vue ;
 - priorité dynamique au viewport/zoom courant sans augmenter les 5 lectures.
 
-Ajout v17.21, explicitement demandé pour le zoom OUT :
+Ajout v17.21/v17.22 pour le zoom OUT :
 - cache de retour de zoom NPF séparé du cache principal : 128 entrées maximum ;
 - maximum 4 niveaux de zoom récemment peints ;
-- le cache principal historique reste à 160 entrées ;
+- le cache principal historique reste à 160 entrées ET n'est plus réduit à 96
+  au début d'un geste ;
+- v17.22 consulte le cache RAM principal puis le cache retour AVANT d'entrer dans
+  la file IndexedDB ; une tuile déjà en RAM ne consomme donc plus un des 5 créneaux ;
 - aucune lecture active n'est annulée ; aucune concurrence supplémentaire ;
-- les Blob déjà chargés sont seulement conservés par référence pour permettre un
-  retour rapide vers un niveau précédemment visible après un zoom IN.
+- DIAG v17.22 sépare hits RAM principal, hits cache retour et accès IDB.
 
 Pistes historiquement testées et à NE PAS réintroduire sans nouvelle preuve :
 - réduction de 5 à 2 lectures simultanées : débit global dégradé ;
@@ -339,7 +348,7 @@ NE PAS appliquer une correction artificielle de +1°/-1°.
 Historique : les bandes/bordures intérieures SIA à 5 NM ont été rétablies dans
 les versions 16.x après une régression antérieure.
 
-État actuel du Script v17.21 vérifié :
+État actuel du Script v17.22 :
 - SIA_DECORATION_LIGHTWEIGHT_SCALE_NM = 10 ;
 - MAIS lorsque la charge combinée Zones + Routes + HT est considérée lourde,
   `combinedHeavyLightweight` devient vrai dès échelle >= 5 NM ;
@@ -440,6 +449,52 @@ Pistes toujours NON implémentées :
 - augmenter la concurrence IndexedDB ;
 - réduire keepBuffer ou modifier les timeouts.
 
+
+9 BIS. DIAG v17.21 — CONCLUSIONS ET DÉCISIONS v17.22
+----------------------------------------------------
+DIAG du 19/09/2026 11:47, build v17.21.
+
+Ouverture v17.21 mesurée :
+- Script : 2,47 s ; DOM prêt : 3,32 s ; IndexedDB prête : 3,80 s ;
+- première tuile : 7,83 s ; fond complet : 9,69 s ;
+- le noyau de tuiles retarde encore les communes d'environ 0,97 s après la
+  première tuile ; démarrage principal prêt à 11,24 s ;
+- maximum blocage JS : ~1004 ms, meilleur que le ~1904 ms du DIAG v17.20 ;
+- la désactivation HT à 50 NM fonctionne et le GPS réel ne recadre pas inutilement.
+
+Décision démarrage v17.22 :
+- ABANDON du noyau de 9 tuiles v17.21 ;
+- retour au déclenchement v17.20 : première tuile -> communes immédiatement ;
+- conservation du report des plans d'eau après la porte de priorité carte ;
+- conservation du splash et du recadrage GPS stabilisé.
+
+Zoom OUT v17.21 mesuré :
+- 379 demandes intermédiaires abandonnées ; 0 lecture active obsolète ; 0 reprise ;
+- cache retour zoom rempli jusqu'à 100 entrées mais 0 hit ;
+- OUT z12 -> z9 : zoomend avec 0 tuile visible, 5 lectures actives et 25 en file,
+  puis environ 5 s avant le retour à 25 tuiles visibles ;
+- le cache retour existe donc bien mais son chemin de lecture v17.21 est trop tardif.
+
+Cause vérifiée dans le code v17.21 :
+- `findDirectOfflineTileBlob()` plaçait d'abord toute demande NPF dans le scheduler ;
+- le cache principal / cache retour n'était consulté qu'ensuite dans la tâche
+  `findDirectOfflineTileBlobUnqueued()` ;
+- une tuile déjà présente en RAM pouvait donc attendre derrière la file IDB et
+  occuper indirectement le séquenceur comme une vraie lecture disque ;
+- le cache principal était en plus réduit volontairement à 96 entrées au début
+  du geste, malgré sa limite historique de 160.
+
+Correction v17.22 :
+- fast-path RAM avant le scheduler : cache principal -> cache retour -> file IDB ;
+- suppression de la réduction à 96 : cache principal laissé à 160 ;
+- le cache retour 128 / 4 niveaux est conservé comme filet de retour OUT ;
+- compteurs DIAG séparés : hits RAM principal, hits retour zoom, accès IDB ;
+- les 5 lectures, file 160, timeouts, keepBuffer, purge et transactions IDB restent
+  inchangés.
+
+STATUT : À MESURER SUR IPAD. Un cache rempli avec 0 hit ne devra plus être interprété
+comme une réussite ; le prochain DIAG doit montrer le chemin réellement utilisé.
+
 10. SPLASH / PAGE BLANCHE — ÉTAT
 --------------------------------
 Avant v17.20 :
@@ -456,8 +511,8 @@ v17.20 :
   et avant les scripts applicatifs ;
 - objectif : permettre au navigateur de peindre le splash plus tôt.
 
-STATUT : v17.20 mesurée avec première tuile à 2,76 s. v17.21 conserve ce mécanisme
-et ajoute le noyau initial de tuiles avant parsing des communes.
+STATUT : v17.20 mesurée avec première tuile à 2,76 s. Le noyau supplémentaire
+v17.21 est abandonné en v17.22 ; on revient à première tuile -> communes immédiatement.
 
 
 11. ROUTES / HT — INVARIANTS ACTUELS
@@ -469,7 +524,7 @@ et ajoute le noyau initial de tuiles avant parsing des communes.
 - HT doit conserver un swap atomique : ne pas supprimer l'ancien rendu avant que
   le nouveau soit prêt si un changement de token peut interrompre le traitement ;
 - les états mémorisés Routes ON / HT ON doivent être réellement restaurés ;
-- v17.21 : HT ON reste mémorisé mais le rendu est automatiquement absent à
+- v17.21/v17.22 : HT ON reste mémorisé mais le rendu est automatiquement absent à
   l'échelle 50 NM et au-delà ; sous 50 NM il doit revenir sans OFF/ON manuel ;
 - si les panes ont été prémasqués pendant un geste, leur état final doit rester
   cohérent avec le bouton utilisateur.
@@ -492,8 +547,9 @@ et ajoute le noyau initial de tuiles avant parsing des communes.
 - v17.19 : suppression des reconstructions GridLayer redondantes si plage zoom
   inchangée, 0 demandes abandonnées dans le DIAG mesuré ;
 - v17.20 : priorisation renforcée du premier affichage, validée par DIAG réel ;
-- v17.21 : noyau initial de tuiles, plans d'eau différés, cache retour zoom et
-  masquage HT automatique à 50 NM+.
+- v17.21 : essai noyau tuiles + plans d'eau différés + cache retour + HT 50 NM ;
+- v17.22 : noyau retiré, plans d'eau/HT conservés, fast-path RAM avant scheduler,
+  cache principal maintenu à 160 pendant les gestes.
 
 
 13. ÉLÉMENTS À NE PAS CONFONDRE / À NE PAS INTÉGRER SANS NOUVELLE DEMANDE
@@ -531,6 +587,89 @@ Pour chaque remarque non implémentée, noter autant que possible :
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.22 — FAST-PATH RAM ZOOM OUT / RETOUR DÉMARRAGE v17.20 / HT 50 NM
+Date : 19/09/2026
+Base fonctionnelle : v17.21
+
+DEMANDE UTILISATEUR
+- Fournir les .txt après analyse du DIAG v17.21 afin d'améliorer encore le
+  démarrage et les zooms OUT.
+
+DIAG À L'ORIGINE — v17.21 (11:47)
+- première tuile 7,83 s ; démarrage principal 11,24 s ;
+- le noyau supplémentaire attend ~0,97 s après la première tuile avant communes ;
+- cache retour zoom : 100 entrées mais 0 hit ;
+- OUT z12 -> z9 : 0 tuile visible, 5 lectures actives, 25 en file au zoomend ;
+- 379 demandes intermédiaires abandonnées, mais 0 lecture active obsolète et 0 reprise ;
+- HT correctement différées à l'échelle 50 NM+ ;
+- blocage JS max ~1004 ms.
+
+MODIFICATIONS
+
+1. DÉMARRAGE — RETOUR AU DÉCLENCHEMENT v17.20 POUR LES COMMUNES
+- Suppression de `waitForNpfStartupTileNucleus()` et de l'attente 9 tuiles / 1,4 s.
+- Après la première vraie tuile (ou timeout de secours historique), le chargement
+  des 34 935 communes démarre immédiatement comme en v17.20.
+- Le report des plans d'eau derrière la porte de priorité carte de v17.21 est
+  conservé car le DIAG montre une baisse du blocage JS maximal.
+- Splash, cadrage pré-tuiles et évitement du second recadrage GPS inchangés.
+
+2. ZOOM OUT — FAST-PATH RAM AVANT LE SCHEDULER INDEXEDDB
+- Avant de créer une demande dans `directOfflineNpfReadQueue`, NPF teste désormais :
+  1) le cache RAM principal historique ;
+  2) le cache retour zoom v17.21 ;
+  3) seulement en cas d'échec, la file des 5 lectures IndexedDB.
+- Une tuile déjà en RAM ne consomme donc plus un slot de lecture IDB et ne peut
+  plus attendre derrière 20/25 demandes disque.
+- Le même helper de cache reste vérifié une seconde fois dans la tâche IDB afin
+  de profiter d'un Blob éventuellement arrivé pendant l'attente en file.
+
+3. CACHE PRINCIPAL — SUPPRESSION DU TRIM TEMPORAIRE À 96
+- `beginBaseMapZoomStabilityGuard()` continue de mémoriser le niveau peint dans le
+  cache retour, mais ne réduit plus `directOfflineTileBlobCache` à 96 entrées.
+- La limite historique NPF de 160 entrées reste donc effective pendant le geste.
+- Le cache retour 128 / 4 niveaux est conservé comme protection supplémentaire.
+
+4. DIAG — SOURCE RÉELLE DES TUILES
+- Ajout des compteurs :
+  * hits RAM principal ;
+  * hits cache retour zoom ;
+  * accès IndexedDB après échec des caches/miss-cache.
+- `Mémoire carte` et `getNpfTilePerformanceStatus()` exposent ces valeurs.
+- Objectif du prochain test : vérifier qu'un OUT vers un niveau déjà vu se sert
+  réellement de RAM avant d'augmenter les accès IDB.
+
+5. HT 50 NM — CONSERVÉ
+- Le comportement v17.21 est conservé sans modification : préférence HT reste ON,
+  rendu/chargement différé à 50 NM+, retour automatique sous 50 NM.
+
+6. MOTEUR TUILES — INVARIANTS
+- 5 lectures IndexedDB simultanées ;
+- file max 160 ;
+- cache principal NPF 160 ; cache général 256 ;
+- cache retour zoom 128 / 4 niveaux ;
+- keepBuffer NPF 2 ; intervalle direct 60 ms ;
+- timeouts IDB, transactions par lecture, purge des demandes et absence
+  d'annulation active inchangés.
+
+7. NON MODIFIÉ
+- Orthodromie v17.18 ; simulation v17.16 ; SIA/VAC ; Routes métier ; SafeSky/GLR ;
+  FdS/GAAR ; calculateur ; WP ; données SIA.
+- `sia.js` strictement identique à v17.21.
+
+VALIDATION AVANT LIVRAISON
+- Syntaxe Script / SIA / SW : OK.
+- Script inline Index : OK.
+- Manifest JSON : OK.
+- Cohérence versions/caches : OK.
+- SIA bit-à-bit identique à v17.21 : OK.
+- Constantes critiques du moteur tuiles inchangées : OK.
+- `waitForNpfStartupTileNucleus` absent : OK.
+- trim temporaire `trimDirectOfflineTileBlobCache(96)` absent : OK.
+- fast-path RAM placé avant `enqueueDirectOfflineNpfRead` : OK.
+
+
 
 VERSION TEST v17.21 — DÉMARRAGE NOYAU TUILES / ZOOM OUT RAPIDE / HT OFF À 50 NM
 Date : 19/09/2026
