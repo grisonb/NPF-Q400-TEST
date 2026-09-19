@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.16';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.17';
 
 
 /*
@@ -23795,6 +23795,61 @@ function selectPelicanOaciFromRoute(oaci) {
     displayCommuneDetails(currentCommune, false);
 }
 
+/*
+ * v17.17 — orthodromie du trait dynamique avion -> cible.
+ * Leaflet reçoit toujours UNE seule polyline continue ; les points intermédiaires
+ * ne sont que des sommets géographiques invisibles qui empêchent la projection
+ * Mercator de transformer une route orthodromique longue en simple corde écran.
+ * Environ un sommet tous les 10 NM suffit largement à l'échelle France.
+ */
+function buildUserTargetGreatCircleLatLngs(startLatLng, endLatLng, distanceNm = null) {
+    const startLat = Number(startLatLng?.[0]);
+    const startLon = Number(startLatLng?.[1]);
+    const endLat = Number(endLatLng?.[0]);
+    const endLon = Number(endLatLng?.[1]);
+    if (![startLat, startLon, endLat, endLon].every(Number.isFinite)) {
+        return [startLatLng, endLatLng];
+    }
+
+    const totalDistanceNm = Number.isFinite(Number(distanceNm))
+        ? Math.max(0, Number(distanceNm))
+        : calculateDistanceInNm(startLat, startLon, endLat, endLon);
+    if (!Number.isFinite(totalDistanceNm) || totalDistanceNm <= 0.01) {
+        return [[startLat, startLon], [endLat, endLon]];
+    }
+
+    const initialTrueBearing = calculateBearing(startLat, startLon, endLat, endLon);
+    if (!Number.isFinite(initialTrueBearing)) {
+        return [[startLat, startLon], [endLat, endLon]];
+    }
+
+    const segmentCount = Math.min(48, Math.max(1, Math.ceil(totalDistanceNm / 10)));
+    if (segmentCount <= 1) {
+        return [[startLat, startLon], [endLat, endLon]];
+    }
+
+    const totalDistanceMeters = totalDistanceNm * 1852;
+    const points = [[startLat, startLon]];
+    for (let index = 1; index < segmentCount; index += 1) {
+        const intermediate = calculateDestinationLatLng(
+            startLat,
+            startLon,
+            initialTrueBearing,
+            totalDistanceMeters * index / segmentCount
+        );
+        if (
+            Array.isArray(intermediate)
+            && Number.isFinite(Number(intermediate[0]))
+            && Number.isFinite(Number(intermediate[1]))
+        ) {
+            points.push([Number(intermediate[0]), Number(intermediate[1])]);
+        }
+    }
+    /* L'extrémité reste exactement la cible réelle, sans approximation accumulée. */
+    points.push([endLat, endLon]);
+    return points;
+}
+
 function drawRoute(startLatLng, endLatLng, options = {}) {
     const { oaci, isUser, isLftwRoute, magneticBearing, pane } = options;
     const distance = calculateDistanceInNm(startLatLng[0], startLatLng[1], endLatLng[0], endLatLng[1]);
@@ -23870,8 +23925,16 @@ function drawRoute(startLatLng, endLatLng, options = {}) {
     }
 
     if (isUser) {
-        /* v13.04 — route GPS -> feu rendue plus lisible : halo blanc + trait rouge épais. */
-        L.polyline([startLatLng, endLatLng], {
+        /*
+         * v17.17 — même apparence qu'avant, mais géométrie orthodromique réelle.
+         * Le halo et le trait rouge utilisent exactement la même polyline continue.
+         */
+        const userRouteLatLngs = buildUserTargetGreatCircleLatLngs(
+            startLatLng,
+            endLatLng,
+            distance
+        );
+        L.polyline(userRouteLatLngs, {
             ...(pane ? { pane } : {}),
             color: '#ffffff',
             weight: 9,
@@ -23881,7 +23944,7 @@ function drawRoute(startLatLng, endLatLng, options = {}) {
             lineCap: 'round',
             lineJoin: 'round'
         }).addTo(layer);
-        L.polyline([startLatLng, endLatLng], {
+        L.polyline(userRouteLatLngs, {
             ...(pane ? { pane } : {}),
             color: '#e3001b',
             weight: 5,
