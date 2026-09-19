@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v17-20_startup_map_gate';
-const APP_VERSION = 'v17.20';
+const SW_VERSION = 'sw-v17-21_startup_zoomout_return_cache_ht50';
+const APP_VERSION = 'v17.21';
 const SIA_DATA_REVISION = '15.69-radio1026-1-maplite1';
 const SIA_DATA_URL = './sia.js';
 const SIA_DATA_CACHE = `npf-q400-sia-data-${SIA_DATA_REVISION}`;
