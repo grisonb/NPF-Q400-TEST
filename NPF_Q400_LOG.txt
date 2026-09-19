@@ -1,3 +1,129 @@
+VERSION TEST v17.16 — SIMULATION : CAP MAGNÉTIQUE + FLUIDITÉ + RECENTRAGE
+Date : 19/09/2026
+Base fonctionnelle : v17.15
+
+OBJECTIFS UTILISATEUR
+- Corriger l'incohérence entre la route magnétique affichée vers le feu et la
+  route saisie dans le mode simulation.
+- Réduire les lenteurs constatées en simulation sans ralentir le déplacement
+  visuel de l'avion, qui reste calculé toutes les 500 ms.
+- Après un déplacement manuel de la carte, ramener plus proprement l'avion vers
+  sa position anticipée correspondant au cap simulé.
+
+DIAG À L'ORIGINE — v17.14 (19/09/2026 08:19)
+- 390 positions et 205 recentrages automatiques.
+- 306 demandes tuiles abandonnées, 10 lectures devenues obsolètes, 38 reprises
+  et 15 snapshots sans tuile visible.
+- 12 blocages JavaScript, maximum ≈ 1327 ms.
+- Le trafic était sollicité explicitement à chaque position simulation alors
+  qu'un timer global de 5 s existe déjà.
+
+MODIFICATIONS
+
+1. ROUTE SIMULATION — RÉFÉRENCE MAGNÉTIQUE
+- La valeur saisie et affichée dans le mode simulation est désormais considérée
+  comme une route MAGNÉTIQUE, cohérente avec les routes affichées par NPF.
+- La déclinaison NPF existante est ajoutée uniquement en interne pour obtenir le
+  cap vrai utilisé par la géométrie de la carte.
+- Le déplacement de l'avion, sa silhouette, le vecteur 2/5/10 min, le suivi
+  anticipé et le profil SIA utilisent donc tous le même cap vrai interne.
+- Aucun tracé géodésique multi-segments n'est ajouté : les routes Leaflet
+  existantes restent inchangées.
+
+2. SIMULATION — ALLÈGEMENT DES TRAITEMENTS À 500 ms
+- L'avion continue à avancer et son marqueur continue à être déplacé toutes les
+  500 ms.
+- Le vecteur et la route dynamique sont rafraîchis au maximum toutes les 1 s.
+- Les traitements plus lourds (commune survolée, contexte calculateur, calculs)
+  sont rafraîchis au maximum toutes les 2,5 s pendant le mouvement automatique.
+- Un positionnement manuel de l'avion ou un changement de paramètres force
+  immédiatement un rafraîchissement complet.
+- L'icône Q400 n'est plus reconstruite à chaque tick si son contenu n'a pas
+  changé ; seule sa position est déplacée.
+- Le refresh trafic spécifique à chaque tick simulation est supprimé : le timer
+  trafic global de 5 s reste la source normale. Un positionnement explicite de
+  l'avion force toujours une actualisation immédiate.
+
+3. SUIVI SIMULATION — RECENTRAGES MOINS COÛTEUX
+- Un gps-update simulation ne lance plus map.setView si le centre cible diffère
+  de moins de 8 px du centre déjà utilisé.
+- L'avion peut donc avancer quelques pixels sans provoquer un mouvement Leaflet
+  et une nouvelle pression sur les tuiles à chaque tick.
+- Après un geste manuel sur la carte, la temporisation de retour au cadrage
+  anticipé est de 5 s en simulation ; le délai historique de 10 s du vrai Suivi
+  GPS reste inchangé.
+- Le retour après temporisation est forcé vers la position anticipée calculée
+  selon le cap, indépendamment du seuil de 8 px.
+
+4. PÉRIMÈTRE STRICT
+- Moteur tuiles v17.14/v17.15 inchangé : lectures IndexedDB, priorité viewport,
+  cache, retries, keepBuffer et snapshot visuel de zoom inchangés.
+- Routes, HT, VAC et données SIA inchangées.
+- La modification évoquée séparément sur les décorations SIA à l'échelle 5 NM
+  n'est pas intégrée dans cette livraison consacrée à la simulation.
+
+VALIDATION AVANT LIVRAISON
+- Syntaxe Script / SIA / SW : OK.
+- Scripts inline Index : OK.
+- Manifest JSON : OK.
+- Références de version : v17.16 cohérentes.
+- SIA : strictement identique à v17.15.
+- Diff contrôlé : aucune modification du scheduler de tuiles ni des moteurs
+  Routes/HT/VAC.
+
+
+VERSION TEST v17.15 — CONTINUITÉ VISUELLE DES TUILES PENDANT LE ZOOM
+Date : 18/09/2026
+Base fonctionnelle : v17.14
+
+OBJECTIF UTILISATEUR
+- Supprimer la disparition momentanée du fond de carte observée sur certains
+  zoomend alors que la nouvelle vue est encore à 0 tuile visible.
+- Conserver intégralement les améliorations de priorité viewport de v17.14.
+
+DIAG À L'ORIGINE — v17.14 (18/09/2026 20:40)
+- 21 mouvements carte, aucun classé saccadé ; 5 zooms, aucun classé lent.
+- Malgré cette amélioration, plusieurs zoomend arrivent encore avec 0 tuile
+  visible et une file active (ex. a5/q25, a5/q42, a5/q30, a5/q20).
+- Routes/HT attendent correctement les tuiles : le reliquat perçu est donc le
+  trou visuel entre ancien et nouveau niveau de zoom.
+
+MODIFICATIONS
+
+1. TUILES — SNAPSHOT VISUEL TEMPORAIRE AU ZOOM
+- Au premier zoomstart, NPF clone uniquement le DOM déjà peint de la GridLayer
+  NPF dans un calque visuel indépendant placé derrière la vraie GridLayer.
+- Aucun objet Leaflet, aucune tuile `_tiles`, aucun niveau `_levels` et aucune
+  méthode interne `_pruneTiles` ne sont retenus ni modifiés.
+- Le snapshot est hors de `baseTileLayer.getContainer()` : les diagnostics et
+  attentes tuiles continuent donc de mesurer exclusivement les vraies tuiles.
+- Au zoomend, le snapshot est recalé mathématiquement sur la nouvelle vue à
+  partir des pixel origins et du facteur de zoom.
+- Les vraies tuiles du nouveau niveau se peignent naturellement au-dessus au fur
+  et à mesure de leur disponibilité.
+- Le snapshot est supprimé dès que toutes les tuiles visibles du niveau courant
+  sont peintes, avec timeout de sécurité à 2,6 s.
+- Une reconstruction réelle du fond de carte supprime immédiatement tout
+  snapshot restant.
+
+2. AUCUN CHANGEMENT DU MOTEUR DE LECTURE
+- Priorité viewport v17.14 inchangée.
+- 5 lectures IndexedDB simultanées inchangées.
+- File maximale, retries, timeouts, cache Blob, keepBuffer, updateInterval,
+  updateWhenIdle et pruning inchangés.
+- Routes, HT, SIA, VAC et simulation inchangés par rapport à v17.14.
+
+VALIDATION AVANT LIVRAISON
+- Syntaxe Script / SIA / SW : OK.
+- Scripts inline Index : OK.
+- Manifest JSON : OK.
+- Références de version : v17.15 cohérentes.
+- SIA : strictement identique à v17.14.
+- Moteur de lecture IndexedDB et paramètres de concurrence inchangés.
+- Seules les fonctions de snapshot visuel et leurs hooks zoomstart/zoomend ont
+  été ajoutés au chemin carte.
+
+
 VERSION TEST v17.14 — PRIORITÉ TUILES VIEWPORT + SUIVI ANTICIPÉ SIMULATION
 Date : 18/09/2026
 Base fonctionnelle : v17.13
