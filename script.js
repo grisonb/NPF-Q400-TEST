@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.21';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.22';
 
 
 /*
@@ -500,8 +500,10 @@ function getNpfStartupDiagnosticOverlaySnapshot() {
         npfTileRetries: Number(directOfflineNpfTileRetryCount || 0),
         npfViewEpoch: Number(directOfflineTileViewPriorityEpoch || 0),
         tileBlobCache: Number(directOfflineTileBlobCache?.size || 0),
+        tileMainRamHits: Number(directOfflineNpfMainRamHitCount || 0),
         tileZoomReturnCache: Number(directOfflineNpfZoomReturnBlobCache?.size || 0),
         tileZoomReturnHits: Number(directOfflineNpfZoomReturnCacheHitCount || 0),
+        tileIndexedDbLookups: Number(directOfflineNpfIndexedDbLookupCount || 0),
         leafletLayers: (() => {
             try { return Number(Object.keys(map?._layers || {}).length || 0); }
             catch (_) { return 0; }
@@ -740,8 +742,10 @@ function getNpfStartupDiagnosticRuntimeInfo() {
         npfTileRetries: layers.npfTileRetries,
         npfViewEpoch: layers.npfViewEpoch,
         tileBlobCacheSize: layers.tileBlobCache,
+        tileMainRamHits: layers.tileMainRamHits,
         tileZoomReturnCacheSize: layers.tileZoomReturnCache,
         tileZoomReturnCacheHits: layers.tileZoomReturnHits,
+        tileIndexedDbLookups: layers.tileIndexedDbLookups,
         leafletLayerCount: layers.leafletLayers,
         runwayLayerCount: layers.runwayLayers,
         siaLayerCount: layers.siaLayers,
@@ -841,8 +845,10 @@ function buildNpfStartupDiagnosticExportText() {
         + runtime.npfReadsAborted + ' lectures devenues obsolètes / '
         + runtime.npfTileRetries + ' reprises | '
         + runtime.tileBlobCacheSize + ' blobs cache | '
+        + runtime.tileMainRamHits + ' hits RAM principal | '
         + runtime.tileZoomReturnCacheSize + ' cache retour zoom / '
-        + runtime.tileZoomReturnCacheHits + ' hits | '
+        + runtime.tileZoomReturnCacheHits + ' hits retour | '
+        + runtime.tileIndexedDbLookups + ' accès IDB | '
         + runtime.leafletLayerCount + ' calques Leaflet totaux | '
         + runtime.runwayLayerCount + ' couches pistes | '
         + runtime.siaLayerCount + ' couches SIA'
@@ -5417,50 +5423,6 @@ function waitForNpfStartupFirstTile(timeoutMs = 4500) {
     });
 }
 
-/*
- * v17.21 — après la première tuile, laisser encore un petit noyau central du
- * viewport se remplir avant de parser/indexer les 34 935 communes. Cela évite
- * qu'une phase JavaScript lourde reprenne immédiatement la main après le tout
- * premier tileload. Aucun réglage du scheduler IndexedDB n'est modifié.
- */
-function waitForNpfStartupTileNucleus({ timeoutMs = 1400, minVisible = 9 } = {}) {
-    return new Promise(resolve => {
-        const startedAt = Date.now();
-        let pollTimer = null;
-        let settled = false;
-        const finish = (reason, state) => {
-            if (settled) return;
-            settled = true;
-            if (pollTimer) clearTimeout(pollTimer);
-            resolve({ reason, ...state });
-        };
-        const check = () => {
-            if (settled) return;
-            const state = getNpfStartupTilePriorityState();
-            const availableCount = Math.max(state.loaded, state.visible);
-            const requestedTarget = Math.max(1, Number(minVisible) || 9);
-            const target = state.total > 0
-                ? Math.max(1, Math.min(requestedTarget, state.total))
-                : requestedTarget;
-
-            if (availableCount >= target) {
-                finish('noyau-prêt', state);
-                return;
-            }
-            if (state.visible > 0 && state.active === 0 && state.queued === 0) {
-                finish('scheduler-idle', state);
-                return;
-            }
-            if (Date.now() - startedAt >= Math.max(300, Number(timeoutMs) || 1400)) {
-                finish('timeout', state);
-                return;
-            }
-            pollTimer = setTimeout(check, 70);
-        };
-        check();
-    });
-}
-
 function waitForNpfStartupMapPriorityRelease({ timeoutMs = 8000, minCoverageRatio = 0.80 } = {}) {
     if (npfStartupMapPriorityPromise) return npfStartupMapPriorityPromise;
 
@@ -5718,18 +5680,8 @@ async function initializeApp() {
     const startupFirstTileReady = await waitForNpfStartupFirstTile(4500);
     npfStartupDiagMark(
         'communes_first_tile_gate',
-        'Communes — première tuile disponible',
+        'Communes — priorité carte libérée',
         startupFirstTileReady ? 'première tuile affichée' : 'timeout sécurité'
-    );
-
-    const startupTileNucleus = await waitForNpfStartupTileNucleus({
-        timeoutMs: 1400,
-        minVisible: 9
-    });
-    npfStartupDiagMark(
-        'communes_tile_nucleus_gate',
-        'Communes — noyau tuiles prioritaire',
-        `${startupTileNucleus.reason} · ${startupTileNucleus.loaded}/${startupTileNucleus.total} couverture · ${startupTileNucleus.visible} visibles · file ${startupTileNucleus.active}/${startupTileNucleus.queued}`
     );
 
     let communesLoadError = null;
@@ -9574,10 +9526,12 @@ function beginBaseMapZoomStabilityGuard(reason = 'zoomstart') {
          * si Leaflet ne retient plus réellement leur tuile.
          */
         try { markDirectOfflineNpfViewportPriority(reason); } catch (_) {}
-        /* v17.21 — protéger le niveau déjà peint avant que le LRU principal ne
-         * soit réduit à 96 entrées pendant le geste. */
+        /*
+         * v17.22 — protéger le niveau déjà peint pour un éventuel retour OUT,
+         * sans réduire artificiellement le LRU principal. Le cache NPF conserve
+         * donc sa limite historique de 160 entrées pendant le geste.
+         */
         try { rememberCurrentNpfZoomLevelForFastReturn(`before-${reason}`); } catch (_) {}
-        try { trimDirectOfflineTileBlobCache(96); } catch (_) {}
     }
 }
 
@@ -10428,6 +10382,8 @@ function rebuildRememberedOfflineMapAfterDatabaseReady(reason, readyDatabase) {
     directOfflineTileMissCache.clear();
     directOfflineTileHitCount = 0;
     directOfflineTileMissCount = 0;
+    directOfflineNpfMainRamHitCount = 0;
+    directOfflineNpfIndexedDbLookupCount = 0;
     offlineTilesMode = true;
     applyImmediateBaseTileZoomForMapSource('offline');
 
@@ -10663,7 +10619,7 @@ function rebuildBaseTileLayerAfterOfflineSwitch(reason = 'offline-switch') {
 const DIRECT_OFFLINE_TILE_CACHE_MAX = 256;
 const DIRECT_OFFLINE_NPF_TILE_CACHE_MAX = 160;
 /*
- * v17.21 — cache de retour de zoom NPF, séparé du LRU principal.
+ * v17.21/v17.22 — cache de retour de zoom NPF, séparé du LRU principal.
  * Le cache historique reste strictement à 160 entrées ; ce cache conserve des
  * références Blob des derniers niveaux déjà peints pour accélérer un zoom OUT
  * vers une échelle récemment affichée sans relecture IndexedDB.
@@ -10676,7 +10632,9 @@ const directOfflineTileBlobCache = new Map();
 const directOfflineNpfZoomReturnBlobCache = new Map();
 const directOfflineNpfZoomReturnLevelKeys = new Map();
 const directOfflineNpfZoomReturnLevelOrder = [];
+let directOfflineNpfMainRamHitCount = 0;
 let directOfflineNpfZoomReturnCacheHitCount = 0;
+let directOfflineNpfIndexedDbLookupCount = 0;
 const directOfflineTileMissCache = new Map();
 const directOfflineDbPromises = new Map();
 let directOfflineTileHitCount = 0;
@@ -11442,11 +11400,46 @@ function rememberDirectOfflineTileBlob(cacheKey, blob) {
     trimDirectOfflineTileBlobCache();
 }
 
+/*
+ * v17.22 — FAST-PATH RAM AVANT LE SCHEDULER INDEXEDDB.
+ * Une tuile déjà présente en mémoire ne doit pas attendre derrière les 5 lectures
+ * IndexedDB. Le cache principal est prioritaire ; le cache retour zoom intervient
+ * uniquement si la tuile a quitté le LRU principal.
+ */
+function getDirectOfflineCachedTileBlob(coords) {
+    const cacheKey = buildDirectOfflineTileBlobCacheKey(coords);
+    if (!cacheKey) return null;
+    const trackNpf = isNpfOfflinePackSelection();
+
+    if (directOfflineTileBlobCache.has(cacheKey)) {
+        const cachedBlob = directOfflineTileBlobCache.get(cacheKey);
+        directOfflineTileBlobCache.delete(cacheKey);
+        directOfflineTileBlobCache.set(cacheKey, cachedBlob);
+        if (trackNpf) directOfflineNpfMainRamHitCount += 1;
+        resetDirectOfflineReadErrorCounter();
+        return cachedBlob;
+    }
+
+    if (directOfflineNpfZoomReturnBlobCache.has(cacheKey)) {
+        const cachedBlob = directOfflineNpfZoomReturnBlobCache.get(cacheKey);
+        directOfflineNpfZoomReturnBlobCache.delete(cacheKey);
+        directOfflineNpfZoomReturnBlobCache.set(cacheKey, cachedBlob);
+        if (trackNpf) directOfflineNpfZoomReturnCacheHitCount += 1;
+        rememberDirectOfflineTileBlob(cacheKey, cachedBlob);
+        resetDirectOfflineReadErrorCounter();
+        return cachedBlob;
+    }
+
+    return null;
+}
+
 function clearDirectOfflineNpfZoomReturnCache() {
     directOfflineNpfZoomReturnBlobCache.clear();
     directOfflineNpfZoomReturnLevelKeys.clear();
     directOfflineNpfZoomReturnLevelOrder.length = 0;
+    directOfflineNpfMainRamHitCount = 0;
     directOfflineNpfZoomReturnCacheHitCount = 0;
+    directOfflineNpfIndexedDbLookupCount = 0;
 }
 
 function trimDirectOfflineNpfZoomReturnCache() {
@@ -11850,9 +11843,11 @@ window.getNpfTilePerformanceStatus = function getNpfTilePerformanceStatus() {
         lookupHints: directOfflineTileLookupHints.size,
         blobCacheSize: directOfflineTileBlobCache.size,
         blobCacheMax: getDirectOfflineTileBlobCacheLimit(),
+        mainRamHits: directOfflineNpfMainRamHitCount,
         zoomReturnCacheSize: directOfflineNpfZoomReturnBlobCache.size,
         zoomReturnCacheMax: DIRECT_OFFLINE_NPF_ZOOM_RETURN_CACHE_MAX,
         zoomReturnCacheHits: directOfflineNpfZoomReturnCacheHitCount,
+        indexedDbLookups: directOfflineNpfIndexedDbLookupCount,
         tileHits: directOfflineTileHitCount,
         tileMisses: directOfflineTileMissCount,
         visibleLoadedTiles: countVisibleLoadedBaseTiles()
@@ -11862,23 +11857,8 @@ window.getNpfTilePerformanceStatus = function getNpfTilePerformanceStatus() {
 async function findDirectOfflineTileBlobUnqueued(coords) {
     const cacheKey = buildDirectOfflineTileBlobCacheKey(coords);
 
-    if (directOfflineTileBlobCache.has(cacheKey)) {
-        const cachedBlob = directOfflineTileBlobCache.get(cacheKey);
-        directOfflineTileBlobCache.delete(cacheKey);
-        directOfflineTileBlobCache.set(cacheKey, cachedBlob);
-        resetDirectOfflineReadErrorCounter();
-        return cachedBlob;
-    }
-
-    if (directOfflineNpfZoomReturnBlobCache.has(cacheKey)) {
-        const cachedBlob = directOfflineNpfZoomReturnBlobCache.get(cacheKey);
-        directOfflineNpfZoomReturnBlobCache.delete(cacheKey);
-        directOfflineNpfZoomReturnBlobCache.set(cacheKey, cachedBlob);
-        directOfflineNpfZoomReturnCacheHitCount += 1;
-        rememberDirectOfflineTileBlob(cacheKey, cachedBlob);
-        resetDirectOfflineReadErrorCounter();
-        return cachedBlob;
-    }
+    const cachedBlob = getDirectOfflineCachedTileBlob(coords);
+    if (cachedBlob) return cachedBlob;
 
     if (directOfflineTileMissCache.has(cacheKey)) {
         const cachedMissAt = Number(directOfflineTileMissCache.get(cacheKey)) || 0;
@@ -11888,6 +11868,10 @@ async function findDirectOfflineTileBlobUnqueued(coords) {
             return null;
         }
         directOfflineTileMissCache.delete(cacheKey);
+    }
+
+    if (isNpfOfflinePackSelection()) {
+        directOfflineNpfIndexedDbLookupCount += 1;
     }
 
     const lookupHint = getDirectOfflineTileLookupHint(coords);
@@ -11993,6 +11977,13 @@ async function findDirectOfflineTileBlob(coords) {
     if (!isNpfOfflinePackSelection()) {
         return findDirectOfflineTileBlobUnqueued(coords);
     }
+
+    /*
+     * v17.22 — RAM avant file : si le Blob existe déjà, ne créer ni élément
+     * de queue ni créneau parmi les 5 lectures IndexedDB.
+     */
+    const cachedBlob = getDirectOfflineCachedTileBlob(coords);
+    if (cachedBlob) return cachedBlob;
 
     const hardGeneration = directOfflineTileReadGeneration;
     const viewEpoch = directOfflineTileViewPriorityEpoch;
@@ -38157,6 +38148,9 @@ async function setMapSourceMode(mode) {
     if (offlineTilesMode) {
         directOfflineTileHitCount = 0;
         directOfflineTileMissCount = 0;
+        directOfflineNpfMainRamHitCount = 0;
+        directOfflineNpfZoomReturnCacheHitCount = 0;
+        directOfflineNpfIndexedDbLookupCount = 0;
     }
 
     localStorage.setItem(MAP_SOURCE_MODE_KEY, mapSourceMode);
@@ -39395,6 +39389,8 @@ async function forceQuickOfflineMapGroupReload(groupName, packNames) {
         directOfflineNpfLastSuccessfulLookup = null;
         directOfflineTileHitCount = 0;
         directOfflineTileMissCount = 0;
+        directOfflineNpfMainRamHitCount = 0;
+        directOfflineNpfIndexedDbLookupCount = 0;
         directOfflineConsecutiveReadErrors = 0;
 
         await new Promise(resolve => setTimeout(resolve, 180));
