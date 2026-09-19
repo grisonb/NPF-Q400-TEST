@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.18';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.19';
 
 
 /*
@@ -1506,8 +1506,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         initializeApp();
 
- // Laisse Leaflet créer la carte, puis retire l'écran de reprise.
-        setTimeout(markAppReady, 250);
+        /*
+         * v17.19 — conserver le splash jusqu'à la première tuile réellement
+         * peinte. Le secours à 6,5 s garantit l'accès à l'interface si aucune
+         * tuile n'est disponible dans la zone courante.
+         */
+        setTimeout(markAppReady, 6500);
     } catch (error) {
         console.error('Erreur initialisation application:', error);
         const statusEl = document.getElementById('status-message');
@@ -5352,6 +5356,30 @@ async function initializeApp() {
         localStorage.removeItem('selected_base_oaci');
     }
 
+    /*
+     * v17.19 — préparer le contexte feu AVANT la création de Leaflet.
+     * Si un feu était sélectionné à la fermeture précédente, initMap() peut ainsi
+     * calculer directement le cadrage final avant d'ajouter la couche de tuiles,
+     * au lieu de charger d'abord une vue provisoire puis de la jeter.
+     */
+    let savedCommuneJSON = null;
+    let startupSavedCommuneRestoredBeforeMap = false;
+    try {
+        savedCommuneJSON = localStorage.getItem('currentCommune');
+        if (savedCommuneJSON) {
+            const parsedSavedCommune = JSON.parse(savedCommuneJSON);
+            const savedFireLat = Number(parsedSavedCommune?.latitude_mairie);
+            const savedFireLon = Number(parsedSavedCommune?.longitude_mairie);
+            if (Number.isFinite(savedFireLat) && Number.isFinite(savedFireLon)) {
+                currentCommune = parsedSavedCommune;
+                startupSavedCommuneRestoredBeforeMap = true;
+            }
+        }
+    } catch (_) {
+        savedCommuneJSON = null;
+        startupSavedCommuneRestoredBeforeMap = false;
+    }
+
     // v12.67 — le bouton Route BASE a été retiré de l'interface, mais la route base reste active.
     showLftwRoute = true;
     localStorage.setItem('showLftwRoute', 'true');
@@ -5479,11 +5507,21 @@ async function initializeApp() {
             });
 
             withTimeout(
-                updateBaseTileNativeZoomFromAvailability({ forceScan: false }),
+                updateBaseTileNativeZoomFromAvailability({
+                    forceScan: false,
+                    rebuildLayer: false
+                }),
                 2200,
                 'Timeout analyse initiale des cartes offline'
-            ).then(() => {
-                if (map) rebuildBaseTileLayerAfterOfflineSwitch('startup-zoom-ready-v15.96');
+            ).then((zoomRangeChanged) => {
+                /*
+                 * v17.19 — ne pas reconstruire le GridLayer si la plage native
+                 * réellement utilisée n'a pas changé. La v17.18 pouvait refaire
+                 * deux fois la même couche et abandonner des tuiles déjà demandées.
+                 */
+                if (map && zoomRangeChanged) {
+                    rebuildBaseTileLayerAfterOfflineSwitch('startup-zoom-ready-v17.19');
+                }
             }).catch(error => {
                 console.warn('[Offline] Plage de zoom initiale conservée:', error);
             });
@@ -5587,11 +5625,16 @@ async function initializeApp() {
         window.dispatchEvent(new CustomEvent('npf-startup-core-ready'));
     } catch (_) {}
 
-    /* v16.66 — charger les alias seulement lorsque la carte et les PÉLIC sont
-     * déjà opérationnels. requestIdleCallback est utilisé s'il existe ; le
-     * fallback temporisé évite de remettre une grosse tâche juste derrière
-     * le premier rendu. */
+    /*
+     * v17.19 — les alias ne concurrencent plus le remplissage du viewport.
+     * Le DIAG v17.18 montre ~2,2 s de travail alias pendant que les tuiles
+     * visibles sont encore incomplètes. On attend donc le viewport courant
+     * entièrement chargé ; un secours à 12 s évite tout blocage permanent.
+     */
+    let communeAliasesStartupLoadStarted = false;
     const startDeferredCommuneAliasesLoad = async () => {
+        if (communeAliasesStartupLoadStarted) return;
+        communeAliasesStartupLoadStarted = true;
         try {
             communeAliases = await loadCommunesAliases();
             npfStartupDiagMark(
@@ -5605,14 +5648,39 @@ async function initializeApp() {
             npfStartupDiagMark('communes_aliases_error', 'Alias communes en erreur', error?.message || error);
         }
     };
-    if (typeof window.requestIdleCallback === 'function') {
-        window.requestIdleCallback(
-            () => { startDeferredCommuneAliasesLoad(); },
-            { timeout: 5000 }
-        );
-    } else {
-        setTimeout(() => { startDeferredCommuneAliasesLoad(); }, 2500);
-    }
+
+    const aliasViewportWaitStartedAt = Date.now();
+    const scheduleAliasesWhenViewportReady = () => {
+        if (communeAliasesStartupLoadStarted) return;
+
+        let viewportReady = false;
+        try {
+            const coverage = getNpfCurrentZoomVisibleTileCoverage();
+            viewportReady = !!(
+                coverage
+                && Number(coverage.total) > 0
+                && Number(coverage.loaded) >= Number(coverage.total)
+            );
+        } catch (_) {}
+
+        const safetyExpired = Date.now() - aliasViewportWaitStartedAt >= 12000;
+        if (!viewportReady && !safetyExpired) {
+            setTimeout(scheduleAliasesWhenViewportReady, 350);
+            return;
+        }
+
+        const launch = () => { startDeferredCommuneAliasesLoad(); };
+        if (typeof window.requestIdleCallback === 'function') {
+            window.requestIdleCallback(launch, { timeout: 2500 });
+        } else {
+            setTimeout(launch, 350);
+        }
+    };
+    npfStartupDiagMark(
+        'communes_aliases_wait_tiles',
+        'Alias communes — attente fond de carte'
+    );
+    setTimeout(scheduleAliasesWhenViewportReady, 350);
 
     /*
      * Toutes les tâches suivantes sont explicitement postérieures aux trois
@@ -5790,26 +5858,34 @@ async function initializeApp() {
         });
     }
 
-    const savedCommuneJSON = localStorage.getItem('currentCommune');
     if (savedCommuneJSON) {
         try {
-            currentCommune = JSON.parse(savedCommuneJSON);
-            displayCommuneDetails(currentCommune, true);
+            if (!currentCommune) currentCommune = JSON.parse(savedCommuneJSON);
+
+            if (startupSavedCommuneRestoredBeforeMap) {
+                /*
+                 * v17.19 — le cadrage feu/GPS/PÉLIC a déjà été appliqué avant
+                 * l'ajout des tuiles : restaurer seulement les dessins et calculs.
+                 */
+                displayCommuneDetails(currentCommune, false);
+            } else {
+                displayCommuneDetails(currentCommune, true);
+                setTimeout(
+                    () => fitMapToStartupFireContext({ reason: 'saved-fire-after-display' }),
+                    350
+                );
+                setTimeout(
+                    () => fitMapToStartupFireContext({ reason: 'saved-fire-after-gps' }),
+                    1400
+                );
+            }
             armNpfFirePelicAutoCycle('fire');
-            setTimeout(
-                () => fitMapToStartupFireContext({ reason: 'saved-fire-after-display' }),
-                350
-            );
-            setTimeout(
-                () => fitMapToStartupFireContext({ reason: 'saved-fire-after-gps' }),
-                1400
-            );
         } catch (_) {}
     }
 
     setTimeout(() => {
-        if (!startupGpsAutoCenteredWithRealPosition) {
-            applyStoredGpsStartupCenter({ force: true });
+        if (!startupGpsAutoCenteredWithRealPosition && !startupGpsStoredCenterAppliedAt) {
+            applyStoredGpsStartupCenter({ force: false });
         }
     }, 750);
 
@@ -8497,7 +8573,43 @@ function initMap() {
         zoomAnimation: false,
         fadeAnimation: false,
         markerZoomAnimation: false
-    }).setView([46.6, 2.2], 5.5);
+    });
+
+    /*
+     * v17.19 — fixer le cadrage de démarrage AVANT setupBaseTileLayer().
+     * Les premières requêtes de tuiles correspondent ainsi directement au
+     * viewport utile au lieu de partir sur France puis d'être abandonnées.
+     */
+    let startupInitialViewApplied = false;
+    try {
+        if (currentCommune) {
+            startupInitialViewApplied = fitMapToStartupFireContext({
+                reason: 'pretiles-saved-fire-v17.19'
+            });
+            if (startupInitialViewApplied && getStoredGpsPosition()) {
+                startupGpsStoredCenterAppliedAt = Date.now();
+            }
+        }
+    } catch (_) {}
+
+    if (!startupInitialViewApplied) {
+        try {
+            const storedStartupGps = getStoredGpsPosition();
+            if (storedStartupGps) {
+                map.setView(
+                    [storedStartupGps.lat, storedStartupGps.lng],
+                    STARTUP_GPS_CENTER_ZOOM,
+                    { animate: false }
+                );
+                startupGpsStoredCenterAppliedAt = Date.now();
+                startupInitialViewApplied = true;
+            }
+        } catch (_) {}
+    }
+
+    if (!startupInitialViewApplied) {
+        map.setView([46.6, 2.2], 5.5, { animate: false });
+    }
 
     map.on('movestart', () => {
         const gpsFollowPan = isNpfGpsFollowProgrammaticPan();
@@ -11772,6 +11884,7 @@ function setupBaseTileLayer() {
         try {
             baseTileLayer.once('tileload', () => {
                 npfStartupDiagMark('first_tile', 'Première tuile affichée');
+                try { window.markNpfAppReady?.(); } catch (_) {}
             });
             baseTileLayer.once('load', () => {
                 npfStartupDiagMark('base_tiles_loaded', 'Fond de carte visible chargé');
@@ -12910,7 +13023,12 @@ async function findOfflineTileZoomRange() {
     });
 }
 
-async function updateBaseTileNativeZoomFromAvailability({ forceScan = false } = {}) {
+async function updateBaseTileNativeZoomFromAvailability({
+    forceScan = false,
+    rebuildLayer = true
+} = {}) {
+    const previousMinNativeZoom = baseTileMinNativeZoom;
+    const previousMaxNativeZoom = baseTileMaxNativeZoom;
     const offlineEnabled = await getOfflineTilesEnabled();
     const shouldForceScan = forceScan;
     const activeOfflineMaxZoomLimit = getOfflinePackMaxNativeZoomLimitForPacks(activeOfflinePacks);
@@ -12947,9 +13065,15 @@ async function updateBaseTileNativeZoomFromAvailability({ forceScan = false } = 
         }
     }
 
-    if (map && baseTileLayer) {
+    const zoomRangeChanged = (
+        previousMinNativeZoom !== baseTileMinNativeZoom
+        || previousMaxNativeZoom !== baseTileMaxNativeZoom
+    );
+
+    if (rebuildLayer && zoomRangeChanged && map && baseTileLayer) {
         setupBaseTileLayer();
     }
+    return zoomRangeChanged;
 }
 
 
@@ -33968,6 +34092,12 @@ function getKnownGpsLatLngForCentering() {
         }
     }
 
+    /* v17.19 — utilisable dès le premier cadrage, avant création du marker GPS. */
+    const stored = getStoredGpsPosition();
+    if (stored && Number.isFinite(stored.lat) && Number.isFinite(stored.lng)) {
+        return { lat: stored.lat, lng: stored.lng };
+    }
+
     return null;
 }
 
@@ -37596,7 +37726,7 @@ async function setMapSourceMode(mode) {
     }
 
     withTimeout(
-        updateBaseTileNativeZoomFromAvailability({ forceScan: false }),
+        updateBaseTileNativeZoomFromAvailability({ forceScan: false, rebuildLayer: false }),
         2400,
         'Timeout analyse des niveaux de zoom'
     ).then(() => {
@@ -38973,7 +39103,7 @@ async function applyOfflineMapGroupSelectionInPlace(groupName, checked, packName
     }
 
     withTimeout(
-        updateBaseTileNativeZoomFromAvailability({ forceScan: false }),
+        updateBaseTileNativeZoomFromAvailability({ forceScan: false, rebuildLayer: false }),
         2400,
         'Timeout analyse carte sélectionnée'
     ).then(() => {
