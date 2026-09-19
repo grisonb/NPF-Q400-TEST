@@ -7,8 +7,8 @@
     <title>NPF-Q400</title>
     <link rel="stylesheet" href="leaflet.css">
     <link rel="preload" href="communes_aliases.json" as="fetch" crossorigin="anonymous">
-    <link rel="stylesheet" href="style.css?appv=v17.16">
-    <link rel="manifest" href="manifest.json?appv=v17.16">
+    <link rel="stylesheet" href="style.css?appv=v17.17">
+    <link rel="manifest" href="manifest.json?appv=v17.17">
     <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192x192.png?appv=v13.92">
     <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512x512.png?appv=v13.92">
     <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png?appv=v13.92">
@@ -56,7 +56,7 @@
     </style>
 
     <script>
-        const APP_VERSION = 'v17.16';
+        const APP_VERSION = 'v17.17';
         const SERVICE_WORKER_URL = `./sw.js?appv=${encodeURIComponent(APP_VERSION)}`;
         const APP_VERSION_STORAGE_KEY = 'appVersion';
         const SW_CONTROLLER_RELOAD_GUARD_KEY = 'swControllerReloadGuard';
@@ -79,15 +79,56 @@
             window.NPF_FORCE_POST_UPDATE_NOTICE = false;
         }
 
+        /*
+         * v17.17 — les versions de mise à jour sont monotones : une page plus
+         * ancienne resservie temporairement par Safari/PWA ne doit jamais être
+         * interprétée comme une nouvelle installation ni faire régresser la
+         * version mémorisée.
+         */
+        function compareNpfNoticeVersions(left, right) {
+            const parse = value => {
+                const match = String(value || '').trim().match(/^v?(\d+)\.(\d+)(?:\.(\d+))?/i);
+                return match
+                    ? [Number(match[1]), Number(match[2]), Number(match[3] || 0)]
+                    : null;
+            };
+            const a = parse(left);
+            const b = parse(right);
+            if (!a || !b) return String(left || '').localeCompare(String(right || ''));
+            for (let index = 0; index < 3; index += 1) {
+                if (a[index] !== b[index]) return a[index] - b[index];
+            }
+            return 0;
+        }
+
         function markPostUpdateRestartNotice(version = APP_VERSION) {
             try {
+                const highestSeenVersion = localStorage.getItem(APP_VERSION_STORAGE_KEY) || '';
                 const shownVersion = localStorage.getItem(
                     POST_UPDATE_NOTICE_SHOWN_VERSION_KEY
                 ) || '';
-                if (shownVersion === version) {
+                const pendingVersion = localStorage.getItem(
+                    POST_UPDATE_NOTICE_VERSION_KEY
+                ) || '';
+
+                /*
+                 * Une ancienne page ne doit surtout pas effacer une notification
+                 * déjà armée pour la version courante plus récente.
+                 */
+                if (highestSeenVersion && compareNpfNoticeVersions(highestSeenVersion, version) > 0) {
+                    return;
+                }
+
+                if (shownVersion && compareNpfNoticeVersions(shownVersion, version) >= 0) {
                     clearLegacyPostUpdateNoticeMarkers();
                     return;
                 }
+
+                /* Ne jamais remplacer une notification déjà armée pour une version plus récente. */
+                if (pendingVersion && compareNpfNoticeVersions(pendingVersion, version) > 0) {
+                    return;
+                }
+
                 localStorage.setItem(POST_UPDATE_NOTICE_VERSION_KEY, version);
                 localStorage.setItem(POST_UPDATE_NOTICE_PENDING_KEY, '1');
             } catch (_) {}
@@ -95,10 +136,23 @@
 
         function shouldShowPostUpdateNotice() {
             try {
+                const highestSeenVersion = localStorage.getItem(APP_VERSION_STORAGE_KEY) || '';
                 const shownVersion = localStorage.getItem(
                     POST_UPDATE_NOTICE_SHOWN_VERSION_KEY
                 ) || '';
-                if (shownVersion === APP_VERSION) {
+
+                /* Une ancienne page revenue en cache n'a jamais le droit d'annoncer une MAJ. */
+                if (
+                    highestSeenVersion
+                    && compareNpfNoticeVersions(highestSeenVersion, APP_VERSION) > 0
+                ) {
+                    return false;
+                }
+
+                if (
+                    shownVersion
+                    && compareNpfNoticeVersions(shownVersion, APP_VERSION) >= 0
+                ) {
                     clearLegacyPostUpdateNoticeMarkers();
                     return false;
                 }
@@ -110,7 +164,7 @@
                     POST_UPDATE_NOTICE_VERSION_KEY
                 ) || '';
 
-                return pending && (!noticeVersion || noticeVersion === APP_VERSION);
+                return pending && noticeVersion === APP_VERSION;
             } catch (_) {
                 return false;
             }
@@ -217,10 +271,20 @@
             const storedVersionAtBoot = localStorage.getItem(
                 APP_VERSION_STORAGE_KEY
             ) || '';
-            if (storedVersionAtBoot && storedVersionAtBoot !== APP_VERSION) {
+            const bootVersionComparison = storedVersionAtBoot
+                ? compareNpfNoticeVersions(APP_VERSION, storedVersionAtBoot)
+                : 1;
+
+            /*
+             * v17.17 — annoncer uniquement une vraie montée de version.
+             * Si Safari ressert une page plus ancienne, ne jamais abaisser
+             * APP_VERSION_STORAGE_KEY : la prochaine ouverture de la version
+             * courante ne sera ainsi pas prise pour une nouvelle mise à jour.
+             */
+            if (storedVersionAtBoot && bootVersionComparison > 0) {
                 markPostUpdateRestartNotice(APP_VERSION);
             }
-            if (storedVersionAtBoot !== APP_VERSION) {
+            if (!storedVersionAtBoot || bootVersionComparison > 0) {
                 localStorage.setItem(APP_VERSION_STORAGE_KEY, APP_VERSION);
                 sessionStorage.removeItem(SW_CONTROLLER_RELOAD_GUARD_KEY);
             }
@@ -1112,7 +1176,7 @@
     <script src="suncalc.js"></script>
     <script src="jszip.min.js"></script>
     <script src="sia.js?siav=15.69-radio1026-1-maplite1"></script>
-    <script src="script.js?appv=v17.16"></script>
+    <script src="script.js?appv=v17.17"></script>
     
     <div id="fuel-split-modal" class="fuel-split-modal" style="display: none;">
         <div class="fuel-split-modal-content">
