@@ -1,3 +1,68 @@
+VERSION TEST v17.20 — PRIORITÉ CARTE AU DÉMARRAGE / RECENTRAGE GPS STABILISÉ
+Date : 19/09/2026
+Base fonctionnelle : v17.19
+
+OBJECTIFS UTILISATEUR
+- Réduire le temps d'affichage utile de la carte à l'ouverture.
+- Réduire le temps de page blanche avant le splash de chargement.
+- Conserver les gains v17.19 : aucune reconstruction/gaspillage inutile des tuiles.
+- Ne modifier aucun réglage sensible du moteur direct offline.
+
+MODIFICATIONS
+
+1. GPS RÉEL : PAS DE DEUXIÈME CADRAGE INUTILE
+- Le cadrage pré-tuiles v17.19 reste la référence de démarrage.
+- Au premier GPS réel, si l'avion se trouve déjà dans les 70 % centraux du viewport,
+  seul le marqueur avion est déplacé : aucun setView/fitBounds n'est déclenché.
+- Si la position réelle est réellement hors cadre, le recentrage historique est conservé.
+- Nouveau marqueur DIAG : « GPS réel — recadrage évité ».
+
+2. PREMIÈRE TUILE AVANT CHARGEMENT DES 34 935 COMMUNES
+- Le parsing/indexage des communes attend désormais la première tuile affichée.
+- Timeout de secours 4,5 s si aucune tuile n'est disponible.
+- La carte et IndexedDB démarrent toujours immédiatement.
+
+3. PORTE DE PRIORITÉ FOND DE CARTE POST-CORE
+- Après core_ready, les tâches réellement non indispensables attendent soit :
+  * 80 % de couverture du viewport,
+  * un scheduler tuiles au repos avec au moins une tuile visible,
+  * ou 8 s de timeout de sécurité.
+- Sont repoussés derrière cette porte : pistes/historique/GAAR, chat, initialisation SIA,
+  polygones communes, lectures BFG/FdS, VAC et rafraîchissements de commune survolée.
+- Le séquenceur HT/Routes conserve sa temporisation offline historique de 6,5 s afin
+  de ne pas ajouter un deuxième délai complet.
+
+4. SPLASH AFFICHABLE PLUS TÔT
+- Le gros script inline de contrôle PWA/mise à jour n'est plus exécuté dans <head>.
+- Il est déplacé dans <body>, après le contenu principal et avant les scripts applicatifs.
+- Le navigateur peut donc parser/peindre le splash « Chargement NPF-Q400… » avant
+  d'exécuter ce gros bloc JavaScript, ce qui réduit le blanc initial perçu.
+- Le splash reste ensuite masqué à la première vraie tuile, avec le secours v17.19.
+
+5. DIAGNOSTIC PLUS FIN
+- Chronométrage dédié de la restauration du feu mémorisé, de la position GPS mémorisée,
+  des pistes, de l'historique feux, des circuits GAAR et du chat.
+- Nouveau marqueur « Priorité fond de carte libérée » avec couverture, tuiles visibles
+  et état du scheduler.
+- Objectif : attribuer précisément tout futur blocage JavaScript Safari.
+
+INCHANGÉ
+- Moteur tuiles direct offline : 5 lectures simultanées, file 160, timeouts, caches,
+  keepBuffer, scheduler v17.14/v17.15 et logique de priorité inchangés.
+- Orthodromie v17.18 inchangée.
+- Simulation v17.16 inchangée.
+- Routes/HT/VAC/SIA : logique métier inchangée ; seulement leur moment d'initialisation
+  non essentielle peut être repoussé pendant la phase de priorité carte.
+- SIA : fichier strictement identique à v17.19.
+
+VALIDATION AVANT LIVRAISON
+- Syntaxe Script / SIA / SW : OK.
+- Scripts inline Index : OK.
+- Manifest JSON : OK.
+- Références de version : v17.20 cohérentes.
+- SIA : strictement identique à v17.19.
+
+
 VERSION TEST v17.19 — DÉMARRAGE CARTE / SPLASH / PRIORITÉ TUILES
 Date : 19/09/2026
 Base fonctionnelle : v17.18
