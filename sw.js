@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v17-24_ht_first_attach_zoomout_z7_z8_z9';
-const APP_VERSION = 'v17.24';
+const SW_VERSION = 'sw-v17-25_road_labels_z13';
+const APP_VERSION = 'v17.25';
 const SIA_DATA_REVISION = '15.69-radio1026-1-maplite1';
 const SIA_DATA_URL = './sia.js';
 const SIA_DATA_CACHE = `npf-q400-sia-data-${SIA_DATA_REVISION}`;
