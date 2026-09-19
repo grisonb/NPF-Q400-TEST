@@ -1,3 +1,63 @@
+VERSION TEST v17.18 — ORTHODROMIE COMMUNE À TOUTES LES ROUTES DE NAVIGATION
+Date : 19/09/2026
+Base fonctionnelle : v17.17
+
+OBJECTIF UTILISATEUR
+- Appliquer la même logique orthodromique à tous les segments de navigation
+  tracés sur la carte afin que cap, ligne de foi et routes restent cohérents.
+- Conserver la fluidité PWA : une route reste un seul objet Leaflet continu et
+  seuls quelques sommets géographiques invisibles sont ajoutés.
+
+MODIFICATIONS
+
+1. MOTEUR ORTHODROMIQUE COMMUN
+- La fonction spécifique v17.17 du trait avion → cible devient une fonction
+  générique `buildNpfGreatCircleLatLngs()` utilisée par les routes de navigation.
+- Environ un sommet tous les 10 NM, maximum 48 segments par branche.
+- Chaque branche reste UNE seule `L.polyline` Leaflet ; aucun segment distinct
+  n'est créé à l'écran et l'apparence graphique reste inchangée.
+- Les extrémités restent exactement les coordonnées réelles de départ/arrivée.
+
+2. ROUTES FEU / PÉLIC / BASE / CIBLE
+- Avion → Feu/cible : orthodromie conservée depuis v17.17 via le moteur commun.
+- Feu → PÉLIC : halo, trait coloré et hitbox cliquable suivent désormais la même
+  orthodromie.
+- Feu → Base : halo et trait vert utilisent désormais l'orthodromie commune.
+- Les distances, temps, libellés et routes magnétiques affichées ne changent pas.
+
+3. ROUTES WAYPOINTS
+- Origine → WP1 et chaque branche WP → WP utilisent désormais exactement la
+  même géométrie orthodromique.
+- Le GoTo dynamique avion → WP actif passe déjà par `drawRoute()` et bénéficie
+  donc automatiquement du même moteur.
+- Les marqueurs, rayon de capture, logique d'édition et acquisition WP restent
+  inchangés.
+
+4. LIGNE DE FOI / VECTEUR AVION
+- Le vecteur jaune 2/5/10 min n'est plus une corde Mercator entre la position et
+  le point 10 min : il suit la même orthodromie que les routes.
+- Les repères 2, 5 et 10 min conservent exactement leurs positions calculées.
+- À route magnétique identique, le nez de l'avion, le départ du vecteur jaune et
+  le départ d'une route vers une cible sont donc cohérents géométriquement.
+
+5. PÉRIMÈTRE / PERFORMANCE
+- Aucun changement des routes routières, lignes HT, limites SIA, communes,
+  départements, pistes, règle deux doigts ou autres géométries non-navigation.
+- Aucun changement du scheduler tuiles, IndexedDB, snapshot zoom, VAC ou moteur
+  de priorité Routes/HT.
+- Même à 250 NM, une branche représente environ 26 sommets mais toujours un seul
+  objet Leaflet : le coût reste très faible face aux calques cartographiques.
+- Le correctif monotone du message « Mise à jour installée » de v17.17 est conservé.
+
+VALIDATION AVANT LIVRAISON
+- Syntaxe Script / SIA / SW : OK.
+- Scripts inline Index : OK.
+- Manifest JSON : OK.
+- Références de version : v17.18 cohérentes.
+- SIA : strictement identique à v17.17.
+- Moteur de tuiles / IndexedDB / Routes routières / HT / VAC inchangés.
+
+
 VERSION TEST v17.17 — ORTHODROMIE AVION→CIBLE + ALERTE MAJ MONOTONE
 Date : 19/09/2026
 Base fonctionnelle : v17.16
