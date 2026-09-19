@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 19/09/2026
-Version de travail actuelle : TEST v17.23
+Version de travail actuelle : TEST v17.24
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -149,6 +149,9 @@ IMPLÉMENTÉ / INTÉGRÉ :
   le scheduler IndexedDB avec compteurs séparés RAM principal/retour/IDB.
 - v17.23 : politique du cache retour corrigée : z7 (50 NM) et z8 (20 NM)
   restent protégés pendant la session, en plus des 4 niveaux récents ordinaires.
+- v17.24 : z9 (10 NM) ajouté aux niveaux de retour protégés ; correction du
+  premier affichage HT après passage 50 NM -> 20 NM en rattachant explicitement
+  le groupe HT pendant la séquence prioritaire, avant révélation du pane.
 
 NON IMPLÉMENTÉ / OUVERT :
 - écart ligne de foi jaune / route rouge alors que les deux affichent 277° :
@@ -166,8 +169,12 @@ NON IMPLÉMENTÉ / OUVERT :
 - v17.22 : MESURÉ. Les OUT z12->z10 restent fluides via RAM principal, mais z8/20 NM
   devient lourd et z7/50 NM très lourd ; 95 entrées cache retour mais 0 hit retour,
   car les niveaux z7/z8 avaient été évincés par la politique « 4 niveaux récents » ;
-- v17.23 : vérifier que les retours vers z8 puis z7 produisent enfin des `hits retour`,
-  évitent `0 visible + 5 actives + 30 en file` et réduisent fortement les accès IDB ;
+- v17.23 : MESURÉ. 45 `hits retour` obtenus ; z8/20 NM revient avec 25 tuiles
+  visibles au zoomend et z7/50 NM avec 20/30 visibles. Le cache protégé fonctionne.
+  Reste un petit ralentissement utilisateur au retour 5 NM -> 10 NM (z9), niveau
+  non protégé en v17.23 ;
+- v17.24 : vérifier que z9/10 NM profite du cache protégé et que les HT apparaissent
+  automatiquement au premier passage 50 NM -> 20 NM sans OFF/ON manuel ;
 - effet du report des plans d'eau sur les blocages JS de démarrage ;
 - comportement HT lors du passage 50 NM -> 20 NM -> 50 NM : préférence utilisateur
   doit rester ON, rendu absent à 50 NM+, puis retour automatique sous 50 NM.
@@ -178,36 +185,36 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.23
+Version : TEST v17.24
 Date : 19/09/2026
-Base : v17.22
+Base : v17.23
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.23.txt
-2_Index_v17.23.txt
-3_Manifest_v17.23.txt
-4_Script_v17.23.txt
-5_SIA_v17.23.txt
-6_Style_v17.23.txt
-7_Sw_v17.23.txt
+1_Modifications_v17.24.txt
+2_Index_v17.24.txt
+3_Manifest_v17.24.txt
+4_Script_v17.24.txt
+5_SIA_v17.24.txt
+6_Style_v17.24.txt
+7_Sw_v17.24.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.23
-- Manifest : start_url = ./index.html?appv=v17.23
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.23
-- Style : NPF_STYLE_BUILD_VERSION = v17.23
-- Service Worker : `sw-v17-23_zoomout_protect_z7_z8`
+- Index : APP_VERSION = v17.24
+- Manifest : start_url = ./index.html?appv=v17.24
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.24
+- Style : NPF_STYLE_BUILD_VERSION = v17.24
+- Service Worker : `sw-v17-24_ht_first_attach_zoomout_z7_z8_z9`
 - SIA_DATA_REVISION : 15.69-radio1026-1-maplite1
-- sia.js v17.23 : strictement identique à v17.22 (et donc aux données v17.20).
+- sia.js v17.24 : strictement identique à v17.23 (et donc aux données v17.20).
 
 STATUT DE VALIDATION :
-- validation statique v17.23 effectuée avant livraison : Script/SIA/SW OK, script
+- validation statique v17.24 effectuée avant livraison : Script/SIA/SW OK, script
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
-- `sia.js` v17.23 est bit-à-bit identique à v17.22 ;
-- constantes historiques du moteur tuiles comparées à v17.22 : 5 lectures, file
+- `sia.js` v17.24 est bit-à-bit identique à v17.23 ;
+- constantes historiques du moteur tuiles comparées à v17.23 : 5 lectures, file
   160, cache principal 160, cache général 256, keepBuffer 4/2, TTL/timeouts et
   settle 240 ms inchangés ;
-- v17.22 dispose de DIAG réels ouverture + zoom ; v17.23 est À MESURER sur iPad.
+- v17.23 dispose d’un DIAG réel ouverture/zoom ; v17.24 est À MESURER sur iPad.
 
 2. PROTOCOLE DE TRAVAIL À RESPECTER
 -----------------------------------
@@ -593,6 +600,74 @@ Pour chaque remarque non implémentée, noter autant que possible :
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.24 — HT PREMIER PASSAGE 50→20 NM / CACHE RETOUR z9
+Date : 19/09/2026
+Base fonctionnelle : v17.23
+
+DEMANDE UTILISATEUR
+- Au premier lancement, les HT ne s'affichent pas lors du passage 50 NM -> 20 NM.
+- Le zoom OUT est désormais nettement meilleur ; seul un petit ralentissement reste
+  perceptible au passage de 5 NM vers 10 NM.
+- Demande explicite : « donne moi les .txt ».
+
+DIAG À L'ORIGINE — v17.23 (12:56)
+- cache retour : 124 entrées et 45 hits retour, contre 0 hit en v17.22 ;
+- retour z8 / ~20 NM : 25 tuiles visibles au zoomend, file 0 ;
+- retour z7 / ~50 NM : 20/30 tuiles visibles au zoomend, nette amélioration ;
+- passage vers z9 / ~10 NM : 13/25 tuiles visibles, 5 lectures actives et 12 en file,
+  cohérent avec le petit ralentissement signalé ;
+- au premier passage z7 -> z8, les données HT sont bien chargées (13 287 tronçons)
+  et 857 tronçons sont calculés/rendus, mais l'utilisateur ne les voit pas ;
+- un OFF puis ON manuel rend ensuite les HT visibles.
+
+CAUSE RETENUE — HT
+- Au démarrage à 50 NM+, HT reste mémorisé ON mais le groupe n'est pas chargé/rendu.
+- Au premier passage sous 50 NM, la séquence de priorité carte appelle
+  `toggleHighVoltageLinesLayer(true)` alors que `npfMapOverlayPriorityActive` est vrai.
+- Dans cet état, le chargement et la construction du rendu HT se font, mais le
+  rattachement du groupe parent `highVoltageLinesLayer` est volontairement bloqué.
+- La branche suivante, utilisée lorsque HT était déjà chargé avant le geste, rattache
+  correctement ce groupe ; la branche du premier chargement ne le faisait pas.
+
+MODIFICATIONS
+
+1. HT — PREMIER PASSAGE 50 NM -> 20 NM
+- Après le premier `toggleHighVoltageLinesLayer(true)` exécuté dans la séquence de
+  priorité, si les données HT sont chargées et que le groupe parent est encore
+  détaché, `highVoltageLinesLayer` est explicitement rattaché à la carte.
+- Le rattachement se fait AVANT le passage à l'étape HT visible ; le pane reste donc
+  masqué pendant l'opération et la priorité des tuiles reste inchangée.
+- Aucune modification du chargement GeoJSON, du filtrage spatial, de la préférence
+  utilisateur HT ou du masquage à 50 NM+.
+
+2. ZOOM OUT — z9 / 10 NM AJOUTÉ AU CACHE PROTÉGÉ
+- Les niveaux protégés deviennent z7 (50 NM), z8 (20 NM) et z9 (10 NM).
+- z9 ne compte pas dans les 4 niveaux récents ordinaires, comme z7/z8.
+- La limite globale du cache retour reste strictement à 128 blobs.
+- En cas de pression mémoire, les niveaux ordinaires sont toujours évincés avant
+  z7/z8/z9 ; la limite absolue de 128 reste prioritaire.
+
+3. TOUT LE RESTE INCHANGÉ
+- Démarrage v17.22/v17.23 conservé.
+- Fast-path RAM avant scheduler conservé.
+- Cache principal NPF 160, cache général 256, 5 lectures simultanées, file 160,
+  keepBuffer, TTL, timeouts et scheduler inchangés.
+- HT reste masqué à 50 NM+ avec préférence ON et doit revenir automatiquement sous
+  50 NM.
+- SIA, Routes, GPS, PÉLIC, communes, trafic, plans d'eau et logique métier inchangés.
+
+VALIDATION AVANT LIVRAISON
+- Syntaxe Script / SIA / SW : OK.
+- Scripts inline Index : OK.
+- Manifest JSON : OK.
+- Cohérence versions/caches : OK.
+- SIA bit-à-bit identique à v17.23 : OK.
+- Constantes critiques du moteur tuiles inchangées : OK.
+- niveaux protégés vérifiés : Set([7, 8, 9]).
+- limite cache retour toujours 128 : OK.
+- rattachement HT ajouté uniquement à la branche du premier chargement sous 50 NM.
+
 
 VERSION TEST v17.23 — CACHE RETOUR PROTÉGÉ 20 NM / 50 NM
 Date : 19/09/2026
