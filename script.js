@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.14';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.16';
 
 
 /*
@@ -2997,6 +2997,17 @@ let simulationAircraftPositionReady = false;
 let simulationMotionLatitude = null;
 let simulationMotionLongitude = null;
 const SIMULATION_MOTION_INTERVAL_MS = 500;
+/*
+ * v17.16 — l'avion continue à avancer toutes les 500 ms, mais les traitements
+ * visuels/lourds ne doivent plus être reconstruits à chaque pas de simulation.
+ * Le suivi carte accepte aussi une dérive minime avant un nouveau setView.
+ */
+const SIMULATION_VISUAL_REFRESH_INTERVAL_MS = 1000;
+const SIMULATION_HEAVY_REFRESH_INTERVAL_MS = 2500;
+const SIMULATION_FOLLOW_RECENTER_DELAY_MS = 5000;
+const SIMULATION_FOLLOW_MIN_CENTER_SHIFT_PX = 8;
+let simulationLastVisualRefreshMs = 0;
+let simulationLastHeavyRefreshMs = 0;
 
 // v12.22 — sécurité : un import interrompu ne doit pas bloquer les suppressions suivantes.
 try {
@@ -8254,6 +8265,228 @@ function scheduleNpfMapOverlayPriorityRestore(reason = 'map-end') {
     }, NPF_MAP_MANUAL_GESTURE_SETTLE_MS);
 }
 
+/*
+ * v17.15 — continuité visuelle du fond NPF pendant un changement de zoom.
+ *
+ * Leaflet reste seul propriétaire de la GridLayer réelle : aucune tuile, aucun
+ * niveau ni aucune méthode interne (`_pruneTiles`) n'est retenu/modifié ici.
+ * On duplique uniquement le DOM déjà peint AVANT le zoom dans un calque visuel
+ * indépendant placé derrière la GridLayer active. Au zoomend, ce snapshot est
+ * recalé sur la nouvelle vue puis supprimé dès que toutes les tuiles visibles
+ * du niveau courant sont peintes (ou au timeout de sécurité).
+ *
+ * Ce snapshot n'est pas enfant de `baseTileLayer.getContainer()` : il est donc
+ * ignoré par les diagnostics, les attentes tuiles et toute la logique métier.
+ */
+let npfBaseTileZoomVisualSnapshot = null;
+let npfBaseTileZoomVisualSnapshotState = null;
+let npfBaseTileZoomVisualSnapshotTimer = null;
+let npfBaseTileZoomVisualSnapshotToken = 0;
+const NPF_BASE_TILE_ZOOM_VISUAL_MAX_HOLD_MS = 2600;
+const NPF_BASE_TILE_ZOOM_VISUAL_POLL_MS = 40;
+
+function clearNpfBaseTileZoomVisualSnapshot(reason = 'clear') {
+    npfBaseTileZoomVisualSnapshotToken += 1;
+    if (npfBaseTileZoomVisualSnapshotTimer) {
+        clearTimeout(npfBaseTileZoomVisualSnapshotTimer);
+        npfBaseTileZoomVisualSnapshotTimer = null;
+    }
+    const snapshot = npfBaseTileZoomVisualSnapshot;
+    npfBaseTileZoomVisualSnapshot = null;
+    npfBaseTileZoomVisualSnapshotState = null;
+    if (snapshot) {
+        try { snapshot.remove(); } catch (_) {
+            try { snapshot.parentNode?.removeChild(snapshot); } catch (_) {}
+        }
+    }
+}
+
+function beginNpfBaseTileZoomVisualSnapshot(reason = 'zoomstart') {
+    if (
+        !map
+        || !baseTileLayer
+        || !offlineTilesMode
+        || typeof isNpfOfflinePackSelection !== 'function'
+        || !isNpfOfflinePackSelection()
+    ) return false;
+
+    /* Un pinch Safari peut émettre plusieurs zoomstart : conserver le premier
+     * snapshot complet du geste au lieu de le remplacer par une vue partielle. */
+    if (npfBaseTileZoomVisualSnapshot && npfBaseTileZoomVisualSnapshotState) {
+        return true;
+    }
+
+    try {
+        const sourceContainer = baseTileLayer.getContainer?.();
+        const tilePane = map.getPane?.('tilePane');
+        const oldZoom = Number(map.getZoom?.());
+        const oldOrigin = map.getPixelOrigin?.();
+        if (
+            !sourceContainer
+            || !tilePane
+            || !Number.isFinite(oldZoom)
+            || !oldOrigin
+            || !Number.isFinite(Number(oldOrigin.x))
+            || !Number.isFinite(Number(oldOrigin.y))
+        ) return false;
+
+        const paintedTiles = sourceContainer.querySelectorAll(
+            'img.leaflet-tile.leaflet-tile-loaded'
+        );
+        if (!paintedTiles.length) return false;
+
+        const root = document.createElement('div');
+        root.className = 'npf-base-tile-zoom-visual-snapshot';
+        root.setAttribute('aria-hidden', 'true');
+        root.style.position = 'absolute';
+        root.style.left = '0';
+        root.style.top = '0';
+        root.style.width = '100%';
+        root.style.height = '100%';
+        root.style.pointerEvents = 'none';
+        root.style.transformOrigin = '0 0';
+        root.style.willChange = 'transform';
+        root.style.zIndex = '0';
+
+        const clone = sourceContainer.cloneNode(true);
+        clone.classList.add('npf-base-tile-zoom-visual-snapshot-layer');
+        clone.setAttribute('aria-hidden', 'true');
+        clone.style.pointerEvents = 'none';
+
+        /* Les tuiles non encore peintes ne doivent jamais apparaître dans le
+         * snapshot. Les images déjà décodées restent purement visuelles. */
+        clone.querySelectorAll('img.leaflet-tile:not(.leaflet-tile-loaded)')
+            .forEach(tile => {
+                try { tile.remove(); } catch (_) {}
+            });
+        clone.querySelectorAll('img.leaflet-tile').forEach(tile => {
+            tile.style.pointerEvents = 'none';
+            tile.draggable = false;
+        });
+
+        root.appendChild(clone);
+        /* Insérer AVANT la GridLayer réelle : chaque nouvelle tuile chargée se
+         * peint naturellement au-dessus du snapshot sans aucune commutation. */
+        tilePane.insertBefore(root, sourceContainer);
+
+        npfBaseTileZoomVisualSnapshot = root;
+        npfBaseTileZoomVisualSnapshotState = {
+            oldZoom,
+            oldOriginX: Number(oldOrigin.x),
+            oldOriginY: Number(oldOrigin.y),
+            startedAt: Date.now(),
+            reason: String(reason || '')
+        };
+        npfBaseTileZoomVisualSnapshotToken += 1;
+        return true;
+    } catch (_) {
+        clearNpfBaseTileZoomVisualSnapshot('capture-error');
+        return false;
+    }
+}
+
+function getNpfCurrentZoomVisibleTileCoverage() {
+    if (!map || !baseTileLayer) return { total: 0, loaded: 0 };
+    try {
+        const mapContainer = map.getContainer?.();
+        const tiles = baseTileLayer._tiles || {};
+        const tileZoom = Number(baseTileLayer._tileZoom);
+        const mapZoom = Number(map.getZoom?.());
+        const targetZoom = Number.isFinite(tileZoom)
+            ? Math.round(tileZoom)
+            : Math.round(mapZoom);
+        if (!mapContainer || !Number.isFinite(targetZoom)) {
+            return { total: 0, loaded: 0 };
+        }
+
+        const mapRect = mapContainer.getBoundingClientRect();
+        let total = 0;
+        let loaded = 0;
+        Object.values(tiles).forEach(entry => {
+            const coords = entry?.coords;
+            const tile = entry?.el;
+            if (!coords || !tile || Number(coords.z) !== targetZoom) return;
+            if (tile.style?.display === 'none') return;
+
+            const rect = tile.getBoundingClientRect();
+            if (
+                rect.width <= 1
+                || rect.height <= 1
+                || rect.right <= mapRect.left
+                || rect.left >= mapRect.right
+                || rect.bottom <= mapRect.top
+                || rect.top >= mapRect.bottom
+            ) return;
+
+            total += 1;
+            if (
+                tile.classList?.contains('leaflet-tile-loaded')
+                || (tile.complete && Number(tile.naturalWidth) > 0)
+            ) loaded += 1;
+        });
+        return { total, loaded };
+    } catch (_) {
+        return { total: 0, loaded: 0 };
+    }
+}
+
+function settleNpfBaseTileZoomVisualSnapshot(reason = 'zoomend') {
+    const snapshot = npfBaseTileZoomVisualSnapshot;
+    const state = npfBaseTileZoomVisualSnapshotState;
+    if (!snapshot || !state || !map) return;
+
+    try {
+        const newZoom = Number(map.getZoom?.());
+        const newOrigin = map.getPixelOrigin?.();
+        if (
+            Number.isFinite(newZoom)
+            && newOrigin
+            && Number.isFinite(Number(newOrigin.x))
+            && Number.isFinite(Number(newOrigin.y))
+        ) {
+            const scale = Number(map.getZoomScale?.(newZoom, state.oldZoom));
+            if (Number.isFinite(scale) && scale > 0) {
+                const tx = scale * state.oldOriginX - Number(newOrigin.x);
+                const ty = scale * state.oldOriginY - Number(newOrigin.y);
+                /* Matrice explicite : x' = scale*x + tx, y' = scale*y + ty. */
+                snapshot.style.transform = `matrix(${scale},0,0,${scale},${tx},${ty})`;
+            }
+        }
+    } catch (_) {}
+
+    if (npfBaseTileZoomVisualSnapshotTimer) {
+        clearTimeout(npfBaseTileZoomVisualSnapshotTimer);
+        npfBaseTileZoomVisualSnapshotTimer = null;
+    }
+    const token = ++npfBaseTileZoomVisualSnapshotToken;
+    const settleStartedAt = Date.now();
+
+    const check = () => {
+        if (
+            token !== npfBaseTileZoomVisualSnapshotToken
+            || snapshot !== npfBaseTileZoomVisualSnapshot
+        ) return;
+
+        const coverage = getNpfCurrentZoomVisibleTileCoverage();
+        if (coverage.total > 0 && coverage.loaded >= coverage.total) {
+            clearNpfBaseTileZoomVisualSnapshot('current-level-ready');
+            return;
+        }
+
+        if (Date.now() - settleStartedAt >= NPF_BASE_TILE_ZOOM_VISUAL_MAX_HOLD_MS) {
+            clearNpfBaseTileZoomVisualSnapshot('timeout');
+            return;
+        }
+
+        npfBaseTileZoomVisualSnapshotTimer = setTimeout(
+            check,
+            NPF_BASE_TILE_ZOOM_VISUAL_POLL_MS
+        );
+    };
+
+    npfBaseTileZoomVisualSnapshotTimer = setTimeout(check, 0);
+}
+
 function initMap() {
     if (map) return;
     map = L.map('map', {
@@ -8331,6 +8564,10 @@ function initMap() {
         cancelTwoFingerRulerTimer();
         if (!twoFingerRulerActive) twoFingerRulerStartPoints = null;
 
+        /* v17.15 — figer visuellement le fond déjà peint avant que Leaflet ne
+         * libère l'ancien niveau. La GridLayer réelle reste totalement autonome. */
+        beginNpfBaseTileZoomVisualSnapshot('zoomstart');
+
         const startedNewNpfManualGesture = beginNpfMapOverlayPrioritySequence('zoomstart');
         /* v17.12 : les starts secondaires du même geste ne recréent pas un epoch tuiles. */
 
@@ -8377,6 +8614,10 @@ function initMap() {
     });
     map.on('zoomend', enforceOfflineZoomLimit);
     map.on('zoomend', () => {
+        /* v17.15 — recaler le snapshot de l'ancien niveau sur la vue finale ;
+         * les nouvelles tuiles réelles le recouvrent progressivement. */
+        settleNpfBaseTileZoomVisualSnapshot('zoomend');
+
         /*
          * v16.71 — retour ciblé au scheduling v16.50 : nettoyage immédiat de la
          * file pour la vue finale, sans délai de stabilisation de 240 ms.
@@ -11426,6 +11667,8 @@ function buildDirectOfflineLeafletLayer(options = {}) {
 
 function setupBaseTileLayer() {
     if (!map) return;
+    /* v17.15 — une reconstruction de source/base invalide tout snapshot visuel. */
+    clearNpfBaseTileZoomVisualSnapshot('base-layer-rebuild');
     /*
      * v16.47 — une reconstruction visuelle de GridLayer n'est pas un changement
      * de source. Ne pas invalider ici les lectures IndexedDB déjà engagées :
@@ -33869,6 +34112,17 @@ function isCenterGpsFollowEffective() {
     return !!(centerGpsFollowActive || simulationMoving);
 }
 
+function getCenterGpsFollowRecenterDelayMs() {
+    const simulationMoving = !!(
+        isSimulationMode
+        && simulationAircraftPositionReady
+        && Number(simulationSpeedKt) > 0
+    );
+    return simulationMoving
+        ? SIMULATION_FOLLOW_RECENTER_DELAY_MS
+        : CENTER_GPS_FOLLOW_RECENTER_DELAY_MS;
+}
+
 function getCenterGpsFollowHeadingDegrees() {
     const heading = Number(lastPosition?.heading);
     if (Number.isFinite(heading)) {
@@ -33876,7 +34130,7 @@ function getCenterGpsFollowHeadingDegrees() {
     }
 
     if (isSimulationMode && Number.isFinite(Number(simulationRouteDeg))) {
-        return ((Number(simulationRouteDeg) % 360) + 360) % 360;
+        return getSimulationTrueRouteDeg();
     }
 
     return null;
@@ -34074,7 +34328,31 @@ function recenterMapOnKnownGpsPosition(reason = 'manual') {
 
     if (isDirectCenterButtonRequest && centerGpsFollowActive) {
         centerGpsFollowLastUserGestureAt = Date.now();
-        centerGpsFollowPausedUntil = Date.now() + CENTER_GPS_FOLLOW_RECENTER_DELAY_MS;
+        centerGpsFollowPausedUntil = Date.now() + getCenterGpsFollowRecenterDelayMs();
+    }
+
+    /*
+     * v17.16 — en simulation, ne plus lancer un setView deux fois par seconde
+     * pour un déplacement inférieur à quelques pixels. L'avion continue à
+     * avancer à 500 ms ; la carte ne bouge que lorsque le cadrage l'exige.
+     */
+    const routineSimulationFollow = !!(
+        isSimulationMode
+        && lastPosition?.simulation === true
+        && String(reason || '') === 'gps-update'
+    );
+    if (routineSimulationFollow) {
+        try {
+            const currentCenter = map.getCenter?.();
+            if (currentCenter) {
+                const currentCenterPixel = map.project(currentCenter, currentZoom);
+                const targetCenterPixel = map.project(L.latLng(mapCenter.lat, mapCenter.lng), currentZoom);
+                const centerShiftPx = currentCenterPixel.distanceTo(targetCenterPixel);
+                if (Number.isFinite(centerShiftPx) && centerShiftPx < SIMULATION_FOLLOW_MIN_CENTER_SHIFT_PX) {
+                    return true;
+                }
+            }
+        } catch (_) {}
     }
 
     let npfDiagCenterShiftM = 0;
@@ -34105,7 +34383,8 @@ function recenterMapOnKnownGpsPosition(reason = 'manual') {
 function scheduleCenterGpsFollowRecentering() {
     if (!isCenterGpsFollowEffective()) return;
 
-    centerGpsFollowPausedUntil = Date.now() + CENTER_GPS_FOLLOW_RECENTER_DELAY_MS;
+    const recenterDelayMs = getCenterGpsFollowRecenterDelayMs();
+    centerGpsFollowPausedUntil = Date.now() + recenterDelayMs;
     if (centerGpsFollowPauseTimer) {
         clearTimeout(centerGpsFollowPauseTimer);
         centerGpsFollowPauseTimer = null;
@@ -34117,7 +34396,7 @@ function scheduleCenterGpsFollowRecentering() {
         if (isCenterGpsFollowEffective()) {
             recenterMapOnKnownGpsPosition('manual-delay');
         }
-    }, CENTER_GPS_FOLLOW_RECENTER_DELAY_MS);
+    }, recenterDelayMs);
 }
 
 function installCenterGpsFollowHandlers() {
@@ -34180,7 +34459,7 @@ function installCenterGpsFollowHandlers() {
     const forcePauseForMapGesture = () => {
         if (!isCenterGpsFollowEffective()) return;
         centerGpsFollowLastUserGestureAt = Date.now();
-        centerGpsFollowPausedUntil = Date.now() + CENTER_GPS_FOLLOW_RECENTER_DELAY_MS;
+        centerGpsFollowPausedUntil = Date.now() + getCenterGpsFollowRecenterDelayMs();
         scheduleCenterGpsFollowRecentering();
     };
 
@@ -35111,16 +35390,43 @@ function updateUserPosition(pos) {
     const motionHeading = Number.isFinite(rawHeading) ? rawHeading : estimatedMotion.heading;
     const motionSpeed = Number.isFinite(rawSpeed) ? rawSpeed : estimatedMotion.speed;
 
+    const isSimulationMotionTick = isSimulationPosition && pos.npfSimulationMotionTick === true;
+    const forceSimulationRefresh = isSimulationPosition && pos.npfSimulationForceRefresh === true;
+    const simulationRefreshNowMs = (typeof performance !== 'undefined' && performance.now)
+        ? performance.now()
+        : Date.now();
+    let simulationVisualRefreshDue = true;
+    let simulationHeavyRefreshDue = true;
+
+    if (isSimulationPosition) {
+        simulationVisualRefreshDue = !!(
+            forceSimulationRefresh
+            || !isSimulationMotionTick
+            || simulationLastVisualRefreshMs <= 0
+            || simulationRefreshNowMs - simulationLastVisualRefreshMs >= SIMULATION_VISUAL_REFRESH_INTERVAL_MS
+        );
+        simulationHeavyRefreshDue = !!(
+            forceSimulationRefresh
+            || !isSimulationMotionTick
+            || simulationLastHeavyRefreshMs <= 0
+            || simulationRefreshNowMs - simulationLastHeavyRefreshMs >= SIMULATION_HEAVY_REFRESH_INTERVAL_MS
+        );
+        if (simulationVisualRefreshDue) simulationLastVisualRefreshMs = simulationRefreshNowMs;
+        if (simulationHeavyRefreshDue) simulationLastHeavyRefreshMs = simulationRefreshNowMs;
+    }
+
     if (isSimulationPosition) {
         const simulatedSpeedMps = Number.isFinite(motionSpeed) ? Math.max(0, motionSpeed) : 0;
         const simulatedHeading = Number.isFinite(motionHeading)
             ? ((motionHeading % 360) + 360) % 360
-            : simulationRouteDeg;
+            : getSimulationTrueRouteDeg();
 
-        if (simulatedSpeedMps >= 1) {
-            updateOwnGpsVector(latitude, longitude, simulatedHeading, simulatedSpeedMps);
-        } else {
-            clearOwnGpsVector();
+        if (simulationVisualRefreshDue) {
+            if (simulatedSpeedMps >= 1) {
+                updateOwnGpsVector(latitude, longitude, simulatedHeading, simulatedSpeedMps);
+            } else {
+                clearOwnGpsVector();
+            }
         }
 
         const simulatedAltitudeMeters = Number(pos.coords.altitude);
@@ -35166,12 +35472,27 @@ function updateUserPosition(pos) {
         });
     }
 
+    const simulationIconSignature = isSimulationPosition
+        ? `simulation|${ownAltitudeLabel}`
+        : '';
+
     if (!userMarker) {
         const userIcon = buildOwnGpsIcon(ownAltitudeLabel, { simulation: isSimulationPosition });
         userMarker = L.marker([latitude, longitude], { icon: userIcon, pane: 'ownAircraftPane', zIndexOffset: 0, keyboard: false, interactive: false }).addTo(map);
+        if (isSimulationPosition) userMarker.__npfSimulationIconSignature = simulationIconSignature;
     } else {
         userMarker.setLatLng([latitude, longitude]);
-        userMarker.setIcon(buildOwnGpsIcon(ownAltitudeLabel, { simulation: isSimulationPosition }));
+        if (
+            !isSimulationPosition
+            || userMarker.__npfSimulationIconSignature !== simulationIconSignature
+        ) {
+            userMarker.setIcon(buildOwnGpsIcon(ownAltitudeLabel, { simulation: isSimulationPosition }));
+            if (isSimulationPosition) {
+                userMarker.__npfSimulationIconSignature = simulationIconSignature;
+            } else {
+                try { delete userMarker.__npfSimulationIconSignature; } catch (_) {}
+            }
+        }
         try { if (typeof userMarker.unbindPopup === 'function') userMarker.unbindPopup(); } catch (_) {}
     }
 
@@ -35195,39 +35516,44 @@ function updateUserPosition(pos) {
      * GPS. Le moteur SIA ne travaille qu'à moveend si sa couverture est devenue
      * réellement insuffisante.
      */
-    updateNearestCommuneDisplay(latitude, longitude);
-    setTimeout(() => { if (typeof refreshNearestCommuneDisplayFromKnownGps === 'function') refreshNearestCommuneDisplayFromKnownGps(); }, 250);
+    if (!isSimulationPosition || simulationHeavyRefreshDue) {
+        updateNearestCommuneDisplay(latitude, longitude);
+        setTimeout(() => { if (typeof refreshNearestCommuneDisplayFromKnownGps === 'function') refreshNearestCommuneDisplayFromKnownGps(); }, 250);
 
-    if (typeof window.refreshCalculatorAirportContext === 'function') {
-        window.refreshCalculatorAirportContext();
-    }
+        if (typeof window.refreshCalculatorAirportContext === 'function') {
+            window.refreshCalculatorAirportContext();
+        }
 
-    if (typeof updateDeroutementGpsStatus === 'function') {
-        updateDeroutementGpsStatus(isSimulationPosition ? 'GPS simulation' : 'GPS actualisé');
+        if (typeof updateDeroutementGpsStatus === 'function') {
+            updateDeroutementGpsStatus(isSimulationPosition ? 'GPS simulation' : 'GPS actualisé');
+        }
     }
 
     if (isCenterGpsFollowEffective()) {
         const nowForFollow = Date.now();
-        const recentManualMapGesture = (nowForFollow - centerGpsFollowLastUserGestureAt) < CENTER_GPS_FOLLOW_RECENTER_DELAY_MS;
+        const recentManualMapGesture = (nowForFollow - centerGpsFollowLastUserGestureAt) < getCenterGpsFollowRecenterDelayMs();
         if (!centerGpsFollowUserGestureActive && !recentManualMapGesture && nowForFollow >= centerGpsFollowPausedUntil) {
             recenterMapOnKnownGpsPosition('gps-update');
         }
     }
 
- // Synchronise les calculs (dont GPS->Feu) dès qu'une position GPS est reçue.
-    if (currentCommune) {
+ // Synchronise les calculs (dont GPS->Feu) à une cadence adaptée en simulation.
+    if (currentCommune && (!isSimulationPosition || simulationHeavyRefreshDue)) {
         updateCalculatorData();
     }
 
- // On appelle toujours la fonction qui redessine la route
-    drawUserToTargetRoute();
+ // La route dynamique reste réactive sans être reconstruite deux fois par seconde.
+    if (!isSimulationPosition || simulationVisualRefreshDue) {
+        drawUserToTargetRoute();
+    }
 
     /*
-     * Le trafic live suit explicitement la position de simulation.
-     * Le garde-fou de refreshTrafficLayer limite les appels à environ 5 s.
+     * v17.16 — le timer trafic global travaille déjà toutes les 5 s avec le
+     * centre carte courant. On force seulement une actualisation lors d'un
+     * positionnement explicite de l'avion, jamais à chaque tick de 500 ms.
      */
-    if (isSimulationPosition && showTrafficLayer) {
-        refreshTrafficLayer({ force: false, reason: 'simulation-position' });
+    if (isSimulationPosition && showTrafficLayer && !isSimulationMotionTick) {
+        refreshTrafficLayer({ force: true, reason: 'simulation-position-init' });
     }
 }
 
@@ -35238,6 +35564,17 @@ function normalizeSimulationRoute(value) {
     const numericValue = Number(value);
     if (!Number.isFinite(numericValue)) return 0;
     return ((numericValue % 360) + 360) % 360;
+}
+
+/*
+ * v17.16 — la route saisie/affichée en simulation est magnétique, comme les
+ * routes NPF. Les calculs géographiques et l'orientation sur la carte utilisent
+ * ensuite le cap vrai correspondant.
+ */
+function getSimulationTrueRouteDeg() {
+    return normalizeSimulationRoute(
+        Number(simulationRouteDeg) + Number(MAGNETIC_DECLINATION || 0)
+    );
 }
 
 function normalizeSimulationSpeed(value) {
@@ -35362,7 +35699,7 @@ function applySimulationMotionSettings(speedKt, routeDeg, altitudeFt) {
         applySimulatedUserPosition(
             Number(lastPosition.latitude),
             Number(lastPosition.longitude),
-            { fromMotionTimer: true }
+            { fromMotionTimer: true, forceFullRefresh: true }
         );
     }
 
@@ -35435,7 +35772,7 @@ function runSimulationMotionStep() {
     const destination = calculateDestinationLatLng(
         latitude,
         longitude,
-        simulationRouteDeg,
+        getSimulationTrueRouteDeg(),
         distanceMeters
     );
 
@@ -35554,7 +35891,7 @@ function refreshSimulationModeButtonState() {
     }
 }
 
-function applySimulatedUserPosition(lat, lng, { fromMotionTimer = false } = {}) {
+function applySimulatedUserPosition(lat, lng, { fromMotionTimer = false, forceFullRefresh = false } = {}) {
     const numericLat = Number(lat);
     const numericLng = Number(lng);
     if (!Number.isFinite(numericLat) || !Number.isFinite(numericLng)) return;
@@ -35572,12 +35909,14 @@ function applySimulatedUserPosition(lat, lng, { fromMotionTimer = false } = {}) 
             latitude: numericLat,
             longitude: numericLng,
             altitude: simulationAltitudeFt / 3.28084,
-            heading: simulationRouteDeg,
+            heading: getSimulationTrueRouteDeg(),
             speed: simulationSpeedKt * 0.5144444444444445,
             accuracy: null
         },
         timestamp: Date.now(),
-        npfIsSimulation: true
+        npfIsSimulation: true,
+        npfSimulationMotionTick: fromMotionTimer,
+        npfSimulationForceRefresh: forceFullRefresh
     });
 }
 
@@ -35608,6 +35947,8 @@ function enableSimulationMode() {
     simulationAircraftPositionReady = false;
     simulationMotionLatitude = null;
     simulationMotionLongitude = null;
+    simulationLastVisualRefreshMs = 0;
+    simulationLastHeavyRefreshMs = 0;
     startSimulationMotionTimer();
     refreshSimulationModeButtonState();
 
@@ -35650,6 +35991,8 @@ function disableSimulationMode({ restoreGps = true } = {}) {
     simulationAircraftPositionReady = false;
     simulationMotionLatitude = null;
     simulationMotionLongitude = null;
+    simulationLastVisualRefreshMs = 0;
+    simulationLastHeavyRefreshMs = 0;
     closeSimulationActionPopup();
     closeSimulationMotionModal();
     isSimulationMode = false;
@@ -48652,7 +48995,7 @@ function getSiaProfileCurrentPosition() {
     const altitudeFt = Number(lastPosition.altitudeFt ?? lastPosition.altitudeFeet);
 
     if (!Number.isFinite(heading) && isSimulationMode) {
-        heading = Number(simulationRouteDeg);
+        heading = getSimulationTrueRouteDeg();
     }
 
     if (![lat, lng, heading].every(Number.isFinite)) return null;
