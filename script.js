@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.25';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.26';
 
 
 /*
@@ -504,6 +504,10 @@ function getNpfStartupDiagnosticOverlaySnapshot() {
         tileZoomReturnCache: Number(directOfflineNpfZoomReturnBlobCache?.size || 0),
         tileZoomReturnHits: Number(directOfflineNpfZoomReturnCacheHitCount || 0),
         tileIndexedDbLookups: Number(directOfflineNpfIndexedDbLookupCount || 0),
+        gpsTileRepairChecks: Number(npfGpsTileRepairCheckCount || 0),
+        gpsTileRepairTriggers: Number(npfGpsTileRepairTriggeredCount || 0),
+        gpsTileRepairRecovered: Number(npfGpsTileRepairRecoveredCount || 0),
+        gpsTileRepairFallbackRedraws: Number(npfGpsTileRepairFallbackRedrawCount || 0),
         leafletLayers: (() => {
             try { return Number(Object.keys(map?._layers || {}).length || 0); }
             catch (_) { return 0; }
@@ -746,6 +750,10 @@ function getNpfStartupDiagnosticRuntimeInfo() {
         tileZoomReturnCacheSize: layers.tileZoomReturnCache,
         tileZoomReturnCacheHits: layers.tileZoomReturnHits,
         tileIndexedDbLookups: layers.tileIndexedDbLookups,
+        gpsTileRepairChecks: layers.gpsTileRepairChecks,
+        gpsTileRepairTriggers: layers.gpsTileRepairTriggers,
+        gpsTileRepairRecovered: layers.gpsTileRepairRecovered,
+        gpsTileRepairFallbackRedraws: layers.gpsTileRepairFallbackRedraws,
         leafletLayerCount: layers.leafletLayers,
         runwayLayerCount: layers.runwayLayers,
         siaLayerCount: layers.siaLayers,
@@ -849,6 +857,10 @@ function buildNpfStartupDiagnosticExportText() {
         + runtime.tileZoomReturnCacheSize + ' cache retour zoom / '
         + runtime.tileZoomReturnCacheHits + ' hits retour | '
         + runtime.tileIndexedDbLookups + ' accès IDB | '
+        + 'réparation GPS ' + runtime.gpsTileRepairChecks + ' contrôles / '
+        + runtime.gpsTileRepairTriggers + ' déclenchements / '
+        + runtime.gpsTileRepairRecovered + ' tuiles récupérées / '
+        + runtime.gpsTileRepairFallbackRedraws + ' redraw secours | '
         + runtime.leafletLayerCount + ' calques Leaflet totaux | '
         + runtime.runwayLayerCount + ' couches pistes | '
         + runtime.siaLayerCount + ' couches SIA'
@@ -1232,6 +1244,7 @@ function renderNpfStartupDiagnosticPanel() {
                 <span>NPF interrompues/reprises : <b>${runtime.npfReadsAborted}</b> / <b>${runtime.npfTileRetries}</b></span>
                 <span>Priorité viewport : <b>${runtime.npfViewEpoch}</b></span>
                 <span>Cache tuiles : <b>${runtime.tileBlobCacheSize}</b></span>
+                <span>Réparation GPS : <b>${runtime.gpsTileRepairChecks}</b> contrôles / <b>${runtime.gpsTileRepairTriggers}</b> déclenchements / <b>${runtime.gpsTileRepairRecovered}</b> récupérées</span>
                 <span>GPS auto : <b>${runtime.diagMapMotion?.gpsFollow?.count || 0}</b> pans / <b>${runtime.diagMapMotion?.gpsFollow?.slow || 0}</b> lents</span>
                 <span>File tuiles max : <b>${runtime.diagLayers?.tileQueueMax || 0}</b></span>
                 <span>SIA : <b>${runtime.diagLayers?.siaRefreshCount || 0}</b> refresh / max <b>${Math.round(runtime.diagLayers?.siaMaxMs || 0)} ms</b></span>
@@ -8965,6 +8978,7 @@ function initMap() {
          */
         if (gpsFollowPan) {
             cancelNpfMapOverlayPriorityForGpsResume('gps-moveend');
+            scheduleNpfGpsTileCoverageRepair('gps-moveend');
             return;
         }
 
@@ -9892,6 +9906,329 @@ function scheduleNpfOfflineZoomCleanup(reason = 'zoomend') {
         releaseStaleOfflineTileResources(reason + '-520ms');
         recordNpfZoomMemorySnapshot(reason);
     }, 520);
+}
+
+/*
+ * v17.26 — auto-réparation ciblée des trous de tuiles pendant un suivi GPS long.
+ *
+ * Le DIAG réel v17.25 après ~1 h 30 de vol montre que les packs contiennent bien
+ * les tuiles (36 trouvées / 0 absente à l'export), mais que des trous ponctuels
+ * peuvent rester visibles après des milliers de recentrages GPS. Le zoom possède
+ * déjà un filet de sécurité ; le moveend GPS quittait jusqu'ici avant tout contrôle.
+ *
+ * Contraintes :
+ * - aucun changement de concurrence IndexedDB, scheduler, keepBuffer ou timeouts ;
+ * - contrôle au maximum toutes les 5 s ;
+ * - aucune action tant que des lectures NPF sont encore actives/en file ;
+ * - suppression/recréation uniquement des tuiles visibles réellement bloquées ;
+ * - les placeholders correspondant à une vraie absence mémorisée ne sont pas
+ *   retentés en boucle ;
+ * - redraw complet uniquement en dernier secours, avec cooldown de 20 s.
+ */
+const NPF_GPS_TILE_REPAIR_MIN_INTERVAL_MS = 5000;
+const NPF_GPS_TILE_REPAIR_INITIAL_DELAY_MS = 650;
+const NPF_GPS_TILE_REPAIR_VERIFY_DELAY_MS = 1200;
+const NPF_GPS_TILE_REPAIR_FALLBACK_REDRAW_COOLDOWN_MS = 20000;
+let npfGpsTileRepairTimer = null;
+let npfGpsTileRepairLastCheckAt = 0;
+let npfGpsTileRepairLastFallbackRedrawAt = 0;
+let npfGpsTileRepairCheckCount = 0;
+let npfGpsTileRepairTriggeredCount = 0;
+let npfGpsTileRepairRecoveredCount = 0;
+let npfGpsTileRepairFallbackRedrawCount = 0;
+
+function getNpfExpectedVisibleTileCountForCurrentZoom(targetZoom = null) {
+    if (!map || !baseTileLayer) return 0;
+    try {
+        const zoom = Number.isFinite(Number(targetZoom))
+            ? Number(targetZoom)
+            : Number(baseTileLayer._tileZoom);
+        const mapZoom = Number(map.getZoom?.());
+        if (
+            !Number.isFinite(zoom)
+            || !Number.isFinite(mapZoom)
+            || Math.abs(zoom - mapZoom) > 0.001
+        ) {
+            return 0;
+        }
+
+        const pixelBounds = map.getPixelBounds?.();
+        const tileSizePoint = baseTileLayer.getTileSize?.();
+        const tileSize = Number(tileSizePoint?.x || tileSizePoint?.y || 256);
+        if (!pixelBounds?.min || !pixelBounds?.max || !Number.isFinite(tileSize) || tileSize <= 0) {
+            return 0;
+        }
+
+        const minX = Math.floor(Number(pixelBounds.min.x) / tileSize);
+        const minY = Math.floor(Number(pixelBounds.min.y) / tileSize);
+        const maxX = Math.floor((Number(pixelBounds.max.x) - 1) / tileSize);
+        const maxY = Math.floor((Number(pixelBounds.max.y) - 1) / tileSize);
+        if (![minX, minY, maxX, maxY].every(Number.isFinite)) return 0;
+
+        let total = 0;
+        for (let y = minY; y <= maxY; y += 1) {
+            for (let x = minX; x <= maxX; x += 1) {
+                const coords = { x, y, z: zoom };
+                if (
+                    typeof baseTileLayer._isValidTile === 'function'
+                    && !baseTileLayer._isValidTile(coords)
+                ) {
+                    continue;
+                }
+                total += 1;
+            }
+        }
+        return total;
+    } catch (_) {
+        return 0;
+    }
+}
+
+function collectNpfVisibleTileRepairState() {
+    const empty = {
+        zoom: null,
+        expected: 0,
+        totalEntries: 0,
+        healthy: 0,
+        knownMissPlaceholders: 0,
+        repairable: [],
+        missingSlots: 0
+    };
+    if (!map || !baseTileLayer) return empty;
+
+    try {
+        const mapContainer = map.getContainer?.();
+        const mapRect = mapContainer?.getBoundingClientRect?.();
+        const tiles = baseTileLayer._tiles || {};
+        const layerZoom = Number(baseTileLayer._tileZoom);
+        const mapZoom = Number(map.getZoom?.());
+        const targetZoom = Number.isFinite(layerZoom)
+            ? Math.round(layerZoom)
+            : Math.round(mapZoom);
+        if (!mapRect || !Number.isFinite(targetZoom)) return empty;
+
+        const state = {
+            ...empty,
+            zoom: targetZoom,
+            expected: getNpfExpectedVisibleTileCountForCurrentZoom(targetZoom)
+        };
+
+        Object.entries(tiles).forEach(([key, entry]) => {
+            const coords = entry?.coords;
+            const tile = entry?.el;
+            if (!coords || !tile || Number(coords.z) !== targetZoom) return;
+            if (tile.style?.display === 'none') return;
+
+            const rect = tile.getBoundingClientRect?.();
+            if (
+                !rect
+                || rect.width <= 1
+                || rect.height <= 1
+                || rect.right <= mapRect.left
+                || rect.left >= mapRect.right
+                || rect.bottom <= mapRect.top
+                || rect.top >= mapRect.bottom
+            ) {
+                return;
+            }
+
+            state.totalEntries += 1;
+            const loaded = !!(
+                tile.classList?.contains('leaflet-tile-loaded')
+                || (tile.complete && Number(tile.naturalWidth) > 0)
+            );
+            const placeholder = tile.__npfPlaceholder === true;
+            const retryablePlaceholder = placeholder && tile.__npfPlaceholderRetryable === true;
+
+            if (placeholder && !retryablePlaceholder) {
+                state.knownMissPlaceholders += 1;
+                return;
+            }
+
+            if (loaded && !placeholder) {
+                state.healthy += 1;
+                return;
+            }
+
+            if (!loaded || retryablePlaceholder) {
+                state.repairable.push({ key, coords, tile });
+            }
+        });
+
+        state.missingSlots = Math.max(
+            0,
+            Number(state.expected || 0) - Number(state.totalEntries || 0)
+        );
+        return state;
+    } catch (_) {
+        return empty;
+    }
+}
+
+function countNpfVisibleTileRepairProblems(state) {
+    if (!state) return 0;
+    return Math.max(0, Number(state.repairable?.length || 0))
+        + Math.max(0, Number(state.missingSlots || 0));
+}
+
+function runNpfGpsTileCoverageRepair(reason = 'gps-moveend') {
+    if (
+        !map
+        || !baseTileLayer
+        || !offlineTilesMode
+        || !isNpfOfflinePackSelection()
+    ) {
+        return false;
+    }
+
+    const layerZoom = Number(baseTileLayer._tileZoom);
+    const mapZoom = Number(map.getZoom?.());
+    if (
+        Number.isFinite(layerZoom)
+        && Number.isFinite(mapZoom)
+        && Math.abs(layerZoom - mapZoom) > 0.001
+    ) {
+        return false;
+    }
+
+    if (
+        Number(directOfflineNpfActiveReads || 0) > 0
+        || Number(directOfflineNpfReadQueue?.length || 0) > 0
+    ) {
+        return false;
+    }
+
+    npfGpsTileRepairLastCheckAt = Date.now();
+    npfGpsTileRepairCheckCount += 1;
+
+    const before = collectNpfVisibleTileRepairState();
+    const beforeProblems = countNpfVisibleTileRepairProblems(before);
+    if (beforeProblems <= 0) return false;
+
+    let removed = 0;
+    for (const candidate of before.repairable) {
+        try {
+            if (typeof baseTileLayer._removeTile === 'function') {
+                baseTileLayer._removeTile(candidate.key);
+                removed += 1;
+            }
+        } catch (_) {}
+    }
+
+    let updateRequested = false;
+    try {
+        if (typeof baseTileLayer._update === 'function') {
+            baseTileLayer._update(map.getCenter?.());
+            updateRequested = true;
+        }
+    } catch (_) {}
+
+    if (!updateRequested && removed > 0) {
+        try {
+            baseTileLayer.redraw?.();
+            updateRequested = true;
+            npfGpsTileRepairFallbackRedrawCount += 1;
+            npfGpsTileRepairLastFallbackRedrawAt = Date.now();
+        } catch (_) {}
+    }
+    if (!updateRequested) return false;
+
+    npfGpsTileRepairTriggeredCount += 1;
+    npfDiagSiaInteraction(
+        'TUILES GPS REPAIR',
+        `ciblée · ${reason} · z${before.zoom ?? '—'} · problèmes=${beforeProblems}`,
+        {
+            totalMs: 0,
+            expected: Number(before.expected || 0),
+            visibleEntries: Number(before.totalEntries || 0),
+            healthy: Number(before.healthy || 0),
+            repairable: Number(before.repairable?.length || 0),
+            missingSlots: Number(before.missingSlots || 0),
+            knownMissPlaceholders: Number(before.knownMissPlaceholders || 0),
+            removed,
+            npfReadsQueued: Number(directOfflineNpfReadQueue?.length || 0),
+            npfReadsActive: Number(directOfflineNpfActiveReads || 0)
+        }
+    );
+
+    const repairZoom = before.zoom;
+    setTimeout(() => {
+        if (!map || !baseTileLayer) return;
+        const currentZoom = Math.round(Number(map.getZoom?.()));
+        if (Number.isFinite(Number(repairZoom)) && currentZoom !== Number(repairZoom)) return;
+
+        const after = collectNpfVisibleTileRepairState();
+        const afterProblems = countNpfVisibleTileRepairProblems(after);
+        const recovered = Math.max(0, beforeProblems - afterProblems);
+        if (recovered > 0) npfGpsTileRepairRecoveredCount += recovered;
+
+        npfDiagSiaInteraction(
+            'TUILES GPS REPAIR',
+            `vérification · ${reason} · z${after.zoom ?? '—'} · reste=${afterProblems}`,
+            {
+                totalMs: NPF_GPS_TILE_REPAIR_VERIFY_DELAY_MS,
+                expected: Number(after.expected || 0),
+                visibleEntries: Number(after.totalEntries || 0),
+                healthy: Number(after.healthy || 0),
+                repairable: Number(after.repairable?.length || 0),
+                missingSlots: Number(after.missingSlots || 0),
+                knownMissPlaceholders: Number(after.knownMissPlaceholders || 0),
+                recovered,
+                npfReadsQueued: Number(directOfflineNpfReadQueue?.length || 0),
+                npfReadsActive: Number(directOfflineNpfActiveReads || 0)
+            }
+        );
+
+        if (
+            afterProblems > 0
+            && Number(directOfflineNpfActiveReads || 0) === 0
+            && Number(directOfflineNpfReadQueue?.length || 0) === 0
+            && Date.now() - npfGpsTileRepairLastFallbackRedrawAt
+                >= NPF_GPS_TILE_REPAIR_FALLBACK_REDRAW_COOLDOWN_MS
+        ) {
+            try {
+                npfGpsTileRepairLastFallbackRedrawAt = Date.now();
+                npfGpsTileRepairFallbackRedrawCount += 1;
+                baseTileLayer.redraw?.();
+                npfDiagSiaInteraction(
+                    'TUILES GPS REPAIR',
+                    `redraw secours · ${reason} · z${after.zoom ?? '—'} · reste=${afterProblems}`,
+                    {
+                        totalMs: 0,
+                        repairable: Number(after.repairable?.length || 0),
+                        missingSlots: Number(after.missingSlots || 0),
+                        npfReadsQueued: Number(directOfflineNpfReadQueue?.length || 0),
+                        npfReadsActive: Number(directOfflineNpfActiveReads || 0)
+                    }
+                );
+            } catch (_) {}
+        }
+    }, NPF_GPS_TILE_REPAIR_VERIFY_DELAY_MS);
+
+    return true;
+}
+
+function scheduleNpfGpsTileCoverageRepair(reason = 'gps-moveend') {
+    if (
+        !map
+        || !baseTileLayer
+        || !offlineTilesMode
+        || !isNpfOfflinePackSelection()
+    ) {
+        return;
+    }
+    if (npfGpsTileRepairTimer) return;
+
+    const elapsed = Date.now() - Number(npfGpsTileRepairLastCheckAt || 0);
+    const delay = Math.max(
+        NPF_GPS_TILE_REPAIR_INITIAL_DELAY_MS,
+        NPF_GPS_TILE_REPAIR_MIN_INTERVAL_MS - elapsed
+    );
+
+    npfGpsTileRepairTimer = setTimeout(() => {
+        npfGpsTileRepairTimer = null;
+        runNpfGpsTileCoverageRepair(reason);
+    }, delay);
 }
 
 function scheduleBaseMapStabilityRefresh(reason = 'map-stability') {
@@ -11900,6 +12237,10 @@ window.getNpfTilePerformanceStatus = function getNpfTilePerformanceStatus() {
         zoomReturnCacheMax: DIRECT_OFFLINE_NPF_ZOOM_RETURN_CACHE_MAX,
         zoomReturnCacheHits: directOfflineNpfZoomReturnCacheHitCount,
         indexedDbLookups: directOfflineNpfIndexedDbLookupCount,
+        gpsTileRepairChecks: npfGpsTileRepairCheckCount,
+        gpsTileRepairTriggers: npfGpsTileRepairTriggeredCount,
+        gpsTileRepairRecovered: npfGpsTileRepairRecoveredCount,
+        gpsTileRepairFallbackRedraws: npfGpsTileRepairFallbackRedrawCount,
         tileHits: directOfflineTileHitCount,
         tileMisses: directOfflineTileMissCount,
         visibleLoadedTiles: countVisibleLoadedBaseTiles()
@@ -12085,6 +12426,8 @@ function buildDirectOfflineLeafletLayer(options = {}) {
             tile.__npfDisposed = false;
             tile.__npfDone = false;
             tile.__npfBlobUrl = '';
+            tile.__npfPlaceholder = false;
+            tile.__npfPlaceholderRetryable = false;
 
             const revokeBlobUrl = () => {
                 const blobUrl = String(tile.__npfBlobUrl || '');
@@ -12161,12 +12504,21 @@ function buildDirectOfflineLeafletLayer(options = {}) {
                     }
 
                     if (!blob) {
+                        const cacheKey = buildDirectOfflineTileBlobCacheKey(coords);
+                        const cachedMissAt = Number(directOfflineTileMissCache.get(cacheKey)) || 0;
+                        const knownMiss = cachedMissAt > 0
+                            && Date.now() - cachedMissAt <= DIRECT_OFFLINE_TILE_MISS_CACHE_TTL_MS;
+                        tile.__npfPlaceholder = true;
+                        /* Une vraie absence connue ne doit pas être retentée en boucle. */
+                        tile.__npfPlaceholderRetryable = !knownMiss;
                         tile.onload = () => finish(null);
                         tile.onerror = error => finish(error || new Error('Tuile absente'));
                         tile.src = OFFLINE_TILE_PLACEHOLDER_DATA_URL;
                         return;
                     }
 
+                    tile.__npfPlaceholder = false;
+                    tile.__npfPlaceholderRetryable = false;
                     const blobUrl = URL.createObjectURL(blob);
                     tile.__npfBlobUrl = blobUrl;
                     tile.onload = () => finish(null);
@@ -12181,6 +12533,8 @@ function buildDirectOfflineLeafletLayer(options = {}) {
                         finish(null);
                         return;
                     }
+                    tile.__npfPlaceholder = true;
+                    tile.__npfPlaceholderRetryable = true;
                     tile.onload = () => finish(null);
                     tile.onerror = () => finish(error);
                     tile.src = OFFLINE_TILE_PLACEHOLDER_DATA_URL;
