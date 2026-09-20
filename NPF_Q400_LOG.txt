@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
-Mise à jour : 19/09/2026
-Version de travail actuelle : TEST v17.25
+Mise à jour : 20/09/2026
+Version de travail actuelle : TEST v17.26
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -155,6 +155,10 @@ IMPLÉMENTÉ / INTÉGRÉ :
 - v17.25 : densité des cartouches routiers augmentée uniquement à z13 / ~0,5 NM :
   seuil des départementales abaissé et plafond global relevé, sans changement
   des priorités de classes ni de l'anti-collision.
+- v17.26 : auto-réparation ciblée des trous de tuiles après suivi GPS prolongé :
+  contrôle de couverture limité à une fois toutes les 5 s, relance ciblée des
+  tuiles visibles bloquées/temporaires seulement, redraw complet uniquement en
+  dernier secours avec cooldown ; compteurs DIAG dédiés ajoutés.
 
 NON IMPLÉMENTÉ / OUVERT :
 - écart ligne de foi jaune / route rouge alors que les deux affichent 277° :
@@ -181,6 +185,14 @@ NON IMPLÉMENTÉ / OUVERT :
   du moteur de tuiles à ce stade ;
 - v17.25 : À MESURER. Vérifier visuellement à ~0,5 NM que davantage de références
   départementales sont affichées sans surcharge excessive de la carte ;
+- v17.25 — VOL LONG MESURÉ (19/09/2026, ~1 h 30) : 4028 positions GPS,
+  3999 recentrages auto, 8 snapshots sans tuile, 218 demandes abandonnées,
+  20 lectures devenues obsolètes et 21 reprises. À l'export : 36 tuiles IDB
+  trouvées / 0 absente, donc les trous observés sont transitoires et non une
+  absence de données dans les packs ;
+- v17.26 : À MESURER en vol prolongé. Vérifier que les compteurs `réparation GPS`
+  restent faibles, que les déclenchements correspondent à de vrais trous et que
+  les tuiles récupérées augmentent sans redraws de secours fréquents ;
 - effet du report des plans d'eau sur les blocages JS de démarrage ;
 - comportement HT lors du passage 50 NM -> 20 NM -> 50 NM : préférence utilisateur
   doit rester ON, rendu absent à 50 NM+, puis retour automatique sous 50 NM.
@@ -191,36 +203,37 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.25
-Date : 19/09/2026
-Base : v17.24
+Version : TEST v17.26
+Date : 20/09/2026
+Base : v17.25
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.25.txt
-2_Index_v17.25.txt
-3_Manifest_v17.25.txt
-4_Script_v17.25.txt
-5_SIA_v17.25.txt
-6_Style_v17.25.txt
-7_Sw_v17.25.txt
+1_Modifications_v17.26.txt
+2_Index_v17.26.txt
+3_Manifest_v17.26.txt
+4_Script_v17.26.txt
+5_SIA_v17.26.txt
+6_Style_v17.26.txt
+7_Sw_v17.26.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.25
-- Manifest : start_url = ./index.html?appv=v17.25
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.25
-- Style : NPF_STYLE_BUILD_VERSION = v17.25
-- Service Worker : `sw-v17-25_road_labels_z13`
+- Index : APP_VERSION = v17.26
+- Manifest : start_url = ./index.html?appv=v17.26
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.26
+- Style : NPF_STYLE_BUILD_VERSION = v17.26
+- Service Worker : `sw-v17-26_gps_partial_tile_repair`
 - SIA_DATA_REVISION : 15.69-radio1026-1-maplite1
-- sia.js v17.25 : strictement identique à v17.24 (et donc aux données v17.20).
+- sia.js v17.26 : strictement identique à v17.25 (et donc aux données v17.20).
 
 STATUT DE VALIDATION :
-- validation statique v17.25 effectuée avant livraison : Script/SIA/SW OK, script
+- validation statique v17.26 effectuée avant livraison : Script/SIA/SW OK, script
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
-- `sia.js` v17.25 est bit-à-bit identique à v17.24 ;
-- constantes historiques du moteur tuiles comparées à v17.24 : 5 lectures, file
+- `sia.js` v17.26 est bit-à-bit identique à v17.25 ;
+- constantes historiques du moteur tuiles comparées à v17.25 : 5 lectures, file
   160, cache principal 160, cache général 256, keepBuffer 4/2, TTL/timeouts et
   settle 240 ms inchangés ;
-- v17.24 dispose d’un DIAG réel multi-zoom ; v17.25 est À MESURER sur iPad.
+- v17.25 dispose d’un DIAG réel après ~1 h 30 de vol ; v17.26 est À MESURER sur
+  un vol prolongé avec suivi GPS actif.
 
 2. PROTOCOLE DE TRAVAIL À RESPECTER
 -----------------------------------
@@ -290,6 +303,20 @@ Ajout v17.21/v17.22 pour le zoom OUT :
 - aucune lecture active n'est annulée ; aucune concurrence supplémentaire ;
 - DIAG v17.22 sépare hits RAM principal, hits cache retour et accès IDB.
 
+Ajout v17.26 pour les trous ponctuels en suivi GPS prolongé :
+- aucun réglage historique du moteur de lecture n'est changé ;
+- le `moveend` GPS programme maintenant un contrôle de couverture au maximum
+  toutes les 5 s, uniquement quand la file et les 5 lecteurs sont au repos ;
+- les tuiles visibles bloquées ou les placeholders issus d'un échec technique
+  transitoire sont retirés individuellement puis redemandés via `_update()` ;
+- une vraie absence déjà enregistrée dans le miss-cache n'est pas retentée en boucle ;
+- un slot visible manquant peut être recréé par `_update()` sans effacer le reste ;
+- après 1,2 s, une vérification mesure le nombre de problèmes restants et estime
+  les tuiles récupérées ;
+- `redraw()` complet n'est utilisé qu'en dernier secours, file au repos, avec un
+  cooldown de 20 s ;
+- DIAG : contrôles / déclenchements / tuiles récupérées / redraws secours.
+
 Pistes historiquement testées et à NE PAS réintroduire sans nouvelle preuve :
 - réduction de 5 à 2 lectures simultanées : débit global dégradé ;
 - accès `index.get(tileUrl)` : abandonné après régressions/lenteurs ;
@@ -301,6 +328,49 @@ Pistes historiquement testées et à NE PAS réintroduire sans nouvelle preuve :
 v17.06 est explicitement ABANDONNÉE.
 v17.09 ne doit pas être reprise telle quelle : détachement physique Routes/HT,
 race HT et gels zoom/règle ont conduit aux corrections v17.10/v17.11.
+
+
+4 BIS. DIAG v17.25 — VOL RÉEL PROLONGÉ ET TROUS PONCTUELS DE TUILES
+----------------------------------------------------------------------------
+DIAG du 19/09/2026 18:49 après environ 1 h 30 de vol réel, build v17.25.
+
+OBSERVATION UTILISATEUR
+- « après 1h30 de vol, parfois des tuiles sont absentes ».
+
+MESURES IMPORTANTES
+- 4028 positions GPS et 3999 recentrages automatiques ;
+- 3660 mouvements carte classés GPS auto, seulement 1 avec gap >100 ms ;
+- 11 zooms, dont 1 lent ;
+- file tuiles max 25, concurrence max 5 ;
+- 8 snapshots enregistrés avec zéro tuile visible ;
+- 218 demandes en file abandonnées ;
+- 20 lectures devenues obsolètes et 21 reprises ;
+- à l'export : 36 tuiles IndexedDB trouvées / 0 absente, 25 tuiles visibles,
+  file et lecteurs à zéro.
+
+CONCLUSION TECHNIQUE RETENUE
+- Les trous observés ne démontrent PAS des données manquantes dans les packs :
+  l'export final trouve toutes les tuiles demandées.
+- Le suivi GPS est le contexte dominant : plusieurs milliers de `setView()` ont
+  déplacé le viewport pendant la session.
+- Dans v17.25, le `moveend` d'un pan GPS retourne immédiatement après la gestion
+  des overlays et ne déclenche pas le filet de sécurité tuiles utilisé au zoom.
+- Le filet historique `scheduleBaseMapStabilityRefresh()` ne fait un redraw que
+  lorsque ZÉRO tuile chargée est visible ; il ne répare donc pas une carte presque
+  complète avec seulement 1 ou 2 trous.
+- Un retour `null` temporaire peut aussi afficher un placeholder considéré chargé ;
+  sans marquage explicite, ce cas n'était pas distingué d'une vraie absence.
+
+DÉCISION v17.26
+- Ajouter une auto-réparation limitée au suivi GPS, sans augmenter la charge
+  normale : contrôle espacé, file au repos, remplacement ciblé seulement.
+- Ne pas modifier les 5 lectures simultanées, le scheduler, keepBuffer, caches,
+  timeouts, Routes, HT ou SIA pour traiter ce point.
+- Marquer les placeholders NPF comme `retryable` uniquement lorsqu'ils proviennent
+  d'un échec technique/transitoire ; les vraies absences du miss-cache restent
+  exclues de la réparation automatique.
+
+STATUT : IMPLÉMENTÉ en v17.26 — À MESURER sur un nouveau vol prolongé.
 
 
 5. GÉOMÉTRIE DES ROUTES / NAVIGATION — ÉTAT ACTUEL
@@ -606,6 +676,82 @@ Pour chaque remarque non implémentée, noter autant que possible :
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.26 — AUTO-RÉPARATION TUILES EN SUIVI GPS PROLONGÉ
+Date : 20/09/2026
+Base fonctionnelle : v17.25
+
+DEMANDE UTILISATEUR
+- Après environ 1 h 30 de vol réel en v17.25, l'utilisateur indique :
+  « parfois des tuiles sont absentes ».
+- Après analyse du DIAG et du code réel, demande explicite : « Donne moi les .txt ».
+
+DIAG À L'ORIGINE — v17.25 (18:49)
+- carte OFFLINE ; 4028 positions GPS / 3999 recentrages automatiques ;
+- 3660 mouvements GPS auto, seulement 1 saccadé selon le seuil DIAG ;
+- 8 snapshots avec zéro tuile visible ;
+- file max 25, lectures max 5 ;
+- 218 demandes en file abandonnées, 20 lectures obsolètes, 21 reprises ;
+- à l'export final : 36 tuiles IDB trouvées / 0 absente, 25 visibles, file 0/0.
+
+CAUSE / LACUNE RETENUE
+- Le `moveend` GPS de v17.25 retourne avant tout contrôle de stabilité des tuiles.
+- Le filet de sécurité existant après zoom ne déclenche un redraw que lorsque
+  `visibleLoaded === 0`; une ou plusieurs tuiles manquantes dans une carte
+  autrement complète peuvent donc persister.
+- Un placeholder issu d'un échec technique temporaire était visuellement chargé
+  par Leaflet et ne pouvait pas être distingué d'une vraie absence de pack.
+
+MODIFICATIONS
+
+1. CONTRÔLE DE COUVERTURE GPS LIMITÉ
+- Après un `moveend` reconnu comme suivi GPS, programmation d'un contrôle de
+  couverture au maximum toutes les 5 s.
+- Aucun travail si la GridLayer n'est pas au zoom courant ou si les lectures NPF
+  sont encore actives/en file.
+- Calcul du nombre attendu de slots visibles au zoom courant et inspection des
+  entrées Leaflet réellement visibles.
+
+2. RÉPARATION CIBLÉE AVANT TOUT REDRAW GLOBAL
+- Une tuile visible non chargée/bloquée est retirée individuellement.
+- Un placeholder provenant d'un échec temporaire est marqué `retryable` et peut
+  être retiré individuellement.
+- Une vraie absence déjà présente dans le miss-cache est marquée non retryable et
+  n'est pas retentée en boucle.
+- `_update()` de la GridLayer est ensuite utilisé pour ne redemander que les slots
+  manquants du viewport courant.
+
+3. REDRAW COMPLET UNIQUEMENT EN DERNIER SECOURS
+- Vérification après 1,2 s.
+- Si des problèmes restent alors que file et lecteurs sont au repos, un redraw
+  complet peut être utilisé avec un cooldown strict de 20 s.
+- Aucun redraw systématique n'est réintroduit.
+
+4. DIAGNOSTIC DÉDIÉ
+- Ajout des compteurs :
+  - contrôles de couverture GPS ;
+  - déclenchements de réparation ;
+  - tuiles récupérées estimées ;
+  - redraws complets de secours.
+- Événements `TUILES GPS REPAIR` seulement lorsqu'une réparation est réellement
+  déclenchée ou vérifiée, afin d'éviter de polluer le DIAG à chaque position GPS.
+
+5. TOUT LE RESTE INCHANGÉ
+- 5 lectures IndexedDB simultanées inchangées.
+- File 160, caches 256/160/128, keepBuffer, TTL, timeouts, scheduler et snapshots
+  de zoom inchangés.
+- Aucun changement Routes, HT, SIA, GPS de navigation, PÉLIC ou logique métier.
+- SIA copié bit-à-bit depuis v17.25.
+
+VALIDATION AVANT LIVRAISON
+- Syntaxe Script / SIA / SW : OK.
+- Scripts inline Index : OK.
+- Manifest JSON : OK.
+- Cohérence versions/caches : OK.
+- SIA bit-à-bit identique à v17.25 : OK.
+- Constantes critiques du moteur tuiles inchangées : OK.
+- Présence du contrôle GPS, du marquage placeholder et des compteurs DIAG : OK.
+
 
 VERSION TEST v17.25 — DENSITÉ CARTOUCHES ROUTIERS À ~0,5 NM
 Date : 19/09/2026
