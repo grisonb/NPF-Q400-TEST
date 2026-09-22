@@ -1,6 +1,6 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
-Mise à jour : 20/09/2026
+Mise à jour : 22/09/2026
 Version de travail actuelle : TEST v17.26
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
@@ -673,9 +673,132 @@ Pour chaque remarque non implémentée, noter autant que possible :
 - statut : NON IMPLÉMENTÉ / À MESURER / ABANDONNÉ / À REVOIR ;
 - condition qui justifierait de la reprendre.
 
+
+15. DÉCOUPAGE DU FICHIER SOURCE script.js — OUTILLAGE DE DÉVELOPPEMENT
+-----------------------------------------------------------------------
+Statut : VALIDÉ (22/09/2026). Étape 1 uniquement : déplacement pur, aucune
+ligne de logique modifiée, aucune modularisation.
+
+- `script.js` (54 527 lignes, 2 949 849 octets) est désormais réparti en
+  35 fichiers `src/0NN_*.js`, concaténés dans l'ordre imposé par `src/ORDER.txt`.
+- `script.js` reste le fichier exécuté par la PWA et le fichier livré
+  (`4_Script_vXX.XX.txt`). Il est RECONSTRUIT, jamais édité à la main.
+- Reconstruction     : `node tools/build_script.js`
+- Contrôle sans écrire : `node tools/build_script.js --check`
+
+RÈGLE DE LIVRAISON AJOUTÉE — À APPLIQUER SYSTÉMATIQUEMENT
+`node tools/build_script.js --check` DOIT être repassé avant chaque livraison
+et DOIT répondre IDENTIQUE.
+Raison : les 54 527 lignes de `script.js` sont en CRLF. Un éditeur, un
+formateur ou une configuration git (`core.autocrlf`) qui normaliserait les fins
+de ligne en LF détruirait l'égalité octet pour octet sans rien casser
+visuellement. Aucun `.gitattributes` n'a été ajouté (décision utilisateur du
+22/09/2026) : ce contrôle est donc le SEUL garde-fou contre une normalisation
+CRLF accidentelle. Si la réponse est DIFFÉRENT, NE PAS LIVRER : identifier
+d'abord le fichier de `src/` dont les fins de ligne ont changé.
+
+INTERDITS
+- Réordonner `src/ORDER.txt` : l'ordre est porteur de sens (4 fonctions
+  redéfinies, la dernière déclaration gagne ; 689 références à des noms déclarés
+  plus bas dans le fichier ; 2 204 const/let de premier niveau soumis à la TDZ).
+- Ajouter un en-tête, une bannière « fichier généré » ou une ligne vide dans un
+  fichier de `src/` : un seul octet ajouté casse l'identité byte-for-byte.
+- Reformater `src/240_donnees_departements_embarquees.js` : une seule ligne de
+  570 Ko (`NPF_EMBEDDED_DEPARTMENTS_GEOJSON`).
+
+NON IMPLÉMENTÉ
+- Étape 2 (vraie modularisation, imports/exports, découpage logique) :
+  NON IMPLÉMENTÉ, aucune demande à ce jour. Ne pas l'engager sans demande
+  explicite.
+
+
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+OUTILLAGE — DÉCOUPAGE DE script.js EN 35 FICHIERS SOURCES (ÉTAPE 1)
+Date : 22/09/2026
+Version concernée : TEST v17.26 — aucun changement de version, aucun changement
+de code applicatif.
+Statut : VALIDÉ
+
+DEMANDE UTILISATEUR
+- Découper `script.js` en plusieurs fichiers sources, sans changer une seule
+  ligne de logique. Étape 1 uniquement, pas de refactorisation.
+- Analyse de la structure réelle et plan détaillé demandés D'ABORD ; exécution
+  autorisée seulement après validation explicite du plan.
+
+DÉCISIONS UTILISATEUR (22/09/2026)
+1. Pas de `.gitattributes` pour l'instant.
+2. `src/` est commité sur GitHub ; `script.js` reste le fichier généré et livré.
+3. Découpage validé tel que proposé.
+
+ANALYSE PRÉALABLE DU FICHIER RÉEL v17.26
+- 54 527 lignes, 2 949 849 octets, SHA-256
+  1fb621ffb797080351417ae3cac58d9c9b43464e4bb3e328768bcd77fa4fd2c7 ;
+- CRLF sur la totalité des lignes, pas de BOM, newline final présent ;
+- aucune enveloppe globale (ni IIFE ni DOMContentLoaded englobant) : tout le
+  code est au premier niveau ;
+- 2 041 déclarations en colonne 0 (572 `function`, 1 764 `const`, 440 `let`) ;
+- 4 fonctions déclarées DEUX fois au premier niveau, la seconde écrasant la
+  première : `installQuickOfflineMapButtonInteractions` (49119 / 51292),
+  `getSiaAirspaceStyle` (49228 / 52425), `buildSiaAirspacePopup` (49274 / 52363),
+  `refreshSiaLayers` (49846 / 54064) ;
+- 689 références à des identifiants déclarés plus loin dans le fichier ;
+- 2 204 `const`/`let` de premier niveau soumis à la TDZ.
+=> L'ordre d'origine est porteur de sens. Le découpage n'est donc légitime que
+   comme concaténation octet pour octet dans l'ordre exact, et l'ordre ne doit
+   jamais être modifié.
+
+RÉALISÉ
+- 35 fichiers `src/0NN_*.js` + `src/ORDER.txt` (ordre de concaténation, avec
+  rappel en tête du fichier de la raison pour laquelle il ne doit pas bouger).
+- Coupes placées sur les bannières de section existantes et les frontières
+  thématiques réelles ; bannières et commentaires d'en-tête rattachés à leur
+  propre section.
+- Les deux zones sensibles sont isolées et repérables :
+  `src/100_tuiles_offline_moteur.js` (moteur tuiles direct offline, caches RAM
+  et retour, file IndexedDB, réparation GPS, diag I/O) et
+  `src/290_calculateur_mission.js` (CALCULATOR_DATA, bingo, fuel, rotations).
+- Gros blocs de données isolés pour que les fichiers voisins restent éditables :
+  `020` (SIA_OFFICIAL_AIRPORT_*), `240` (NPF_EMBEDDED_DEPARTMENTS_GEOJSON, une
+  seule ligne de 570 Ko), `330` (données SIA AIRAC gzip/base64).
+- `tools/build_script.js` : concaténation strictement binaire (jamais de lecture
+  en utf8, afin que les CRLF traversent la construction sans être modifiés),
+  avec mode reconstruction et mode `--check` (compare sans écrire).
+
+VÉRIFICATION BYTE-FOR-BYTE — RÉSULTATS
+1. `node --check` sur chacun des 35 fichiers : 35 OK, 0 échec ;
+2. `cmp` entre `script.js` et la concaténation de `src/` : aucune différence ;
+3. SHA-256 identiques de part et d'autre (1fb621ff…fa4fd2c7) ;
+4. `node --check script.js` : OK ;
+5. `git diff --stat script.js` vide : `script.js` n'a pas été touché.
+Contrôles complémentaires :
+- 2 949 849 octets et 54 527 lignes de part et d'autre ;
+- CRLF préservés dans `src/`, y compris sur la ligne de 566 Ko du fichier `240` ;
+- le build n'a jamais été lancé en mode écriture : `script.js` n'a pas été
+  réécrit, même à l'identique.
+
+CONSÉQUENCE FONCTIONNELLE
+- AUCUNE. `script.js` est resté bit à bit identique. `index.html`, `sia.js`,
+  `style.css`, `manifest.json`, le Service Worker, les caches et les paramètres
+  `appv` sont inchangés. Aucun essai en vol n'est nécessaire pour valider ce
+  découpage : c'est la raison pour laquelle le statut est VALIDÉ et non
+  À MESURER.
+
+RÈGLE AJOUTÉE POUR TOUTES LES LIVRAISONS FUTURES
+- `node tools/build_script.js --check` doit être repassé AVANT CHAQUE LIVRAISON
+  et répondre IDENTIQUE. Aucun `.gitattributes` n'ayant été ajouté, ce contrôle
+  est le seul garde-fou contre une normalisation CRLF -> LF accidentelle, qui
+  serait invisible à l'œil mais casserait l'identité du fichier livré.
+  Voir aussi la section 15 de la fiche de reprise.
+
+NON IMPLÉMENTÉ
+- Étape 2 (vraie modularisation, imports/exports, découpage logique) :
+  NON IMPLÉMENTÉ, aucune demande à ce jour.
+
+--------------------------------------------------------------------------------
+
 
 VERSION TEST v17.26 — AUTO-RÉPARATION TUILES EN SUIVI GPS PROLONGÉ
 Date : 20/09/2026
