@@ -54,9 +54,18 @@ session — elle peut évoluer. Résumé de l'essentiel :
 - À chaque livraison complète demandée, fournir les **7 fichiers .txt complets**, dans
   l'ordre ci-dessus — `5_SIA` excepté, qui ne change presque jamais (vérifier qu'il reste
   strictement identique si aucune modif SIA n'est demandée)
-- L'utilisateur copie-colle ensuite manuellement ces fichiers dans le repo GitHub —
-  ce n'est pas (encore) Claude Code qui commite directement. Si un jour l'utilisateur
-  veut que Claude Code commite/pousse lui-même, il faudra une demande explicite.
+- La livraison elle-même reste manuelle : l'utilisateur copie-colle les 7 fichiers
+  `.txt` dans le repo GitHub.
+- **Git : jamais de commit ni de push sans demande explicite, à chaque fois.**
+  L'utilisateur peut demander à Claude Code de commiter et de pousser lui-même
+  (c'est le cas depuis le 22/09/2026, par exemple pour `src/` et l'outillage).
+  Dans ce cas :
+  - commiter **exactement** les chemins nommés, rien d'autre ;
+  - « commite » n'autorise pas à pousser — s'arrêter et demander avant `git push` ;
+  - montrer le résultat du travail **avant** tout commit ;
+  - commits directs sur `main` (dépôt solo), pas de branche ni de PR sauf demande ;
+  - commits séparés par sujet plutôt qu'un `--amend`.
+  Une autorisation vaut pour l'opération demandée, jamais pour les suivantes.
 
 ## Structure des fichiers
 
