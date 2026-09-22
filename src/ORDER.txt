@@ -1,0 +1,38 @@
+# Ordre de concaténation de script.js — NE PAS RÉORDONNER.
+# L'ordre d'origine est porteur de sens : 4 fonctions redéfinies (la dernière gagne)
+# et 689 références à des noms déclarés plus bas dans le fichier.
+010_entete_diagnostic_ipad.js
+020_donnees_sia_radio_terrains.js
+030_variables_globales.js
+040_chat_push_plans_eau_aerodromes.js
+050_utilitaires.js
+060_demarrage_app.js
+070_communes_recherche.js
+080_carte_echelle_regle_overlays.js
+090_carte_init_gardes_zoom.js
+100_tuiles_offline_moteur.js
+110_evenements_ui_eau_ht.js
+120_routes_offline.js
+130_trafic_reglages_suivi.js
+140_trafic_rendu.js
+150_commune_route_aeroports.js
+160_vac.js
+170_fds_briefing_nas.js
+180_global_link.js
+190_pdf_terrains.js
+200_waypoints.js
+210_pistes_notam_trace.js
+220_frequences_marqueurs_terrains.js
+230_calques_departements.js
+240_donnees_departements_embarquees.js
+250_calques_communes.js
+260_etat_gps.js
+270_position_simulation.js
+280_cartes_hors_ligne.js
+290_calculateur_mission.js
+300_chat_equipe.js
+310_calculateur_ui.js
+320_appui_long_feu.js
+330_sia_donnees_embarquees.js
+340_sia_moteur.js
+350_sia_ctr_labels_selection.js
