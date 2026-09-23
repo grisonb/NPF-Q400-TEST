@@ -46,7 +46,91 @@ const sanitizeStoredAirportState = () => {
     }
 };
 
+/*
+ * v17.30 — MIGRATION UNIQUE DES CODES OACI CORRIGÉS.
+ * Les réglages mémorisés (base, PÉLIC personnalisés, terrains désactivés ou en
+ * eau) portaient d'anciens codes erronés. Chaque ancien code est converti
+ * directement vers son nouveau code, sans enchaînement : l'ancien LFRT
+ * (Saint-Nazaire) devient LFRZ AVANT que l'ancien LFBK ne devienne LFRT
+ * (Saint-Brieuc) ; l'ancien LFSX (Montbéliard) devient LFSM AVANT que l'ancien
+ * LFSQ ne devienne LFSX (Luxeuil). Une référence à un terrain retiré (absent du
+ * SIA) est abandonnée. Exécutée une seule fois (drapeau), sinon un nouveau LFRT
+ * ou LFSX légitime serait converti à tort à chaque ouverture. Le drapeau porte
+ * le compte rendu, rappelé dans le DIAG à chaque démarrage : la page qui a fait
+ * la migration peut être rechargée aussitôt (mise à jour du Service Worker).
+ */
+const NPF_AIRPORT_CODES_MIGRATION_KEY = 'npfAirportCodesMigrationV1730';
+const NPF_AIRPORT_CODES_MIGRATION_MAP = Object.freeze({
+    LFCU: 'LFOA', LFLZ: 'LFHP', LFYD: 'LFRD', LFSF: 'LFJL', LFSK: 'LFGA',
+    LFRT: 'LFRZ', LFBK: 'LFRT',
+    LFSX: 'LFSM', LFSQ: 'LFSX'
+});
+const NPF_AIRPORT_CODES_REMOVED = Object.freeze(['LFPC', 'LFSR']);
+
+const markStoredAirportCodesMigrationV1730 = (raw) => {
+    try {
+        const report = JSON.parse(raw);
+        if (!report || (!report.converted?.length && !report.dropped?.length)) return;
+        npfStartupDiagMark(
+            'airport_codes_migration_v1730',
+            'Codes OACI — migration v17.30',
+            `effectuée le ${report.at || '?'} · convertis : ${report.converted.join(', ') || 'aucun'} · abandonnés (terrain retiré) : ${report.dropped.join(', ') || 'aucun'}`
+        );
+    } catch (_) {}
+};
+
+const migrateStoredAirportCodesV1730 = () => {
+    try {
+        const existingReport = localStorage.getItem(NPF_AIRPORT_CODES_MIGRATION_KEY);
+        if (existingReport) {
+            markStoredAirportCodesMigrationV1730(existingReport);
+            return;
+        }
+        const converted = [];
+        const dropped = [];
+        const migrateCode = (value, where) => {
+            const code = normalizeOaciCodeInput(value);
+            if (!code) return null;
+            if (NPF_AIRPORT_CODES_REMOVED.includes(code)) {
+                dropped.push(`${where}:${code}`);
+                return null;
+            }
+            const next = NPF_AIRPORT_CODES_MIGRATION_MAP[code];
+            if (next) {
+                converted.push(`${where}:${code}->${next}`);
+                return next;
+            }
+            return code;
+        };
+        [
+            ['disabled_airports', 'désactivé'],
+            ['water_airports', 'eau'],
+            ['custom_pelican_airports', 'PÉLIC']
+        ].forEach(([key, where]) => {
+            const raw = localStorage.getItem(key);
+            if (!raw) return;
+            let list = [];
+            try { list = JSON.parse(raw); } catch (_) { list = []; }
+            if (!Array.isArray(list)) return;
+            const next = [...new Set(list.map(code => migrateCode(code, where)).filter(Boolean))];
+            localStorage.setItem(key, JSON.stringify(next));
+        });
+        const savedBase = localStorage.getItem('selected_base_oaci');
+        if (savedBase) {
+            const nextBase = migrateCode(savedBase, 'base');
+            if (nextBase) localStorage.setItem('selected_base_oaci', nextBase);
+            else localStorage.removeItem('selected_base_oaci');
+        }
+        const report = JSON.stringify({ at: new Date().toLocaleString('fr-FR'), converted, dropped });
+        localStorage.setItem(NPF_AIRPORT_CODES_MIGRATION_KEY, report);
+        markStoredAirportCodesMigrationV1730(report);
+    } catch (error) {
+        try { npfStartupDiagMark('airport_codes_migration_v1730_error', 'Codes OACI — migration v17.30 en erreur', error?.message || String(error)); } catch (_) {}
+    }
+};
+
 const loadState = () => {
+    migrateStoredAirportCodesV1730();
     const savedDisabled = localStorage.getItem('disabled_airports');
     if (savedDisabled) disabledAirports = new Set(JSON.parse(savedDisabled));
     const savedWater = localStorage.getItem('water_airports');

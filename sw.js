@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v17-29_notams_122_calculator_fix';
-const APP_VERSION = 'v17.29';
+const SW_VERSION = 'sw-v17-30_oaci_codes_sia';
+const APP_VERSION = 'v17.30';
 const SIA_DATA_REVISION = '15.69-radio1026-1-maplite1';
 const SIA_DATA_URL = './sia.js';
 const SIA_DATA_CACHE = `npf-q400-sia-data-${SIA_DATA_REVISION}`;

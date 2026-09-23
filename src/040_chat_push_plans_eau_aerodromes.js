@@ -24,14 +24,14 @@ const waterPoints = [{"id":"AIGUEBLETTE","name":"Aigueblette","countryCode":"FR"
 
 
 const otherAirports = [
-    { oaci: "LFBC", name: "Cazaux", lat: 44.534, lon: -1.155 }, { oaci: "LFBH", name: "La Rochelle-Île de Ré", lat: 46.179, lon: -1.195 }, { oaci: "LFBF", name: "Toulouse-Francazal", lat: 43.546, lon: 1.365 }, { oaci: "LFBG", name: "Cognac-Châteaubernard", lat: 45.660, lon: -0.354 }, { oaci: "LFBI", name: "Poitiers-Biard", lat: 46.587, lon: 0.309 }, { oaci: "LFBK", name: "Saint-Brieuc-Armor", lat: 48.538, lon: -2.852 }, { oaci: "LFBO", name: "Toulouse-Blagnac", lat: 43.635, lon: 1.363 }, { oaci: "LFBT", name: "Tarbes-Lourdes-Pyrénées", lat: 43.185, lon: -0.003 }, { oaci: "LFBU", name: "Angoulême-Cognac", lat: 45.729, lon: 0.220 }, { oaci: "LFCU", name: "Avord", lat: 47.056, lon: 2.637 }, { oaci: "LFLA", name: "Auxerre-Branches", lat: 47.848, lon: 3.497 }, { oaci: "LFLC", name: "Clermont-Ferrand-Auvergne", lat: 45.786, lon: 3.169 }, { oaci: "LFLD", name: "Bourges", lat: 47.059, lon: 2.370 }, { oaci: "LFLL", name: "Lyon-Saint Exupéry", lat: 45.725, lon: 5.081 }, { oaci: "LFLN", name: "Saint-Yan", lat: 46.409, lon: 4.013 }, { oaci: "LFLS", name: "Grenoble-Isère", lat: 45.363, lon: 5.331 }, { oaci: "LFLV", name: "Vichy-Charmeil", lat: 46.167, lon: 3.403 }, { oaci: "LFLW", name: "Aurillac", lat: 44.887, lon: 2.418 }, { oaci: "LFLY", name: "Lyon-Bron", lat: 45.729, lon: 4.945 }, { oaci: "LFLZ", name: "Le Puy-Loudes", lat: 45.079, lon: 3.762 }, { oaci: "LFMC", name: "Le Luc-Le Cannet", lat: 43.385, lon: 6.368 }, { oaci: "LFMI", name: "Istres-Le Tubé", lat: 43.524, lon: 4.944 }, { oaci: "LFMN", name: "Nice-Côte d'Azur", lat: 43.665, lon: 7.215 }, { oaci: "LFMQ", name: "Le Castellet", lat: 43.253, lon: 5.786 }, { oaci: "LFMV", name: "Avignon-Provence", lat: 43.906, lon: 4.902 }, { oaci: "LFMY", name: "Salon-de-Provence", lat: 43.606, lon: 5.110 }, { oaci: "LFOA", name: "Avord", lat: 47.056, lon: 2.637 }, { oaci: "LFOC", name: "Châteaudun", lat: 48.058, lon: 1.378 }, { oaci: "LFOE", name: "Évreux-Fauville", lat: 49.028, lon: 1.218 }, { oaci: "LFOK", name: "Châlons-Vatry", lat: 48.776, lon: 4.185 }, { oaci: "LFOJ", name: "Orléans-Bricy", lat: 47.989, lon: 1.758 }, { oaci: "LFOP", name: "Rouen-Vallée de Seine", lat: 49.385, lon: 1.182 }, { oaci: "LFOQ", name: "Blois-Le Breuil", lat: 47.678, lon: 1.217 }, { oaci: "LFOR", name: "Chartres-Métropole", lat: 48.455, lon: 1.530 }, { oaci: "LFOT", name: "Tours-Val de Loire", lat: 47.432, lon: 0.722 }, { oaci: "LFOU", name: "Cholet-Le Pontreau", lat: 47.081, lon: -0.871 }, { oaci: "LFOV", name: "Laval-Entrammes", lat: 48.033, lon: -0.749 }, { oaci: "LFPB", name: "Paris-Le Bourget", lat: 48.969, lon: 2.441 }, { oaci: "LFPC", name: "Creil", lat: 49.253, lon: 2.520 }, { oaci: "LFPG", name: "Paris-Charles-de-Gaulle", lat: 49.009, lon: 2.547 }, { oaci: "LFPO", name: "Paris-Orly", lat: 48.723, lon: 2.379 }, { oaci: "LFPV", name: "Villacoublay-Vélizy", lat: 48.773, lon: 2.203 }, { oaci: "LFRB", name: "Brest-Bretagne", lat: 48.447, lon: -4.418 }, { oaci: "LFRC", name: "Cherbourg-Manche", lat: 49.650, lon: -1.478 }, { oaci: "LFRD", name: "Dinard-Pleurtuit-Saint-Malo", lat: 48.587, lon: -2.080 }, { oaci: "LFRE", name: "La Baule-Escoublac", lat: 47.289, lon: -2.348 }, { oaci: "LFRF", name: "Granville-Mont-Saint-Michel", lat: 48.887, lon: -1.564 }, { oaci: "LFRG", name: "Deauville-Normandie", lat: 49.365, lon: 0.154 }, { oaci: "LFRH", name: "Lorient-Bretagne-Sud", lat: 47.760, lon: -3.440 }, { oaci: "LFRI", name: "La Roche-sur-Yon-Les Ajoncs", lat: 46.702, lon: -1.381 }, { oaci: "LFRJ", name: "Landivisiau", lat: 48.527, lon: -4.156 }, { oaci: "LFRK", name: "Caen-Carpiquet", lat: 49.173, lon: -0.450 }, { oaci: "LFRL", name: "Lanvéoc-Poulmic", lat: 48.278, lon: -4.437 }, { oaci: "LFRM", name: "Le Mans-Arnage", lat: 47.949, lon: 0.203 }, { oaci: "LFRN", name: "Rennes-Saint-Jacques", lat: 48.070, lon: -1.732 }, { oaci: "LFRO", name: "Lannion-Côte de Granit Rose", lat: 48.755, lon: -3.472 }, { oaci: "LFRQ", name: "Quimper-Pluguffan", lat: 47.975, lon: -4.167 }, { oaci: "LFRS", name: "Nantes-Atlantique", lat: 47.153, lon: -1.607 }, { oaci: "LFRT", name: "Saint-Nazaire-Montoir", lat: 47.312, lon: -2.152 }, { oaci: "LFRU", name: "Morlaix-Ploujean", lat: 48.604, lon: -3.818 }, { oaci: "LFSD", name: "Dijon-Longvic", lat: 47.268, lon: 5.088 }, { oaci: "LFSF", name: "Metz-Nancy-Lorraine", lat: 48.981, lon: 6.251 }, { oaci: "LFSH", name: "Haguenau", lat: 48.790, lon: 7.820 }, { oaci: "LFSK", name: "Colmar-Houssen", lat: 48.110, lon: 7.359 }, { oaci: "LFSO", name: "Nancy-Ochey", lat: 48.577, lon: 5.955 }, { oaci: "LFSQ", name: "Luxeuil-Saint-Sauveur", lat: 47.779, lon: 6.353 }, { oaci: "LFQA", name: "Reims-Prunay", lat: 49.207, lon: 4.148 }, { oaci: "LFST", name: "Strasbourg-Entzheim", lat: 48.542, lon: 7.628 }, { oaci: "LFSX", name: "Montbéliard-Courcelles", lat: 47.487, lon: 6.852 }, { oaci: "LFYR", name: "Romorantin-Pruniers", lat: 47.352, lon: 1.670 }, { oaci: "LFYD", name: "Dinard", lat: 48.587, lon: -2.080 }, { oaci: "LFSR", name: "Reims-Champagne", lat: 49.308, lon: 4.045 }, { oaci: "LFPM", name: "Melun-Villaroche", lat: 48.604, lon: 2.676 }, { oaci: "LFOB", name: "Beauvais-Tillé", lat: 49.454, lon: 2.112 }, { oaci: "LFQN", name: "Saint-Omer-Wizernes", lat: 50.727, lon: 2.233 }, { oaci: "LFKS", name: "Solenzara", lat: 41.924, lon: 9.405 },
+    { oaci: "LFBC", name: "Cazaux", lat: 44.534, lon: -1.155 }, { oaci: "LFBH", name: "La Rochelle-Île de Ré", lat: 46.179, lon: -1.195 }, { oaci: "LFBF", name: "Toulouse-Francazal", lat: 43.546, lon: 1.365 }, { oaci: "LFBG", name: "Cognac-Châteaubernard", lat: 45.660, lon: -0.354 }, { oaci: "LFBI", name: "Poitiers-Biard", lat: 46.587, lon: 0.309 }, { oaci: "LFRT", name: "Saint-Brieuc-Armor", lat: 48.538, lon: -2.852 }, { oaci: "LFBO", name: "Toulouse-Blagnac", lat: 43.635, lon: 1.363 }, { oaci: "LFBT", name: "Tarbes-Lourdes-Pyrénées", lat: 43.185, lon: -0.003 }, { oaci: "LFBU", name: "Angoulême-Cognac", lat: 45.729, lon: 0.220 }, { oaci: "LFLA", name: "Auxerre-Branches", lat: 47.848, lon: 3.497 }, { oaci: "LFLC", name: "Clermont-Ferrand-Auvergne", lat: 45.786, lon: 3.169 }, { oaci: "LFLD", name: "Bourges", lat: 47.059, lon: 2.370 }, { oaci: "LFLL", name: "Lyon-Saint Exupéry", lat: 45.725, lon: 5.081 }, { oaci: "LFLN", name: "Saint-Yan", lat: 46.409, lon: 4.013 }, { oaci: "LFLS", name: "Grenoble-Isère", lat: 45.363, lon: 5.331 }, { oaci: "LFLV", name: "Vichy-Charmeil", lat: 46.167, lon: 3.403 }, { oaci: "LFLW", name: "Aurillac", lat: 44.887, lon: 2.418 }, { oaci: "LFLY", name: "Lyon-Bron", lat: 45.729, lon: 4.945 }, { oaci: "LFMC", name: "Le Luc-Le Cannet", lat: 43.385, lon: 6.368 }, { oaci: "LFMI", name: "Istres-Le Tubé", lat: 43.524, lon: 4.944 }, { oaci: "LFMN", name: "Nice-Côte d'Azur", lat: 43.665, lon: 7.215 }, { oaci: "LFMQ", name: "Le Castellet", lat: 43.253, lon: 5.786 }, { oaci: "LFMV", name: "Avignon-Provence", lat: 43.906, lon: 4.902 }, { oaci: "LFMY", name: "Salon-de-Provence", lat: 43.606, lon: 5.110 }, { oaci: "LFOA", name: "Avord", lat: 47.056, lon: 2.637 }, { oaci: "LFOC", name: "Châteaudun", lat: 48.058, lon: 1.378 }, { oaci: "LFOE", name: "Évreux-Fauville", lat: 49.028, lon: 1.218 }, { oaci: "LFOK", name: "Châlons-Vatry", lat: 48.776, lon: 4.185 }, { oaci: "LFOJ", name: "Orléans-Bricy", lat: 47.989, lon: 1.758 }, { oaci: "LFOP", name: "Rouen-Vallée de Seine", lat: 49.385, lon: 1.182 }, { oaci: "LFOQ", name: "Blois-Le Breuil", lat: 47.678, lon: 1.217 }, { oaci: "LFOR", name: "Chartres-Métropole", lat: 48.455, lon: 1.530 }, { oaci: "LFOT", name: "Tours-Val de Loire", lat: 47.432, lon: 0.722 }, { oaci: "LFOU", name: "Cholet-Le Pontreau", lat: 47.081, lon: -0.871 }, { oaci: "LFOV", name: "Laval-Entrammes", lat: 48.033, lon: -0.749 }, { oaci: "LFPB", name: "Paris-Le Bourget", lat: 48.969, lon: 2.441 }, { oaci: "LFPG", name: "Paris-Charles-de-Gaulle", lat: 49.009, lon: 2.547 }, { oaci: "LFPO", name: "Paris-Orly", lat: 48.723, lon: 2.379 }, { oaci: "LFPV", name: "Villacoublay-Vélizy", lat: 48.773, lon: 2.203 }, { oaci: "LFRB", name: "Brest-Bretagne", lat: 48.447, lon: -4.418 }, { oaci: "LFRC", name: "Cherbourg-Manche", lat: 49.650, lon: -1.478 }, { oaci: "LFRD", name: "Dinard-Pleurtuit-Saint-Malo", lat: 48.587, lon: -2.080 }, { oaci: "LFRE", name: "La Baule-Escoublac", lat: 47.289, lon: -2.348 }, { oaci: "LFRF", name: "Granville-Mont-Saint-Michel", lat: 48.887, lon: -1.564 }, { oaci: "LFRG", name: "Deauville-Normandie", lat: 49.365, lon: 0.154 }, { oaci: "LFRH", name: "Lorient-Lann-Bihoué", lat: 47.760, lon: -3.440 }, { oaci: "LFRI", name: "La Roche-sur-Yon-Les Ajoncs", lat: 46.702, lon: -1.381 }, { oaci: "LFRJ", name: "Landivisiau", lat: 48.527, lon: -4.156 }, { oaci: "LFRK", name: "Caen-Carpiquet", lat: 49.173, lon: -0.450 }, { oaci: "LFRL", name: "Lanvéoc-Poulmic", lat: 48.278, lon: -4.437 }, { oaci: "LFRM", name: "Le Mans-Arnage", lat: 47.949, lon: 0.203 }, { oaci: "LFRN", name: "Rennes-Saint-Jacques", lat: 48.070, lon: -1.732 }, { oaci: "LFRO", name: "Lannion", lat: 48.755, lon: -3.472 }, { oaci: "LFRQ", name: "Quimper-Pluguffan", lat: 47.975, lon: -4.167 }, { oaci: "LFRS", name: "Nantes-Atlantique", lat: 47.153, lon: -1.607 }, { oaci: "LFRU", name: "Morlaix-Ploujean", lat: 48.604, lon: -3.818 }, { oaci: "LFSD", name: "Dijon-Longvic", lat: 47.268, lon: 5.088 }, { oaci: "LFSH", name: "Haguenau", lat: 48.790, lon: 7.820 }, { oaci: "LFSO", name: "Nancy-Ochey", lat: 48.577, lon: 5.955 }, { oaci: "LFSX", name: "Luxeuil-Saint-Sauveur", lat: 47.779, lon: 6.353 }, { oaci: "LFQA", name: "Reims-Prunay", lat: 49.207, lon: 4.148 }, { oaci: "LFST", name: "Strasbourg-Entzheim", lat: 48.542, lon: 7.628 }, { oaci: "LFSM", name: "Montbéliard-Courcelles", lat: 47.4867, lon: 6.7915 }, { oaci: "LFYR", name: "Romorantin-Pruniers", lat: 47.352, lon: 1.670 }, { oaci: "LFPM", name: "Melun-Villaroche", lat: 48.604, lon: 2.676 }, { oaci: "LFOB", name: "Beauvais-Tillé", lat: 49.454, lon: 2.112 }, { oaci: "LFQN", name: "Saint-Omer-Wizernes", lat: 50.727, lon: 2.233 }, { oaci: "LFKS", name: "Solenzara", lat: 41.924, lon: 9.405 },
 
  // Terrains ajoutés depuis le PDF "piste revêtue > 1500 m"
     { oaci: "LFBA", name: "Agen-La Garenne", lat: 44.1747, lon: 0.5906 },
     { oaci: "LFBE", name: "Bergerac-Roumanière", lat: 44.8253, lon: 0.5186 },
-    { oaci: "LFDN", name: "Rochefort-Saint-Agnant", lat: 45.8878, lon: -0.9831 },
+    { oaci: "LFDN", name: "Rochefort-Charente-Maritime", lat: 45.8878, lon: -0.9831 },
     { oaci: "LFBZ", name: "Biarritz-Pays Basque", lat: 43.4683, lon: -1.5311 },
-    { oaci: "LFSL", name: "Brive-Vallée de la Dordogne", lat: 45.0397, lon: 1.4856 },
+    { oaci: "LFSL", name: "Brive-Souillac", lat: 45.0397, lon: 1.4856 },
     { oaci: "LFJL", name: "Metz-Nancy-Lorraine", lat: 48.9821, lon: 6.2513 },
     { oaci: "LFSB", name: "Bâle-Mulhouse", lat: 47.5896, lon: 7.5299 },
     { oaci: "LFGA", name: "Colmar-Houssen", lat: 48.1099, lon: 7.3590 },
@@ -70,7 +70,7 @@ LFRH|LORIENT LANN BIHOUE|47.76053|-3.43995
 LFTW|NIMES GARONS|43.75743|4.41634
 LFBE|BERGERAC ROUMANIERE|44.82443|0.52053
 LFBO|TOULOUSE BLAGNAC|43.63513|1.36786
-LFBZ|BIARRITZ BAYONNE ANGLET|43.46831|-1.53116
+LFBZ|BIARRITZ PAYS BASQUE|43.46831|-1.53116
 LFKB|BASTIA PORETTA|42.55000|9.48485
 LFLL|LYON SAINT EXUPERY|45.72564|5.08111
 LFLX|CHATEAUROUX DEOLS|46.86031|1.72113
@@ -252,7 +252,7 @@ LFXU|LES MUREAUX|48.99861|1.94167
 LFYR|ROMORANTIN PRUNIERS|47.32083|1.68889
 LFAC|CALAIS DUNKERQUE|50.96093|1.95143
 LFAE|EU MERS LE TREPORT|50.06917|1.42667
-LFAT|LE TOUQUET PARIS PLAGE|50.51485|1.62758
+LFAT|LE TOUQUET ELIZABETH II|50.51485|1.62758
 LFBC|CAZAUX|44.53488|-1.13145
 LFBH|LA ROCHELLE ILE DE RE|46.17921|-1.19524
 LFBM|MONT DE MARSAN|43.91139|-0.51000
@@ -299,10 +299,9 @@ LFOA|AVORD|47.05694|2.63889
 LFOD|SAUMUR SAINT FLORENT|47.25673|-0.11355
 LFOE|EVREUX FAUVILLE|49.02861|1.22000
 LFPM|MELUN VILLAROCHE|48.60528|2.67078
-LFPN|TOUSSUS LE NOBLE|48.74976|2.11118
+LFPN|PARIS SACLAY VERSAILLES|48.74976|2.11118
 LFPT|PONTOISE CORMEILLES EN VEXIN|49.09663|2.04072
 LFPV|VILLACOUBLAY VELIZY|48.77417|2.19169
-LFPY|BRETIGNY SUR ORGE|48.59611|2.33222
 LFQM|BESANCON LA VEZE|47.20531|6.08055
 LFRE|LA BAULE ESCOUBLAC|47.28833|-2.34694
 LFRF|GRANVILLE-MONT SAINT MICHEL|48.88287|-1.56383
@@ -312,11 +311,8 @@ LFRO|LANNION|48.75444|-3.47194
 LFRT|SAINT BRIEUC ARMOR|48.53749|-2.85654
 LFRZ|SAINT NAZAIRE MONTOIR|47.31065|-2.15680
 LFSC|COLMAR-MEYENHEIM|47.92194|7.39972
-LFSQ|BELFORT FONTAINE|47.65556|7.01167
 LFTH|HYERES LE PALYVESTRE|43.09734|6.14603
-LFXI|SAINT CHRISTOL|44.05250|5.49389
 LFXQ|COETQUIDAN|47.94389|-2.18194
-LFYH|BROYE LES PESMES|47.31667|5.51667
 LFBT|TARBES LOURDES PYRENEES|43.18545|-0.00289
 LFMP|PERPIGNAN RIVESALTES|42.74083|2.86972
 LFRG|DEAUVILLE NORMANDIE|49.36339|0.16000
@@ -393,14 +389,13 @@ LFHS|BOURG CEYZERIAT|46.20562|5.29179
 LFID|CONDOM VALENCE SUR BAISE|43.90917|0.38611
 LFIF|SAINT AFFRIQUE BELMONT|43.82278|2.74722
 LFIG|CASSAGNES BEGONHES|44.17833|2.51778
-LFIK|RIBERAC SAINT AULAYE|45.23944|0.26583
+LFIK|RIBERAC-TOURETTE|45.23944|0.26583
 LFJC|CLAMECY|47.43750|3.50750
 LFJH|CAZERES PALAMINY|43.20083|1.05000
 LFJS|SOISSONS COURMELLES|49.34500|3.28306
 LFKM|SAINT GALMIER|45.60639|4.30500
-LFLK|OYONNAX ARBENT|46.27861|5.66639
 LFNO|FLORAC SAINTE ENIMIE|44.28556|3.46556
-LFNQ|MONT LOUIS LA QUILLANE|42.54346|2.12002
+LFNQ|LA LLAGONNE LA QUILLANE|42.54346|2.12002
 LFNW|PUIVERT|42.91028|2.05472
 LFNX|BEDARIEUX LA TOUR SUR ORB|43.63972|3.14472
 LFOF|ALENCON VALFRAMBERT|48.44667|0.10833
@@ -422,7 +417,6 @@ LFQH|CHATILLON SUR SEINE|47.84528|4.57944
 LFQJ|MAUBEUGE ELESMES|50.30833|4.03000
 LFQK|CHALONS ECURY SUR COOLE|48.90556|4.35278
 LFQL|LENS BENIFONTAINE|50.46639|2.81972
-LFQS|VITRY EN ARTOIS|50.33833|2.99333
 LFQU|SARRE UNION|48.95083|7.07639
 LFQW|VESOUL FROTEY|47.63861|6.20417
 LFQX|JUVANCOURT|48.11389|4.81944
@@ -470,12 +464,9 @@ LFOC|CHATEAUDUN|48.05788|1.37944
 LFOG|FLERS SAINT PAUL|48.74972|-0.59472
 LFOJ|ORLEANS BRICY|47.98778|1.76056
 LFOL|L'AIGLE SAINT MICHEL|48.75889|0.65778
-LFPC|CREIL|49.25361|2.51917
 LFQE|ETAIN ROUVRES|49.22909|5.67605
-LFQI|CAMBRAI EPINOY|50.21917|3.15222
 LFQP|PHALSBOURG BOURSCHEID|48.76815|7.20513
 LFQV|CHARLEVILLE MEZIERES|49.78505|4.64281
-LFSF|METZ FRESCATY|49.07639|6.13389
 LFSG|EPINAL MIRECOURT|48.32501|6.06674
 LFSI|SAINT DIZIER ROBINSON|48.63354|4.90819
 LFSL|BRIVE SOUILLAC|45.03964|1.48567
@@ -483,9 +474,6 @@ LFSO|NANCY OCHEY|48.58319|5.95453
 LFSX|LUXEUIL SAINT SAUVEUR|47.78722|6.36500
 LFSY|CESSEY BAIGNEUX LES JUIFS|47.60972|4.61750
 LFTF|CUERS PIERREFEU|43.24759|6.12729
-LFYD|DAMBLAIN|48.08611|5.66389
-LFYM|MARIGNY LE GRAND|48.66000|3.83389
-LFSR|REIMS CHAMPAGNE|49.31028|4.05083
 LFMD|CANNES MANDELIEU|43.54639|6.95417
 LFMF|FAYENCE|43.60806|6.70167
 LFMC|LE LUC LE CANNET|43.38472|6.38694
@@ -896,7 +884,6 @@ LFQO|07R/25L|50.685931|3.069971|50.688509|3.081149|838|50|GRASS|1
 LFQO|17L/35R|50.690984|3.074512|50.683456|3.076608|850|80|GRASS|1
 LFQO|17R/35L|50.690984|3.074512|50.683456|3.076608|850|50|GRASS|1
 LFQP|06/24|48.760899|7.187990|48.771500|7.213120|2196|45|ASP|0
-LFQS|12/30|50.340353|2.987839|50.336306|2.998821|900|100|G|1
 LFQT|04/22|50.611801|2.634340|50.624901|2.650150|1840|30|ASP|0
 LFQU|09/27|48.950830|7.070433|48.950830|7.082347|870|0|UNK|1
 LFQV|11/29|49.786499|4.637430|49.781399|4.656710|1500|30|ASP|0
@@ -1117,12 +1104,11 @@ LFBF|12/30|43.549099|1.357200|43.542301|1.377410|1800|45|ASP|0
 LFBG|05/23|45.648411|-0.324381|45.662518|-0.300686|2423|45|PEM|0
 LFBG|08/26|45.661861|-0.324158|45.663662|-0.301008|1814|60|MAC|0
 LFBI|03/21|46.579601|0.300117|46.597900|0.315761|2350|45|ASP|0
-LFBK|06/24|48.533100|-2.867380|48.543400|-2.841840|2200|45|ASP|0
+LFRT|06/24|48.533100|-2.867380|48.543400|-2.841840|2200|45|ASP|0
 LFBO|14L/32R|43.637402|1.357620|43.615601|1.380220|3000|45|ASP|0
 LFBO|14R/32L|43.644100|1.345930|43.618999|1.372100|3500|45|ASP|0
 LFBT|02/20|43.166000|-0.012750|43.191299|0.000069|3000|45|ASP|0
 LFBU|10/28|45.730499|0.207131|45.728500|0.230214|1810|45|ASP|0
-LFCU|06/24|47.047901|2.611770|47.063499|2.651840|3503|45|ASP|0
 LFLA|18/36|47.857700|3.498210|47.842999|3.496100|1650|30|ASP|0
 LFLC|08/26|45.784801|3.150820|45.788601|3.189160|3013|45|ASP|0
 LFLD|06/24|47.056599|2.359880|47.063801|2.377330|1550|45|ASP|0
@@ -1134,8 +1120,6 @@ LFLS|09/27|45.362999|5.309910|45.362900|5.348840|3050|45|ASP|0
 LFLV|01/19|46.159901|3.401720|46.179501|3.405750|2200|45|ASP|0
 LFLW|15/33|44.897900|2.416940|44.884998|2.427440|1700|30|ASP|0
 LFLY|16/34|45.735001|4.940930|45.719299|4.947610|1820|45|ASP|0
-LFLZ|15/33|45.086300|3.758240|45.074902|3.767160|1393|30|Paved|0
-LFLZ|15R/33L|45.083599|3.759090|45.077499|3.763680|940|80|Unpaved|0
 LFMC|09/27|43.384499|6.378570|43.384701|6.388490|800|30|ASP|0
 LFMC|13/31|43.388599|6.380470|43.380501|6.393670|1400|30|ASP|0
 LFMI|15/33|43.537800|4.913300|43.507801|4.934620|3750|60|ASP|0
@@ -1158,7 +1142,6 @@ LFOV|14/32|48.038506|-0.751112|48.026672|-0.737479|1662|30|ASP|0
 LFPB|03/21|48.948700|2.426860|48.970501|2.442150|2395|45|ASP|0
 LFPB|07/25|48.963799|2.420290|48.973999|2.458250|3000|45|PEM|0
 LFPB|09/27|48.963699|2.420400|48.965099|2.445630|1847|45|ASP|0
-LFPC|07/25|49.249001|2.504170|49.258099|2.534090|2399|50|CON|0
 LFPG|08H/26H|49.015769|2.558572|49.016089|2.564603|440|30|GRASS|0
 LFPG|08L/26R|48.995701|2.552740|48.998798|2.610180|4215|45|ASP|0
 LFPG|08R/26L|48.992901|2.565660|48.994900|2.602430|2700|60|CON|0
@@ -1190,25 +1173,19 @@ LFRN|14/32|48.069901|-1.740500|48.063900|-1.733530|850|30|ASP|0
 LFRO|11/29|48.756599|-3.482710|48.751999|-3.460770|1700|45|ASP|0
 LFRQ|09/27|47.975700|-4.185340|47.974499|-4.156600|2150|45|ASP|0
 LFRS|03/21|47.141602|-1.619540|47.164799|-1.601900|2900|45|ASP|0
-LFRT|07/25|47.309101|-2.164430|47.315300|-2.133930|2400|45|ASP|0
 LFRU|04/22|48.597698|-3.822940|48.608799|-3.808830|1617|36|ASP|0
 LFSD|01/19|47.266302|5.082896|47.276722|5.087014|1200|23|ASP|0
 LFSD|17/35|47.276600|5.093590|47.255100|5.096370|2400|45|ASP|0
-LFSF|04/22|48.973400|6.240540|48.990799|6.262100|2500|45|ASP|0
 LFSH|03/21|48.790401|7.814320|48.798302|7.820840|995|18|ASP|0
 LFSH|03L/21R|48.791000|7.813160|48.798599|7.819510|963|80|Turf|0
-LFSK|01/19|48.102600|7.356890|48.116699|7.361020|1610|30|ASP|0
 LFSO|02/20|48.573002|5.949090|48.593399|5.959950|2401|45|CON|0
-LFSQ|04/22|47.777199|6.357160|47.793701|6.376220|2315|36|ASP|0
-LFSQ|11/29|47.791599|6.334540|47.783001|6.364410|2433|45|ASP|0
+LFSX|04/22|47.777199|6.357160|47.793701|6.376220|2315|36|ASP|0
+LFSX|11/29|47.791599|6.334540|47.783001|6.364410|2433|45|ASP|0
 LFQA|07/25|49.206699|4.149810|49.210899|4.164290|1150|30|ASP|0
 LFST|05/23|48.531200|7.616030|48.545399|7.640440|2400|45|ASP|0
-LFSX|08/26|47.485600|6.779460|47.488400|6.801610|1700|20|ASP|0
+LFSM|08/26|47.485600|6.779460|47.488400|6.801610|1700|20|ASP|0
 LFYR|04L/22R|47.324797|1.693338|47.317681|1.683200|1100|100|GRASS|1
 LFYR|04R/22L|47.323500|1.693887|47.317354|1.685132|950|100|GRASS|1
-LFYD|12/30|48.590500|-2.088880|48.584999|-2.071300|1435|45|ASP|0
-LFYD|17/35|48.598099|-2.082680|48.578602|-2.077560|2200|45|ASP|0
-LFSR|07/25|49.313816|4.065809|49.306182|4.033637|2482|48|ASP|1
 LFPM|01/19|48.606098|2.670980|48.617500|2.674850|1300|30|ASP|0
 LFPM|10/28|48.606499|2.663290|48.602299|2.689290|1975|45|ASP|0
 LFOB|04/22|49.454601|2.113020|49.462101|2.123270|1105|30|ASP|0

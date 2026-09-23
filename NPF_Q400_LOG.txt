@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 23/09/2026
-Version de travail actuelle : TEST v17.29
+Version de travail actuelle : TEST v17.30
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -173,8 +173,20 @@ IMPLÉMENTÉ / INTÉGRÉ :
   individuelles conservées si NOTAM inchangé (id + signature).
 - v17.29 — calculatorModal : exception supprimée sans réactiver le repli par
   coordonnées ; calculateur strictement inchangé (section 16, point D).
+- v17.30 — codes OACI alignés sur le SIA : Saint-Brieuc recodé LFRT,
+  Montbéliard LFSM, Luxeuil LFSX ; 6 doublons et 2 terrains fermés selon le SIA
+  retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
+  liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
+  des réglages mémorisés (section 18).
 
 NON IMPLÉMENTÉ / OUVERT :
+- PÉRENNE v2026.67 (utilisée par les collègues) : MÊMES codes OACI erronés,
+  plus LFSJ « Dole-Tavaux » (pélicandrome ; LFSJ = Sedan-Douzy) et LFBS
+  « Chambéry-Savoie » (LFBS = Biscarrosse). Son bouton VAC ouvre la carte d'un
+  autre terrain. Décision utilisateur (23/09/2026) : aucune modification pour le
+  moment — À DÉCIDER (section 18, point P) ;
+- manifest VAC du dépôt NPF-Q400-VAC (noms et npfType) : à régénérer, dépôt non
+  cloné localement — NON IMPLÉMENTÉ (section 18) ;
 - écart ligne de foi jaune / route rouge alors que les deux affichent 277° :
   hypothèse principale = arrondi du relèvement affiché ; aucune compensation codée ;
 - comportement SIA à 5 NM sous charge combinée Zones + Routes + HT : la suppression
@@ -261,6 +273,10 @@ NON IMPLÉMENTÉ / OUVERT :
   sélections conservées. Calculateur : onglets et appuis inchangés, plus aucune
   erreur `calculatorModal`. Le parcours complet du bouton contre le vrai NAS
   dépend du point NAS ci-dessus (erreur 500 tant qu'il n'est pas traité) ;
+- v17.30 : À MESURER sur iPad après installation de la NAS 2026-09-24c et d'un
+  rafraîchissement NOTAM (ordre en section 17) : Saint-Brieuc LFRT, Luxeuil
+  LFSX, Montbéliard LFSM (VAC, fréquence, NOTAM), réglages mémorisés migrés
+  (trace DIAG « Codes OACI — migration v17.30 ») ;
 
 IMPORTANT : cette liste de statut ne remplace pas les sections détaillées plus bas.
 Elle sert à savoir immédiatement ce qui est réellement codé, ce qui reste ouvert
@@ -268,37 +284,39 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.29
+Version : TEST v17.30
 Date : 23/09/2026
-Base : v17.28 (VALIDÉE sur iPad)
+Base : v17.29 (commitée ; test réel du bouton NOTAM sur iPad en attente)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.29.txt
-2_Index_v17.29.txt
-3_Manifest_v17.29.txt
-4_Script_v17.29.txt
-5_SIA_v17.29.txt
-6_Style_v17.29.txt
-7_Sw_v17.29.txt
+1_Modifications_v17.30.txt
+2_Index_v17.30.txt
+3_Manifest_v17.30.txt
+4_Script_v17.30.txt
+5_SIA_v17.30.txt
+6_Style_v17.30.txt
+7_Sw_v17.30.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.29
-- Manifest : start_url = ./index.html?appv=v17.29
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.29
-- Style : NPF_STYLE_BUILD_VERSION = v17.29
-- Service Worker : `sw-v17-29_notams_122_calculator_fix`
+- Index : APP_VERSION = v17.30
+- Manifest : start_url = ./index.html?appv=v17.30
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.30
+- Style : NPF_STYLE_BUILD_VERSION = v17.30
+- Service Worker : `sw-v17-30_oaci_codes_sia`
 - SIA_DATA_REVISION (SW / Index) : 15.69-radio1026-1-maplite1 (inchangée)
-- sia.js v17.29 : strictement identique à v17.28.
+- sia.js v17.30 : strictement identique à v17.29.
 
 STATUT DE VALIDATION :
-- validation statique v17.29 effectuée avant livraison : Script/SIA/SW OK, script
+- validation statique v17.30 effectuée avant livraison : Script/SIA/SW OK, script
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
-- `sia.js` et moteur tuiles (src/100) identiques à v17.28 ;
-- tests Chrome (v17.29 servie en local, profil neuf) : calculateur, affichage
-  NOTAM et bouton de rafraîchissement face à un NAS simulé : OK (entrée v17.29) ;
+- `sia.js` et moteur tuiles (src/100) identiques à v17.29 ;
+- audit OACI rejoué sur les sources corrigées : 0 écart (hors LFSC, erreur de
+  position dans le SIA lui-même) ;
+- tests Chrome (v17.30 servie en local, profil neuf) : migration, carte,
+  fréquences, NOTAM, boutons VAC : OK (entrée v17.30) ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27 et v17.28 VALIDÉES sur iPad ;
-  v17.29 À MESURER.
+  v17.29 et v17.30 À MESURER.
 
 
 2. PROTOCOLE DE TRAVAIL À RESPECTER
@@ -1172,10 +1190,220 @@ INSTALLATION NAS 2026-09-24b — INSTALLÉ (23/09/2026 au soir)
   occupé par BFG) EN ATTENTE de v17.29 en ligne ; tâche de 06h30 à contrôler dans
   /volume1/briefing-logs/npf-notams-auto-refresh.log.
 
+CORRECTION NAS 2026-09-24c — PRÉPARÉE, À INSTALLER (codes OACI, NPF v17.30)
+- Base : ~/nas-a-copier/notams-sdvfr-shared_2026-09-24b.php (fichier installé).
+  Fichier livré : ~/nas-a-copier/notams-sdvfr-shared_2026-09-24c.php, `php -l` OK.
+  npf-docs-api.php NON modifié (reste 2026-09-24b) ; notams-auto-refresh.php
+  inchangé.
+- npf_notams_targets() et npf_notams_airport_label() alignés sur NPF v17.30 :
+  114 terrains (27 pélicandromes + 87 autres), lots de 50 + 50 + 14 (et non 116 :
+  LFPC et LFSR, absents du SIA, sont aussi retirés, point 2 des décisions).
+  - retirés : LFRT au sens de Saint-Nazaire (doublon de LFRZ), LFCU, LFLZ, LFSK,
+    LFSF, LFYD (doublons), LFPC, LFSR (absents du SIA) ;
+  - recodés : LFBK -> LFRT (Saint-Brieuc), LFSQ -> LFSX (Luxeuil), LFSX -> LFSM
+    (Montbéliard, position SIA 47.4867 / 6.7915) ;
+  - libellés alignés : LFRH LORIENT LANN BIHOUE, LFRO LANNION, LFDN ROCHEFORT
+    CHARENTE MARITIME, LFSL BRIVE SOUILLAC.
+- Contrôle : codes, coordonnées et libellés du NAS identiques aux listes NPF
+  v17.30 (114 / 114, 0 écart). Le diff brut avec 24b est plus long car les tables
+  sont remises en page (3 cibles / 2 libellés par ligne, tri OACI).
+- ORDRE D'INSTALLATION (aucun terrain sous un faux code pendant la transition) :
+  NAS 24c avec v17.29 afficherait les NOTAM de Saint-Brieuc sur le symbole
+  « Saint-Nazaire » (LFRT) ; v17.30 avec le fichier 24b afficherait ceux de
+  Saint-Nazaire sur « Saint-Brieuc » (LFRT) et ceux de Montbéliard sur « Luxeuil »
+  (LFSX). D'où :
+  1. pousser v17.30 sur GitHub, SANS ouvrir les NOTAM ;
+  2. installer notams-sdvfr-shared.php 24c (hors 06h30, statut `success`, fichier
+     partagé de plus de 30 min pour que le bouton relance vraiment SDVFR) ;
+  3. ouvrir NPF, laisser la mise à jour v17.30 s'installer, puis Gestion des
+     cartes -> « Rafraîchir les NOTAM » et attendre les 3 lots ;
+  4. vérifier `coverage` = 114 dans npf-notams-snapshot-v1.json avant de
+     consulter des NOTAM. La pérenne n'a pas de NOTAM : non concernée.
+- Statut : À INSTALLER, puis À MESURER.
+
+
+18. CODES OACI DES AÉRODROMES — AUDIT ET CORRECTIONS (23/09/2026)
+------------------------------------------------------------------
+Origine : l'utilisateur relève dans le fichier NOTAM du NAS des en-têtes dont les
+NOTAM portent A) d'un autre terrain (LFBK -> LFRT, LFRT -> LFRZ, LFYD -> LFRD,
+LFLZ -> LFHP, LFCU -> LFOA, LFSF -> LFJL, LFSK -> LFGA, LFSQ -> LFSX).
+Référence : jeu SIA AIRAC 08/26 du projet (sia.js, 877 terrains). Critère de
+retrait (décision utilisateur, précisée le 23/09/2026) : retirer SEULEMENT ce
+qui est certainement fermé, c'est-à-dire marqué CLOSED par ce jeu SIA. L'absence
+du SIA ne prouve pas la fermeture : un code sans fiche SIA est gardé. Tout
+terrain présent dans le SIA, militaire compris, est gardé.
+
+CONSTAT (v17.29) — otherAirports et otherAirportRunwaysData
+- Code erroné (nom et position d'un autre terrain) : LFBK Saint-Brieuc (LFBK =
+  Montluçon-Guéret), LFRT Saint-Nazaire (LFRT = Saint-Brieuc), LFLZ Le Puy (LFLZ
+  = Feurs), LFCU Avord (LFCU = Ussel), LFSK Colmar (LFSK = Vitry-le-François),
+  LFSX Montbéliard (LFSX = Luxeuil ; position décalée de 2,5 NM), LFSQ Luxeuil,
+  LFYD Dinard, LFSF Metz-Nancy (absents du SIA).
+- 6 doublons au même endroit : LFCU/LFOA, LFLZ/LFHP, LFYD/LFRD, LFRT/LFRZ,
+  LFSF/LFJL, LFSK/LFGA. LFSF était de plus déplacé de 7,4 NM sur Metz-Frescaty
+  (fermé) par la correction de position PIAF (<= 12 NM).
+- Vrais terrains masqués (code déjà pris) : Montluçon, Ussel, Feurs, Vitry.
+- Effets : bouton VAC ouvrant la carte d'un autre terrain (VAC = fiche SIA du
+  code) ; fréquence d'un autre terrain ; code faux affiché (FMS / contrôle) ;
+  NOTAM sous un faux code ; recherche par code trompée.
+- pelicanAirports : aucune anomalie en TEST.
+
+CORRECTIONS v17.30 (gravité 1, décision utilisateur)
+- LFBK -> LFRT (Saint-Brieuc) ; entrée LFRT « Saint-Nazaire » supprimée
+  (doublon de LFRZ).
+- Supprimés (doublons) : LFCU, LFLZ, LFSK, LFSF, LFYD.
+- LFSX -> LFSM (Montbéliard, position SIA 47.4867 / 6.7915), puis LFSQ -> LFSX
+  (Luxeuil).
+- Mêmes corrections dans otherAirportRunwaysData (lignes recodées ou retirées).
+
+RETRAITS — TERRAINS MARQUÉS CLOSED PAR LE SIA (justification exacte)
+Aucun de ces codes n'existe dans le jeu SIA : le SIA décrit le même lieu sous un
+code LFnn marqué « (CLOSED) » :
+- otherAirports : LFPC Creil (SIA : LF39 CREIL (CLOSED)) ; LFSR Reims-Champagne
+  (SIA : LF43 REIMS CHAMPAGNE (CLOSED)).
+- liste PIAF (12) :
+  LFPC CREIL (LF39 CLOSED) · LFSR REIMS CHAMPAGNE (LF43 CLOSED) ·
+  LFSF METZ FRESCATY (LF45 CLOSED) · LFYD DAMBLAIN (LF11 CLOSED) ·
+  LFSQ BELFORT FONTAINE (LF46 CLOSED) · LFPY BRETIGNY SUR ORGE (LF41 CLOSED) ·
+  LFXI SAINT CHRISTOL (LF40 CLOSED) · LFYH BROYE LES PESMES (LF12 CLOSED) ·
+  LFLK OYONNAX ARBENT (LF50 CLOSED) · LFQS VITRY EN ARTOIS (LF51 CLOSED, et sa
+  ligne de piste) · LFQI CAMBRAI EPINOY (LF42 CLOSED) · LFYM MARIGNY LE GRAND
+  (LF17 CLOSED).
+- GARDÉS tels qu'avant (décision utilisateur) : les 6 codes PIAF sans aucune
+  fiche SIA au même endroit — LFNP PEZENAS NIZAS, LFGV THIONVILLE YUTZ, LFXG
+  BITCHE (militaire), LFXH LE VALDAHON (militaire), LFHZ SALLANCHES MONT BLANC,
+  LFSY CESSEY BAIGNEUX LES JUIFS. Une première version v17.30 non livrée les
+  retirait ; rétablis à leur place d'origine. Ils ne font pas partie des cibles
+  NAS (114 inchangé).
+- GARDÉ : LFSC COLMAR-MEYENHEIM — présent dans le SIA et non marqué fermé (le SIA
+  le place par erreur en 44.99 N / 8.54 W ; il existe aussi LF47
+  « COLMAR-MEYENHEIM (CLOSED) »). À DÉCIDER si l'utilisateur veut le retirer.
+
+GRAVITÉ 3
+- Noms alignés sur le SIA : LFRH Lorient-Lann-Bihoué, LFRO Lannion, LFDN
+  Rochefort-Charente-Maritime, LFSL Brive-Souillac ; PIAF : LFBZ BIARRITZ PAYS
+  BASQUE, LFAT LE TOUQUET ELIZABETH II, LFPN PARIS SACLAY VERSAILLES, LFIK
+  RIBERAC-TOURETTE, LFNQ LA LLAGONNE LA QUILLANE.
+- src/220 : entrées obsolètes LFRT|119.400 et LFBK|118.400 supprimées.
+- « 122 terrains » -> 114 (index.html, commentaire src/210).
+
+POSITIONS EFFECTIVES AVANT / APRÈS (correction PIAF comprise) — À VALIDER
+| Terrain              | Code     | Avant              | Après                  | Écart   |
+| Saint-Brieuc-Armor   | LFBK->LFRT | 48.5380, -2.8520 | 48.5375, -2.8565 PIAF  | 0,18 NM |
+| Saint-Nazaire (dbl)  | LFRT->LFRZ | 47.3120, -2.1520 | 47.3107, -2.1568 PIAF  | 0,21 NM |
+| Dinard (dbl)         | LFYD->LFRD | 48.5870, -2.0800 | 48.5877, -2.0800 PIAF  | 0,04 NM |
+| Le Puy-Loudes (dbl)  | LFLZ->LFHP | 45.0790, 3.7620  | 45.0797, 3.7634 PIAF   | 0,07 NM |
+| Avord (dbl)          | LFCU->LFOA | 47.0560, 2.6370  | 47.0569, 2.6389 PIAF   | 0,10 NM |
+| Metz-Nancy (dbl)     | LFSF->LFJL | 49.0764, 6.1339 PIAF (Frescaty) | 48.9783, 6.2465 PIAF | 7,37 NM |
+| Colmar-Houssen (dbl) | LFSK->LFGA | 48.1100, 7.3590  | 48.1103, 7.3591 PIAF   | 0,02 NM |
+| Montbéliard          | LFSX->LFSM | 47.4870, 6.8520  | 47.4867, 6.7915 PIAF   | 2,46 NM |
+| Luxeuil              | LFSQ->LFSX | 47.7790, 6.3530  | 47.7872, 6.3650 PIAF   | 0,69 NM |
+| Creil / Reims        | LFPC, LFSR | —                | retirés                | —       |
+Le « PÉLIC le plus proche » d'un feu ne change pas : pelicanAirports est
+identique. Il ne change que si l'un de ces terrains était déclaré PÉLIC
+personnalisé ou BASE (migration ci-dessous) : Metz (7,4 NM) et Montbéliard
+(2,5 NM) sont alors les seuls écarts notables.
+
+MIGRATION UNIQUE DES RÉGLAGES MÉMORISÉS (src/260)
+- Base, PÉLIC personnalisés, terrains désactivés ou en eau : LFCU->LFOA,
+  LFLZ->LFHP, LFYD->LFRD, LFSF->LFJL, LFSK->LFGA, ancien LFRT->LFRZ, LFBK->LFRT,
+  LFSX->LFSM, LFSQ->LFSX (conversion directe ancien code -> nouveau code, sans
+  enchaînement). LFPC / LFSR : référence abandonnée proprement.
+- Exécutée une seule fois (clé `npfAirportCodesMigrationV1730`, qui porte le
+  compte rendu). Trace DIAG « Codes OACI — migration v17.30 » rappelée à chaque
+  démarrage (la page qui migre peut être rechargée aussitôt par le SW).
+- Non migrés (hors décision) : sélections NOTAM (perte acceptée), lignes du
+  calculateur et WP enregistrés avec un ancien code.
+
+MANIFEST VAC (dépôt NPF-Q400-VAC) — NON IMPLÉMENTÉ
+- Le dépôt n'est pas cloné localement : non reconstitué. Le manifest en ligne
+  garde les noms NPF v16.50 (ex. LFRT « Saint-Nazaire-Montoir ») et marque LFSX
+  indisponible. Les fichiers eux-mêmes sont les fiches SIA du code : avec v17.30,
+  le bouton VAC ouvre donc la bonne carte ; seuls les noms, npfType et la
+  disponibilité de Luxeuil (LFSX) sont à régénérer.
+
+POINT P — PÉRENNE v2026.67 (lecture seule, ~/projects/NPF-Q400, identique au
+site en ligne) — À DÉCIDER, NON MODIFIÉE
+- Mêmes codes erronés qu'en TEST (LFBK, LFRT, LFYD, LFLZ, LFCU, LFSF, LFSK,
+  LFSQ, LFSX, LFPC, LFSR) et deux de plus :
+  - pélicandrome LFSJ « Dole-Tavaux » (LFSJ = Sedan-Douzy ; bon code LFGJ) ;
+  - LFBS « Chambéry-Savoie » (LFBS = Biscarrosse ; doublon de LFLB).
+- La pérenne n'a ni NOTAM ni fréquences SIA, mais son bouton VAC (même dépôt
+  NPF-Q400-VAC, fichier = fiche SIA du code) ouvre la carte d'un autre terrain :
+  Dole -> Sedan, Chambéry -> Biscarrosse, Saint-Brieuc -> Montluçon, Avord ->
+  Ussel, Le Puy -> Feurs, Colmar -> Vitry, Saint-Nazaire -> Saint-Brieuc.
+- Décision utilisateur du 23/09/2026 : aucune modification de la pérenne pour
+  le moment. Statut : À DÉCIDER.
+
 
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.30 — CODES OACI ALIGNÉS SUR LE SIA
+Date : 23/09/2026
+Base fonctionnelle : v17.29
+
+DEMANDE UTILISATEUR
+- Corrections de gravité 1 des codes OACI, retrait des terrains absents ou
+  fermés selon le SIA uniquement, migration unique des réglages mémorisés,
+  gravité 3 (noms, entrées obsolètes de src/220), texte « 122 terrains », NAS
+  2026-09-24c, tableau avant / après. Rien n'est commité.
+- Détail complet : section 18 de la fiche (constat, retraits justifiés,
+  positions avant / après, migration, pérenne).
+
+MODIFICATIONS
+1. src/040_chat_push_plans_eau_aerodromes.js : otherAirports 95 -> 87
+   (1 recodage LFBK->LFRT, 2 recodages LFSX->LFSM et LFSQ->LFSX, 8 retraits,
+   4 noms) ; otherAirportRunwaysData 129 -> 119 lignes ; liste PIAF 446 -> 434
+   (12 retraits de codes marqués CLOSED par le SIA, 5 noms ; les 6 codes sans
+   fiche SIA sont gardés) ; additionalAerodromeRunwaysData : ligne LFQS retirée.
+2. src/260_etat_gps.js : migration unique `migrateStoredAirportCodesV1730`,
+   appelée en tête de loadState(), avec trace DIAG.
+3. src/220_frequences_marqueurs_terrains.js : LFRT|119.400 et LFBK|118.400
+   retirés.
+4. index.html et commentaire src/210 : « 122 terrains » -> 114.
+
+TESTS CHROME (v17.30 servie en local, profil neuf)
+- Migration : réglages v17.29 posés (base LFCU ; PÉLIC LFBK, LFRT, LFSQ, LFSX,
+  LFPC ; désactivés LFLZ, LFSR ; eau LFSK, LFYD, LFSF) -> base LFOA ; PÉLIC
+  LFRT, LFRZ, LFSM, LFSX ; désactivés LFHP ; eau LFGA, LFJL, LFRD ; LFPC et LFSR
+  abandonnés ; trace DIAG présente ; au rechargement, pas de nouvelle
+  conversion (un LFRT = Saint-Brieuc est conservé).
+- Carte : pelican 27, other 87, aérodromes PIAF affichés 320 ; LFRT
+  Saint-Brieuc, LFRZ Saint-Nazaire, LFSX Luxeuil, LFSM Montbéliard ; Montluçon
+  (LFBK), Ussel (LFCU), Feurs (LFLZ) et Vitry (LFSK) réapparaissent à leur
+  position ; les 12 codes CLOSED absents ; les 6 codes sans fiche SIA (LFNP,
+  LFGV, LFXG, LFXH, LFHZ, LFSY) toujours affichés ; boutons VAC LFRT / LFSX /
+  LFSM / LFBK portent leur propre code (tests rejoués après la décision du
+  23/09/2026 sur les codes sans fiche SIA).
+- Fréquences : LFRT 118.455 AFIS, LFRZ 118.955 TWR-A/A, LFBK 118.405 AFIS-A/A,
+  LFSX 122.100 TWR, LFSM 132.030 AFIS-A/A ; étiquette à 2 NM sur Saint-Brieuc :
+  « Saint-Brieuc-Armor (LFRT) AFIS 118.455 ».
+- NOTAM (fichier de test, couverture 114) : bouton sur LFRT, LFSX, LFSM, LFRZ ;
+  aucun sur LFBK ni LFCU ; LFRT / LFSX / LFSM ouvrent leur propre section.
+- VAC : LFRT -> vac/LFRT.pdf (fiche SIA Saint-Brieuc). Le test des autres codes
+  est brouillé en headless par la synchronisation VAC automatique ; les boutons
+  portent le bon code et le fichier servi est la fiche SIA du code.
+- Aucune exception de page.
+
+VERSIONS
+- Index / Manifest / Script / Style : v17.30.
+- Service Worker : `sw-v17-30_oaci_codes_sia`.
+- SIA_DATA_REVISION inchangée ; sia.js strictement identique à v17.29.
+
+VALIDATION AVANT LIVRAISON
+- `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés.
+- Syntaxe Script / SIA / SW : OK. Script inline Index : OK. Manifest JSON : OK.
+- Cohérence versions/caches : OK. sia.js et moteur tuiles identiques à v17.29.
+- v17.27 (communes) et v17.29 (NOTAM, calculatorModal) toujours présents : OK.
+
+À MESURER
+- Sur iPad, après l'ordre d'installation de la section 17 : VAC, fréquences et
+  NOTAM de Saint-Brieuc, Luxeuil, Montbéliard ; trace DIAG de migration.
+
+--------------------------------------------------------------------------------
+
 
 VERSION TEST v17.29 — NOTAM DES 122 TERRAINS / CORRECTION calculatorModal
 Date : 23/09/2026

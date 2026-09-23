@@ -349,7 +349,7 @@ const NPF_PELIC_NOTAMS_KEYWORDS_TO_FILTER = Object.freeze([
 ]);
 
 /*
- * v17.29 — NOTAM DES 122 TERRAINS : la couverture est lue dans le champ
+ * v17.29 — NOTAM DES TERRAINS NPF (114 depuis v17.30) : la couverture est lue dans le champ
  * `coverage` du fichier produit par le NAS. Elle est recopiée en localStorage
  * afin que les popups des terrains soient justes dès le premier tracé, avant
  * toute lecture IndexedDB. Fichier sans `coverage` (ancienne publication BFG)
