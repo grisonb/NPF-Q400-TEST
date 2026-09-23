@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
-Mise à jour : 22/09/2026
-Version de travail actuelle : TEST v17.26
+Mise à jour : 23/09/2026
+Version de travail actuelle : TEST v17.27
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -159,6 +159,9 @@ IMPLÉMENTÉ / INTÉGRÉ :
   contrôle de couverture limité à une fois toutes les 5 s, relance ciblée des
   tuiles visibles bloquées/temporaires seulement, redraw complet uniquement en
   dernier secours avec cooldown ; compteurs DIAG dédiés ajoutés.
+- v17.27 : suppression de la copie inutile de la base communes (~62 Mo) dans
+  localStorage au démarrage (JSON.stringify + setItem voué à l'échec sur le
+  quota Safari). Seule piste implémentée de l'analyse fluidité du 23/09/2026.
 
 NON IMPLÉMENTÉ / OUVERT :
 - écart ligne de foi jaune / route rouge alors que les deux affichent 277° :
@@ -171,6 +174,13 @@ NON IMPLÉMENTÉ / OUVERT :
   non implémentée ;
 - augmentation de concurrence IndexedDB / modification keepBuffer / timeouts :
   non retenue sans nouvelle preuve DIAG.
+- analyse fluidité carte du 23/09/2026 : 12 pistes consignées en section 16
+  (statuts NON IMPLÉMENTÉ / À MESURER / À DÉCIDER / ABANDONNÉ). En particulier :
+  canvas HT hors de son pane (piste 2) = NON IMPLÉMENTÉ, prévu dans une version
+  séparée APRÈS validation de v17.27 (décision utilisateur du 23/09/2026) ;
+- révision `sia.js` déployée (15.69) ≠ révision attendue par le SW
+  (15.69-radio1026-1-maplite1) : À DÉCIDER, aucune correction demandée
+  (section 16, point S).
 
 À MESURER :
 - v17.22 : MESURÉ. Les OUT z12->z10 restent fluides via RAM principal, mais z8/20 NM
@@ -195,7 +205,11 @@ NON IMPLÉMENTÉ / OUVERT :
   les tuiles récupérées augmentent sans redraws de secours fréquents ;
 - effet du report des plans d'eau sur les blocages JS de démarrage ;
 - comportement HT lors du passage 50 NM -> 20 NM -> 50 NM : préférence utilisateur
-  doit rester ON, rendu absent à 50 NM+, puis retour automatique sous 50 NM.
+  doit rester ON, rendu absent à 50 NM+, puis retour automatique sous 50 NM ;
+- v17.27 : À MESURER. Comparer à v17.26, sur 3 démarrages à froid en mode avion,
+  la durée entre les repères DIAG `Communes — chargement` et `Communes — données
+  prêtes`, ainsi que le top des blocages JS du démarrage. Vérifier aussi que la
+  recherche de communes et la commune survolée fonctionnent hors ligne.
 
 IMPORTANT : cette liste de statut ne remplace pas les sections détaillées plus bas.
 Elle sert à savoir immédiatement ce qui est réellement codé, ce qui reste ouvert
@@ -203,37 +217,39 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.26
-Date : 20/09/2026
-Base : v17.25
+Version : TEST v17.27
+Date : 23/09/2026
+Base : v17.26
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.26.txt
-2_Index_v17.26.txt
-3_Manifest_v17.26.txt
-4_Script_v17.26.txt
-5_SIA_v17.26.txt
-6_Style_v17.26.txt
-7_Sw_v17.26.txt
+1_Modifications_v17.27.txt
+2_Index_v17.27.txt
+3_Manifest_v17.27.txt
+4_Script_v17.27.txt
+5_SIA_v17.27.txt
+6_Style_v17.27.txt
+7_Sw_v17.27.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.26
-- Manifest : start_url = ./index.html?appv=v17.26
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.26
-- Style : NPF_STYLE_BUILD_VERSION = v17.26
-- Service Worker : `sw-v17-26_gps_partial_tile_repair`
-- SIA_DATA_REVISION : 15.69-radio1026-1-maplite1
-- sia.js v17.26 : strictement identique à v17.25 (et donc aux données v17.20).
+- Index : APP_VERSION = v17.27
+- Manifest : start_url = ./index.html?appv=v17.27
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.27
+- Style : NPF_STYLE_BUILD_VERSION = v17.27
+- Service Worker : `sw-v17-27_communes_no_localstorage`
+- SIA_DATA_REVISION (SW / Index) : 15.69-radio1026-1-maplite1
+- sia.js v17.27 : strictement identique à v17.26 (révision interne réelle : 15.69,
+  voir section 16, point S).
 
 STATUT DE VALIDATION :
-- validation statique v17.26 effectuée avant livraison : Script/SIA/SW OK, script
+- validation statique v17.27 effectuée avant livraison : Script/SIA/SW OK, script
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
-- `sia.js` v17.26 est bit-à-bit identique à v17.25 ;
-- constantes historiques du moteur tuiles comparées à v17.25 : 5 lectures, file
-  160, cache principal 160, cache général 256, keepBuffer 4/2, TTL/timeouts et
-  settle 240 ms inchangés ;
-- v17.25 dispose d’un DIAG réel après ~1 h 30 de vol ; v17.26 est À MESURER sur
-  un vol prolongé avec suivi GPS actif.
+- `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
+- `sia.js` v17.27 est bit-à-bit identique à v17.26 ;
+- moteur tuiles non modifié (aucune ligne de `src/100_tuiles_offline_moteur.js`
+  touchée) ;
+- v17.26 reste À MESURER sur un vol prolongé avec suivi GPS actif ; v17.27 est
+  À MESURER au démarrage à froid hors ligne.
+
 
 2. PROTOCOLE DE TRAVAIL À RESPECTER
 -----------------------------------
@@ -712,9 +728,214 @@ NON IMPLÉMENTÉ
   explicite.
 
 
+16. ANALYSE FLUIDITÉ CARTE iPad — PISTES CONSIGNÉES (23/09/2026)
+----------------------------------------------------------------
+Origine : demande utilisateur d'analyse seule (« ne modifie aucun fichier ») des
+causes de lenteur/saccades de la carte NPF sur iPad, hors ligne et avec calques.
+Analyse faite sur les sources réelles v17.26 (`src/`, `sw.js`, `style.css`,
+Leaflet 1.9.4 embarqué) et en croisant ce journal pour écarter les pistes déjà
+ABANDONNÉES.
+Décisions utilisateur du 23/09/2026 : piste 1 seule implémentée (v17.27) ;
+piste 2 dans une version séparée après validation de v17.27 ; toutes les autres
+pistes seulement consignées ici. Aucune ne doit être codée sans nouvelle demande.
+Numéros de ligne : sources v17.26 (inchangés en v17.27 sauf `070`).
+
+Légende : CONSTATÉ = lu dans le code ; HYPOTHÈSE = effet à mesurer sur iPad.
+
+PISTE 1 — Sérialisation de communes.json dans localStorage au démarrage
+- Statut : IMPLÉMENTÉ en v17.27 — À MESURER.
+- Constaté : `loadCommunesData` (src/070:11-21 en v17.26) faisait, à chaque
+  démarrage, `localStorage.setItem(COMMUNES_CACHE_KEY, JSON.stringify(payload))`
+  sur les ~62 Mo de `communes.json`. Le quota localStorage de Safari (~5 Mo)
+  rend cet enregistrement impossible : le texte était construit pour rien.
+- Hypothèse : part importante du blocage JS d'ouverture (~1 904 ms en v17.20,
+  repère communes à 4,35 s) et pic mémoire de plusieurs centaines de Mo.
+- Hors ligne : la base est servie par le cache APP_DATA du SW (cache-first).
+
+PISTE 2 — Canvas HT hors de son pane
+- Statut : NON IMPLÉMENTÉ — prévu dans une version séparée, APRÈS validation
+  de v17.27 (décision utilisateur du 23/09/2026).
+- Constaté : `highVoltageLinesRenderer = L.canvas({ padding: 0.35 })`
+  (src/090:318) est créé SANS option `pane`. Leaflet place le canvas dans le
+  pane de son renderer, pas dans celui du tracé : le canvas HT est donc dans
+  `overlayPane` (z400) et non dans `highVoltageLinesPane` (z385). Le prémasquage
+  HT pendant les gestes (src/080:668-702, src/120:1976) n'a donc aucun effet
+  sur HT ; il fonctionne pour Routes.
+- Correction envisagée : ajouter `pane: 'highVoltageLinesPane'` au renderer.
+  Le comportement visible change : HT réellement masquée pendant les gestes et
+  dessinée sous les pistes. Ce n'est PAS le détachement v17.09 (ABANDONNÉ).
+- Mesure : A/B `PAN CARTE SACCADÉ` tout OFF / HT ON, avant et après.
+
+PISTE 3 — Mémoire des canvas (padding)
+- Statut : À MESURER.
+- Hypothèse chiffrée : un canvas vaut (viewport × (1 + 2 × padding)) × DPR 2.
+  Pour un écran de 1 180 × 820 : ~45 Mo en padding 0,35 et ~68 Mo en 0,55
+  (Routes). SIA zones + SIA points + HT + 2 Routes + pistes ≈ 300 Mo, proche du
+  plafond global de mémoire canvas de WebKit. Pourrait recouper les rechargements
+  PWA SIA + Routes + HT (v16.40, v16.57).
+- Fichiers : src/090:318-342, src/340:1078-1087.
+- Condition de reprise : mesure réelle de la mémoire canvas (inspecteur web
+  Safari, onglet Canvas, ou ajout DIAG si demandé).
+
+PISTE 4 — Polygones communes construits même calque éteint
+- Statut : À MESURER.
+- Constaté : `ensureCommunesLayerDataLoaded` (déclenché par src/060:598) crée
+  via `L.geoJSON` les 35 014 polygones Leaflet avec emprise et centre
+  (src/250:847-886), même si le calque communes est OFF. La commune survolée
+  utilise un index séparé (`communesPolygonData`).
+- Mesure : repères DIAG `Polygones communes — chargement / prêts` et blocages JS.
+
+PISTE 5 — Mesures DIAG qui forcent un calcul de mise en page
+- Statut : À MESURER.
+- Constaté : `getNpfStartupDiagnosticOverlaySnapshot` (src/010:475-526) appelle
+  `countVisibleLoadedBaseTiles` (src/090:782-818 : `getBoundingClientRect` sur
+  chaque tuile) à chaque movestart et moveend (src/340:3350, 3398), y compris
+  lors des recentrages GPS.
+- Piste : alléger ces mesures, ne pas supprimer le DIAG.
+
+PISTE 6 — Flou `backdrop-filter` sur les boutons au-dessus de la carte
+- Statut : À MESURER.
+- Constaté : style.css:36 (#ui-overlay), 181, 192, 5181, 6937.
+- Hypothèse : flou recalculé à chaque image pendant le pan. Test A/B simple.
+
+PISTE 7 — Cache principal ramené à 128 après chaque zoom
+- Statut : À DÉCIDER — moteur tuiles, DIAG requis (règle I).
+- Constaté : `releaseStaleOfflineTileResources` (src/090:1071-1087) appelle
+  `trimDirectOfflineTileBlobCache(128)` à +120 ms et +520 ms après chaque
+  zoomend, alors que le commentaire v17.22 (src/090:773-776) indique que le
+  cache NPF conserve 160 entrées. Le miss-cache est aussi ramené à 160 (limite
+  512 ailleurs).
+- Condition de reprise : compteurs `MÉMOIRE CARTE` hits RAM / accès IDB.
+
+PISTE 8 — Reprise au démarrage qui reconstruit un calque déjà affiché
+- Statut : À MESURER — moteur tuiles, règle I.
+- Constaté : `scheduleRememberedOfflineMapStartupRecovery` (src/100:849-931)
+  vérifie `directOfflineTileHitCount > 0` avant l'attente de la base, pas après.
+  Si la base répond après l'affichage des premières tuiles,
+  `rebuildRememberedOfflineMapAfterDatabaseReady` (src/100:817) vide les caches
+  et recrée la GridLayer.
+- Mesure : DIAG démarrage — message « carte locale prête » / réveil `db-ready:`
+  APRÈS la première tuile ?
+
+PISTE 9 — Calque communes affiché : tout reconstruit à chaque moveend
+- Statut : NON IMPLÉMENTÉ.
+- Constaté : `renderVisibleCommuneLayers` (src/250:299-324) vide le groupe, boucle
+  sur les 35 014 entrées et réajoute les visibles (chemins SVG recréés) ;
+  `renderVisibleCommuneLabels` (src/250:458-500) recrée jusqu'à 220/450
+  étiquettes DOM. Concerne uniquement communes ON à z ≥ 10,5.
+
+PISTE 10 — Popups SIA construites d'avance
+- Statut : NON IMPLÉMENTÉ.
+- Constaté : `buildSiaPointPopup` / `buildSiaTerrainPopup` exécutés pour chaque
+  point rendu à chaque reconstruction (src/350:3050, 3085).
+
+PISTE 11 — Aérodromes : ~450 marqueurs DOM + ~450 zones tactiles SVG
+- Statut : À MESURER.
+- Constaté : `drawPermanentAirportMarkers` (src/220:871-963) et zones tactiles
+  (src/210:184-251), sans tri par zone visible ; `drop-shadow` sur
+  `.terrain-airport-symbol` (style.css:17977). Les chemins SVG sont recalculés
+  à chaque moveend.
+
+PISTE 12 — `noMoveStart` ignoré lors du suivi GPS
+- Statut : À DÉCIDER — gain probablement faible.
+- Constaté : `map.setView(..., { animate: false, noMoveStart: true })`
+  (src/260:900-904) ; Leaflet ne lit `noMoveStart` que dans `options.pan`, donc
+  `movestart` est émis à chaque recentrage. Le vol v17.25 montre déjà 1 seul
+  mouvement GPS saccadé sur 3 660.
+
+PISTE 13 — Trafic : animation 20 Hz et liaisons des étiquettes
+- Statut : À MESURER — concerne uniquement trafic ON (en ligne).
+- Constaté : boucle rAF continue (src/140:2117-2185) ; 3 `getBoundingClientRect`
+  par avion entrecoupés d'écritures après chaque moveend (src/140:2206-2320).
+
+PISTE ÉCARTÉE — Recherche de commune à chaque touchmove
+- Statut : ABANDONNÉ (non constaté dans le code).
+- Une première exploration affirmait que `markUserMapGesture` (src/260:946-960)
+  appelait la recherche de commune à chaque touchmove. Vérifié : il ne fait que
+  programmer des minuteurs. Ne pas reprendre.
+
+POINT S — Révision sia.js déployée ≠ révision attendue par le SW
+- Statut : À DÉCIDER — aucune correction demandée (23/09/2026).
+- Constaté : le `sia.js` du dépôt GitHub (identique au local, blob ee6207c)
+  déclare `const NPF_SIA_DATA_REVISION = '15.69'` et ne contient pas de
+  `mapLiteGzipBase64`. Le SW (sw.js:3, 849, 866) n'accepte un `sia.js` que s'il
+  contient `const NPF_SIA_DATA_REVISION = '15.69-radio1026-1-maplite1'`. Le
+  fichier livré en v16.73 avec cette révision n'a donc jamais été déployé.
+- Conséquence quand le SW contrôle la page : `sia.js` est refusé (504), en ligne
+  comme hors ligne, et `window.NPF_SIA_EMBEDDED` est absent.
+- Pourquoi SIA fonctionne quand même (test utilisateur du 23/09/2026 : ouverture
+  en ligne, mode avion, fermeture, réouverture) :
+  - le jeu carte léger (terrains + points/VRP) est embarqué dans script.js comme
+    filet de sécurité (src/330:77, v16.74) ;
+  - le jeu complet des zones est lu dans IndexedDB (`NpfSiaDB`, src/340:428
+    environ) où il a été enregistré lors d'un chargement antérieur de `sia.js`.
+    La métadonnée de secours de script.js (src/330:14-49) est identique à celle
+    du `sia.js` 15.69, donc le contrôle `siaMetaMatchesEmbedded` passe ;
+  - la radio AIRAC 10/26 est embarquée dans script.js (src/010:2030, v16.69).
+- Risque latent (HYPOTHÈSE) : sur un iPad neuf ou après effacement des données,
+  si les zones SIA n'ont jamais été affichées pendant le tout premier chargement
+  (avant que le SW contrôle la page), le jeu complet ne serait jamais enregistré
+  et l'affichage des zones échouerait (« sia.js absent ou invalide »).
+- Condition de reprise : décision utilisateur (déployer le sia.js
+  « radio1026-1-maplite1 » ou aligner la révision attendue par le SW).
+
+
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.27 — DÉMARRAGE : SUPPRESSION DE LA COPIE localStorage DES COMMUNES
+Date : 23/09/2026
+Base fonctionnelle : v17.26
+
+DEMANDE UTILISATEUR
+- Analyse seule des axes d'amélioration de la fluidité de la carte NPF sur iPad
+  (hors ligne, avec calques), puis décision : « Piste 1 (sérialisation de
+  communes.json) : implémente-la seule, livraison selon les règles du projet,
+  nouvelle version TEST. » Piste 2 dans une version séparée après validation
+  de celle-ci. Autres pistes consignées en section 16 de la fiche.
+
+CAUSE RETENUE
+- `loadCommunesData` sérialisait à chaque démarrage les ~62 Mo de
+  `communes.json` (`JSON.stringify`) pour les écrire dans localStorage ;
+  l'écriture dépasse le quota Safari (~5 Mo) et échouait silencieusement.
+  Le coût CPU/mémoire de la sérialisation était donc payé sans aucun bénéfice.
+
+MODIFICATION
+1. src/070_communes_recherche.js — `parseAndStore` : suppression du bloc
+   `localStorage.setItem(COMMUNES_CACHE_KEY, JSON.stringify(payload))`,
+   remplacé par un commentaire v17.27. Le parsing, la validation du format et
+   la valeur retournée sont inchangés.
+2. Lectures de secours conservées telles quelles (src/070 `localStorage.getItem`
+   dans le catch, src/060 en FORCE_DISPLAY_MODE) : périmètre strict.
+
+TOUT LE RESTE INCHANGÉ
+- Moteur tuiles, Routes, HT, SIA, GPS, PÉLIC, calculateur : aucune modification.
+- Cache des alias communes (`COMMUNES_ALIASES_CACHE_KEY`, ~1,5 Mo, réellement
+  relu en cache-first) : non concerné, inchangé.
+- SIA copié bit-à-bit depuis v17.26.
+
+VERSIONS
+- Index / Manifest / Script / Style : v17.27.
+- Service Worker : `sw-v17-27_communes_no_localstorage`.
+- SIA_DATA_REVISION inchangée : `15.69-radio1026-1-maplite1`.
+
+VALIDATION AVANT LIVRAISON
+- `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés.
+- Syntaxe Script / SIA / SW : OK.
+- Script inline Index : OK.
+- Manifest JSON : OK.
+- Cohérence versions/caches (contrôles du SW sur index/script/style/manifest) : OK.
+- SIA bit-à-bit identique à v17.26 : OK.
+- Plus aucune écriture `setItem(COMMUNES_CACHE_KEY` dans script.js : OK.
+
+À MESURER
+- DIAG démarrage à froid hors ligne (3 fois), comparé à v17.26 : durée
+  `Communes — chargement` -> `Communes — données prêtes` et top des blocages JS.
+- Recherche de communes et commune survolée fonctionnelles hors ligne.
+
+--------------------------------------------------------------------------------
+
 
 OUTILLAGE — DÉCOUPAGE DE script.js EN 35 FICHIERS SOURCES (ÉTAPE 1)
 Date : 22/09/2026

@@ -15,9 +15,12 @@ async function loadCommunesData() {
         if (!payload || !Array.isArray(payload.data)) {
             throw new Error("Format JSON invalide.");
         }
-        try {
-            localStorage.setItem(COMMUNES_CACHE_KEY, JSON.stringify(payload));
-        } catch (_) {}
+        /*
+         * v17.27 — plus de copie de la base communes dans localStorage.
+         * JSON.stringify des ~62 Mo bloquait le démarrage pour rien : setItem
+         * dépasse de toute façon le quota Safari (~5 Mo). Hors ligne, la base
+         * est servie par le cache APP_DATA du Service Worker.
+         */
         return payload;
     };
 
