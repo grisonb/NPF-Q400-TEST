@@ -480,6 +480,12 @@ function buildNpfWaypointPelicPopupHtml(wp) {
     return `<div class="airport-popup"><b>${escapeHtml(oaci)}</b><br>${escapeHtml(String(airport.name || oaci))}<div class="popup-buttons"><button class="${waterButtonClass}" onclick="window.toggleWater('${oaci}')">${waterButtonText}</button><button class="${disableButtonClass}" onclick="window.toggleAirport('${oaci}')">${disableButtonText}</button><button class="${baseButtonClass}" onclick="window.setBaseAirport('${oaci}')">${baseButtonText}</button>${customPelicButton}</div>${buildPelicPdfButtonsHtml(oaci)}${buildVacButtonHtml(oaci)}${buildPelicNotamsButtonHtml(oaci)}${buildAirportGoToButtonHtml(oaci)}${buildNpfWaypointPelicActionsHtml(wp)}</div>`;
 }
 
+/* v17.29 — WP posé sur un terrain couvert par les NOTAM : bouton NOTAMS. */
+function buildNpfWaypointNotamsButtonHtml(wp) {
+    if (String(wp?.source || '').trim() !== 'airport') return '';
+    return buildNpfNotamsButtonHtmlIfCovered(normalizeOaciCodeInput(wp?.sourceRef));
+}
+
 function buildNpfWaypointPopupHtml(wp, index) {
     const pelicPopupHtml = buildNpfWaypointPelicPopupHtml(wp);
     if (pelicPopupHtml) return pelicPopupHtml;
@@ -494,6 +500,7 @@ function buildNpfWaypointPopupHtml(wp, index) {
             <div class="npf-waypoint-popup-actions">
                 ${buildNpfWaypointActionsHtml(wp)}
             </div>
+            ${buildNpfWaypointNotamsButtonHtml(wp)}
         </div>
     `;
 }

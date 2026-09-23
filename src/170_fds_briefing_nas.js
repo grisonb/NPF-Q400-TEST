@@ -527,7 +527,8 @@ function getBriefingDocsBfgAuthorizationUnavailableMessage() {
 
 function openBriefingDocsPasswordModal(type) {
     const safeType = String(type || '').toLowerCase();
-    if (!NPF_BRIEFING_DOC_TYPES.includes(safeType)) return false;
+    // v17.29 — 'notams' : même fenêtre pour le bouton « Rafraîchir les NOTAM ».
+    if (!NPF_BRIEFING_DOC_TYPES.includes(safeType) && safeType !== 'notams') return false;
 
     /* v16.63 — un iPad associé à BFG ne doit jamais retomber sur le mot de
      * passe NPF. Ce garde-fou couvre aussi un éventuel ancien appel résiduel. */
@@ -550,7 +551,7 @@ function openBriefingDocsPasswordModal(type) {
 
     npfBriefingDocsBfgPairingOnly = false;
     npfBriefingDocsPendingType = safeType;
-    const label = safeType === 'gaar' ? 'GAAR' : 'FdS';
+    const label = safeType === 'gaar' ? 'GAAR' : (safeType === 'notams' ? 'NOTAM' : 'FdS');
     if (title) title.textContent = `Accès ${label}`;
     if (help) help.textContent = `Utilise le mot de passe NPF. Pour associer BFG à cet iPad, ferme cette fenêtre puis utilise le bouton BFG dédié.`;
     if (input) { input.value = ''; input.style.display = ''; }
@@ -1102,6 +1103,12 @@ function initializeBriefingDocsUi() {
             }
             if (passwordStatus) passwordStatus.textContent = 'Vérification du mot de passe…';
             await authorizeBriefingDocs(password);
+            if (targetType === 'notams') {
+                // v17.29 — aucun document FdS / GAAR : on relance le rafraîchissement NOTAM.
+                closeBriefingDocsPasswordModal();
+                refreshNpfNotamsFromNasManually().catch(error => console.warn('[NPF NOTAMS] Rafraîchissement impossible:', error));
+                return;
+            }
             if (passwordStatus) passwordStatus.textContent = `Téléchargement ${getBriefingDocLabel(targetType)} du jour…`;
 
             const result = await refreshSingleBriefingDocFromNas(targetType);

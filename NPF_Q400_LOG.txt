@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 23/09/2026
-Version de travail actuelle : TEST v17.28
+Version de travail actuelle : TEST v17.29
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -166,6 +166,13 @@ IMPLÉMENTÉ / INTÉGRÉ :
   (`15.69-radio1026-1-maplite1`, fichier 5_SIA_v17.25.txt retrouvé par
   l'utilisateur). Jeu des zones identique ; corrige le refus 504 de `sia.js`
   qui empêchait les zones SIA sur un appareil vierge (section 16, point S).
+- v17.29 — NOTAM 122 TERRAINS : bouton NOTAMS sur tous les terrains présents
+  dans `coverage` du fichier NAS, « Aucun NOTAM » pour un terrain couvert sans
+  NOTAM, fichier qui n'est pas du jour affiché avec « NOTAM du JJ/MM — pas à
+  jour », bouton « Rafraîchir les NOTAM » dans Gestion des cartes, sélections
+  individuelles conservées si NOTAM inchangé (id + signature).
+- v17.29 — calculatorModal : exception supprimée sans réactiver le repli par
+  coordonnées ; calculateur strictement inchangé (section 16, point D).
 
 NON IMPLÉMENTÉ / OUVERT :
 - écart ligne de foi jaune / route rouge alors que les deux affichent 277° :
@@ -185,9 +192,15 @@ NON IMPLÉMENTÉ / OUVERT :
 - révision `sia.js` déployée (15.69) ≠ révision attendue par le SW
   (15.69-radio1026-1-maplite1) : MESURÉ par test Chrome sur profil vierge le
   23/09/2026, TRAITÉ en v17.28 (section 16, point S) ;
-- défaut `calculatorModal is not defined` sur chaque clic/tap : NON IMPLÉMENTÉ,
-  consigné en section 16 (point D). Correction PRÉVUE dans une version séparée,
-  APRÈS validation de v17.28 (décision utilisateur du 23/09/2026) ;
+- défaut `calculatorModal is not defined` sur chaque clic/tap : TRAITÉ en v17.29
+  (section 16, point D). Prévu d'abord après validation de v17.28, puis intégré
+  à v17.29 à la demande de l'utilisateur (23/09/2026) ;
+- NAS — action web `notams-refresh`, follow(), reprise après attente de
+  créneau et couverture du fichier partagé : CORRIGÉS côté NAS (2026-09-24b, qui
+  reprend 2026-09-24a), INSTALLÉ le 23/09/2026 au soir ; test réel du bouton
+  « Rafraîchir les NOTAM » en attente de v17.29 en ligne (section 17) ;
+- transfert des sélections NOTAM BFG -> NPF : NON IMPLÉMENTÉ, en attente
+  (décision utilisateur du 23/09/2026, section 17) ;
 
 À MESURER :
 - v17.22 : MESURÉ. Les OUT z12->z10 restent fluides via RAM principal, mais z8/20 NM
@@ -231,12 +244,23 @@ NON IMPLÉMENTÉ / OUVERT :
   analyse ni correction pour l'instant, décision utilisateur du 23/09/2026) :
   - « Fond de carte visible chargé » entre 8 et 13 s ;
   - attente des tuiles avant le filtre HT de 6 à 11 s ;
-- v17.28 : À MESURER après mise en ligne. Test Chrome sur profil vierge
-  (scénarios A et B + hors ligne, procédure dans l'entrée v17.28) et test iPad :
-  zones SIA présentes, `sia.js` servi en 200 par le SW. Surveiller aussi le
-  repère DIAG de démarrage du script : `sia.js` (1,40 Mo, bloquant) est de
-  nouveau réellement chargé à chaque ouverture, alors qu'il était refusé en 504.
-  Référence v17.27 « Script NPF exécuté » : 1,97 s, 1,68 s, 1,59 s ;
+- v17.28 : VALIDÉ (iPad, 3 démarrages à froid en mode avion) : zones SIA
+  activées et affichées hors ligne, recherche de communes OK. Test Chrome
+  automatisé sur la version en ligne (23/09/2026) : scénarios A et B + hors
+  ligne OK.
+  Résultats DIAG iPad v17.28 (3 démarrages à froid en mode avion) :
+  - « Script NPF exécuté » : 2,11 / 1,75 / 1,84 s (v17.27 : 1,97 / 1,68 /
+    1,59 s), soit environ +0,15 s dû au chargement réel de `sia.js` ;
+  - blocage JS maximal : 1 199 / 1 101 / 694 ms (v17.27 : 458 / 865 / 432 ms),
+    survenant vers 7 à 8 s, donc après `sia.js`. Conditions NON comparables :
+    zoom 8 au lieu de 10, feu mémorisé restauré au démarrage, GPS toutes les
+    ~2 s au lieu de 15 à 35 s. À MESURER, sans l'attribuer à v17.28. ;
+- v17.29 : À MESURER sur iPad. NOTAM : bouton sur les 122 terrains couverts,
+  « Aucun NOTAM », avertissement de date, bouton « Rafraîchir les NOTAM »
+  (message du NAS, progression des lots, règle des 30 min, jeton, hors ligne),
+  sélections conservées. Calculateur : onglets et appuis inchangés, plus aucune
+  erreur `calculatorModal`. Le parcours complet du bouton contre le vrai NAS
+  dépend du point NAS ci-dessus (erreur 500 tant qu'il n'est pas traité) ;
 
 IMPORTANT : cette liste de statut ne remplace pas les sections détaillées plus bas.
 Elle sert à savoir immédiatement ce qui est réellement codé, ce qui reste ouvert
@@ -244,40 +268,37 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.28
+Version : TEST v17.29
 Date : 23/09/2026
-Base : v17.27 (VALIDÉE sur iPad le 23/09/2026)
+Base : v17.28 (VALIDÉE sur iPad)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.28.txt
-2_Index_v17.28.txt
-3_Manifest_v17.28.txt
-4_Script_v17.28.txt
-5_SIA_v17.28.txt
-6_Style_v17.28.txt
-7_Sw_v17.28.txt
+1_Modifications_v17.29.txt
+2_Index_v17.29.txt
+3_Manifest_v17.29.txt
+4_Script_v17.29.txt
+5_SIA_v17.29.txt
+6_Style_v17.29.txt
+7_Sw_v17.29.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.28
-- Manifest : start_url = ./index.html?appv=v17.28
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.28
-- Style : NPF_STYLE_BUILD_VERSION = v17.28
-- Service Worker : `sw-v17-28_sia_revision_restored`
+- Index : APP_VERSION = v17.29
+- Manifest : start_url = ./index.html?appv=v17.29
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.29
+- Style : NPF_STYLE_BUILD_VERSION = v17.29
+- Service Worker : `sw-v17-29_notams_122_calculator_fix`
 - SIA_DATA_REVISION (SW / Index) : 15.69-radio1026-1-maplite1 (inchangée)
-- sia.js v17.28 : CHANGÉ volontairement — copie octet pour octet de
-  `5_SIA_v17.25.txt` (1 402 248 octets), révision interne
-  `15.69-radio1026-1-maplite1`, désormais conforme à ce qu'attend le SW.
+- sia.js v17.29 : strictement identique à v17.28.
 
 STATUT DE VALIDATION :
-- validation statique v17.28 effectuée avant livraison : Script/SIA/SW OK, script
+- validation statique v17.29 effectuée avant livraison : Script/SIA/SW OK, script
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
-- `sia.js` v17.28 bit-à-bit identique à `5_SIA_v17.25.txt` ;
-- test Chrome local (profil vierge, scénario B + hors ligne) : OK ;
-- moteur tuiles non modifié ; aucune ligne de `src/` modifiée hormis la version
-  (src/010, ligne 1) ;
-- v17.26 reste À MESURER en vol prolongé ; v17.27 VALIDÉE sur iPad ; v17.28
-  À MESURER après mise en ligne.
+- `sia.js` et moteur tuiles (src/100) identiques à v17.28 ;
+- tests Chrome (v17.29 servie en local, profil neuf) : calculateur, affichage
+  NOTAM et bouton de rafraîchissement face à un NAS simulé : OK (entrée v17.29) ;
+- v17.26 reste À MESURER en vol prolongé ; v17.27 et v17.28 VALIDÉES sur iPad ;
+  v17.29 À MESURER.
 
 
 2. PROTOCOLE DE TRAVAIL À RESPECTER
@@ -945,8 +966,10 @@ POINT S — Révision sia.js déployée ≠ révision attendue par le SW
   ligne.
 
 POINT D — Défaut constaté : `calculatorModal is not defined`
-- Statut : NON IMPLÉMENTÉ — correction PRÉVUE dans une version séparée, APRÈS
-  validation de v17.28 (décision utilisateur du 23/09/2026). Pas dans v17.28.
+- Statut : TRAITÉ en v17.29 — À MESURER sur iPad. Historique du statut :
+  NON IMPLÉMENTÉ (prévu après validation de v17.28) -> intégré à v17.29 sur
+  demande de l'utilisateur (23/09/2026). Correction : l'écouteur n'est plus
+  branché, sans réactiver le repli par coordonnées (décision utilisateur).
 - Constaté : `handleCalculatorTabHitByCoordinates` (src/310:309-350), défini dans
   `initializeCalculator`, lit `calculatorModal`. Cette constante n'existe que
   dans `setupEventListeners` (src/110:16), donc hors de portée : ReferenceError.
@@ -965,9 +988,337 @@ POINT D — Défaut constaté : `calculatorModal is not defined`
   « calculs » non concernée, il s'agit d'un défaut d'interface).
 
 
+17. CHAÎNE NOTAM CÔTÉ NAS — RÉSUMÉ (état au 23/09/2026)
+-------------------------------------------------------
+Source : fichiers installés sur le NAS, copiés par l'utilisateur dans
+~/nas-a-copier/installes/ (npf-docs-api.php 66 052 octets,
+notams-sdvfr-shared.php 46 693 octets, notams-auto-refresh.php 4 466 octets),
+lus en lecture seule, et entrée « NAS — 2026-09-23b » du journal BFG. Rien n'a
+été modifié côté NAS ni dans BFG.
+
+ARCHITECTURE
+- Le NAS est le SEUL producteur de /web/briefing-data/npf-notams-snapshot-v1.json.
+  Contenu : version `bfgNpfNotamsV1`, source `NAS`, sourceKind `SDVFR`,
+  publishedAt, notamsAutoPdfStatus (timestampText / timestampIso), notamText,
+  coverage (122 codes OACI), coverageCount, airportsWithNotams, notamCount.
+- Périmètre : 122 terrains = 27 pélicandromes (`pelicanAirports`) + 95
+  `otherAirports` de NPF. Lots SDVFR de 50 maximum : 3 lots (50 + 50 + 22).
+- Tout ou rien : les lots s'accumulent hors du fichier partagé ; le fichier
+  n'est écrit qu'après le dernier lot réussi, sinon le précédent reste intact.
+- Créneau SDVFR occupé entre deux lots (BFG partage la file) : la chaîne attend
+  (`slotWaitingSince`) jusqu'à 600 s, puis échoue proprement
+  (`sdvfr_batch_slot_timeout`).
+- Tâche planifiée : un chargement par jour à 06h30 ; ensuite, uniquement sur
+  demande.
+- Mesure réelle (npf-notams-refresh-v1.json après le dernier rafraîchissement
+  complet, 23/09/2026) : 3 lots en ~61 s, sans attente de créneau ; 926 NOTAM
+  sur 110 terrains, pour 122 couverts ; fichier ~248 Ko.
+
+ACTIONS WEB (npf-docs-api.php, jeton « Authorization: Bearer »)
+- notams-snapshot (GET) : fichier brut ; 404 s'il est absent.
+- notams-refresh-status (GET) : état (idle / pending / running / success /
+  error), message, batchIndex, batchCount, batchLabel, slotWaitingSince,
+  snapshot { available, publishedAt, isToday… }. Sa lecture fait avancer la
+  machine à états : un client doit l'interroger jusqu'à l'état terminal.
+- notams-refresh (POST) : rejoint un téléchargement en cours (`joined: true`)
+  ou en crée un.
+- Jeton absent ou expiré : HTTP 401 { ok: false, error: 'unauthorized',
+  message: 'Autorisation expirée ou absente.' }.
+
+GARDE
+- notams-publish refuse toute publication applicative (HTTP 409,
+  `snapshot_owned_by_nas`) lorsque le fichier en place porte `source: "NAS"`.
+  BFG ne peut donc plus ramener le fichier à ses 27 pélicandromes ; le refus
+  est sans conséquence visible pour BFG (vérifié en lecture seule côté BFG).
+
+SÉLECTIONS INDIVIDUELLES
+- Le fichier du NAS ne porte plus aucune sélection. Cases, exclusions et
+  surlignages sont individuels, stockés uniquement sur l'iPad, jamais envoyés
+  au NAS. NPF ignore tout `state` éventuellement présent dans le fichier
+  (v17.29).
+
+TRANSFERT BFG -> NPF DES SÉLECTIONS
+- NON IMPLÉMENTÉ — en attente (décision utilisateur du 23/09/2026).
+
+DÉFAUT CONSTATÉ DANS LES FICHIERS INSTALLÉS — À DÉCIDER (côté NAS)
+- L'action web `notams-refresh` appelle
+  `npf_notams_create_request(npf_notams_targets(), 'api-refresh')` avec les 122
+  terrains en un seul lot. `npf_notams_create_request` refuse au-delà de 50
+  (`sdvfr_targets_overflow`) : sans téléchargement déjà en cours, la réponse est
+  HTTP 500 « Trop de terrains pour une seule demande SDVFR (50 maximum). ».
+  Seule la tâche planifiée passe par `npf_notams_refresh_start_batched`.
+- Côté NPF (v17.29), ce message du NAS est affiché tel quel et la copie locale
+  reste en place. Aucun contournement n'est codé dans NPF.
+- Point annexe à vérifier côté NAS : `npf_notams_refresh_follow()` rappelle
+  `npf_notams_refresh_begin()` si la demande active n'est pas celle suivie, ce
+  qui réécrit l'état sans les champs de lots.
+
+CORRECTION NAS 2026-09-24a — PRÉPARÉE, À INSTALLER (24/09/2026)
+Demande utilisateur : action web par lots comme la tâche de 06h30, rejoindre un
+rafraîchissement par lots en cours, vérifier puis corriger au minimum follow() ;
+rien d'autre (garde, purge des sélections, format du fichier, coverage et
+tâche de 06h30 strictement identiques). Aucun fichier du dépôt NPF modifié
+hormis ce journal ; v17.29 toujours non commitée.
+- Fichiers : ~/nas-a-copier/npf-docs-api_2026-09-24a.php et
+  ~/nas-a-copier/notams-sdvfr-shared_2026-09-24a.php, construits à partir des
+  copies exactes de ~/nas-a-copier/installes/ (non modifiées). `php -l` OK.
+  notams-auto-refresh.php inchangé.
+- npf-docs-api.php, action `notams-refresh` :
+  1. rafraîchissement par lots déjà en cours (état pending/running, batchCount
+     > 1, mis à jour depuis moins de NPF_NOTAMS_BATCH_SLOT_MAX_WAIT = 600 s) :
+     REJOINT (`joined: true`) en faisant avancer l'état ; au-delà de 600 s sans
+     mise à jour, le rafraîchissement est considéré abandonné ;
+  2. demande SDVFR étrangère active : suivie comme avant (follow) ;
+  3. sinon `npf_notams_refresh_start_batched('api-refresh')`, exactement comme la
+     tâche de 06h30 ; en cas d'échec au démarrage, HTTP 500 avec le code et le
+     message du NAS, comme avant.
+- notams-sdvfr-shared.php, `npf_notams_refresh_follow()` : perte des lots
+  CONFIRMÉE en exécutant la bibliothèque installée (banc d'essai hors NAS) : une
+  demande BFG active pendant le lot 2 remplace l'état ; runId, batchIndex et
+  batchCount disparaissent, le lot 3 n'est jamais lancé et l'état suit la demande
+  BFG. Correction minimale : pendant un rafraîchissement par lots pending/running,
+  follow() rend l'état suivi et n'adopte plus l'autre demande.
+- Vérifications (bac à sable PHP local, arborescence identique au NAS, worker
+  SDVFR et demande BFG simulés, jeton signé localement) :
+  - fichiers installés : POST -> HTTP 500 `sdvfr_targets_overflow` (reproduit) ;
+  - corrigés : POST -> lot 1/3 (runId, batchCount 3) ; second POST pendant le
+    lot -> `joined: true`, même runId ; 3 lots jusqu'au succès ; fichier
+    partagé : source NAS, coverage 122, sans `state` ; POST avec rafraîchissement
+    abandonné (> 600 s) -> nouveau runId ; demande BFG active pendant les lots
+    puis POST -> lots conservés.
+- À MESURER : test réel depuis l'iPad une fois v17.29 en ligne.
+
+DÉFAUTS CONSTATÉS LE 24/09/2026 — CORRIGÉS EN 2026-09-24b (voir ci-dessous)
+- Reprise après attente de créneau : lorsque le créneau SDVFR est pris entre
+  deux lots, npf_notams_refresh_start_next_batch() pose `slotWaitingSince`, mais
+  npf_notams_refresh_advance() ne la rappelle plus ensuite : le fichier de
+  résultat porte l'identifiant de l'autre demande, advance() reste sur « En
+  attente de prise en charge » et le rafraîchissement échoue à l'expiration du
+  lot précédent avec « Service SDVFR VPS inaccessible… ». Reproduit sur la
+  bibliothèque installée. Concerne aussi la tâche de 06h30.
+- Adoption d'une demande BFG hors rafraîchissement par lots : si BFG a une
+  demande SDVFR active et qu'aucun rafraîchissement par lots n'est en cours,
+  follow() l'adopte (comportement d'origine conservé) ; à son terme, le mode
+  mono-lot écrit le fichier partagé avec la couverture de CETTE demande (les
+  pélicandromes de BFG) et non les 122 terrains.
+
+CORRECTION NAS 2026-09-24b — PRÉPARÉE, À INSTALLER (remplace 2026-09-24a)
+Demande utilisateur : corriger aussi les deux défauts ci-dessus dans la même
+livraison, en gardant les corrections 2026-09-24a ; rien d'autre (garde, purge
+des sélections, format du fichier, coverage et notams-auto-refresh.php
+inchangés). Les fichiers 2026-09-24a restent en place, non écrasés.
+- Fichiers : ~/nas-a-copier/npf-docs-api_2026-09-24b.php et
+  ~/nas-a-copier/notams-sdvfr-shared_2026-09-24b.php (base : copies exactes de
+  ~/nas-a-copier/installes/). `php -l` OK. notams-auto-refresh.php NON modifié :
+  le point 1 ne l'exige pas (la tâche passe par follow() et advance(), corrigées
+  dans la bibliothèque).
+- Attente de créneau : npf_notams_refresh_advance() relance le lot en attente à
+  chaque passage (tâche CLI ou interrogation du statut par l'API) dès que le
+  créneau se libère. Au-delà de 600 s : échec avec « Créneau SDVFR occupé trop
+  longtemps entre deux lots : … » (code existant `sdvfr_batch_slot_timeout`) ou,
+  si l'attente précède le lot 1, « Créneau SDVFR occupé trop longtemps avant le
+  premier lot : … » (nouveau code `sdvfr_slot_timeout`). Fichier partagé
+  précédent conservé (tout ou rien).
+- Lot supplanté : si BFG écrit sa demande et son résultat initial par-dessus un
+  de nos lots (pendant le lot ou avant sa lecture), le lot est relancé dès que
+  le créneau se libère, au lieu d'échouer à tort en « Service SDVFR VPS
+  inaccessible ». Ajouté car c'est la forme réelle la plus probable du « créneau
+  pris entre deux lots ».
+- Couverture : une demande étrangère (BFG) n'est plus jamais adoptée.
+  npf_notams_refresh_start_batched() n'écrase pas une demande active : le lot 1
+  attend le créneau. follow() (tâche de 06h30) lance le rafraîchissement par
+  lots au lieu d'adopter la demande BFG. L'action web ne fait plus appel à
+  follow(). npf_notams_refresh_begin() n'est plus appelée que par
+  start_batched(), qui ajoute aussitôt les champs de lots : le chemin mono-lot
+  qui écrivait une autre couverture n'est plus atteignable (sauf état laissé en
+  cours par l'ancienne version au moment de l'installation — d'où la consigne
+  d'installer hors rafraîchissement).
+- Vérifications (hors NAS) :
+  - bibliothèque, worker et BFG simulés : 3 lots sans concurrence ; BFG pendant
+    le lot 2 puis follow() ; créneau occupé puis libéré entre les lots 2 et 3
+    (reprise automatique, demande BFG jamais écrasée) ; lot 2 supplanté puis
+    relancé ; BFG actif au démarrage (attente puis 3 lots, coverage 122) ; même
+    cas par follow() ; créneau occupé > 600 s entre deux lots et avant le lot 1
+    (message exact, fichier précédent identique octet pour octet). Fichier
+    partagé : source NAS, coverage 122, sans `state` ;
+  - action web (bac à sable PHP local) : fichiers installés -> 500
+    `sdvfr_targets_overflow` ; 24b -> tous les cas 2026-09-24a OK, plus POST avec
+    BFG actif au démarrage (attente, 3 lots, coverage 122) ;
+  - tâche CLI réelle (notams-auto-refresh.php installé, inchangé, bibliothèque
+    24b, worker et BFG simulés en parallèle) : BFG prend le créneau après le
+    lot 1 puis le libère -> reprise, 3 lots, coverage 122 ; BFG actif avant la
+    tâche -> attente puis 3 lots ; créneau jamais libéré (délai abaissé à 12 s
+    pour le test) -> code de sortie 1, message exact, fichier précédent intact.
+- Remarques sans code (notams-auto-refresh.php non modifié) :
+  - la ligne de journal « Demande SDVFR déjà active (…) : suivi sans nouvelle
+    demande » devient imprécise quand la demande est celle de BFG : la tâche lance
+    en fait le rafraîchissement par lots qui attend le créneau ;
+  - en cas d'échec, la tâche ajoute « — le fichier NOTAM partagé précédent est
+    conservé » à un message qui le dit déjà (répétition existante).
+- À MESURER : test réel depuis l'iPad une fois v17.29 en ligne, puis tâche de
+  06h30 du lendemain.
+
+INSTALLATION NAS 2026-09-24b — INSTALLÉ (23/09/2026 au soir)
+- Avant dépôt : npf-notams-refresh-v1.json vérifié en status `success`.
+- Déposés directement sous leur nom définitif dans web/briefing-api/ :
+  npf-docs-api.php (67 499 octets) et notams-sdvfr-shared.php (50 838 octets),
+  tailles identiques aux fichiers 2026-09-24b. notams-auto-refresh.php inchangé.
+- Les sauvegardes .bak et .v515 qui se trouvaient dans web/briefing-api/ ont été
+  supprimées (lisibles publiquement). Copies de référence conservées hors NAS
+  dans ~/nas-a-copier/installes/.
+- Vérifié ensuite sur iPad : BFG pérenne et TEST, NPF pérenne et TEST
+  fonctionnent comme avant.
+- Statut : INSTALLÉ. Test réel du bouton « Rafraîchir les NOTAM » (dont créneau
+  occupé par BFG) EN ATTENTE de v17.29 en ligne ; tâche de 06h30 à contrôler dans
+  /volume1/briefing-logs/npf-notams-auto-refresh.log.
+
+
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.29 — NOTAM DES 122 TERRAINS / CORRECTION calculatorModal
+Date : 23/09/2026
+Base fonctionnelle : v17.28 (VALIDÉE sur iPad)
+
+Deux rubriques distinctes ci-dessous. Aucun commit (v17.28 en validation).
+
+================================================================
+A. NOTAM DES 122 TERRAINS
+================================================================
+
+DEMANDE UTILISATEUR
+- NOTAM sur tous les terrains présents dans `coverage`, même présentation que
+  pour les pélicandromes (même bouton, même fenêtre, mêmes filtres).
+- Terrain couvert sans NOTAM : « Aucun NOTAM ». Terrain non couvert : rien.
+- Fichier qui n'est pas du jour : affiché avec un avertissement de date bien
+  visible (« NOTAM du JJ/MM — pas à jour ») au lieu d'être masqué.
+- Bouton « Rafraîchir les NOTAM » dans Gestion des cartes, sous
+  #simulation-mode-button, sur le gabarit de la section VAC.
+- Sélections individuelles, uniquement sur l'iPad, conservées si le NOTAM n'a
+  pas changé (identifiant + signature), remises à zéro sinon. Transfert
+  BFG -> NPF en attente : non implémenté.
+- Réponses de l'utilisateur au plan : âge du fichier lu dans
+  snapshot.publishedAt de notams-refresh-status ; « simple rechargement » =
+  GET notams-snapshot si la copie locale est plus ancienne, sans lancer SDVFR ;
+  messages d'autorisation existants de NPF et ouverture de la fenêtre de mot de
+  passe comme le lecteur FdS ; `state` venant du NAS toujours ignoré ; fichier
+  sans `coverage` : retour aux 27 pélicandromes ; popup d'un WP posé sur un
+  terrain couvert : bouton NOTAMS.
+
+CONTRAT NAS UTILISÉ
+- Voir section 17 de la fiche (fichiers installés lus en lecture seule).
+
+MODIFICATIONS
+1. src/210_pistes_notam_trace.js
+   - Couverture : `npfNotamsCoverageSet`, lu dans `coverage` de la copie locale
+     et recopié en localStorage (`npfNotamsCoverageV1`) pour que les popups
+     soient justes dès le premier tracé ; repli sur les 27 pélicandromes. Un
+     changement de couverture retrace une fois les marqueurs de terrains.
+   - Synchronisation : un fichier qui n'est pas du jour n'est plus écarté ; la
+     règle « jamais plus ancien que la copie locale » est conservée ; délai
+     paramétrable ; tout `state` venant du NAS est supprimé ; les sélections
+     locales sont reprises si id ET signature sont inchangés
+     (`carryOverNpfNotamsLocalSelections`), sinon abandonnées.
+   - Fenêtre NOTAMS : bandeau « NOTAM du JJ/MM — pas à jour » (heure de Paris)
+     au-dessus de la liste, liste affichée ; « Aucun NOTAM » pour un terrain
+     couvert sans NOTAM ; libellé « copie locale du jour / du JJ/MM ».
+   - Bouton de rafraîchissement (`refreshNpfNotamsFromNasManually`) :
+     hors ligne -> message, aucune requête ; jeton absent -> appairage BFG en
+     silence, puis messages et fenêtre de mot de passe comme le lecteur FdS ;
+     GET notams-refresh-status ; téléchargement déjà en cours -> suivi ; fichier
+     du NAS de moins de 30 min -> GET notams-snapshot seulement si la copie
+     locale est plus ancienne, message « NOTAM déjà à jour (téléchargés à
+     HHhMM) » ; sinon POST notams-refresh, interrogation du statut toutes les
+     2 s avec le message du NAS tel quel et la progression « Lot i/N », puis
+     GET notams-snapshot et enregistrement local.
+   - Délais : 180 s de suivi (~3 × les 61 s mesurés pour 3 lots), prolongés si
+     le NAS signale une attente de créneau (`slotWaitingSince`) selon son
+     propre plafond de 600 s ; 15 s par requête d'état ; 30 s pour le fichier
+     (~248 Ko). Délai dépassé : message, copie locale conservée ; un nouvel
+     appui reprend le suivi.
+2. src/220_frequences_marqueurs_terrains.js : bouton NOTAMS dans la popup des
+   `otherAirports` ordinaires lorsqu'ils sont couverts. Popups PÉLIC inchangées.
+3. src/200_waypoints.js : bouton NOTAMS dans la popup d'un WP posé sur un
+   terrain couvert non PÉLIC (la fiche PÉLIC l'avait déjà).
+4. src/170_fds_briefing_nas.js : la fenêtre de mot de passe accepte le type
+   `notams` (titre « Accès NOTAM ») ; après autorisation, elle se ferme et relance
+   le rafraîchissement NOTAM au lieu de télécharger un document FdS / GAAR.
+5. src/110_evenements_ui_eau_ht.js : branchement du bouton ; statut de la copie
+   locale affiché à l'ouverture de Gestion des cartes.
+6. src/060_demarrage_app.js : couverture de la copie locale relue au démarrage,
+   y compris hors ligne.
+7. index.html : section « NOTAM » sous #simulation-mode-button (classes CSS de
+   la section VAC, identifiants propres).
+8. style.css : bandeau « pas à jour » et couleurs du statut de rafraîchissement.
+
+TESTS CHROME (v17.29 servie en local, profil neuf, données de test au format
+du NAS, NAS simulé d'après le contrat lu — le vrai NAS n'a pas été appelé)
+- Couverture 122 : bouton NOTAMS sur un terrain ordinaire couvert (LFBC), absent
+  sur un aérodrome non couvert (LFAB) ; coverage recopiée en localStorage.
+- Fichier de la veille : bandeau « NOTAM du 22/09 — pas à jour » et liste
+  affichée. Terrain couvert sans NOTAM (LFBH) : « Aucun NOTAM ».
+- Sélections : 2 NOTAM cochés ; nouveau fichier du jour où l'un a changé de
+  texte et contenant un `state` étranger : seule la sélection du NOTAM
+  inchangé est conservée ; le `state` du fichier est ignoré ; bandeau masqué.
+- Rafraîchissement simulé 3 lots avec attente de créneau : messages du NAS
+  affichés tels quels, « Lot 1/3 » -> « Lot 3/3 », GET notams-snapshot final,
+  « NOTAM enregistrés sur cet iPad pour le hors ligne. ».
+- Fichier de moins de 30 min : « NOTAM déjà à jour (téléchargés à HHhMM) »,
+  aucun POST.
+- Réponse réelle du NAS installé (POST -> 500 `sdvfr_targets_overflow`) :
+  message du NAS affiché en erreur.
+- 401 : « Autorisation expirée : saisis à nouveau le mot de passe NPF. » et
+  fenêtre « Accès NOTAM » ouverte. Hors ligne : message, aucune requête.
+- Aucune exception de page pendant la session de test.
+
+À MESURER
+- Sur iPad : popups, fenêtre NOTAMS, bandeau de date, Gestion des cartes.
+- Parcours complet du bouton contre le vrai NAS : bloqué côté NAS tant que
+  l'action web `notams-refresh` envoie 122 terrains en un seul lot (section 17).
+  Le rechargement sous 30 min et le suivi d'un téléchargement déjà en cours
+  (tâche de 06h30, BFG) ne dépendent pas de ce point.
+
+================================================================
+B. CORRECTION calculatorModal
+================================================================
+
+DEMANDE UTILISATEUR
+- Supprimer l'erreur « calculatorModal is not defined » (point D) SANS
+  réactiver le repli par coordonnées ; comportement du calculateur strictement
+  identique ; vérifier dans Chrome les onglets et l'absence d'erreur.
+
+MODIFICATION
+- src/310_calculateur_ui.js : l'écouteur `handleCalculatorTabHitByCoordinates`
+  n'est plus branché sur document (pointerdown / pointerup / touchend / click).
+  La fonction reste en place, inutilisée, avec un commentaire v17.29. Comme
+  elle levait une exception dès sa première ligne, elle n'avait jamais d'autre
+  effet : la retirer ne change rien d'autre.
+
+TESTS CHROME (vrais clics souris CDP, profil neuf)
+- Référence v17.28 en ligne : 9 erreurs pour 3 clics sur la carte ; onglets
+  BLOC / FUEL, SUIVI LARGAGES, DEROUT. / GAAR, PREVI. NBR LARGAGES : OK ; appui
+  dans la bande sous la barre d'onglets : onglet inchangé ; 28 erreurs au total.
+- v17.29 : 0 erreur pour 3 clics sur la carte ; mêmes 4 onglets OK ; même
+  appui dans la bande : onglet inchangé ; 0 erreur sur toute la session.
+
+À MESURER
+- Sur iPad : onglets du calculateur au doigt, comportement inchangé.
+
+VERSIONS
+- Index / Manifest / Script / Style : v17.29.
+- Service Worker : `sw-v17-29_notams_122_calculator_fix`.
+- SIA_DATA_REVISION inchangée ; sia.js strictement identique à v17.28.
+
+VALIDATION AVANT LIVRAISON
+- `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés.
+- Syntaxe Script / SIA / SW : OK. Script inline Index : OK. Manifest JSON : OK.
+- Cohérence versions/caches (contrôles du SW sur index/script/style/manifest) : OK.
+- sia.js et moteur tuiles (src/100) identiques à v17.28 : OK.
+- Modification v17.27 (communes sans localStorage) toujours présente : OK.
+
+--------------------------------------------------------------------------------
+
 
 VERSION TEST v17.28 — sia.js REMIS À LA RÉVISION ATTENDUE PAR LE SERVICE WORKER
 Date : 23/09/2026
@@ -1031,6 +1382,17 @@ REMARQUE CONSIGNÉE SANS CODE
   de nouveau chargé et exécuté à chaque ouverture ; le SW relit aussi son texte
   pour contrôler la révision. Comparer le repère DIAG « Script NPF exécuté » à
   la référence v17.27 : 1,97 s, 1,68 s, 1,59 s.
+
+VALIDATION TERRAIN — iPad — STATUT : VALIDÉ
+- 3 démarrages à froid en mode avion ; zones SIA activées et affichées hors
+  ligne ; recherche de communes OK.
+- Résultats DIAG :
+  - « Script NPF exécuté » : 2,11 / 1,75 / 1,84 s (v17.27 : 1,97 / 1,68 /
+    1,59 s), soit environ +0,15 s dû au chargement réel de `sia.js` ;
+  - blocage JS maximal : 1 199 / 1 101 / 694 ms (v17.27 : 458 / 865 / 432 ms),
+    survenant vers 7 à 8 s, donc après `sia.js`. Conditions NON comparables :
+    zoom 8 au lieu de 10, feu mémorisé restauré au démarrage, GPS toutes les
+    ~2 s au lieu de 15 à 35 s. À MESURER, sans l'attribuer à v17.28.
 
 PROCÉDURE — TEST CHROME SUR APPAREIL VIERGE (v17.28 EN LIGNE)
 1. Ouvrir une fenêtre de navigation privée neuve (ou un profil Chrome neuf).

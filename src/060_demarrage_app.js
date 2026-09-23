@@ -531,6 +531,8 @@ async function initializeApp() {
      */
     startupMapPriorityGate.then(() => {
         setTimeout(() => {
+            // v17.29 — couverture NOTAM de la copie locale, y compris hors ligne.
+            reconcileNpfNotamsCoverageFromLocalRecord();
             tryAuthorizeBriefingDocsFromBfgBridge({ silent: true })
                 .then(async () => {
                     await refreshBriefingDocMapButtons().catch(() => {});

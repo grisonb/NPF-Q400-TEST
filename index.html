@@ -6,8 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>NPF-Q400</title>
     <link rel="stylesheet" href="leaflet.css">
-    <link rel="stylesheet" href="style.css?appv=v17.28">
-    <link rel="manifest" href="manifest.json?appv=v17.28">
+    <link rel="stylesheet" href="style.css?appv=v17.29">
+    <link rel="manifest" href="manifest.json?appv=v17.29">
     <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192x192.png?appv=v13.92">
     <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512x512.png?appv=v13.92">
     <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png?appv=v13.92">
@@ -579,7 +579,7 @@
 
     <!-- v17.20 — le splash est parsé avant le gros contrôleur PWA afin de réduire le blanc initial Safari. -->
     <script>
-        const APP_VERSION = 'v17.28';
+        const APP_VERSION = 'v17.29';
         const SERVICE_WORKER_URL = `./sw.js?appv=${encodeURIComponent(APP_VERSION)}`;
         const APP_VERSION_STORAGE_KEY = 'appVersion';
         const SW_CONTROLLER_RELOAD_GUARD_KEY = 'swControllerReloadGuard';
@@ -1176,7 +1176,7 @@
     <script src="suncalc.js"></script>
     <script src="jszip.min.js"></script>
     <script src="sia.js?siav=15.69-radio1026-1-maplite1"></script>
-    <script src="script.js?appv=v17.28"></script>
+    <script src="script.js?appv=v17.29"></script>
     
     <div id="fuel-split-modal" class="fuel-split-modal" style="display: none;">
         <div class="fuel-split-modal-content">
@@ -1411,6 +1411,28 @@
             <div class="modal-content">
                 <div class="import-section">
                     <button id="simulation-mode-button" type="button" class="simulation-mode-button">Mode simulation avion</button>
+                </div>
+
+                <div class="vac-management-section notams-management-section">
+                    <h3 class="maps-management-title">NOTAM</h3>
+                    <p>
+                        NOTAM SDVFR des 122 terrains NPF, produits par le NAS (chargement quotidien à 06h30)
+                        et stockés sur cet appareil pour une utilisation hors ligne.
+                    </p>
+                    <div class="vac-management-actions">
+                        <button id="notams-refresh-button" type="button" class="import-button">
+                            Rafraîchir les NOTAM
+                        </button>
+                    </div>
+                    <div id="notams-refresh-status" class="vac-installed-status notams-refresh-status" aria-live="polite">
+                        Vérification de la copie locale…
+                    </div>
+                    <div id="notams-refresh-progress" class="vac-download-progress" style="display: none;">
+                        <div class="vac-download-progress-track">
+                            <div id="notams-refresh-progress-bar" class="vac-download-progress-bar"></div>
+                        </div>
+                        <div id="notams-refresh-progress-text" class="vac-download-progress-text"></div>
+                    </div>
                 </div>
 
                 <div class="map-source-management-section">

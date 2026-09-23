@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.28';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.29';
 
 
 /*
@@ -5900,6 +5900,8 @@ async function initializeApp() {
      */
     startupMapPriorityGate.then(() => {
         setTimeout(() => {
+            // v17.29 — couverture NOTAM de la copie locale, y compris hors ligne.
+            reconcileNpfNotamsCoverageFromLocalRecord();
             tryAuthorizeBriefingDocsFromBfgBridge({ silent: true })
                 .then(async () => {
                     await refreshBriefingDocMapButtons().catch(() => {});
@@ -12867,6 +12869,7 @@ function setupEventListeners() {
     const offlineMapModal = document.getElementById('offline-map-modal');
     const closeOfflineMapButton = document.getElementById('close-offline-map-btn');
     const vacDownloadUpdateButton = document.getElementById('vac-download-update-button');
+    const notamsRefreshButton = document.getElementById('notams-refresh-button');
     const vacDeleteAllButton = document.getElementById('vac-delete-all-button');
     const vacUpdateModal = document.getElementById('vac-update-modal');
     const vacUpdateNowButton = document.getElementById('vac-update-now-button');
@@ -13401,9 +13404,17 @@ function setupEventListeners() {
         displayVacManagementStatus();
         refreshSimulationModeButtonState();
         refreshRoadOverlayInstalledStatus();
+        displayNpfNotamsLocalStatus().catch(() => {});
     });
     closeOfflineMapButton.addEventListener('click', () => { offlineMapModal.style.display = 'none'; });
 
+    if (notamsRefreshButton) {
+        notamsRefreshButton.addEventListener('click', () => {
+            refreshNpfNotamsFromNasManually().catch(error => {
+                console.error('[NPF NOTAMS] Rafraîchissement impossible:', error);
+            });
+        });
+    }
     if (vacDownloadUpdateButton) {
         vacDownloadUpdateButton.addEventListener('click', () => {
             handleVacDownloadUpdateClick().catch(error => {
@@ -26860,7 +26871,8 @@ function getBriefingDocsBfgAuthorizationUnavailableMessage() {
 
 function openBriefingDocsPasswordModal(type) {
     const safeType = String(type || '').toLowerCase();
-    if (!NPF_BRIEFING_DOC_TYPES.includes(safeType)) return false;
+    // v17.29 — 'notams' : même fenêtre pour le bouton « Rafraîchir les NOTAM ».
+    if (!NPF_BRIEFING_DOC_TYPES.includes(safeType) && safeType !== 'notams') return false;
 
     /* v16.63 — un iPad associé à BFG ne doit jamais retomber sur le mot de
      * passe NPF. Ce garde-fou couvre aussi un éventuel ancien appel résiduel. */
@@ -26883,7 +26895,7 @@ function openBriefingDocsPasswordModal(type) {
 
     npfBriefingDocsBfgPairingOnly = false;
     npfBriefingDocsPendingType = safeType;
-    const label = safeType === 'gaar' ? 'GAAR' : 'FdS';
+    const label = safeType === 'gaar' ? 'GAAR' : (safeType === 'notams' ? 'NOTAM' : 'FdS');
     if (title) title.textContent = `Accès ${label}`;
     if (help) help.textContent = `Utilise le mot de passe NPF. Pour associer BFG à cet iPad, ferme cette fenêtre puis utilise le bouton BFG dédié.`;
     if (input) { input.value = ''; input.style.display = ''; }
@@ -27435,6 +27447,12 @@ function initializeBriefingDocsUi() {
             }
             if (passwordStatus) passwordStatus.textContent = 'Vérification du mot de passe…';
             await authorizeBriefingDocs(password);
+            if (targetType === 'notams') {
+                // v17.29 — aucun document FdS / GAAR : on relance le rafraîchissement NOTAM.
+                closeBriefingDocsPasswordModal();
+                refreshNpfNotamsFromNasManually().catch(error => console.warn('[NPF NOTAMS] Rafraîchissement impossible:', error));
+                return;
+            }
             if (passwordStatus) passwordStatus.textContent = `Téléchargement ${getBriefingDocLabel(targetType)} du jour…`;
 
             const result = await refreshSingleBriefingDocFromNas(targetType);
@@ -30271,6 +30289,12 @@ function buildNpfWaypointPelicPopupHtml(wp) {
     return `<div class="airport-popup"><b>${escapeHtml(oaci)}</b><br>${escapeHtml(String(airport.name || oaci))}<div class="popup-buttons"><button class="${waterButtonClass}" onclick="window.toggleWater('${oaci}')">${waterButtonText}</button><button class="${disableButtonClass}" onclick="window.toggleAirport('${oaci}')">${disableButtonText}</button><button class="${baseButtonClass}" onclick="window.setBaseAirport('${oaci}')">${baseButtonText}</button>${customPelicButton}</div>${buildPelicPdfButtonsHtml(oaci)}${buildVacButtonHtml(oaci)}${buildPelicNotamsButtonHtml(oaci)}${buildAirportGoToButtonHtml(oaci)}${buildNpfWaypointPelicActionsHtml(wp)}</div>`;
 }
 
+/* v17.29 — WP posé sur un terrain couvert par les NOTAM : bouton NOTAMS. */
+function buildNpfWaypointNotamsButtonHtml(wp) {
+    if (String(wp?.source || '').trim() !== 'airport') return '';
+    return buildNpfNotamsButtonHtmlIfCovered(normalizeOaciCodeInput(wp?.sourceRef));
+}
+
 function buildNpfWaypointPopupHtml(wp, index) {
     const pelicPopupHtml = buildNpfWaypointPelicPopupHtml(wp);
     if (pelicPopupHtml) return pelicPopupHtml;
@@ -30285,6 +30309,7 @@ function buildNpfWaypointPopupHtml(wp, index) {
             <div class="npf-waypoint-popup-actions">
                 ${buildNpfWaypointActionsHtml(wp)}
             </div>
+            ${buildNpfWaypointNotamsButtonHtml(wp)}
         </div>
     `;
 }
@@ -31785,6 +31810,141 @@ const NPF_PELIC_NOTAMS_KEYWORDS_TO_FILTER = Object.freeze([
     'wig wag'
 ]);
 
+/*
+ * v17.29 — NOTAM DES 122 TERRAINS : la couverture est lue dans le champ
+ * `coverage` du fichier produit par le NAS. Elle est recopiée en localStorage
+ * afin que les popups des terrains soient justes dès le premier tracé, avant
+ * toute lecture IndexedDB. Fichier sans `coverage` (ancienne publication BFG)
+ * ou aucune copie locale : retour aux 27 pélicandromes.
+ */
+const NPF_NOTAMS_COVERAGE_LOCAL_KEY = 'npfNotamsCoverageV1';
+
+function getNpfNotamsFallbackCoverage() {
+    return pelicanAirports
+        .map(airport => String(airport?.oaci || '').trim().toUpperCase())
+        .filter(Boolean);
+}
+
+function getNpfNotamsCoverageFromPayload(payload) {
+    const coverage = Array.isArray(payload?.coverage)
+        ? payload.coverage
+            .map(code => String(code || '').trim().toUpperCase())
+            .filter(code => /^[A-Z0-9]{4}$/.test(code))
+        : [];
+    return coverage.length ? coverage : getNpfNotamsFallbackCoverage();
+}
+
+function loadNpfNotamsCoverageSet() {
+    try {
+        const stored = JSON.parse(localStorage.getItem(NPF_NOTAMS_COVERAGE_LOCAL_KEY) || 'null');
+        if (Array.isArray(stored) && stored.length) {
+            return new Set(stored.map(code => String(code || '').trim().toUpperCase()).filter(Boolean));
+        }
+    } catch (_) {}
+    return new Set(getNpfNotamsFallbackCoverage());
+}
+
+let npfNotamsCoverageSet = loadNpfNotamsCoverageSet();
+
+function isNpfNotamsAirportCovered(oaci) {
+    return npfNotamsCoverageSet.has(String(oaci || '').trim().toUpperCase());
+}
+
+function applyNpfNotamsCoverageFromPayload(payload) {
+    const next = getNpfNotamsCoverageFromPayload(payload);
+    const changed = next.length !== npfNotamsCoverageSet.size
+        || next.some(code => !npfNotamsCoverageSet.has(code));
+    try { localStorage.setItem(NPF_NOTAMS_COVERAGE_LOCAL_KEY, JSON.stringify(next)); } catch (_) {}
+    if (!changed) return false;
+    npfNotamsCoverageSet = new Set(next);
+    // Le bouton NOTAMS est porté par les popups des terrains : un seul retracé.
+    try {
+        if (map && permanentAirportLayer) drawPermanentAirportMarkers();
+    } catch (_) {}
+    return true;
+}
+
+async function reconcileNpfNotamsCoverageFromLocalRecord() {
+    try {
+        const record = await getNpfBfgNotamsLocalRecord();
+        if (record?.payload) applyNpfNotamsCoverageFromPayload(record.payload);
+    } catch (_) {}
+}
+
+function formatNpfNotamsParisDate(value, options) {
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    try {
+        const parts = new Intl.DateTimeFormat('fr-FR', { timeZone: 'Europe/Paris', ...options }).formatToParts(date);
+        return Object.fromEntries(parts.map(part => [part.type, part.value]));
+    } catch (_) {
+        return null;
+    }
+}
+
+function formatNpfNotamsParisDayMonth(value) {
+    const parts = formatNpfNotamsParisDate(value, { day: '2-digit', month: '2-digit' });
+    return parts ? `${parts.day}/${parts.month}` : '';
+}
+
+function formatNpfNotamsParisHourMinute(value) {
+    const parts = formatNpfNotamsParisDate(value, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+    return parts ? `${parts.hour}h${parts.minute}` : '';
+}
+
+function getNpfNotamsSourceIso(payload) {
+    return String(payload?.notamsAutoPdfStatus?.timestampIso || payload?.publishedAt || '').trim();
+}
+
+/* v17.29 — un fichier qui n'est pas du jour est affiché avec cet avertissement. */
+function getNpfNotamsStaleWarningText(payload) {
+    if (isNpfPelicNotamsPayloadCurrentToday(payload)) return '';
+    const dayMonth = formatNpfNotamsParisDayMonth(getNpfNotamsSourceIso(payload));
+    return dayMonth ? `NOTAM du ${dayMonth} — pas à jour` : 'NOTAM — pas à jour';
+}
+
+function getNpfNotamsCopyLabel(payload) {
+    if (isNpfPelicNotamsPayloadCurrentToday(payload)) return 'copie locale du jour';
+    const dayMonth = formatNpfNotamsParisDayMonth(getNpfNotamsSourceIso(payload));
+    return dayMonth ? `copie locale du ${dayMonth}` : 'copie locale';
+}
+
+/*
+ * v17.29 — SÉLECTIONS INDIVIDUELLES : elles restent sur cet iPad et ne sont
+ * jamais envoyées au NAS. Un éventuel `state` présent dans le fichier du NAS
+ * est ignoré. Lors du remplacement de la copie locale, une sélection n'est
+ * conservée que si son NOTAM existe toujours avec le même identifiant ET la
+ * même signature de texte ; sinon elle repart à zéro.
+ */
+function carryOverNpfNotamsLocalSelections(previousPayload, nextPayload) {
+    const previousById = previousPayload?.state?.byId;
+    if (!previousById || typeof previousById !== 'object') return null;
+
+    const signaturesByOaci = new Map();
+    const kept = {};
+    Object.entries(previousById).forEach(([id, entry]) => {
+        if (!entry || typeof entry !== 'object') return;
+        const oaci = String(id || '').split('-')[0].toUpperCase();
+        if (!oaci) return;
+        if (!signaturesByOaci.has(oaci)) {
+            signaturesByOaci.set(oaci, new Map(
+                extractNpfBfgNotamsForOaci(nextPayload?.notamText || '', oaci)
+                    .map(record => [record.id, record.signature])
+            ));
+        }
+        const signature = signaturesByOaci.get(oaci).get(id);
+        const expected = String(entry.textSignature || entry.signature || '').trim();
+        if (signature && expected && expected === signature) kept[id] = entry;
+    });
+
+    if (!Object.keys(kept).length) return null;
+    return {
+        version: 'persistentNotamStateV1',
+        updatedAt: String(previousPayload.state.updatedAt || new Date().toISOString()),
+        byId: kept
+    };
+}
+
 function getNpfBfgNotamsSharedUrl() {
     try {
         return new URL(NPF_BFG_NOTAMS_SHARED_URL_PATH, window.location.origin).toString();
@@ -32041,7 +32201,7 @@ async function syncNpfBfgNotamsFromNas(options = {}) {
         const response = await fetchBriefingDocsNas(
             `${NPF_BRIEFING_DOCS_API_URL}?action=notams-snapshot&t=${Date.now()}`,
             { method: 'GET', headers: briefingDocsAuthHeaders(session) },
-            12000
+            Number(options.timeoutMs) || 12000
         );
         if (response.status === 404) return false;
         const payload = await response.json().catch(() => null);
@@ -32052,9 +32212,9 @@ async function syncNpfBfgNotamsFromNas(options = {}) {
             return false;
         }
 
-        // Un snapshot ancien n'écrase jamais une éventuelle copie locale plus récente.
-        if (!isNpfPelicNotamsPayloadCurrentToday(payload)) return false;
-
+        // v17.29 — un fichier qui n'est pas du jour n'est plus écarté : il est
+        // conservé et affiché avec un avertissement de date. Un snapshot ancien
+        // n'écrase toujours jamais une copie locale plus récente.
         const localRecord = await getNpfBfgNotamsLocalRecord().catch(() => null);
         const localRemotePublishedAt = String(localRecord?.remotePublishedAt || localRecord?.payload?.remotePublishedAt || localRecord?.payload?.publishedAt || '');
         const remotePublishedAt = String(payload.publishedAt || '');
@@ -32069,7 +32229,11 @@ async function syncNpfBfgNotamsFromNas(options = {}) {
             remotePublishedAt,
             npfCachedAt: new Date().toISOString()
         };
+        delete localPayload.state;
+        const carriedState = carryOverNpfNotamsLocalSelections(localRecord?.payload, localPayload);
+        if (carriedState) localPayload.state = carriedState;
         await putNpfBfgNotamsLocalPayload(localPayload, { remotePublishedAt });
+        applyNpfNotamsCoverageFromPayload(localPayload);
         return true;
     })();
 
@@ -32108,6 +32272,7 @@ function ensureNpfPelicNotamsModal() {
                 </div>
                 <button type="button" class="pelic-notams-modal-close" aria-label="Fermer">×</button>
             </div>
+            <div id="pelic-notams-modal-stale" class="pelic-notams-modal-status pelic-notams-modal-status-warning pelic-notams-modal-stale" style="display: none;"></div>
             <div id="pelic-notams-modal-status" class="pelic-notams-modal-status"></div>
             <div id="pelic-notams-modal-prefilters" class="pelic-notams-modal-prefilters" hidden>
                 <label class="pelic-notams-date-filter-label" for="pelic-notams-date-filter-cb">
@@ -32274,7 +32439,7 @@ function updateNpfPelicNotamsStatusForView() {
         status.classList.add('pelic-notams-modal-status-warning');
         return;
     }
-    status.textContent = `${visibleCount} NOTAM(s) affiché(s) — copie locale BFG du jour.`;
+    status.textContent = `${visibleCount} NOTAM(s) affiché(s) — ${getNpfNotamsCopyLabel(npfPelicNotamsCurrentPayload)}.`;
 }
 
 function applyNpfPelicNotamsViewMode() {
@@ -32318,25 +32483,23 @@ function renderNpfPelicNotams(payload, oaci) {
     if (prefilters) prefilters.hidden = true;
     if (controls) controls.hidden = true;
 
-    if (!isNpfPelicNotamsPayloadCurrentToday(payload)) {
-        if (status) {
-            const last = String(payload?.notamsAutoPdfStatus?.timestampText || '').trim();
-            status.textContent = last
-                ? `Aucun fichier NOTAM du jour disponible. ${last}`
-                : 'Aucun fichier NOTAM du jour disponible.';
-            status.classList.add('pelic-notams-modal-status-warning');
-        }
-        return;
+    // v17.29 — fichier qui n'est pas du jour : affiché quand même, avec un
+    // avertissement de date bien visible au-dessus de la liste.
+    const stale = modal.querySelector('#pelic-notams-modal-stale');
+    const staleText = getNpfNotamsStaleWarningText(payload);
+    if (stale) {
+        stale.textContent = staleText;
+        stale.style.display = staleText ? '' : 'none';
     }
 
     if (status) status.classList.remove('pelic-notams-modal-status-warning');
     const records = extractNpfBfgNotamsForOaci(payload.notamText || '', oaci);
     if (!records.length) {
-        if (status) status.textContent = `Aucun NOTAM ${oaci} dans le fichier BFG du jour.`;
+        if (status) status.textContent = 'Aucun NOTAM';
         return;
     }
 
-    if (status) status.textContent = `${records.length} NOTAM(s) — copie locale BFG du jour.`;
+    if (status) status.textContent = `${records.length} NOTAM(s) — ${getNpfNotamsCopyLabel(payload)}.`;
     if (prefilters) prefilters.hidden = false;
     if (controls) controls.hidden = false;
 
@@ -32436,6 +32599,8 @@ async function openNpfPelicNotams(oaci) {
     if (prefilters) prefilters.hidden = true;
     if (controls) controls.hidden = true;
     if (list) list.innerHTML = '';
+    const stale = modal.querySelector('#pelic-notams-modal-stale');
+    if (stale) stale.style.display = 'none';
 
     let payload = await readNpfBfgNotamsSharedPayload();
     if ((!payload || !isNpfPelicNotamsPayloadCurrentToday(payload)) && navigator.onLine) {
@@ -32464,7 +32629,217 @@ function buildPelicNotamsButtonHtml(oaci) {
     return `<div class="popup-notams-buttons"><button type="button" class="pelic-notams-btn" onclick="window.openPelicNotams('${normalizedOaci}')">NOTAMS</button></div>`;
 }
 
+/* v17.29 — bouton NOTAMS des terrains non PÉLIC : seulement si couverts. */
+function buildNpfNotamsButtonHtmlIfCovered(oaci) {
+    return isNpfNotamsAirportCovered(oaci) ? buildPelicNotamsButtonHtml(oaci) : '';
+}
+
 window.openPelicNotams = openNpfPelicNotams;
+
+/*
+ * v17.29 — RAFRAÎCHISSEMENT NOTAM À LA DEMANDE (Gestion des cartes)
+ * --------------------------------------------------------------------------
+ * Contrat : npf-docs-api.php installé sur le NAS (lu en lecture seule).
+ * - notams-refresh-status (GET) : état de la chaîne ; sa lecture fait aussi
+ *   avancer la machine à états du NAS, il faut donc l'interroger jusqu'au
+ *   bout. Champs utilisés : status, message, batchIndex, batchCount,
+ *   slotWaitingSince, serverTime, snapshot.available, snapshot.publishedAt.
+ * - notams-refresh (POST) : lance ou rejoint le téléchargement.
+ * - notams-snapshot (GET) : fichier complet (~248 Ko).
+ * - Jeton absent ou expiré : HTTP 401 { error: 'unauthorized' }.
+ * Délais calés sur la mesure réelle du 23/09/2026 : 3 lots en ~61 s sans
+ * attente de créneau SDVFR. Si le NAS signale une attente de créneau
+ * (slotWaitingSince), le délai suit son propre plafond de 600 s.
+ */
+const NPF_NOTAMS_FRESH_MAX_AGE_MS = 30 * 60 * 1000;
+const NPF_NOTAMS_REFRESH_POLL_MS = 2000;
+const NPF_NOTAMS_REFRESH_MAX_WAIT_MS = 180000;
+const NPF_NOTAMS_REFRESH_SLOT_MAX_WAIT_S = 600;
+const NPF_NOTAMS_API_TIMEOUT_MS = 15000;
+const NPF_NOTAMS_SNAPSHOT_TIMEOUT_MS = 30000;
+let npfNotamsManualRefreshInProgress = false;
+
+function setNpfNotamsRefreshStatus(message, { error = false, success = false } = {}) {
+    const status = document.getElementById('notams-refresh-status');
+    if (!status) return;
+    status.textContent = String(message || '');
+    status.classList.toggle('notams-refresh-status-error', Boolean(error));
+    status.classList.toggle('notams-refresh-status-success', Boolean(success));
+}
+
+function setNpfNotamsRefreshProgress(batchIndex, batchCount) {
+    const container = document.getElementById('notams-refresh-progress');
+    const bar = document.getElementById('notams-refresh-progress-bar');
+    const text = document.getElementById('notams-refresh-progress-text');
+    if (!container) return;
+    const count = Number(batchCount) || 0;
+    const index = Math.min(Number(batchIndex) || 0, count);
+    if (count < 1 || index < 1) {
+        container.style.display = 'none';
+        return;
+    }
+    container.style.display = '';
+    if (bar) bar.style.width = `${Math.round((index / count) * 100)}%`;
+    if (text) text.textContent = `Lot ${index}/${count}`;
+}
+
+async function displayNpfNotamsLocalStatus() {
+    if (npfNotamsManualRefreshInProgress) return;
+    const record = await getNpfBfgNotamsLocalRecord().catch(() => null);
+    const payload = record?.payload;
+    if (!payload) {
+        setNpfNotamsRefreshStatus('Aucune copie locale NOTAM sur cet iPad.');
+        return;
+    }
+    const source = String(payload?.notamsAutoPdfStatus?.timestampText || '').trim() || 'NOTAM';
+    const staleText = getNpfNotamsStaleWarningText(payload);
+    const coverageCount = getNpfNotamsCoverageFromPayload(payload).length;
+    setNpfNotamsRefreshStatus(
+        `Copie locale : ${source} — ${coverageCount} terrain(s) couvert(s).${staleText ? ` ${staleText}.` : ''}`,
+        { error: Boolean(staleText) }
+    );
+}
+
+function handleNpfNotamsAuthorizationMissing() {
+    // Même comportement que le lecteur FdS / GAAR.
+    if (getStoredNpfBfgBridgeCredentials()) {
+        setNpfNotamsRefreshStatus(getBriefingDocsBfgAuthorizationUnavailableMessage(), { error: true });
+        return;
+    }
+    openBriefingDocsPasswordModal('notams');
+    setNpfNotamsRefreshStatus('Autorisation expirée : saisis à nouveau le mot de passe NPF.', { error: true });
+}
+
+async function requestNpfNotamsRefreshState(session, action, method = 'GET') {
+    const response = await fetchBriefingDocsNas(
+        `${NPF_BRIEFING_DOCS_API_URL}?action=${action}&t=${Date.now()}`,
+        { method, headers: briefingDocsAuthHeaders(session) },
+        NPF_NOTAMS_API_TIMEOUT_MS
+    );
+    const payload = await response.json().catch(() => null);
+    if (response.status === 401) {
+        handleNpfNotamsAuthorizationMissing();
+        return null;
+    }
+    if (!response.ok || !payload || payload.ok !== true) {
+        setNpfNotamsRefreshStatus(
+            payload?.message || payload?.error || `Réponse inattendue du NAS (${response.status}).`,
+            { error: true }
+        );
+        return null;
+    }
+    return payload;
+}
+
+async function pollNpfNotamsRefreshUntilDone(session, initialState) {
+    const startedAt = Date.now();
+    let deadline = startedAt + NPF_NOTAMS_REFRESH_MAX_WAIT_MS;
+    let state = initialState;
+
+    while (true) {
+        // Message du NAS affiché tel quel ; progression des lots à part.
+        setNpfNotamsRefreshStatus(String(state?.message || 'Téléchargement NOTAM en cours…'));
+        setNpfNotamsRefreshProgress(state?.batchIndex, state?.batchCount);
+
+        const status = String(state?.status || '');
+        if (status !== 'pending' && status !== 'running') return state;
+
+        const waitingSince = Number(state?.slotWaitingSince) || 0;
+        if (waitingSince > 0) {
+            const serverNowS = (Date.parse(String(state?.serverTime || '')) || Date.now()) / 1000;
+            const remainingS = Math.max(0, NPF_NOTAMS_REFRESH_SLOT_MAX_WAIT_S - (serverNowS - waitingSince));
+            deadline = Math.max(deadline, Date.now() + (remainingS + 60) * 1000);
+        }
+        if (Date.now() >= deadline) {
+            const minutes = Math.max(1, Math.round((Date.now() - startedAt) / 60000));
+            setNpfNotamsRefreshStatus(
+                `Le NAS n’a pas terminé dans le délai (${minutes} min). La copie locale reste affichée ; relance « Rafraîchir les NOTAM » dans quelques minutes pour reprendre le suivi.`,
+                { error: true }
+            );
+            return null;
+        }
+        if (!navigator.onLine) {
+            setNpfNotamsRefreshStatus('Connexion perdue : suivi NOTAM interrompu. La copie locale reste affichée.', { error: true });
+            return null;
+        }
+
+        await new Promise(resolve => setTimeout(resolve, NPF_NOTAMS_REFRESH_POLL_MS));
+        state = await requestNpfNotamsRefreshState(session, 'notams-refresh-status');
+        if (!state) return null;
+    }
+}
+
+async function refreshNpfNotamsFromNasManually() {
+    if (npfNotamsManualRefreshInProgress) return;
+    if (!navigator.onLine) {
+        setNpfNotamsRefreshStatus('Hors ligne : rafraîchissement NOTAM impossible. La copie locale reste affichée.', { error: true });
+        return;
+    }
+
+    const button = document.getElementById('notams-refresh-button');
+    npfNotamsManualRefreshInProgress = true;
+    if (button) button.disabled = true;
+    setNpfNotamsRefreshProgress(0, 0);
+
+    try {
+        let session = getStoredBriefingDocsSession();
+        if (!session) session = await tryAuthorizeBriefingDocsFromBfgBridge({ silent: true }).catch(() => null);
+        if (!session) {
+            handleNpfNotamsAuthorizationMissing();
+            return;
+        }
+
+        setNpfNotamsRefreshStatus('Interrogation du NAS…');
+        let state = await requestNpfNotamsRefreshState(session, 'notams-refresh-status');
+        if (!state) return;
+
+        const status = String(state.status || '');
+        if (status !== 'pending' && status !== 'running') {
+            // Fichier du NAS de moins de 30 min : aucun nouveau téléchargement
+            // SDVFR, simple rechargement si la copie locale est plus ancienne.
+            const publishedAt = String(state?.snapshot?.publishedAt || '');
+            const publishedTs = Date.parse(publishedAt);
+            if (state?.snapshot?.available && Number.isFinite(publishedTs)
+                && Date.now() - publishedTs < NPF_NOTAMS_FRESH_MAX_AGE_MS) {
+                setNpfNotamsRefreshStatus('Rechargement du fichier NOTAM du NAS…');
+                await syncNpfBfgNotamsFromNas({ silent: false, timeoutMs: NPF_NOTAMS_SNAPSHOT_TIMEOUT_MS });
+                setNpfNotamsRefreshStatus(
+                    `NOTAM déjà à jour (téléchargés à ${formatNpfNotamsParisHourMinute(publishedAt)})`,
+                    { success: true }
+                );
+                return;
+            }
+            state = await requestNpfNotamsRefreshState(session, 'notams-refresh', 'POST');
+            if (!state) return;
+        }
+
+        const finalState = await pollNpfNotamsRefreshUntilDone(session, state);
+        if (!finalState) return;
+        const finalMessage = String(finalState.message || '').trim();
+        if (finalState.status !== 'success') {
+            setNpfNotamsRefreshStatus(finalMessage || 'Échec du rafraîchissement NOTAM sur le NAS.', { error: true });
+            return;
+        }
+
+        setNpfNotamsRefreshStatus(`${finalMessage} Enregistrement sur cet iPad…`);
+        const stored = await syncNpfBfgNotamsFromNas({ silent: false, timeoutMs: NPF_NOTAMS_SNAPSHOT_TIMEOUT_MS });
+        setNpfNotamsRefreshStatus(
+            `${finalMessage} ${stored ? 'NOTAM enregistrés sur cet iPad pour le hors ligne.' : 'La copie locale était déjà à jour.'}`,
+            { success: true }
+        );
+    } catch (error) {
+        if (!getStoredBriefingDocsSession()) {
+            handleNpfNotamsAuthorizationMissing();
+        } else if (error?.name === 'AbortError') {
+            setNpfNotamsRefreshStatus('Le NAS ne répond pas (délai dépassé). La copie locale reste affichée.', { error: true });
+        } else {
+            setNpfNotamsRefreshStatus(error?.message || String(error), { error: true });
+        }
+    } finally {
+        npfNotamsManualRefreshInProgress = false;
+        if (button) button.disabled = false;
+    }
+}
 
 
 
@@ -33476,7 +33851,7 @@ function drawPermanentAirportMarkers() {
             zIndexOffset: 1850
         }).addTo(permanentAirportLayer);
 
-        const popupHtml = `<div class="airport-popup"><b>${airport.oaci}</b><br>${airport.name}<div class="popup-buttons"><button class="${baseButtonClass}" onclick="window.setBaseAirport('${airport.oaci}')">${baseButtonText}</button><button class="${customPelicClass}" onclick="window.toggleCustomPelican('${airport.oaci}')">${customPelicText}</button></div>${buildVacButtonHtml(airport.oaci)}${buildAirportGoToButtonHtml(airport.oaci)}${buildAirportAddWpButtonHtml(airport.oaci)}</div>`;
+        const popupHtml = `<div class="airport-popup"><b>${airport.oaci}</b><br>${airport.name}<div class="popup-buttons"><button class="${baseButtonClass}" onclick="window.setBaseAirport('${airport.oaci}')">${baseButtonText}</button><button class="${customPelicClass}" onclick="window.toggleCustomPelican('${airport.oaci}')">${customPelicText}</button></div>${buildVacButtonHtml(airport.oaci)}${buildNpfNotamsButtonHtmlIfCovered(airport.oaci)}${buildAirportGoToButtonHtml(airport.oaci)}${buildAirportAddWpButtonHtml(airport.oaci)}</div>`;
         addAirportTouchHitbox(airport, popupHtml);
     });
 
@@ -43783,9 +44158,14 @@ function initializeCalculator() {
         return true;
     }
 
-    ['pointerdown', 'pointerup', 'touchend', 'click'].forEach((eventName) => {
-        document.addEventListener(eventName, handleCalculatorTabHitByCoordinates, { passive: false, capture: true });
-    });
+    /*
+     * v17.29 — gestionnaire NON branché. Il lisait `calculatorModal`, constante
+     * propre à setupEventListeners() (src/110), et levait donc une ReferenceError
+     * à chaque pointerdown / pointerup / touchend / click du document, sans jamais
+     * rien faire d'autre. Le retirer supprime l'erreur SANS réactiver ce repli par
+     * coordonnées : le calculateur garde strictement son comportement antérieur
+     * (onglets pilotés par leurs propres écouteurs click / pointerup).
+     */
 
 
     function createEmptyFlight(number = 1) {

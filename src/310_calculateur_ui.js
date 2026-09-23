@@ -348,9 +348,14 @@ function initializeCalculator() {
         return true;
     }
 
-    ['pointerdown', 'pointerup', 'touchend', 'click'].forEach((eventName) => {
-        document.addEventListener(eventName, handleCalculatorTabHitByCoordinates, { passive: false, capture: true });
-    });
+    /*
+     * v17.29 — gestionnaire NON branché. Il lisait `calculatorModal`, constante
+     * propre à setupEventListeners() (src/110), et levait donc une ReferenceError
+     * à chaque pointerdown / pointerup / touchend / click du document, sans jamais
+     * rien faire d'autre. Le retirer supprime l'erreur SANS réactiver ce repli par
+     * coordonnées : le calculateur garde strictement son comportement antérieur
+     * (onglets pilotés par leurs propres écouteurs click / pointerup).
+     */
 
 
     function createEmptyFlight(number = 1) {

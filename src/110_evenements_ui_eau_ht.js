@@ -31,6 +31,7 @@ function setupEventListeners() {
     const offlineMapModal = document.getElementById('offline-map-modal');
     const closeOfflineMapButton = document.getElementById('close-offline-map-btn');
     const vacDownloadUpdateButton = document.getElementById('vac-download-update-button');
+    const notamsRefreshButton = document.getElementById('notams-refresh-button');
     const vacDeleteAllButton = document.getElementById('vac-delete-all-button');
     const vacUpdateModal = document.getElementById('vac-update-modal');
     const vacUpdateNowButton = document.getElementById('vac-update-now-button');
@@ -565,9 +566,17 @@ function setupEventListeners() {
         displayVacManagementStatus();
         refreshSimulationModeButtonState();
         refreshRoadOverlayInstalledStatus();
+        displayNpfNotamsLocalStatus().catch(() => {});
     });
     closeOfflineMapButton.addEventListener('click', () => { offlineMapModal.style.display = 'none'; });
 
+    if (notamsRefreshButton) {
+        notamsRefreshButton.addEventListener('click', () => {
+            refreshNpfNotamsFromNasManually().catch(error => {
+                console.error('[NPF NOTAMS] Rafraîchissement impossible:', error);
+            });
+        });
+    }
     if (vacDownloadUpdateButton) {
         vacDownloadUpdateButton.addEventListener('click', () => {
             handleVacDownloadUpdateClick().catch(error => {

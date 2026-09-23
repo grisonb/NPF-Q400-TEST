@@ -1,4 +1,4 @@
-/* NPF_STYLE_BUILD_VERSION: v17.28 */
+/* NPF_STYLE_BUILD_VERSION: v17.29 */
 /* v14.83 — nettoyage des références techniques et limitation des cartouches routiers. */
 /* v14.81 — recherche phonétique nationale élargie aux fragments sur deux lettres. */
 /* v14.80 — Brive conservé uniquement sous LFSL. */
@@ -17011,6 +17011,18 @@ body.pelic-notams-modal-open {
 .pelic-notams-modal-status-warning {
     color: #856404;
     background: #fff8df;
+}
+/* v17.29 — NOTAM : fichier pas du jour et statut du rafraîchissement. */
+.pelic-notams-modal-stale {
+    font-size: 15px;
+    color: #8a1c1c;
+    background: #ffe3e3;
+}
+.notams-refresh-status-error {
+    color: #a61b1b;
+}
+.notams-refresh-status-success {
+    color: #1e7b34;
 }
 .pelic-notams-modal-prefilters {
     flex: 0 0 auto;
