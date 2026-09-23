@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 23/09/2026
-Version de travail actuelle : TEST v17.27
+Version de travail actuelle : TEST v17.28
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -162,6 +162,10 @@ IMPLÉMENTÉ / INTÉGRÉ :
 - v17.27 : suppression de la copie inutile de la base communes (~62 Mo) dans
   localStorage au démarrage (JSON.stringify + setItem voué à l'échec sur le
   quota Safari). Seule piste implémentée de l'analyse fluidité du 23/09/2026.
+- v17.28 : `sia.js` remis à la révision attendue par le SW
+  (`15.69-radio1026-1-maplite1`, fichier 5_SIA_v17.25.txt retrouvé par
+  l'utilisateur). Jeu des zones identique ; corrige le refus 504 de `sia.js`
+  qui empêchait les zones SIA sur un appareil vierge (section 16, point S).
 
 NON IMPLÉMENTÉ / OUVERT :
 - écart ligne de foi jaune / route rouge alors que les deux affichent 277° :
@@ -179,8 +183,11 @@ NON IMPLÉMENTÉ / OUVERT :
   canvas HT hors de son pane (piste 2) = NON IMPLÉMENTÉ, prévu dans une version
   séparée APRÈS validation de v17.27 (décision utilisateur du 23/09/2026) ;
 - révision `sia.js` déployée (15.69) ≠ révision attendue par le SW
-  (15.69-radio1026-1-maplite1) : À DÉCIDER, aucune correction demandée
-  (section 16, point S).
+  (15.69-radio1026-1-maplite1) : MESURÉ par test Chrome sur profil vierge le
+  23/09/2026, TRAITÉ en v17.28 (section 16, point S) ;
+- défaut `calculatorModal is not defined` sur chaque clic/tap : NON IMPLÉMENTÉ,
+  consigné en section 16 (point D). Correction PRÉVUE dans une version séparée,
+  APRÈS validation de v17.28 (décision utilisateur du 23/09/2026) ;
 
 À MESURER :
 - v17.22 : MESURÉ. Les OUT z12->z10 restent fluides via RAM principal, mais z8/20 NM
@@ -206,10 +213,30 @@ NON IMPLÉMENTÉ / OUVERT :
 - effet du report des plans d'eau sur les blocages JS de démarrage ;
 - comportement HT lors du passage 50 NM -> 20 NM -> 50 NM : préférence utilisateur
   doit rester ON, rendu absent à 50 NM+, puis retour automatique sous 50 NM ;
-- v17.27 : À MESURER. Comparer à v17.26, sur 3 démarrages à froid en mode avion,
-  la durée entre les repères DIAG `Communes — chargement` et `Communes — données
-  prêtes`, ainsi que le top des blocages JS du démarrage. Vérifier aussi que la
-  recherche de communes et la commune survolée fonctionnent hors ligne.
+- v17.27 : VALIDÉ (23/09/2026, iPad). 3 démarrages à froid en mode avion ;
+  recherche de communes, commune survolée, carte et calques SIA vérifiés hors
+  ligne : tout fonctionne.
+  Résultats DIAG iPad v17.27 (3 démarrages à froid en mode avion, 23/09/2026) :
+  - blocage JS maximal : 458 ms, 865 ms, 432 ms ;
+  - `Communes — chargement` -> `Communes — données prêtes` : 1,26 s, 0,87 s,
+    1,30 s ;
+  - index de recherche des communes prêt vers 5,0 à 5,3 s ;
+  - « Script NPF exécuté » : 1,97 s, 1,68 s, 1,59 s — RÉFÉRENCE pour mesurer
+    l'effet du chargement réel de `sia.js` (1,40 Mo) en v17.28.
+  Points de comparaison : 1 904 ms de blocage JS maximal en v17.20 (journal)
+  et 1 189 ms lors de la session précédant la mise à jour.
+  ATTENTION : ce n'est PAS un A/B strict — aucun DIAG v17.26 n'a été fait dans
+  les mêmes conditions (même appareil, démarrages à froid, mode avion). ;
+- v17.27 — nouveaux points relevés sur ces mêmes démarrages, À MESURER (ni
+  analyse ni correction pour l'instant, décision utilisateur du 23/09/2026) :
+  - « Fond de carte visible chargé » entre 8 et 13 s ;
+  - attente des tuiles avant le filtre HT de 6 à 11 s ;
+- v17.28 : À MESURER après mise en ligne. Test Chrome sur profil vierge
+  (scénarios A et B + hors ligne, procédure dans l'entrée v17.28) et test iPad :
+  zones SIA présentes, `sia.js` servi en 200 par le SW. Surveiller aussi le
+  repère DIAG de démarrage du script : `sia.js` (1,40 Mo, bloquant) est de
+  nouveau réellement chargé à chaque ouverture, alors qu'il était refusé en 504.
+  Référence v17.27 « Script NPF exécuté » : 1,97 s, 1,68 s, 1,59 s ;
 
 IMPORTANT : cette liste de statut ne remplace pas les sections détaillées plus bas.
 Elle sert à savoir immédiatement ce qui est réellement codé, ce qui reste ouvert
@@ -217,38 +244,40 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.27
+Version : TEST v17.28
 Date : 23/09/2026
-Base : v17.26
+Base : v17.27 (VALIDÉE sur iPad le 23/09/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.27.txt
-2_Index_v17.27.txt
-3_Manifest_v17.27.txt
-4_Script_v17.27.txt
-5_SIA_v17.27.txt
-6_Style_v17.27.txt
-7_Sw_v17.27.txt
+1_Modifications_v17.28.txt
+2_Index_v17.28.txt
+3_Manifest_v17.28.txt
+4_Script_v17.28.txt
+5_SIA_v17.28.txt
+6_Style_v17.28.txt
+7_Sw_v17.28.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.27
-- Manifest : start_url = ./index.html?appv=v17.27
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.27
-- Style : NPF_STYLE_BUILD_VERSION = v17.27
-- Service Worker : `sw-v17-27_communes_no_localstorage`
-- SIA_DATA_REVISION (SW / Index) : 15.69-radio1026-1-maplite1
-- sia.js v17.27 : strictement identique à v17.26 (révision interne réelle : 15.69,
-  voir section 16, point S).
+- Index : APP_VERSION = v17.28
+- Manifest : start_url = ./index.html?appv=v17.28
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.28
+- Style : NPF_STYLE_BUILD_VERSION = v17.28
+- Service Worker : `sw-v17-28_sia_revision_restored`
+- SIA_DATA_REVISION (SW / Index) : 15.69-radio1026-1-maplite1 (inchangée)
+- sia.js v17.28 : CHANGÉ volontairement — copie octet pour octet de
+  `5_SIA_v17.25.txt` (1 402 248 octets), révision interne
+  `15.69-radio1026-1-maplite1`, désormais conforme à ce qu'attend le SW.
 
 STATUT DE VALIDATION :
-- validation statique v17.27 effectuée avant livraison : Script/SIA/SW OK, script
+- validation statique v17.28 effectuée avant livraison : Script/SIA/SW OK, script
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
-- `sia.js` v17.27 est bit-à-bit identique à v17.26 ;
-- moteur tuiles non modifié (aucune ligne de `src/100_tuiles_offline_moteur.js`
-  touchée) ;
-- v17.26 reste À MESURER sur un vol prolongé avec suivi GPS actif ; v17.27 est
-  À MESURER au démarrage à froid hors ligne.
+- `sia.js` v17.28 bit-à-bit identique à `5_SIA_v17.25.txt` ;
+- test Chrome local (profil vierge, scénario B + hors ligne) : OK ;
+- moteur tuiles non modifié ; aucune ligne de `src/` modifiée hormis la version
+  (src/010, ligne 1) ;
+- v17.26 reste À MESURER en vol prolongé ; v17.27 VALIDÉE sur iPad ; v17.28
+  À MESURER après mise en ligne.
 
 
 2. PROTOCOLE DE TRAVAIL À RESPECTER
@@ -743,7 +772,10 @@ Numéros de ligne : sources v17.26 (inchangés en v17.27 sauf `070`).
 Légende : CONSTATÉ = lu dans le code ; HYPOTHÈSE = effet à mesurer sur iPad.
 
 PISTE 1 — Sérialisation de communes.json dans localStorage au démarrage
-- Statut : IMPLÉMENTÉ en v17.27 — À MESURER.
+- Statut : IMPLÉMENTÉ en v17.27 — VALIDÉ (iPad, 23/09/2026). Historique du
+  statut : À MESURER -> VALIDÉ. Mesures : voir 0 BIS et l'entrée v17.27 (blocage
+  JS maximal 458 / 865 / 432 ms ; communes 1,26 / 0,87 / 1,30 s). Comparaison
+  non A/B stricte : pas de DIAG v17.26 dans les mêmes conditions.
 - Constaté : `loadCommunesData` (src/070:11-21 en v17.26) faisait, à chaque
   démarrage, `localStorage.setItem(COMMUNES_CACHE_KEY, JSON.stringify(payload))`
   sur les ~62 Mo de `communes.json`. Le quota localStorage de Safari (~5 Mo)
@@ -855,7 +887,10 @@ PISTE ÉCARTÉE — Recherche de commune à chaque touchmove
   programmer des minuteurs. Ne pas reprendre.
 
 POINT S — Révision sia.js déployée ≠ révision attendue par le SW
-- Statut : À DÉCIDER — aucune correction demandée (23/09/2026).
+- Statut : MESURÉ (test Chrome sur profil vierge, 23/09/2026) — TRAITÉ en
+  v17.28 : `sia.js` remis à la révision attendue par le SW, sans toucher au SW
+  (décision utilisateur : c'est `sia.js` qui doit revenir à la révision
+  attendue). Historique du statut : À DÉCIDER (23/09/2026, analyse) -> MESURÉ.
 - Constaté : le `sia.js` du dépôt GitHub (identique au local, blob ee6207c)
   déclare `const NPF_SIA_DATA_REVISION = '15.69'` et ne contient pas de
   `mapLiteGzipBase64`. Le SW (sw.js:3, 849, 866) n'accepte un `sia.js` que s'il
@@ -872,17 +907,157 @@ POINT S — Révision sia.js déployée ≠ révision attendue par le SW
     La métadonnée de secours de script.js (src/330:14-49) est identique à celle
     du `sia.js` 15.69, donc le contrôle `siaMetaMatchesEmbedded` passe ;
   - la radio AIRAC 10/26 est embarquée dans script.js (src/010:2030, v16.69).
-- Risque latent (HYPOTHÈSE) : sur un iPad neuf ou après effacement des données,
-  si les zones SIA n'ont jamais été affichées pendant le tout premier chargement
-  (avant que le SW contrôle la page), le jeu complet ne serait jamais enregistré
-  et l'affichage des zones échouerait (« sia.js absent ou invalide »).
-- Condition de reprise : décision utilisateur (déployer le sia.js
-  « radio1026-1-maplite1 » ou aligner la révision attendue par le SW).
+- Risque latent (MESURÉ, anciennement HYPOTHÈSE) : sur un iPad neuf ou après
+  effacement des données, si les zones SIA n'ont jamais été affichées pendant le
+  tout premier chargement (avant que le SW contrôle la page), le jeu complet
+  n'est jamais enregistré et l'affichage des zones échoue (« sia.js absent ou
+  invalide »).
+- MESURE — test Chrome headless piloté par CDP, profil neuf par scénario,
+  hors ligne = coupure réseau de la page ET du SW (équivalent case « Offline »
+  des DevTools). Adresses relevées par l'API GitHub Pages des deux dépôts.
+  TEST v17.26 (https://grisonb.github.io/NPF-Q400-TEST/) :
+  - mécanisme observé : au premier chargement, le SW s'installe (skipWaiting +
+    clients.claim) et la page se recharge d'elle-même sur `controllerchange`
+    (index.html:835-851). Seule la toute première page reçoit `sia.js` (200,
+    réseau direct) ; toutes les suivantes reçoivent 504 « Offline SIA data
+    unavailable » servi par le SW (fallback) ;
+  - scénario A (activation ~15 s après le premier chargement) : ÉCHEC. Panneau
+    SIA : « Impossible de charger les données SIA : Données SIA intégrées
+    indisponibles : le fichier sia.js est absent ou invalide. » ; hors ligne :
+    aucune zone ;
+  - scénario A0 (activation dès que la carte existe, avant le rechargement
+    automatique) : OK. 35 catégories, 5 066 espaces enregistrés dans NpfSiaDB,
+    858 zones rendues sur la zone test ; toujours présentes hors ligne ;
+  - scénario B (premier chargement sans SIA, rechargement SW actif, puis
+    activation) : ÉCHEC. `sia.js` -> HTTP 504 servi par le SW ; même message
+    d'erreur ; hors ligne : aucune zone ;
+  - pérenne v2026.67 (https://grisonb.github.io/NPF-Q400/) : aucune
+    fonctionnalité SIA (pas de `sia.js`, 404 ; aucune fonction SIA dans le
+    script) : scénarios sans objet.
+  Conclusion : sur appareil vierge, les zones SIA de la TEST v17.26 ne
+  fonctionnent que si elles sont ouvertes pendant les quelques secondes de la
+  toute première page. Le terrain de l'utilisateur fonctionne parce que le jeu
+  complet y a été enregistré par une version antérieure.
+  TEST v17.28 servie localement (http://localhost, contexte sécurisé) : scénario
+  B OK — `sia.js` 200 servi par le SW (cache-storage), 35 catégories, 858 zones,
+  présentes hors ligne.
+- Condition de reprise : aucune, sauf échec de la mesure v17.28 après mise en
+  ligne.
+
+POINT D — Défaut constaté : `calculatorModal is not defined`
+- Statut : NON IMPLÉMENTÉ — correction PRÉVUE dans une version séparée, APRÈS
+  validation de v17.28 (décision utilisateur du 23/09/2026). Pas dans v17.28.
+- Constaté : `handleCalculatorTabHitByCoordinates` (src/310:309-350), défini dans
+  `initializeCalculator`, lit `calculatorModal`. Cette constante n'existe que
+  dans `setupEventListeners` (src/110:16), donc hors de portée : ReferenceError.
+  Le gestionnaire est branché en capture sur tout le document pour
+  `pointerdown`, `pointerup`, `touchend` et `click` (src/310:351-353).
+- MESURÉ (Chrome, vrais événements d'entrée CDP) : 3 exceptions par clic souris,
+  4 par tap tactile, n'importe où dans l'application. Ce n'est PAS un artefact
+  des clics simulés du premier test.
+- Conséquence : le repli « onglet du calculateur touché par coordonnées » ne
+  fonctionne jamais ; les gestionnaires directs des onglets (click/pointerup)
+  restent actifs. Une exception dans un écouteur n'empêche pas les autres
+  écouteurs ni l'action par défaut. Le DIAG ne capte pas ces erreurs (aucun
+  écouteur `error`), les exports ne sont donc pas pollués.
+- Présent au moins depuis le 05/07/2026 (historique git de script.js).
+- Condition de reprise : demande utilisateur (lié au calculateur : règle
+  « calculs » non concernée, il s'agit d'un défaut d'interface).
 
 
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.28 — sia.js REMIS À LA RÉVISION ATTENDUE PAR LE SERVICE WORKER
+Date : 23/09/2026
+Base fonctionnelle : v17.27 (VALIDÉE sur iPad le 23/09/2026)
+
+DEMANDE UTILISATEUR
+- Le `sia.js` livré avec la révision attendue a été retrouvé
+  (`5_SIA_v17.25.txt`). Analyse en lecture seule, puis : « prépare la v17.28 :
+  remplacement de sia.js par ce fichier, seule modification fonctionnelle,
+  livraison selon les règles du projet. Ne modifie pas sw.js pour contourner
+  l'écart : c'est sia.js qui doit revenir à la révision attendue. »
+- Aucun commit (validation iPad de v17.27 d'abord).
+
+ANALYSE — 5_SIA_v17.25.txt COMPARÉ AU sia.js v17.27
+- Révision : `15.69-radio1026-1-maplite1` contre `15.69`.
+- Métadonnées (`meta`) : strictement identiques (AIRAC 08/26, 2026-08-06,
+  datasetVersion 04, 5 066 espaces, 877 AHP, 1 899 DPN, npfDatasetRevision 15.69).
+- Jeu complet des zones (`gzipBase64`) : identique octet pour octet ;
+  décompressé : 5 066 espaces / 877 terrains / 1 899 points, JSON identique.
+- Ajouts du fichier v17.25 : `airportRadioMeta`, `airportServiceRows` (482),
+  `airportOperationalGroups` (326) = radio AIRAC 10/26, et `mapLiteGzipBase64`
+  (jeu carte léger). Les quatre sont identiques octet pour octet aux copies
+  déjà embarquées dans script.js (src/020 et filet src/330:77).
+- Compatibilité script.js : seul `mapLiteGzipBase64` est lu depuis `sia.js`
+  (src/330:737-743) ; la radio reste lue depuis src/020 (découplage v16.69).
+  Métadonnées identiques : le jeu déjà enregistré dans NpfSiaDB sur les iPad
+  reste valide, aucune redécompression forcée.
+- SW : `sia.js` contient `const NPF_SIA_DATA_REVISION =
+  '15.69-radio1026-1-maplite1'`, exactement la chaîne contrôlée par
+  sw.js:849/866. Accepté tel quel, SW non modifié (hors numéro de version).
+- Taille : 1 402 248 octets (contre 1 232 911), LF, syntaxe JS OK.
+
+MODIFICATION
+1. `sia.js` remplacé par la copie octet pour octet de `5_SIA_v17.25.txt`.
+2. Rien d'autre de fonctionnel. `SIA_DATA_REVISION` et `siav` de l'Index
+   inchangés.
+
+VERSIONS
+- Index / Manifest / Script / Style : v17.28.
+- Service Worker : `sw-v17-28_sia_revision_restored`.
+
+VALIDATION AVANT LIVRAISON
+- `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés.
+- Syntaxe Script / SIA / SW : OK. Script inline Index : OK. Manifest JSON : OK.
+- Cohérence versions/caches (contrôles du SW sur index/script/style/manifest) : OK.
+- SW accepte `sia.js` (chaîne de révision présente) : OK.
+- Modification v17.27 (communes sans localStorage) toujours présente : OK.
+- Test Chrome local (v17.28 servie sur http://localhost, profil vierge),
+  scénario B : `sia.js` 200 servi par le SW depuis son cache, panneau SIA à
+  35 catégories, 858 zones, toujours présentes hors ligne : OK.
+
+REMARQUE CONSIGNÉE SANS CODE
+- Défaut `calculatorModal is not defined` sur chaque clic/tap : point D de la
+  section 16, NON IMPLÉMENTÉ dans v17.28 ; correction prévue dans une version
+  séparée après validation de v17.28.
+
+À MESURER
+- Après mise en ligne, refaire le test Chrome sur profil vierge (procédure
+  ci-dessous) puis vérifier sur iPad.
+- Coût de démarrage : `sia.js` (1,40 Mo, script bloquant avant script.js) est
+  de nouveau chargé et exécuté à chaque ouverture ; le SW relit aussi son texte
+  pour contrôler la révision. Comparer le repère DIAG « Script NPF exécuté » à
+  la référence v17.27 : 1,97 s, 1,68 s, 1,59 s.
+
+PROCÉDURE — TEST CHROME SUR APPAREIL VIERGE (v17.28 EN LIGNE)
+1. Ouvrir une fenêtre de navigation privée neuve (ou un profil Chrome neuf).
+   Fermer toutes les autres fenêtres privées : elles partagent leurs données.
+2. Ouvrir les DevTools (F12) AVANT de charger la page : onglet Réseau, filtre
+   `sia.js`, laisser « Disable cache » DÉCOCHÉ.
+3. Charger https://grisonb.github.io/NPF-Q400-TEST/ ; vérifier APP v17.28
+   (étiquette version à droite). Attendre le rechargement automatique de la
+   page (prise de contrôle du SW).
+4. Scénario B : ne pas toucher à SIA. Recharger la page une fois (Ctrl+R).
+   Dans Application > Service Workers : `sw.js` « activated and is running ».
+   Réseau : `sia.js` doit répondre 200 « (ServiceWorker) », pas 504.
+5. Console : `window.NPF_SIA_DATA_REVISION` doit renvoyer
+   '15.69-radio1026-1-maplite1'.
+6. Appui long (clic long) sur le bouton de changement de carte -> panneau
+   « CALQUES AÉRONAUTIQUES SIA » : les catégories doivent s'afficher (pas de
+   message « Impossible de charger les données SIA »). « Tout afficher »,
+   « Fermer », zoomer vers ~10 NM : les zones doivent être visibles.
+7. Hors ligne : Réseau > liste « No throttling » -> « Offline », puis
+   recharger. Les zones SIA doivent rester visibles ; `sia.js` 200
+   « (ServiceWorker) ».
+8. Scénario A : nouvelle fenêtre privée, activer SIA immédiatement après le
+   premier affichage, puis étapes 6 et 7.
+9. Refermer les fenêtres privées pour effacer les données du test.
+
+--------------------------------------------------------------------------------
+
 
 VERSION TEST v17.27 — DÉMARRAGE : SUPPRESSION DE LA COPIE localStorage DES COMMUNES
 Date : 23/09/2026
@@ -933,6 +1108,24 @@ VALIDATION AVANT LIVRAISON
 - DIAG démarrage à froid hors ligne (3 fois), comparé à v17.26 : durée
   `Communes — chargement` -> `Communes — données prêtes` et top des blocages JS.
 - Recherche de communes et commune survolée fonctionnelles hors ligne.
+
+VALIDATION TERRAIN — 23/09/2026 — STATUT : VALIDÉ
+- iPad, 3 démarrages à froid en mode avion ; recherche de communes, commune
+  survolée, carte et calques SIA vérifiés hors ligne : tout fonctionne.
+- Résultats DIAG :
+  - blocage JS maximal : 458 ms, 865 ms, 432 ms ;
+  - `Communes — chargement` -> `Communes — données prêtes` : 1,26 s, 0,87 s,
+    1,30 s ;
+  - index de recherche des communes prêt vers 5,0 à 5,3 s ;
+  - « Script NPF exécuté » : 1,97 s, 1,68 s, 1,59 s — RÉFÉRENCE pour mesurer
+    l'effet du chargement réel de `sia.js` (1,40 Mo) en v17.28.
+  Points de comparaison : 1 904 ms de blocage JS maximal en v17.20 (journal)
+  et 1 189 ms lors de la session précédant la mise à jour.
+  ATTENTION : ce n'est PAS un A/B strict — aucun DIAG v17.26 n'a été fait dans
+  les mêmes conditions (même appareil, démarrages à froid, mode avion).
+- Relevé sur ces mêmes démarrages, À MESURER (ni analyse ni correction pour
+  l'instant) : « Fond de carte visible chargé » entre 8 et 13 s ; attente des
+  tuiles avant le filtre HT de 6 à 11 s.
 
 --------------------------------------------------------------------------------
 

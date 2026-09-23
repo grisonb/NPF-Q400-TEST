@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v17-27_communes_no_localstorage';
-const APP_VERSION = 'v17.27';
+const SW_VERSION = 'sw-v17-28_sia_revision_restored';
+const APP_VERSION = 'v17.28';
 const SIA_DATA_REVISION = '15.69-radio1026-1-maplite1';
 const SIA_DATA_URL = './sia.js';
 const SIA_DATA_CACHE = `npf-q400-sia-data-${SIA_DATA_REVISION}`;
