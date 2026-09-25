@@ -1,6 +1,6 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
-Mise à jour : 23/09/2026
+Mise à jour : 25/09/2026
 Version de travail actuelle : TEST v17.30
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
@@ -185,8 +185,9 @@ NON IMPLÉMENTÉ / OUVERT :
   « Chambéry-Savoie » (LFBS = Biscarrosse). Son bouton VAC ouvre la carte d'un
   autre terrain. Décision utilisateur (23/09/2026) : aucune modification pour le
   moment — À DÉCIDER (section 18, point P) ;
-- manifest VAC du dépôt NPF-Q400-VAC (noms et npfType) : à régénérer, dépôt non
-  cloné localement — NON IMPLÉMENTÉ (section 18) ;
+- manifest VAC du dépôt NPF-Q400-VAC (noms, npfType, disponibilité de LFSX) : à
+  régénérer, dépôt non cloné localement — À DÉCIDER (section 18). Historique du
+  statut : NON IMPLÉMENTÉ -> À DÉCIDER (25/09/2026) ;
 - écart ligne de foi jaune / route rouge alors que les deux affichent 277° :
   hypothèse principale = arrondi du relèvement affiché ; aucune compensation codée ;
 - comportement SIA à 5 NM sous charge combinée Zones + Routes + HT : la suppression
@@ -209,8 +210,10 @@ NON IMPLÉMENTÉ / OUVERT :
   à v17.29 à la demande de l'utilisateur (23/09/2026) ;
 - NAS — action web `notams-refresh`, follow(), reprise après attente de
   créneau et couverture du fichier partagé : CORRIGÉS côté NAS (2026-09-24b, qui
-  reprend 2026-09-24a), INSTALLÉ le 23/09/2026 au soir ; test réel du bouton
-  « Rafraîchir les NOTAM » en attente de v17.29 en ligne (section 17) ;
+  reprend 2026-09-24a), INSTALLÉ le 23/09/2026 au soir ; codes OACI (2026-09-24c)
+  INSTALLÉ et VALIDÉ le 25/09/2026 : tâche de 06h30 et bouton « Rafraîchir les
+  NOTAM » OK depuis l'iPad. Restent À MESURER : rejoindre un rafraîchissement en
+  cours, créneau occupé par BFG (section 17) ;
 - transfert des sélections NOTAM BFG -> NPF : NON IMPLÉMENTÉ, en attente
   (décision utilisateur du 23/09/2026, section 17) ;
 
@@ -273,10 +276,13 @@ NON IMPLÉMENTÉ / OUVERT :
   sélections conservées. Calculateur : onglets et appuis inchangés, plus aucune
   erreur `calculatorModal`. Le parcours complet du bouton contre le vrai NAS
   dépend du point NAS ci-dessus (erreur 500 tant qu'il n'est pas traité) ;
-- v17.30 : À MESURER sur iPad après installation de la NAS 2026-09-24c et d'un
-  rafraîchissement NOTAM (ordre en section 17) : Saint-Brieuc LFRT, Luxeuil
-  LFSX, Montbéliard LFSM (VAC, fréquence, NOTAM), réglages mémorisés migrés
-  (trace DIAG « Codes OACI — migration v17.30 ») ;
+- v17.30 : VALIDÉ (25/09/2026, iPad), après installation de la NAS 2026-09-24c
+  et « Rafraîchir les NOTAM » (869 NOTAM sur 105 terrains pour 114 interrogés,
+  enregistrés pour le hors ligne). Historique du statut : À MESURER -> VALIDÉ.
+  Contrôles : Saint-Brieuc LFRT (NOTAM en A) LFRT, VAC de Saint-Brieuc,
+  118.455) ; Luxeuil LFSX (122.100 ; VAC indisponible, attendu tant que le
+  manifest VAC n'est pas mis à jour) ; Montbéliard LFSM (132.030, un seul
+  symbole). Détail : entrée « VALIDATION v17.30 ET NAS 2026-09-24c » ;
 
 IMPORTANT : cette liste de statut ne remplace pas les sections détaillées plus bas.
 Elle sert à savoir immédiatement ce qui est réellement codé, ce qui reste ouvert
@@ -316,7 +322,7 @@ STATUT DE VALIDATION :
 - tests Chrome (v17.30 servie en local, profil neuf) : migration, carte,
   fréquences, NOTAM, boutons VAC : OK (entrée v17.30) ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27 et v17.28 VALIDÉES sur iPad ;
-  v17.29 et v17.30 À MESURER.
+  v17.29 À MESURER ; v17.30 VALIDÉE sur iPad (25/09/2026).
 
 
 2. PROTOCOLE DE TRAVAIL À RESPECTER
@@ -1189,6 +1195,9 @@ INSTALLATION NAS 2026-09-24b — INSTALLÉ (23/09/2026 au soir)
 - Statut : INSTALLÉ. Test réel du bouton « Rafraîchir les NOTAM » (dont créneau
   occupé par BFG) EN ATTENTE de v17.29 en ligne ; tâche de 06h30 à contrôler dans
   /volume1/briefing-logs/npf-notams-auto-refresh.log.
+- Tâche de 06h30 du 25/09/2026 (encore en 24b) : RÉUSSIE — 3 lots, 911 NOTAM sur
+  110 terrains pour 122 interrogés (06:30:02 -> 06:31:07). Elle tourne donc bien
+  après le redémarrage quotidien du NAS à 06h00. Bouton : voir installation 24c.
 
 CORRECTION NAS 2026-09-24c — PRÉPARÉE, À INSTALLER (codes OACI, NPF v17.30)
 - Base : ~/nas-a-copier/notams-sdvfr-shared_2026-09-24b.php (fichier installé).
@@ -1220,6 +1229,25 @@ CORRECTION NAS 2026-09-24c — PRÉPARÉE, À INSTALLER (codes OACI, NPF v17.30)
   4. vérifier `coverage` = 114 dans npf-notams-snapshot-v1.json avant de
      consulter des NOTAM. La pérenne n'a pas de NOTAM : non concernée.
 - Statut : À INSTALLER, puis À MESURER.
+
+INSTALLATION NAS 2026-09-24c — INSTALLÉ ET VALIDÉ (25/09/2026)
+- Installé le 25/09/2026 au matin, APRÈS la tâche de 06h30 (réussie en 24b, voir
+  ci-dessus), après vérification du status `success` et d'un fichier partagé de
+  plus de 30 min. notams-sdvfr-shared.php : 50 573 octets. npf-docs-api.php (24b)
+  et notams-auto-refresh.php inchangés.
+- Ordre d'installation respecté : v17.30 poussée d'abord, puis NAS 24c, puis
+  iPad passé en v17.30 et « Rafraîchir les NOTAM » : 869 NOTAM sur 105 terrains
+  pour 114 interrogés, enregistrés pour le hors ligne. Le bouton de
+  rafraîchissement fonctionne donc contre le vrai NAS (plus d'erreur 500).
+- Contrôles iPad OK : Saint-Brieuc (LFRT, NOTAM en A) LFRT), Luxeuil (LFSX),
+  Montbéliard (LFSM) — détail dans l'entrée « VALIDATION v17.30 ET NAS
+  2026-09-24c ».
+- Statut : INSTALLÉ et VALIDÉ. Historique du statut : À INSTALLER -> INSTALLÉ et
+  VALIDÉ.
+- Restent À MESURER (tests réels non encore faits) :
+  - second « Rafraîchir les NOTAM » pendant un rafraîchissement en cours :
+    rejoint (`joined: true`, même runId) ;
+  - créneau SDVFR occupé par BFG pendant les lots : attente puis reprise.
 
 
 18. CODES OACI DES AÉRODROMES — AUDIT ET CORRECTIONS (23/09/2026)
@@ -1315,12 +1343,15 @@ MIGRATION UNIQUE DES RÉGLAGES MÉMORISÉS (src/260)
 - Non migrés (hors décision) : sélections NOTAM (perte acceptée), lignes du
   calculateur et WP enregistrés avec un ancien code.
 
-MANIFEST VAC (dépôt NPF-Q400-VAC) — NON IMPLÉMENTÉ
+MANIFEST VAC (dépôt NPF-Q400-VAC) — À DÉCIDER (NON IMPLÉMENTÉ)
 - Le dépôt n'est pas cloné localement : non reconstitué. Le manifest en ligne
   garde les noms NPF v16.50 (ex. LFRT « Saint-Nazaire-Montoir ») et marque LFSX
   indisponible. Les fichiers eux-mêmes sont les fiches SIA du code : avec v17.30,
   le bouton VAC ouvre donc la bonne carte ; seuls les noms, npfType et la
   disponibilité de Luxeuil (LFSX) sont à régénérer.
+- Constaté sur iPad le 25/09/2026 : VAC de Saint-Brieuc (LFRT) OK ; VAC de
+  Luxeuil (LFSX) indisponible, comme attendu. Statut : À DÉCIDER (historique :
+  NON IMPLÉMENTÉ -> À DÉCIDER, 25/09/2026).
 
 POINT P — PÉRENNE v2026.67 (lecture seule, ~/projects/NPF-Q400, identique au
 site en ligne) — À DÉCIDER, NON MODIFIÉE
@@ -1339,6 +1370,38 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VALIDATION v17.30 ET NAS 2026-09-24c
+Date : 25/09/2026
+Aucune modification de code : journal uniquement. Version de travail inchangée
+(TEST v17.30).
+
+FAITS CONSTATÉS
+- Tâche DSM de 06h30 du 25/09/2026, encore avec la NAS 2026-09-24b : réussie,
+  3 lots, 911 NOTAM sur 110 terrains pour 122 interrogés (06:30:02 ->
+  06:31:07). Elle tourne donc bien après le redémarrage quotidien du NAS à 06h00.
+- NAS 2026-09-24c installé ensuite (notams-sdvfr-shared.php, 50 573 octets),
+  après vérification du status `success` et d'un fichier partagé de plus de
+  30 min.
+- iPad passé en v17.30, puis « Rafraîchir les NOTAM » : 869 NOTAM sur 105
+  terrains pour 114 interrogés, enregistrés pour le hors ligne.
+- Contrôles OK sur iPad :
+  . Saint-Brieuc : code LFRT, NOTAM en A) LFRT, VAC de Saint-Brieuc, fréquence
+    118.455 ;
+  . Luxeuil : code LFSX, fréquence 122.100 ; VAC indisponible, attendu tant que
+    le manifest VAC n'est pas mis à jour ;
+  . Montbéliard : code LFSM, fréquence 132.030, un seul symbole.
+
+STATUTS
+- v17.30 : VALIDÉ (À MESURER -> VALIDÉ).
+- NAS 2026-09-24c (section 17) : INSTALLÉ et VALIDÉ.
+- À MESURER : rejoindre un rafraîchissement en cours (second appui pendant les
+  lots) ; créneau SDVFR occupé par BFG pendant les lots.
+- À DÉCIDER : mise à jour du manifest VAC (dépôt NPF-Q400-VAC non cloné,
+  section 18) ; pérenne v2026.67 (section 18, point P).
+
+--------------------------------------------------------------------------------
+
 
 VERSION TEST v17.30 — CODES OACI ALIGNÉS SUR LE SIA
 Date : 23/09/2026
@@ -1398,7 +1461,8 @@ VALIDATION AVANT LIVRAISON
 - Cohérence versions/caches : OK. sia.js et moteur tuiles identiques à v17.29.
 - v17.27 (communes) et v17.29 (NOTAM, calculatorModal) toujours présents : OK.
 
-À MESURER
+À MESURER -> VALIDÉ (25/09/2026, voir l'entrée « VALIDATION v17.30 ET NAS
+2026-09-24c » ci-dessus)
 - Sur iPad, après l'ordre d'installation de la section 17 : VAC, fréquences et
   NOTAM de Saint-Brieuc, Luxeuil, Montbéliard ; trace DIAG de migration.
 
