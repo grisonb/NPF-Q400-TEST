@@ -207,6 +207,9 @@ NON IMPLÉMENTÉ / OUVERT :
 - analyse du 26/09/2026 (section 16, pistes 14 à 17) : index spatial HT par
   grille, découpage Routes, reconstruction forcée après chaque geste, règle CSS
   pointer-events HT sans effet — NON IMPLÉMENTÉ / À DÉCIDER / À MESURER ;
+- mesure de référence iPad v17.30 du 26/09/2026 (5 séries, Nîmes, mode avion)
+  consignée en section 16 ; pistes 18 (cellules Routes en RAM) et 19 (gestes
+  classés « autre » dans le DIAG) — À DÉCIDER / NON IMPLÉMENTÉ ;
 - révision `sia.js` déployée (15.69) ≠ révision attendue par le SW
   (15.69-radio1026-1-maplite1) : MESURÉ par test Chrome sur profil vierge le
   23/09/2026, TRAITÉ en v17.28 (section 16, point S) ;
@@ -1022,6 +1025,167 @@ PISTE 16 — Reconstruction HT / Routes forcée après chaque geste
   celui de la piste 14 pour HT, mais il touche l'ordre de restitution.
 - Reste à mesurer : proportion des gestes qui restent dans la couverture, et
   durée d'une reconstruction Routes sur iPad.
+- Complément du 26/09/2026 (mesure de référence iPad, voir plus bas) :
+  - la reconstruction a lieu une fois par RAFALE de gestes, pas à chaque
+    geste : un nouveau geste annule la restitution en cours (série 3 :
+    8 reconstructions Routes pour 26 mouvements et 5 zooms ; série 2 :
+    12 rendus HT pour 26 mouvements et 6 zooms) ;
+  - après chaque rafale, la restitution Routes coûte des attentes fixes
+    (fenêtre calme ~165-180 ms, puis ~0,45 s entre ce signal et le début de
+    la première lecture : second contrôle des tuiles, vidage, ouverture du cache), puis la lecture des sources (146 à 280 ms mesurés),
+    puis la construction `L.geoJSON` et les cartouches (NON MESURÉE : aucun
+    repère DIAG). Du signal « tuiles prêtes » Routes à la fin de la dernière
+    lecture : 0,64 à 0,73 s ;
+  - une rafale de glissements dans la même direction sort presque toujours de
+    la couverture (marge de rendu Routes 0,12 à 0,18, HT 0,06 à 0,22 de la
+    vue) : pour cette séquence d'essai, le gain serait faible ; il concerne
+    surtout les petits recadrages.
+- PROPOSITION (NON IMPLÉMENTÉ, À DÉCIDER) :
+  - Routes : ne plus forcer la reconstruction pour `overlay-priority-routes`
+    (src/120:2366) quand `coverageStillValid` est vrai (même tier, même jeu de
+    parties, vue dans la zone rendue, sources couvrantes). Le style
+    (`styleChanged`) et les cartouches (`shouldRefreshRoadOverlayLabelsForView`)
+    ont déjà leurs propres chemins. Startup / toggle restent forcés ;
+  - HT : dans l'étape HT de la restitution (src/080:1031), ne pas reconstruire
+    si `isHighVoltageCoverageValidForCurrentView()` est vrai ET si la classe de
+    zoom (≤ 8, 9, 10, ≥ 11 : tensions affichées et marge) est celle du dernier
+    rendu. Il faut mémoriser cette classe au rendu ;
+  - dans les deux cas, révéler le pane sans reconstruire. Le swap atomique
+    v17.10 n'est pas concerné (pas de nouveau rendu).
+  - Gain attendu (HYPOTHÈSE) : pour un geste resté dans la couverture, les
+    Routes reviennent sans lecture (~150-230 ms) ni reconstruction (non
+    mesurée) ; HT économise sa fenêtre calme (~170 ms) et son rendu (quelques
+    ms). Nul pour les rafales qui sortent de la couverture.
+  - Hors ligne : aucun risque (ni données, ni stockage). Mémoire iPad : plutôt
+    moins de pics (pas de double rendu transitoire). Risque : afficher un rendu
+    périmé si la condition de validité est incomplète (classe de zoom HT,
+    tier / parties Routes).
+  - Effort : faible en code (deux conditions), mais touche le séquenceur
+    (section 11) : tests Chrome puis A/B iPad.
+
+PISTE 18 — Garder les cellules Routes en mémoire
+- Statut : À DÉCIDER — gain mesuré faible ; mesure mémoire requise.
+- Constaté (DIAG iPad du 26/09/2026, 2 parties Nîmes, tier 2) : lecture
+  depuis le stockage de 36 à 43 cellules = 146 à 226 ms ; lecture des mêmes
+  volumes depuis la RAM = 153 à 163 ms. Tier 1 (68 cellules, 4 parties) :
+  stockage 247 / 280 ms, RAM 227 ms. La relecture depuis le stockage ne pèse
+  donc que ~0 à 70 ms : l'essentiel est le décodage / filtrage / déduplication
+  des 1 300 à 3 400 tronçons retenus par partie.
+- Constaté : `ram=0 storage=N` correspond surtout à une ZONE NOUVELLE (rafale
+  de glissements dans une direction) : aucune taille de cache ne l'évite. Les
+  retours vers une zone déjà lue sont bien servis par la RAM (séries 3 et 4 :
+  ram=41/41, 37/37, 36/36, 68/68).
+- Constaté : le LRU (96 cellules, src/030:396, vrai LRU) est trop petit pour un
+  aller-retour 1 NM -> 2 NM -> 1 NM : 41 cellules tier 2 + 68 cellules tier 1
+  = 109 > 96. Au retour à 1 NM, les 41 cellules sont relues depuis le
+  stockage (séries 3 et 4, à la fin de la séquence de zoom).
+- Options :
+  a) passer le LRU de 96 à ~160-200 cellules : couvre l'aller-retour
+     1 -> 2 -> 1 NM ; gain ~50 ms au plus par reconstruction concernée ;
+  b) agrandir le jeu de travail source (marge 0,35 / 0,50,
+     `ROAD_OVERLAY_SOURCE_WORKSET_PAD_TIER_*`) : plus de glissements servis
+     SANS aucune lecture (constaté : une reconstruction de la série 3 n'a lu
+     aucune cellule) ; première lecture plus longue et plus de tronçons
+     gardés ;
+  c) préchargement des cellules voisines au repos : hors périmètre, non
+     proposé.
+- Hors ligne : aucun risque (les cellules restent dans Cache Storage).
+  Mémoire iPad : inconnue — taille d'une cellule décodée NON MESURÉE ; à
+  rapprocher des rechargements PWA historiques avec SIA + Routes + HT (v16.40,
+  v16.57) et de la piste 3.
+- Effort : a) une constante ; b) deux constantes, mais effet sur le volume
+  filtré à chaque reconstruction.
+
+PISTE 19 — Gestes classés « autre » au lieu de « manuel » dans le DIAG
+- Statut : NON IMPLÉMENTÉ — défaut du DIAG uniquement, sans effet sur le
+  masquage (vérifié le 26/09/2026 avant le commit v17.31).
+- Constaté : `source: 'manual'` n'est donné que si
+  `centerGpsFollowUserGestureActive` est vrai (src/340:3368) ; ce drapeau
+  n'est posé que si le suivi GPS centré est actif (`markUserMapGesture`,
+  src/260:1031). Sans suivi (mode avion, 0 recentrage), tous les gestes sont
+  « autre ». Le masquage v17.31, lui, dépend de
+  `isNpfGpsFollowProgrammaticPan()` (src/030:294), faux sans suivi : la
+  séquence prioritaire démarre bien (DIAG : « priorité carte · début geste
+  verrouillé · movestart » puis `overlay-priority-vfr` après les gestes
+  « autre »).
+- Correction possible (sur demande) : classer « manuel » tout geste précédé
+  d'un contact sur la carte, suivi GPS ou non.
+
+MESURE DE RÉFÉRENCE iPad v17.30 — 26/09/2026 (Nîmes, mode avion)
+- Protocole utilisateur : NPF relancé entre chaque série ; 5 glissements dans
+  chaque direction, puis zooms 5 -> 10 -> 20 -> 50 NM et retour (séries 1-2),
+  ou 1 -> 2 -> 5 NM et retour (séries 3-5). Routes visibles seulement à 2 NM
+  (autoroutes) et 1 NM (autoroutes + départementales).
+- Fichiers : ~/projects/livraisons_NPF-Q400-TEST/diag-2026-09-26/
+  NPF_DIAG_2026-09-26_15-23 / 15-26 / 15-32 / 15-35 / 15-38. Chaque fichier
+  contient la série courante PUIS la fin de la session précédente
+  (« SESSION DIAG RESTAURÉE ») : seuls les chiffres de la série courante sont
+  repris ici.
+- ATTENTION : le DIAG n'enregistre individuellement que les glissements
+  SACCADÉS. L'écart moyen 18-20 ms ne porte que sur ces glissements-là ; pour
+  les autres, seuls le nombre et l'écart max global sont disponibles.
+
+  | Série                 | Zoom | Mvts | Sacc. | >100/>150/>250 | Écart max | Zooms |
+  | 1 sans calque, 5 NM   |  10  |  26  |   1   |     1/0/0      |  134 ms   | 6 (0 lent) |
+  | 2 HT seul, 5 NM       |  10  |  26  |   1   |     1/0/0      |  118 ms   | 6 (0 lent) |
+  | 3 Routes seul, 1 NM   |  12  |  26  |   0   |     0/0/0      |   66 ms   | 5 (0 lent) |
+  | 4 HT + Routes, 1 NM   |  12  |  26  |   2   |     3/1/0      |  174 ms   | 5 (0 lent) |
+  | 5 sans calque, 1 NM   |  12  |  27  |   2   |     2/2/1      |  251 ms   | 7 (0 lent) |
+  Glissements saccadés détaillés (écart moyen / max, événements move) :
+  S1 19/134 ms (85) ; S2 18/118 ms (64) ; S4 20/174 ms (67) et 19/117 ms (78) ;
+  S5 19/166 ms (68) et 20/251 ms (85). Tous : JS=0, SIA/Routes/HT = 0 ms
+  pendant le geste.
+
+  | Série | 1re tuile | Priorité fond libérée            | Blocages JS (moment)                       |
+  | 1     |  4,04 s   | 10,84 s (couverture 80 %)        | 314 ms (5,9 s)                             |
+  | 2     |  4,50 s   | 14,36 s (TIMEOUT, 21/30)         | 537 ms (5,1 s), 257 ms (6,4 s)             |
+  | 3     |  3,67 s   |  6,30 s (scheduler au repos)     | 773 ms (6,4 s)                             |
+  | 4     |  3,43 s   |  9,26 s (scheduler au repos)     | 371 (3,9 s), 523 (6,4 s), 193 (15,6 s), 577 ms (115,6 s, zoom 5 -> 2 NM) |
+  | 5     |  3,91 s   |  9,69 s (couverture 80 %)        | 1 353 ms (6,3 s)                           |
+
+  Calques :
+  - S2 : HT attend les tuiles 12 039 ms (timeout) au démarrage, puis
+    1 603 / 389 ms ; données HT prêtes en 173 / 218 ms ; 12 rendus HT ;
+    fenêtre calme après chaque rafale 164 à 222 ms ; SIA max 440 ms.
+  - S3 : 8 rendus Routes ; fenêtre calme 169 à 181 ms ; lectures sources :
+    démarrage stockage 41 cellules 196 ms ; nouvelle zone stockage 38 = 162 ms ;
+    retour ram 41 + stockage 2 = 187 ms ; zone suivante stockage 38 = 162 ms ;
+    retour ram 37 = 155 ms ; 2 NM stockage 68 = 247 ms ; 5 NM tier 0 ; retour
+    2 NM ram 68 = 227 ms ; retour 1 NM stockage 41 = 184 ms (LRU dépassé).
+    Une reconstruction (56,5 s) sans aucune lecture : jeu de travail couvrant.
+  - S4 : HT attend 7 508 ms, Routes 4 595 ms au démarrage ; premier rendu
+    Routes layerMs 865 ms ; 9 rendus HT, 7 rendus Routes ; lectures sources :
+    stockage 36 = 146 ms ; stockage 43 = 226 ms ; ram 36 = 153 ms ; stockage
+    43 = 192 ms ; ram 36 + stockage 5 = 163 ms ; 2 NM stockage 68 = 280 ms ;
+    retour 1 NM stockage 41 = 185 ms (LRU dépassé).
+- Lecture :
+  - la fluidité PENDANT les glissements ne dépend pas des calques : la pire
+    série (écart max 251 ms) est la 5, sans calque ; aucun travail HT / Routes
+    / SIA pendant les gestes ;
+  - le blocage JS de démarrage (0,3 à 1,4 s vers 5-6,5 s) existe sans calque ;
+    il coïncide avec « Couches annexes programmées » / position GPS mémorisée
+    (non attribué, À MESURER) ;
+  - HT et Routes retardent surtout leur PROPRE apparition (attente des
+    tuiles au démarrage, restitution après chaque rafale), pas le fond.
+- Statut : MESURÉ (référence v17.30). À comparer avec v17.31 dans les mêmes
+  conditions (mêmes séries, même lieu).
+
+À AJOUTER AU DIAG POUR MESURER LES PISTES 16 ET 18 (NON IMPLÉMENTÉ, sur demande)
+- Par restitution : durée totale fin de geste -> « priorité carte · fin », et
+  durée de chaque étape (tuiles, VFR, HT, Routes).
+- HT : durée d'une reconstruction (parcours, `L.geoJSON`, ajout) et décision
+  « réutilisé / reconstruit » avec la raison (couverture, classe de zoom).
+- Routes : pour chaque reconstruction, durée des lectures sources (existe),
+  du filtrage, de `L.geoJSON` + ajout, des cartouches ; décision
+  « réutilisé / reconstruit » avec la raison (tier, parties, sortie de
+  couverture, source non couvrante).
+- Déplacement de chaque geste en % de la vue, et « fin dans la couverture
+  HT / Routes : oui / non » : donne dès maintenant, SANS changer le
+  comportement, la proportion de gestes qui éviteraient une reconstruction.
+- Cache cellules Routes : taille, évictions, et nombre de tronçons décodés
+  gardés en RAM (estimation mémoire).
+- Correction de la classification « manuel » (piste 19), pour distinguer les
+  gestes des mouvements programmés (recherche, centrage).
 
 PISTE 17 — Règle CSS « pointer-events: none » du pane HT sans effet
 - Statut : NON IMPLÉMENTÉ — constat seul.
