@@ -300,10 +300,11 @@ NON IMPLÉMENTÉ / OUVERT :
   réaffichées après les tuiles et les VFR ; ordre d'affichage (HT sous les pistes
   et sous les tracés de overlayPane) ; A/B `PAN CARTE SACCADÉ` avec HT ON,
   v17.30 (mesure de référence de l'utilisateur) contre v17.31 ;
-- v17.32 : À MESURER sur iPad (mêmes 5 séries que la référence du 26/09/2026,
-  export DIAG complet, bouton « Repère » aux ralentissements ressentis). But :
-  expliquer le blocage de démarrage (section 16, point 7 de l'analyse v17.32)
-  et les ralentissements aléatoires avec Routes / HT ;
+- v17.32 : MESURÉ sur iPad le 26/09/2026 (session au sol 16:22-16:42 et vol
+  réel 16:42-18:11, 4 repères) — DIAG fonctionnel. Analyse en section 16
+  (« ANALYSE DIAG v17.32 SOL + VOL ») : 5 défauts du DIAG lui-même relevés
+  (D1 à D5) et 9 recommandations classées gain / risque (R1 à R9), aucune
+  implémentée. Historique : À MESURER -> MESURÉ ;
 
 IMPORTANT : cette liste de statut ne remplace pas les sections détaillées plus bas.
 Elle sert à savoir immédiatement ce qui est réellement codé, ce qui reste ouvert
@@ -1200,6 +1201,215 @@ MESURE DE RÉFÉRENCE iPad v17.30 — 26/09/2026 (Nîmes, mode avion)
   gardés en RAM (estimation mémoire).
 - Correction de la classification « manuel » (piste 19), pour distinguer les
   gestes des mouvements programmés (recherche, centrage).
+
+ANALYSE DIAG v17.32 SOL + VOL — 26/09/2026 (analyse seule, aucun code modifié)
+Fichiers : ~/projects/livraisons_NPF-Q400-TEST/diag-2026-09-26/
+- NPF_DIAG_2026-09-26_16-32.txt : au sol, 16:22:57 -> 16:32 (premier
+  lancement juste après l'installation de v17.32) ;
+- NPF_DIAG_2026-09-26_18-11.txt : VOL RÉEL 16:42:50 -> 18:11, suivi GPS actif
+  (4 505 positions, 3 362 recentrages, 2 766 mouvements GPS, intervalle moyen
+  1 191 ms), 4 repères ; sa « session précédente » couvre 16:22 -> 16:42.
+Légende : CONSTATÉ = lu dans le DIAG ou dans le code ; SUPPOSÉ = hypothèse à
+mesurer.
+
+1. DÉMARRAGE — map.invalidateSize ET setupEventListeners
+- CONSTATÉ (sol, 16:23) : un seul blocage de 5,53 à 8,07 s ≈ 2 490 ms (la
+  mesure historique à 1 Hz en voyait 2 968 ms) : map.invalidateSize 1 195 ms
+  (à 6,29 s), setupEventListeners 463 ms (à 5,83 s) — dont
+  refreshBriefingDocMapButtons 127 ms synchrones, appelé À L'INTÉRIEUR de
+  setupEventListeners (à 6,04 s) —, waitForNpfStartupMapPriorityRelease
+  170 ms, displayCommuneDetails 137 ms ; index des communes 0,26 s (5,54 ->
+  5,80 s). Juste avant : lecture JSON de communes.json ≈ 546 ms (4,93 -> 5,53 s,
+  nouveau repère « réponse reçue »).
+- CONSTATÉ (vol, 16:43, lancement suivant) : setupEventListeners 85 ms,
+  map.invalidateSize 245 ms. Même appel invalidateSize plus tard : 14 ms (sol
+  à 8,03 s), 1 à 33 ms ensuite. Le coût dépend donc de l'état de la page, pas
+  de la fonction.
+- Quand : les deux sont appelés dans initializeApp (src/060), dans la même
+  suite SYNCHRONE après `await loadCommunesData()` : index communes -> Map
+  INSEE -> recherche affichée (display:block) -> setupEventListeners ->
+  map.invalidateSize({ animate:false, pan:false }) -> PÉLIC -> core-ready.
+- Pourquoi (SUPPOSÉ, fortement étayé) : invalidateSize lit la taille du
+  conteneur (clientWidth/Height) ; le navigateur doit alors recalculer
+  immédiatement styles et mise en page de toute la page, que les étapes
+  précédentes viennent de modifier. invalidateSize « paie » ce premier calcul
+  forcé (feuille de style de ~510 Ko, DOM complet de l'application). Au premier
+  lancement après une mise à jour (sol), tout est froid : coût maximal.
+  setupEventListeners : ~336 ms non décomposés hors refreshBriefingDocMapButtons.
+- Réduction sans risque pour le hors ligne (aucune donnée, cache ni SW touché) :
+  voir R3 et R4.
+
+2. BLOCAGES EN VOL ET POSITIONS GPS
+- CONSTATÉ : 304 blocages > 100 ms dans la session de vol (max ≈ 1 797 ms, hors
+  liste) ; seuls les 120 derniers (17:51 -> 18:08) sont conservés (défaut D3).
+  89 / 120 surviennent sans aucune fonction instrumentée en cours ; médiane
+  138 ms, max listé 646 ms.
+- CONSTATÉ : les recentrages GPS tombent à une phase fixe (≈ ,88 s de chaque
+  seconde, liste des gestes gps-follow). Les listes gestes (18:09 -> 18:11) et
+  blocages (-> 18:08) ne se recouvrent pas : pas de rapprochement ligne à ligne
+  possible (défaut D3). Rapprochement par phase : 39 / 120 blocages démarrent
+  dans les 100 ms qui suivent la phase GPS (hasard ≈ 12), 68 / 120 dans les
+  300 ms (hasard ≈ 36). Les blocages suivent donc le traitement de chaque
+  position GPS (SUPPOSÉ : phase supposée stable sur tout le vol).
+- CONSTATÉ (code) — à chaque position GPS réelle (updateUserPosition, src/270) :
+  saveStoredGpsPosition (écriture localStorage), applyStartupGpsAutoCenter,
+  userMarker.setLatLng + setIcon (icône reconstruite à CHAQUE position réelle),
+  setZIndexOffset, applyOwnGpsPlaneHeading, updateOwnGpsVector,
+  handleNpfWaypointAutoAdvance, handleNpfFirePelicAutoCycle,
+  updateNearestCommuneDisplay (+ refreshNearestCommuneDisplayFromKnownGps à
+  +250 ms), refreshCalculatorAirportContext, updateDeroutementGpsStatus,
+  recenterMapOnKnownGpsPosition -> setView, updateCalculatorData (si un feu est
+  posé), drawUserToTargetRoute.
+  Puis, dans le même setView (movestart + moveend synchrones) :
+  . Leaflet 1.9.4 (CONSTATÉ dans leaflet.min.js) : chaque renderer canvas
+    présent sur la carte réaffecte canvas.width / height à chaque moveend
+    (surface effacée et réallouée) puis redessine tous ses tracés — MÊME calque
+    OFF, le renderer restant attaché. En vol, canvas HT 3 672 × 3 672 px =
+    51,4 Mo présent de 17:45 à la fin, HT OFF compris ;
+  . GridLayer : mise à jour des tuiles (moteur, non instrumenté) ;
+  . DIAG existant (src/340, depuis v16.8x) : 2 instantanés complets par
+    mouvement, GPS compris — getBoundingClientRect sur chaque tuile (calcul de
+    mise en page forcé juste après le déplacement), énumération des ~1 300
+    calques Leaflet, lecture du manifeste Routes (voir 5) ;
+  . refreshAirportOperationalLabels à +180 ms (instrumenté : 1 à 55 ms) ;
+  . HT : sortie de couverture toutes les ~4 s à z10 (132 reconstructions
+    « gps-follow-edge », 25 à 39 ms de travail chacune + redessin du canvas) ;
+  . trafic (animation continue, piste 13) et GLR (réseau) en parallèle.
+- Instrumentation à ajouter (DIAG seulement, sans changement de comportement) :
+  I1 updateUserPosition (durée totale) et, dedans, recenterMapOnKnownGpsPosition,
+     setIcon / buildOwnGpsIcon, updateOwnGpsVector, updateNearestCommuneDisplay,
+     updateCalculatorData, drawUserToTargetRoute, saveStoredGpsPosition ;
+  I2 durée de map.setView (instance) pour chaque recentrage : l'écart entre sa
+     durée et celle du blocage = rendu / peinture / ramasse-miettes ;
+  I3 renderers canvas (HT, pistes, 2 Routes) : envelopper _update et _redraw
+     sur l'INSTANCE dès sa création (initMap), avant son ajout à la carte (les
+     écouteurs Leaflet capturent la fonction à l'ajout) ; durée, taille ;
+  I4 getNpfStartupDiagnosticOverlaySnapshot : durée et nombre d'appels ;
+  I5 trafic (rendu + boucle d'animation) et GLR : durée par cycle ;
+  I6 sonde de mise en page : durée d'une lecture forcée (offsetHeight) avant /
+     après setupEventListeners, et nombre d'éléments du DOM ;
+  I7 relevé mémoire canvas immédiatement après tout blocage > 500 ms.
+
+3. TUILES EN VOL
+- CONSTATÉ (code) : « Carte OACI » passe par le MÊME lecteur IndexedDB
+  (findDirectOfflineTileBlobUnqueued) mais SANS la file NPF : pas de limite à 5
+  lectures, pas de priorité ni de lecture RAM d'abord ; délais 2,2 s (ouverture)
+  / 1,8 s (lecture) au lieu de 7 / 5,2 s ; keepBuffer 4 au lieu de 2 ; zoom
+  natif max 10 (affichage 11). Les compteurs NPF (accès IDB, hits RAM, réparation
+  GPS) ne comptent pas pour ce pack : les « 0 accès IDB / 0 hit RAM » de l'en-tête
+  sont un artefact.
+- CONSTATÉ : le vol a tourné sur les packs NPF_France jusqu'à au moins 18:03:41
+  (file NPF occupée : q71/a5 à 18:00:31, q25/a5 à 18:00:45, q0/a5 à 18:03:41 ;
+  compteurs IDB actifs au démarrage). Passage à « Carte OACI » dans les
+  dernières minutes (SUPPOSÉ vers 18:04:40-18:04:45 : displayInstalledMaps,
+  restartLiveGpsWatch). L'en-tête mélange donc deux packs et des compteurs
+  remis à zéro (défaut D4).
+- CONSTATÉ : « 16 écrans sans tuile » = 16 zooms : instantanés MÉMOIRE CARTE pris
+  au zoomend, avant chargement (tilesVisible=0 normal à cet instant). Ce ne sont
+  pas des trous en croisière.
+- CONSTATÉ : en suivi GPS, réparation 582 contrôles / 3 déclenchements /
+  5 tuiles : le débit suit l'avion. Calcul (SUPPOSÉ, vitesse non enregistrée) :
+  à z10 une tuile couvre ~27 km d'est en ouest vers 45° N ; à 250 kt (~7,7 km/min)
+  une nouvelle colonne toutes les ~3,5 min ; à z12 ~1 / min.
+- CONSTATÉ : la vraie lenteur est le rechargement APRÈS UN ZOOM. Restitution
+  « tuiles » de 4,5 à 10,7 s en vol (17:12:26 9,4 s annulée ; 17:16:23 4,9 s ;
+  17:29:20 10,7 s ; 17:57:45 4,5 s ; 18:00:33 9,9 s ; 18:01:20 10,0 s) et de
+  13,9 à 17,9 s au sol (16:29:19, 16:29:50, 16:30:52) pour 25 tuiles, contre
+  ~2 s pour les mêmes 25 tuiles au démarrage. Les repères n°2 (17:12:30,
+  restitution=tuiles, q15/a5) et n°3 (18:00:45, q25/a5) en vol, n°1 et n°3 au
+  sol, tombent dans ces attentes : la lenteur RESSENTIE correspond au
+  rechargement des tuiles après zoom, bien plus qu'aux blocages JS.
+- CONSTATÉ (code, src/100:2560-2590) : les 285 « demandes abandonnées » sont des
+  demandes retirées de la file (vue / zoom changés) ; les 100 « reprises » sont
+  des demandes retirées alors que la tuile restait nécessaire, remises en file —
+  ce ne sont PAS des délais dépassés.
+- Cause des 5 à 18 s : NON MESURABLE avec ce DIAG (ni durée de lecture, ni
+  nombre de bases / URL essayées, ni délais dépassés). Hypothèses : (a) recherche
+  successive dans les 10 bases NPF_France_xx quand l'indice de la dernière base
+  trouvée ne vaut plus au nouveau zoom ; (b) lectures qui vont jusqu'au délai de
+  5,2 s ; (c) concurrence avec d'autres accès IndexedDB.
+- Pistes ABANDONNÉES (section 4 : 5 -> 2 lectures, index.get, annulation active,
+  batch v17.06, redraw systématique, invalidation agressive) : elles RESTENT
+  ABANDONNÉES. Ces DIAG ne mesurent ni la durée des lectures ni l'effet de la
+  concurrence : ils ne constituent PAS la preuve DIAG qui manquait.
+- Instrumentation nécessaire (dans src/100 : demande explicite requise,
+  règle I) : I8 durée de chaque lecture (histogramme), nombre de bases / URL
+  essayées par tuile trouvée, délais dépassés, indice faux ; I9 événement de
+  changement de pack et compteurs par pack.
+
+4. MÉMOIRE DES CANVAS
+- CONSTATÉ : côté du canvas = 2 (densité) × vue × (1 + 2 × marge). HT et pistes
+  (marge 0,35) : 3 672 × 3 672 px = 51,4 Mo chacun (vue ≈ 1 080 px). Routes
+  (marge 0,55) : ≈ 78 Mo chacun (calcul), 2 canvas. Pic au sol 259,8 Mo
+  ≈ 2 × 78 + 51,4 + 51,4 (Routes + HT + pistes). En vol : 51,4 Mo (HT seul)
+  de 17:45 à la fin.
+- Gros blocages inexpliqués au sol : 1 444 ms (16:30:22, 2 canvas = 102,9 Mo,
+  ~9 s après le chargement de 5 066 espaces SIA et 6 s après un affichage de
+  commune) ; 1 306 ms (16:33:01, 3 s avant Routes + HT ON puis pic 259,8 Mo) ;
+  737 ms (16:31:20). Aucune fonction instrumentée en cours. Lien avec la mémoire
+  des canvas : SUPPOSÉ, non démontré ; ramasse-miettes aussi possible. En vol,
+  les blocages à 1 Hz persistent avec un seul canvas de 51,4 Mo : le VOLUME seul
+  ne les explique pas ; la remise à zéro du canvas à chaque moveend (coût
+  proportionnel à sa surface) est un contributeur plausible.
+- Gain d'une marge réduite (mémoire ∝ (1 + 2 × marge)²) : HT / pistes 0,35 ->
+  0,10 : ×0,50 (51,4 -> 25,7 Mo chacun) ; Routes 0,55 -> 0,20 : ×0,44 (≈ 78 ->
+  35 Mo chacun). Pic au sol ≈ 260 -> ≈ 120 Mo ; surface remise à zéro à chaque
+  recentrage GPS divisée par 2. Effet visible : HT et Routes sont masquées
+  pendant les gestes manuels depuis v17.31 et les recentrages GPS sont de
+  quelques pixels : aucun effet visible attendu pour elles. Les pistes NE sont
+  PAS masquées pendant les gestes : avec une petite marge, elles apparaîtraient
+  en retard au bord de l'écran pendant un pan. Option : densité 1 pour HT
+  (×0,25) — lignes plus floues, visible.
+
+5. COÛT DU DIAG LUI-MÊME
+- CONSTATÉ : persistance 166 écritures, 1 245 ms au total sur 88 min (7,5 ms en
+  moyenne, max 28 ms) : ne produit aucun blocage > 100 ms. Minuterie 50 ms :
+  quelques opérations par tick — négligeable (SUPPOSÉ, non mesuré séparément).
+- CONSTATÉ (code, défaut D1) : l'enregistreur de gestes existant (src/340)
+  prend 2 instantanés complets à CHAQUE mouvement, recentrages GPS compris
+  (~5 500 en vol) : getBoundingClientRect sur toutes les tuiles (mise en page
+  forcée), Object.keys(map._layers) (~1 300), lecture du manifeste Routes. Ils
+  sont inutiles pour les mouvements GPS (jamais saccadés : écart max 51 ms).
+  Contribution aux blocages : SUPPOSÉE, non mesurée — suspect n°1 avec la
+  remise à zéro des canvas.
+- Défauts du DIAG relevés :
+  D1 instantanés complets sur les mouvements GPS (ci-dessus) ;
+  D2 les événements « SIA GPS … aucun traitement » (2 / s) saturent la liste de
+     100 événements : 50 s d'historique seulement, et la persistance ne garde que
+     ça ;
+  D3 listes plafonnées « derniers N » : blocages du démarrage perdus en vol,
+     gestes et blocages sans période commune ;
+  D4 pas d'événement de changement de pack, compteurs de tuiles NPF seulement ;
+  D5 vitesse GPS non enregistrée (débit de tuiles non rapportable à la vitesse).
+
+RECOMMANDATIONS CLASSÉES GAIN / RISQUE (aucune implémentée — À DÉCIDER)
+R1 [risque nul, DIAG seul] Corriger D1 à D5 : pas d'instantané pour les
+   mouvements GPS, « SIA GPS » en compteur seulement, garder les 40 premiers +
+   80 derniers blocages, événement de changement de pack, vitesse GPS ; ajouter
+   I1 à I7. Gain : suppression d'une mise en page forcée par seconde en vol
+   (SUPPOSÉ) et prochain vol conclusif.
+R2 [risque faible, gain mémoire CONSTATÉ par calcul] Marge du canvas HT 0,35 ->
+   0,10 (HT masquées pendant les gestes) : -50 % de mémoire HT et de surface
+   remise à zéro par recentrage.
+R3 [risque faible] Démarrage : invalidateSize au prochain rafraîchissement
+   (requestAnimationFrame) au lieu d'un calcul forcé au milieu de la suite
+   synchrone. Gain SUPPOSÉ : bloc de 0,3 à 2,5 s scindé, calcul forcé évité.
+R4 [risque faible à modéré] Démarrage : rendre la main (une image) entre index
+   communes, setupEventListeners et PÉLIC ; le fond peut se peindre entre les
+   étapes. Temps total inchangé, blocage le plus long réduit (SUPPOSÉ).
+R5 [risque faible, visible seulement si Routes affichées hors geste] Marge des
+   2 canvas Routes 0,55 -> 0,20 : ≈ -85 Mo au pic.
+R6 [À DÉCIDER, historique v17.09-v17.11] Retirer le renderer HT de la carte
+   quand HT est OFF (libère 51,4 Mo, supprime sa remise à zéro à chaque
+   recentrage). Uniquement au passage OFF, jamais pendant un geste (le retrait
+   pendant les gestes reste ABANDONNÉ).
+R7 [demande explicite requise — moteur tuiles, règle I] Instrumenter I8 / I9
+   avant toute modification du chargement des tuiles après zoom.
+R8 [À DÉCIDER, effet opérationnel visible] Recentrage GPS seulement au-delà
+   d'un déplacement de N pixels : réduirait tout le coût par moveend, mais
+   modifie le suivi de l'avion.
+R9 [visible] Marge des pistes réduite : pistes en retard au bord pendant les
+   pans.
 
 PISTE 17 — Règle CSS « pointer-events: none » du pane HT sans effet
 - Statut : NON IMPLÉMENTÉ — constat seul.
