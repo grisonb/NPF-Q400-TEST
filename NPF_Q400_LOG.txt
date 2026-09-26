@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
-Mise à jour : 25/09/2026
-Version de travail actuelle : TEST v17.30
+Mise à jour : 26/09/2026
+Version de travail actuelle : TEST v17.31
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,9 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.31 — canvas HT créé dans son propre pane `highVoltageLinesPane` : le
+  masquage pendant les gestes s'applique enfin à HT comme à Routes (section 16,
+  piste 2).
 
 NON IMPLÉMENTÉ / OUVERT :
 - PÉRENNE v2026.67 (utilisée par les collègues) : MÊMES codes OACI erronés,
@@ -200,8 +203,10 @@ NON IMPLÉMENTÉ / OUVERT :
   non retenue sans nouvelle preuve DIAG.
 - analyse fluidité carte du 23/09/2026 : 12 pistes consignées en section 16
   (statuts NON IMPLÉMENTÉ / À MESURER / À DÉCIDER / ABANDONNÉ). En particulier :
-  canvas HT hors de son pane (piste 2) = NON IMPLÉMENTÉ, prévu dans une version
-  séparée APRÈS validation de v17.27 (décision utilisateur du 23/09/2026) ;
+  canvas HT hors de son pane (piste 2) = TRAITÉ en v17.31 (À MESURER sur iPad) ;
+- analyse du 26/09/2026 (section 16, pistes 14 à 17) : index spatial HT par
+  grille, découpage Routes, reconstruction forcée après chaque geste, règle CSS
+  pointer-events HT sans effet — NON IMPLÉMENTÉ / À DÉCIDER / À MESURER ;
 - révision `sia.js` déployée (15.69) ≠ révision attendue par le SW
   (15.69-radio1026-1-maplite1) : MESURÉ par test Chrome sur profil vierge le
   23/09/2026, TRAITÉ en v17.28 (section 16, point S) ;
@@ -283,6 +288,10 @@ NON IMPLÉMENTÉ / OUVERT :
   118.455) ; Luxeuil LFSX (122.100 ; VAC indisponible, attendu tant que le
   manifest VAC n'est pas mis à jour) ; Montbéliard LFSM (132.030, un seul
   symbole). Détail : entrée « VALIDATION v17.30 ET NAS 2026-09-24c » ;
+- v17.31 : À MESURER sur iPad. HT réellement masquées pendant pan / pinch, puis
+  réaffichées après les tuiles et les VFR ; ordre d'affichage (HT sous les pistes
+  et sous les tracés de overlayPane) ; A/B `PAN CARTE SACCADÉ` avec HT ON,
+  v17.30 (mesure de référence de l'utilisateur) contre v17.31 ;
 
 IMPORTANT : cette liste de statut ne remplace pas les sections détaillées plus bas.
 Elle sert à savoir immédiatement ce qui est réellement codé, ce qui reste ouvert
@@ -290,39 +299,37 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.30
-Date : 23/09/2026
-Base : v17.29 (commitée ; test réel du bouton NOTAM sur iPad en attente)
+Version : TEST v17.31
+Date : 26/09/2026
+Base : v17.30 (VALIDÉE sur iPad le 25/09/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.30.txt
-2_Index_v17.30.txt
-3_Manifest_v17.30.txt
-4_Script_v17.30.txt
-5_SIA_v17.30.txt
-6_Style_v17.30.txt
-7_Sw_v17.30.txt
+1_Modifications_v17.31.txt
+2_Index_v17.31.txt
+3_Manifest_v17.31.txt
+4_Script_v17.31.txt
+5_SIA_v17.31.txt
+6_Style_v17.31.txt
+7_Sw_v17.31.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.30
-- Manifest : start_url = ./index.html?appv=v17.30
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.30
-- Style : NPF_STYLE_BUILD_VERSION = v17.30
-- Service Worker : `sw-v17-30_oaci_codes_sia`
+- Index : APP_VERSION = v17.31
+- Manifest : start_url = ./index.html?appv=v17.31
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.31
+- Style : NPF_STYLE_BUILD_VERSION = v17.31
+- Service Worker : `sw-v17-31_ht_canvas_pane`
 - SIA_DATA_REVISION (SW / Index) : 15.69-radio1026-1-maplite1 (inchangée)
-- sia.js v17.30 : strictement identique à v17.29.
+- sia.js v17.31 : strictement identique à v17.30.
 
 STATUT DE VALIDATION :
-- validation statique v17.30 effectuée avant livraison : Script/SIA/SW OK, script
+- validation statique v17.31 effectuée avant livraison : Script/SIA/SW OK, script
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
-- `sia.js` et moteur tuiles (src/100) identiques à v17.29 ;
-- audit OACI rejoué sur les sources corrigées : 0 écart (hors LFSC, erreur de
-  position dans le SIA lui-même) ;
-- tests Chrome (v17.30 servie en local, profil neuf) : migration, carte,
-  fréquences, NOTAM, boutons VAC : OK (entrée v17.30) ;
-- v17.26 reste À MESURER en vol prolongé ; v17.27 et v17.28 VALIDÉES sur iPad ;
-  v17.29 À MESURER ; v17.30 VALIDÉE sur iPad (25/09/2026).
+- `sia.js` et moteur tuiles (src/100) identiques à v17.30 ;
+- tests Chrome A/B v17.30 / v17.31 (servies en local, profils neufs) : entrée
+  v17.31 ;
+- v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
+  sur iPad ; v17.29 et v17.31 À MESURER.
 
 
 2. PROTOCOLE DE TRAVAIL À RESPECTER
@@ -830,8 +837,12 @@ PISTE 1 — Sérialisation de communes.json dans localStorage au démarrage
 - Hors ligne : la base est servie par le cache APP_DATA du SW (cache-first).
 
 PISTE 2 — Canvas HT hors de son pane
-- Statut : NON IMPLÉMENTÉ — prévu dans une version séparée, APRÈS validation
-  de v17.27 (décision utilisateur du 23/09/2026).
+- Statut : IMPLÉMENTÉ en v17.31 — À MESURER sur iPad. Historique du statut :
+  NON IMPLÉMENTÉ (prévu après validation de v17.27, décision du 23/09/2026) ->
+  demandé comme correction de défaut le 26/09/2026 (l'utilisateur accepte que
+  les HT disparaissent pendant les déplacements et zooms) -> IMPLÉMENTÉ.
+  Constat confirmé dans Chrome (v17.30) : pendant un glisser, séquence de
+  priorité active mais canvas HT toujours affiché dans `overlayPane`.
 - Constaté : `highVoltageLinesRenderer = L.canvas({ padding: 0.35 })`
   (src/090:318) est créé SANS option `pane`. Leaflet place le canvas dans le
   pane de son renderer, pas dans celui du tracé : le canvas HT est donc dans
@@ -930,6 +941,99 @@ PISTE ÉCARTÉE — Recherche de commune à chaque touchmove
 - Une première exploration affirmait que `markUserMapGesture` (src/260:946-960)
   appelait la recherche de commune à chaque touchmove. Vérifié : il ne fait que
   programmer des minuteurs. Ne pas reprendre.
+
+ANALYSE DU 26/09/2026 — INDEX SPATIAL HT / DÉCOUPAGE ROUTES (analyse seule)
+Demande utilisateur : analyse sans modification de fichier. Sources v17.30/v17.31
+(`src/`), numéros de ligne v17.31. Mesures : Chrome 153 (Windows), app servie
+en local, profil neuf, vue Lyon (45,76 / 4,85) sauf mention ; « 4x » = CPU
+ralenti 4 fois par les DevTools, borne pessimiste. Ce ne sont PAS des mesures
+iPad : l'iPad se situe probablement entre 1x et 4x (HYPOTHÈSE).
+
+PISTE 14 — Index spatial des lignes HT par grille
+- Statut : À DÉCIDER — gain faible et hors geste ; variante plus simple
+  ci-dessous. Condition de reprise : mesure iPad de la durée d'une
+  reconstruction HT (pas de repère DIAG de durée aujourd'hui).
+- Constaté : le fichier compte 13 287 tronçons (50 sans géométrie, 13 237
+  LineString) et 107 447 points ; tensions 63 kV 6 113, 90 kV 2 650,
+  225 kV 2 959, 400 kV 1 077, autres 438. L'emprise de chaque tronçon est
+  calculée UNE fois au chargement (src/110:2114, `__npfBbox`). À chaque
+  reconstruction, la boucle (src/110:1742) ne parcourt donc pas les points :
+  elle fait 13 287 tests de tension (`String().toLowerCase()`) et d'emprise
+  (`roadOverlayBboxIntersectsBounds`, qui alloue un tableau par tronçon).
+  Seuls les tronçons retenus sont convertis par `L.geoJSON`.
+- Fréquence constatée : une reconstruction HT par geste manuel, par la
+  restitution prioritaire (`overlay-priority-ht`, src/080:1031), APRÈS les
+  tuiles et les VFR ; aucune pendant le geste (3 gestes -> 3 reconstructions).
+  En suivi GPS : seulement en sortie de couverture (`gps-follow-edge`).
+- Mesures par reconstruction (1x / 4x, en ms) :
+  | Vue      | Retenus | Boucle actuelle | Grille 0,25° | Regroupement + L.geoJSON + dessin |
+  | z8       |   972   |   3,3 / 12,4    |  1,7 / 10,9  |  7,9 / 47,0                     |
+  | z10      |   687   |   2,2 / 21,0    |  0,2 /  2,7  |  2,4 / 22,6                     |
+  | z12      |   242   |   2,9 / 18,1    |  0,1 /  0,9  |  1,4 /  8,2                     |
+  | z10 Paris|   939   |   3,9 / 17,4    |  0,7 /  3,6  |  5,5 / 26,7                     |
+  Variante sans grille (tension calculée une fois, emprise comparée
+  directement, second passage) : boucle 1,35 -> 0,21 ms (1x) et 22,7 -> 6,0 ms
+  (4x) à z10 ; 21,6 -> 1,3 ms (4x) à z12. Mêmes tronçons retenus dans tous les
+  cas (contrôlé).
+- Gain attendu sur iPad (HYPOTHÈSE) : 2 à 20 ms de moins par reconstruction,
+  soit environ 40 à 65 % d'une reconstruction HT à z10-z12 et presque rien à
+  z8. Ce travail a lieu une fois le fond affiché : il ne rend ni le pan ni le
+  pinch plus fluides, il raccourcit seulement la tâche qui suit le retour des
+  tuiles. La variante sans grille obtient l'essentiel du gain.
+- Mémoire : grille 0,25° = 1 107 cases, 18 928 entrées, construite en 10 ms
+  (37 ms en 4x) ; estimation 0,3 à 0,5 Mo, négligeable devant le GeoJSON
+  parsé. Variante sans grille : une propriété de plus par tronçon.
+- Hors ligne : aucun risque sur les données. Index recalculé en mémoire depuis
+  le GeoJSON déjà en cache ; rien de nouveau dans Cache Storage ni IndexedDB.
+  Risque de régression limité à `refreshVisibleHighVoltageLines` (swap
+  atomique v17.10 et jeton à préserver, section 11).
+- Effort : faible (une fonction de construction au chargement et une requête
+  dans la boucle, src/110 uniquement). Variante sans grille : encore plus
+  faible.
+- Reste à mesurer : durée réelle d'une reconstruction HT sur iPad (ajout d'une
+  durée au repère DIAG `lignes-ht rendu`, sur demande), ou profil Safari
+  distant pendant quelques gestes HT ON.
+
+PISTE 15 — Calque Routes : déjà découpé
+- Statut : NON IMPLÉMENTÉ — aucun découpage supplémentaire justifié.
+- Constaté : trois niveaux existent déjà : 53 parties départementales avec
+  emprise (manifeste) ; index par cases de 0,15° (v16.78,
+  `ROAD_OVERLAY_SPATIAL_CELL_DEG`, src/030:385) conservé dans Cache Storage
+  (`npf-road-overlay-spatial-v1`) avec 96 cases en RAM ; jeu de travail source
+  avec marge 0,35 à 0,50 et contrôle de couverture (src/120:1914-1960). Une
+  grille de plus n'apporterait rien à la sélection.
+- Le délai « moveend + 1 150 ms » (`ROAD_OVERLAY_MAP_CHANGE_DELAY_MS`) ne
+  concerne pas les gestes manuels : pendant la séquence prioritaire, ce chemin
+  est court-circuité (src/090:424) et Routes est reconstruit par
+  `overlay-priority-routes` (src/080:1068).
+- Non mesurable dans Chrome ici (aucun pack Routes dans un profil neuf).
+
+PISTE 16 — Reconstruction HT / Routes forcée après chaque geste
+- Statut : À DÉCIDER — touche le séquenceur VFR/HT/Routes (section 11), DIAG
+  requis.
+- Constaté : après chaque geste manuel, la restitution reconstruit HT sans
+  contrôle de couverture (src/110:1707) et Routes en mode forcé
+  (`forceRefresh`, src/120:2366 : `overlay-priority-routes` n'est pas
+  `map-change`), même si la vue reste dans la zone déjà rendue (marges HT 0,06
+  à 0,22, Routes 0,12 à 0,18). Pour Routes, cela veut dire vider toutes les
+  parties rendues et recréer tous les `L.geoJSON` et cartouches.
+- Gain possible : pour un petit déplacement, réafficher l'existant sans
+  reconstruction. C'est probablement le plus gros gain Routes, et il dépasse
+  celui de la piste 14 pour HT, mais il touche l'ordre de restitution.
+- Reste à mesurer : proportion des gestes qui restent dans la couverture, et
+  durée d'une reconstruction Routes sur iPad.
+
+PISTE 17 — Règle CSS « pointer-events: none » du pane HT sans effet
+- Statut : NON IMPLÉMENTÉ — constat seul.
+- Constaté : style.css vise `.leaflet-pane.highVoltageLinesPane` et
+  `.leaflet-high-voltage-lines-pane`, mais Leaflet nomme le pane
+  `leaflet-highVoltageLines-pane`. Le canvas HT garde `pointer-events: auto`
+  (mesuré dans Chrome). En v17.30, à z400, c'est lui qui recevait le toucher
+  au-dessus du fond (constaté dans Chrome) ; s'il était ajouté après le calque
+  SVG de `overlayPane`, il pouvait intercepter les appuis sur ses tracés
+  interactifs (tracé Feu -> PÉLIC) — HYPOTHÈSE non testée. En v17.31, sous
+  `overlayPane`, cette interception disparaît. Pas d'effet connu sur le
+  déplacement de la carte.
 
 POINT S — Révision sia.js déployée ≠ révision attendue par le SW
 - Statut : MESURÉ (test Chrome sur profil vierge, 23/09/2026) — TRAITÉ en
@@ -1370,6 +1474,81 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.31 — CANVAS HT DANS SON PANE (SECTION 16, PISTE 2)
+Date : 26/09/2026
+Base fonctionnelle : v17.30 (VALIDÉE sur iPad le 25/09/2026)
+
+DEMANDE UTILISATEUR
+- Chantier « fluidité carte avec Routes et Lignes HT ».
+- 1. Analyse seule (aucun fichier modifié) : index spatial HT par grille,
+  découpage Routes -> section 16, pistes 14 à 17.
+- 2. v17.31, piste 2 : créer le canvas HT dans `highVoltageLinesPane` pour
+  que le masquage pendant les gestes s'applique à HT comme à Routes. Défaut à
+  corriger ; l'utilisateur accepte que les HT disparaissent pendant les
+  déplacements et zooms. Signaler tout autre changement visible.
+- Rien n'est commité ni poussé : mesure de référence iPad v17.30 d'abord.
+
+MODIFICATION
+1. src/090_carte_init_gardes_zoom.js : `highVoltageLinesRenderer` reçoit
+   `pane: 'highVoltageLinesPane'`. Rien d'autre dans le code : le prémasquage
+   tactile, la séquence prioritaire et `setNpfHeavyOverlayPanesHidden`
+   visaient déjà ce pane, qui était vide.
+
+CHANGEMENTS VISIBLES
+- Pendant un pan ou un pinch manuel : HT disparaissent dès le premier
+  touchmove, comme Routes, puis reviennent après les tuiles et les VFR
+  (étape « HT prêt » de la séquence). Avant, HT restaient affichées, puis
+  étaient remplacées à la fin.
+- Au démarrage, ou après un geste, les HT restent masquées jusqu'à l'étape HT
+  de la séquence prioritaire (même règle que pour Routes).
+- Suivi GPS : aucun changement (les recentrages automatiques ne masquent pas
+  les panes, src/090, `gpsFollowPan`).
+- Ordre d'affichage : le canvas HT passe de `overlayPane` (z400) à z385.
+  HT sont donc désormais SOUS :
+  . les pistes NPF (`npfRunwaysPane`, z390), qu'elles recouvraient avant ;
+  . tout ce qui est dessiné dans `overlayPane` (z400) sans pane dédié :
+    contours départements (voile blanc 2 %) et communes, tracés Feu -> PÉLIC /
+    Base, circuits GAAR. Avant, l'ordre entre HT et ces tracés dépendait de
+    l'ordre de création des deux calques.
+  Inchangé : HT restent au-dessus du fond (z200) et sous Routes (z405-415),
+  zones SIA (z440), WP (z548), points VFR (z555), marqueurs (z600) et trafic.
+- Toucher : le canvas HT ne se trouve plus au-dessus des tracés de
+  `overlayPane` (section 16, piste 17).
+
+TESTS CHROME (A/B, v17.30 et v17.31 servies en local, profils neufs, HT ON,
+Lyon z10, vrais événements souris et tactiles CDP)
+- v17.30 : canvas HT dans `leaflet-overlay-pane` (z400). Pendant un glisser :
+  priorité active, canvas toujours visible (défaut reproduit). Capture : HT
+  dessinées pendant le geste.
+- v17.31 : canvas HT dans `leaflet-highVoltageLines-pane` (z385),
+  `overlayPane` vide. Pendant un glisser souris et pendant un touchmove : pane
+  en `display:none`, canvas invisible. Réaffichage environ 1,1 s après la fin
+  du geste avec le nouveau rendu (687 -> 645 -> 628 tronçons selon la vue).
+  Capture : aucune HT pendant le geste.
+- Une seule reconstruction HT par geste (3 gestes -> 3 appels
+  `overlay-priority-ht`).
+- Aucune exception de page dans les deux versions.
+
+VERSIONS
+- Index / Manifest / Script / Style : v17.31.
+- Service Worker : `sw-v17-31_ht_canvas_pane`.
+- SIA_DATA_REVISION inchangée ; sia.js strictement identique à v17.30.
+
+VALIDATION AVANT LIVRAISON
+- `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés.
+- Syntaxe Script / SIA / SW : OK. Script inline Index : OK. Manifest JSON : OK.
+- Cohérence versions/caches : OK. sia.js et moteur tuiles (src/100) identiques
+  à v17.30.
+
+À MESURER
+- Sur iPad : A/B `PAN CARTE SACCADÉ` et blocages JS, tout OFF / HT ON, v17.30
+  (référence de l'utilisateur) contre v17.31 ; HT masquées pendant pan / pinch
+  puis revenues ; pistes au-dessus des HT ; HT absentes à 50 NM et de retour
+  en dessous sans OFF/ON (section 11).
+
+--------------------------------------------------------------------------------
+
 
 VALIDATION v17.30 ET NAS 2026-09-24c
 Date : 25/09/2026

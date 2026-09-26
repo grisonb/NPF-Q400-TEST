@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.30';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.31';
 
 
 /*
@@ -9081,7 +9081,18 @@ function initMap() {
             runwayPane.style.pointerEvents = 'none';
         }
     }
-    highVoltageLinesRenderer = L.canvas ? L.canvas({ padding: 0.35 }) : null;
+    /*
+     * v17.31 — canvas HT dans son propre pane (journal, section 16, piste 2).
+     * Sans option `pane`, Leaflet plaçait ce canvas dans overlayPane (z400) :
+     * le masquage de highVoltageLinesPane pendant les gestes n'avait aucun
+     * effet sur HT. Le canvas passe ainsi en z385, sous les pistes (z390).
+     */
+    highVoltageLinesRenderer = L.canvas
+        ? L.canvas({
+            padding: 0.35,
+            pane: 'highVoltageLinesPane'
+        })
+        : null;
     npfRunwayRenderer = L.canvas
         ? L.canvas({
             padding: 0.35,
