@@ -11,6 +11,8 @@ async function loadCommunesData() {
 
     const parseAndStore = async (response) => {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        /* v17.32 — DIAG : sépare l'attente de la réponse de la lecture JSON. */
+        npfStartupDiagMark('communes_response', 'Communes — réponse reçue, lecture JSON');
         const payload = await response.json();
         if (!payload || !Array.isArray(payload.data)) {
             throw new Error("Format JSON invalide.");

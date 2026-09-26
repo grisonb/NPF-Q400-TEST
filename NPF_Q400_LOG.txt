@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 26/09/2026
-Version de travail actuelle : TEST v17.31
+Version de travail actuelle : TEST v17.32
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,11 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.32 — DIAG détaillé (aucun changement de comportement) : mémoire des
+  canvas, chaque geste, chaque restitution, reconstructions HT / Routes, cache
+  des cellules Routes, blocages JS > 100 ms à 50 ms avec contexte, chronologie
+  des tuiles au démarrage, gestes « manuels » sans suivi GPS (piste 19),
+  bouton « Repère », sessions séparées dans l'export ;
 - v17.31 — canvas HT créé dans son propre pane `highVoltageLinesPane` : le
   masquage pendant les gestes s'applique enfin à HT comme à Routes (section 16,
   piste 2).
@@ -295,6 +300,10 @@ NON IMPLÉMENTÉ / OUVERT :
   réaffichées après les tuiles et les VFR ; ordre d'affichage (HT sous les pistes
   et sous les tracés de overlayPane) ; A/B `PAN CARTE SACCADÉ` avec HT ON,
   v17.30 (mesure de référence de l'utilisateur) contre v17.31 ;
+- v17.32 : À MESURER sur iPad (mêmes 5 séries que la référence du 26/09/2026,
+  export DIAG complet, bouton « Repère » aux ralentissements ressentis). But :
+  expliquer le blocage de démarrage (section 16, point 7 de l'analyse v17.32)
+  et les ralentissements aléatoires avec Routes / HT ;
 
 IMPORTANT : cette liste de statut ne remplace pas les sections détaillées plus bas.
 Elle sert à savoir immédiatement ce qui est réellement codé, ce qui reste ouvert
@@ -302,37 +311,37 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.31
+Version : TEST v17.32
 Date : 26/09/2026
-Base : v17.30 (VALIDÉE sur iPad le 25/09/2026)
+Base : v17.31 (commitée, À MESURER sur iPad)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.31.txt
-2_Index_v17.31.txt
-3_Manifest_v17.31.txt
-4_Script_v17.31.txt
-5_SIA_v17.31.txt
-6_Style_v17.31.txt
-7_Sw_v17.31.txt
+1_Modifications_v17.32.txt
+2_Index_v17.32.txt
+3_Manifest_v17.32.txt
+4_Script_v17.32.txt
+5_SIA_v17.32.txt
+6_Style_v17.32.txt
+7_Sw_v17.32.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.31
-- Manifest : start_url = ./index.html?appv=v17.31
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.31
-- Style : NPF_STYLE_BUILD_VERSION = v17.31
-- Service Worker : `sw-v17-31_ht_canvas_pane`
+- Index : APP_VERSION = v17.32
+- Manifest : start_url = ./index.html?appv=v17.32
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.32
+- Style : NPF_STYLE_BUILD_VERSION = v17.32
+- Service Worker : `sw-v17-32_diag_detail`
 - SIA_DATA_REVISION (SW / Index) : 15.69-radio1026-1-maplite1 (inchangée)
-- sia.js v17.31 : strictement identique à v17.30.
+- sia.js v17.32 : strictement identique à v17.31.
 
 STATUT DE VALIDATION :
-- validation statique v17.31 effectuée avant livraison : Script/SIA/SW OK, script
+- validation statique v17.32 effectuée avant livraison : Script/SIA/SW OK, script
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
-- `sia.js` et moteur tuiles (src/100) identiques à v17.30 ;
-- tests Chrome A/B v17.30 / v17.31 (servies en local, profils neufs) : entrée
-  v17.31 ;
+- `sia.js` et moteur tuiles (src/100) identiques à v17.31 ;
+- tests Chrome A/B v17.31 / v17.32 (servies en local, profils neufs) : entrée
+  v17.32 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
-  sur iPad ; v17.29 et v17.31 À MESURER.
+  sur iPad ; v17.29, v17.31 et v17.32 À MESURER.
 
 
 2. PROTOCOLE DE TRAVAIL À RESPECTER
@@ -1097,8 +1106,13 @@ PISTE 18 — Garder les cellules Routes en mémoire
   filtré à chaque reconstruction.
 
 PISTE 19 — Gestes classés « autre » au lieu de « manuel » dans le DIAG
-- Statut : NON IMPLÉMENTÉ — défaut du DIAG uniquement, sans effet sur le
-  masquage (vérifié le 26/09/2026 avant le commit v17.31).
+- Statut : TRAITÉ en v17.32 (DIAG seulement) — À MESURER sur iPad. Historique :
+  NON IMPLÉMENTÉ -> demandé le 26/09/2026 -> v17.32 : « manuel » si un contact
+  sur la carte (hors contrôles, boutons, popups) précède le mouvement ou est
+  encore en cours, suivi GPS ou non. Vérifié dans Chrome : glissements souris et
+  tactile, molette = manual ; `panBy` programmé = autre.
+- Défaut du DIAG uniquement, sans effet sur le masquage (vérifié le 26/09/2026
+  avant le commit v17.31).
 - Constaté : `source: 'manual'` n'est donné que si
   `centerGpsFollowUserGestureActive` est vrai (src/340:3368) ; ce drapeau
   n'est posé que si le suivi GPS centré est actif (`markUserMapGesture`,
@@ -1638,6 +1652,139 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.32 — DIAG DÉTAILLÉ (AUCUN CHANGEMENT DE COMPORTEMENT)
+Date : 26/09/2026
+Base fonctionnelle : v17.31
+
+DEMANDE UTILISATEUR
+- Enrichir le DIAG uniquement, pour comprendre les lenteurs au démarrage et les
+  ralentissements aléatoires, plus marqués avec Routes et HT : mémoire des
+  calques, chaque geste, chaque restitution, détail des reconstructions Routes,
+  cache des cellules Routes, tout blocage JS > 100 ms avec contexte, chronologie
+  des tuiles au démarrage et fonction à l'origine du blocage de 0,3 à 1,4 s,
+  piste 19, bouton « Repère », sessions courante / précédente séparées.
+- Contraintes : pas de mesure qui force un calcul de mise en page pendant un
+  geste (piste 5), export de taille raisonnable, sia.js et moteur de tuiles
+  inchangés.
+
+PRINCIPE
+- Nouveau module `NPF_DIAG_DETAIL` dans src/010. Les fonctions suivies (53)
+  sont ENVELOPPÉES une fois au chargement du script : leur code n'est pas
+  modifié ; l'enveloppe mesure la durée synchrone (et totale si async) puis rend
+  le même résultat ou la même exception. Aucune fonction de src/100 n'est
+  enveloppée : les compteurs du moteur de tuiles sont seulement lus.
+- Aucune nouvelle mesure n'appelle getBoundingClientRect ; la mémoire des
+  canvas n'est relevée ni pendant un geste ni pendant une restitution.
+- La mesure historique des blocages à 1 Hz est conservée telle quelle (pour
+  comparer avec v17.30 / v17.31) ; la nouvelle mesure est une minuterie de
+  50 ms, active toute la session, suspendue en arrière-plan.
+
+MODIFICATIONS
+1. src/010 : module DIAG détaillé ; persistance d'un extrait compact avec la
+   session ; export restructuré ; bouton « Repère » ; chaque geste journalisé
+   (recordMapMotion) ; version v17.32.
+2. src/340 : l'enregistreur de gestes mémorise centre / zoom de départ, calcule
+   déplacement et zone, et classe « manuel » tout geste précédé d'un contact
+   sur la carte (piste 19).
+3. src/070 : repère « Communes — réponse reçue, lecture JSON » (sépare
+   l'attente de la réponse de la lecture JSON).
+4. style.css : bouton « Repère ».
+
+NOUVELLES SECTIONS DE L'EXPORT (session courante)
+- REPÈRES UTILISATEUR : heure exacte, ce qui était en cours, et blocages /
+  gestes à ±10 s.
+- BLOCAGES JS > 100 ms — chronologique, toute la session (120 derniers) : début
+  -> fin, durée, fonctions synchrones en cours, fonctions async ouvertes, étapes
+  du démarrage (avec leur heure) comprises dans le blocage, état (geste,
+  étape de restitution, file / lectures tuiles, SIA, Routes, HT).
+- DÉMARRAGE — FONCTIONS MESURÉES (30 premières s) : durée synchrone et totale.
+- DÉMARRAGE — CHRONOLOGIE TUILES : toutes les 100 ms, sur changement : file,
+  lectures actives, tuiles chargées / tuiles du niveau, accès IDB, hits RAM,
+  dernière étape.
+- ATTENTES SUR LES TUILES : chaque attente (première tuile, priorité fond de
+  carte, activation / fenêtre lourde HT / Routes / SIA, restitution), durée,
+  résultat, état des tuiles au début et à la fin (= la cause).
+- GESTES (tous, 150 derniers) : source, durée, événements, écart moyen / max,
+  déplacement en % de la vue (x+ = est, y+ = sud) ou zoom de -> à, vue finale
+  dans la zone déjà dessinée HT / Routes (oui / non / niveau 0 / masqué 50 NM).
+- RESTITUTIONS : durée totale et par étape (tuiles, VFR, HT, Routes), gestes de
+  la rafale, délai depuis la fin du geste, décision HT / Routes et raison,
+  terminée ou annulée pendant quelle étape.
+- RECONSTRUCTIONS HT : attente tuiles, travail, tronçons ; HT est toujours
+  reconstruit, avec « réutilisable = oui / non » (piste 16).
+- RECONSTRUCTIONS ROUTES : décision (reconstruit / réutilisé / niveau 0 /
+  reporté / interrompu) et raison (changement de niveau, sortie de couverture,
+  forcé par la restitution, sources non couvrantes) ; attente tuiles, vidage,
+  lecture (parties, cellules RAM / stockage, parties servies par le jeu de
+  travail), filtrage, tracés, cartouches, total.
+- CACHE CELLULES ROUTES : taille / limite, pic, lectures RAM trouvées /
+  absentes, insertions, évictions, vidages, mémoire estimée et pic.
+- MÉMOIRE DES CALQUES : pour chaque canvas pane, largeur × hauteur (densité
+  écran comprise), Mo estimés, pane masqué ; total ; pic de la session ; relevés
+  à +5, +10, +20 s, après chaque restitution terminée et toutes les 30 s
+  (relevés identiques successifs regroupés).
+- SESSION PRÉCÉDENTE RESTAURÉE : déplacée EN FIN de fichier, sous un bandeau
+  explicite, avec ses propres totaux, repères, blocages, gestes, restitutions et
+  reconstructions.
+- Section « BLOCAGES JAVASCRIPT » historique renommée « mesure historique à
+  1 Hz, 20 plus longs ».
+
+TESTS CHROME (v17.31 et v17.32 servies en local, profils neufs, densité ×2,
+pack Routes synthétique importé par importRoadOverlayFile, HT + Routes ON,
+Lyon z12 ; petit glissement, grand glissement, glissement tactile, panBy
+programmé, molette 12 -> 11 -> 12)
+- Comportement IDENTIQUE v17.31 / v17.32 : mêmes centres et zooms, mêmes
+  tronçons HT et segments Routes à chaque étape, même masquage des panes
+  pendant les glissements, mêmes nombres de reconstructions (6 HT, 6 Routes).
+- 53 fonctions suivies, 0 absente ; aucune exception de page, aucune erreur
+  console, dans les deux versions.
+- Classification : glissements souris / tactile et molette = manual ; panBy et
+  setView programmés = autre.
+- Petit glissement (-5 % / -4 %) : vue finale dans la zone HT et Routes -> HT
+  « réutilisable = oui », Routes « reconstruit (forcé) » : la piste 16 est
+  désormais mesurable directement.
+- Blocage synthétique de 300 ms : relevé ≈ 296 ms ; au démarrage Chrome, un
+  blocage de 581 ms couvre « Communes — données prêtes » -> « Démarrage
+  principal prêt » (drawPermanentAirportMarkers 84 ms, map.invalidateSize
+  29 ms…).
+- Bouton « Repère » : vrai appui -> « Repère ✓ 1 », repère présent dans
+  l'export avec son contexte.
+- Mémoire canvas (Chrome, densité ×2, 1180 × 820) : pic 215,6 Mo = 2 canvas
+  Routes 65,1 Mo + HT 42,7 Mo + pistes 42,7 Mo (piste 3).
+- Export : 35 à 40 Ko pour ~1 min et 7 gestes ; extrait persisté 23 Ko ;
+  après rechargement, la session précédente apparaît en fin de fichier.
+
+PREMIER CONSTAT POUR LE POINT 7 (à confirmer par le DIAG iPad v17.32)
+- Dans les 5 DIAG iPad v17.30 du 26/09/2026, de « Communes — données prêtes »
+  à « Position GPS mémorisée — terminé », aucune étape ne peut s'intercaler :
+  c'est la suite SYNCHRONE d'initializeApp après `await loadCommunesData()`
+  (0,54 à 1,0 s selon la série) : index des communes (0,13 à 0,37 s),
+  setupEventListeners + map.invalidateSize (0,14 à 0,40 s), PÉLIC (0,06 à
+  0,10 s), puis core-ready et ses suites (0,02 à 0,19 s). Le moniteur à 1 Hz
+  n'en voit qu'une partie (314 à 773 ms) ; en série 5, le blocage de 1 353 ms
+  commence dès la fin de la lecture de communes.json. Statut : À MESURER
+  (v17.32 donne les durées par fonction et le début exact du blocage).
+
+VERSIONS
+- Index / Manifest / Script / Style : v17.32.
+- Service Worker : `sw-v17-32_diag_detail`.
+- SIA_DATA_REVISION inchangée ; sia.js strictement identique à v17.31.
+
+VALIDATION AVANT LIVRAISON
+- `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés.
+- Syntaxe Script / SIA / SW : OK. Script inline Index : OK. Manifest JSON : OK.
+- Cohérence versions/caches : OK. sia.js et moteur tuiles (src/100) identiques
+  à v17.31.
+
+À MESURER
+- Sur iPad, mêmes 5 séries que la référence v17.30 (Nîmes, mode avion), export
+  DIAG après chaque série ; appuyer sur « Repère » (panneau DIAG) au moment
+  d'un ralentissement ressenti.
+- Vérifier que le DIAG ne ralentit pas la carte : écarts des glissements
+  comparables à la référence v17.30 (série 1 et 5 sans calque).
+
+--------------------------------------------------------------------------------
 
 VERSION TEST v17.31 — CANVAS HT DANS SON PANE (SECTION 16, PISTE 2)
 Date : 26/09/2026

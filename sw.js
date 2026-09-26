@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v17-31_ht_canvas_pane';
-const APP_VERSION = 'v17.31';
+const SW_VERSION = 'sw-v17-32_diag_detail';
+const APP_VERSION = 'v17.32';
 const SIA_DATA_REVISION = '15.69-radio1026-1-maplite1';
 const SIA_DATA_URL = './sia.js';
 const SIA_DATA_CACHE = `npf-q400-sia-data-${SIA_DATA_REVISION}`;

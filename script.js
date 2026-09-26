@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.31';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.32';
 
 
 /*
@@ -235,6 +235,9 @@ const NPF_STARTUP_DIAGNOSTIC = (() => {
         bucket.gap250Count = Number(bucket.gap250Count || 0) + gap250Count;
         if (slow) bucket.slow += 1;
 
+        /* v17.32 — chaque geste est journalisé, pas seulement les saccadés. */
+        try { NPF_DIAG_DETAIL.recordGesture(source, safeMetrics); } catch (_) {}
+
         if (slow) {
             return addSiaInteraction(
                 'PAN CARTE SACCADÉ',
@@ -306,7 +309,9 @@ const NPF_STARTUP_DIAGNOSTIC = (() => {
         layerSummary: state.layerSummary,
         interactions: state.siaInteractions.slice(-80),
         stalls: state.stalls.slice(0, 20),
-        longTasks: state.longTasks.slice(0, 20)
+        longTasks: state.longTasks.slice(0, 20),
+        /* v17.32 — extrait du DIAG détaillé, restitué dans l'export suivant. */
+        detail: npfDiagDetailPersistSnapshot()
     });
 
     const persist = () => {
@@ -425,6 +430,1190 @@ function npfDiagGpsRecenter(reason = '', centerShiftM = 0) {
 }
 function npfDiagPersist() {
     try { return NPF_STARTUP_DIAGNOSTIC.persist(); } catch (_) { return null; }
+}
+
+/*
+ * v17.32 — DIAG DÉTAILLÉ (lecture seule, aucun changement de comportement).
+ *
+ * - Les fonctions suivies sont enveloppées ici, une seule fois, au chargement du
+ *   script : leur code n'est pas modifié, l'enveloppe mesure seulement la durée
+ *   synchrone (et la durée totale si la fonction est async), puis rend exactement
+ *   le même résultat ou la même exception.
+ * - Aucune fonction du moteur de tuiles (src/100) n'est enveloppée : ses compteurs
+ *   sont seulement lus.
+ * - Aucune mesure ne force un calcul de mise en page (pas de
+ *   getBoundingClientRect) ; la mémoire des canvas n'est pas relevée pendant un
+ *   geste ni pendant une restitution.
+ * - Blocages JS : minuterie de 50 ms (en plus de la mesure historique à 1 Hz,
+ *   conservée telle quelle pour comparer avec les versions précédentes).
+ */
+const NPF_DIAG_DETAIL = (() => {
+    const now = () => NPF_STARTUP_DIAGNOSTIC.now();
+    const LIMITS = {
+        activities: 400,
+        blocks: 120,
+        gestures: 150,
+        restores: 60,
+        routes: 60,
+        ht: 60,
+        memory: 60,
+        startupCalls: 120,
+        tileTimeline: 150,
+        waits: 60,
+        markers: 40
+    };
+    const STARTUP_WINDOW_MS = 30000;
+    const BLOCK_TICK_MS = 50;
+    const BLOCK_MIN_MS = 100;
+
+    const state = {
+        wrapped: [],
+        missing: [],
+        activities: [],
+        blocks: [],
+        blockCount: 0,
+        blockMaxMs: 0,
+        gestures: [],
+        gestureCount: 0,
+        restores: [],
+        restoreCount: 0,
+        routesRebuilds: [],
+        routesCount: 0,
+        htRebuilds: [],
+        htCount: 0,
+        memorySamples: [],
+        memoryPeak: null,
+        cellCache: {
+            insertions: 0, hits: 0, misses: 0, evictions: 0, clears: 0,
+            estimatedBytes: 0, peakBytes: 0, peakCells: 0
+        },
+        cellBytesByKey: new Map(),
+        startupCalls: [],
+        tileTimeline: [],
+        waits: [],
+        markers: [],
+        userContactActive: false,
+        userContactLastAt: -Infinity,
+        motionActive: false,
+        lastMoveEndAt: 0,
+        gesturesSinceRestore: 0,
+        currentRestore: null,
+        currentRoutes: null,
+        htRenderedZoomBand: null,
+        lastWaitByLabel: Object.create(null)
+    };
+
+    const safe = (callback, fallback = undefined) => {
+        try { return callback(); } catch (_) { return fallback; }
+    };
+    const pushCapped = (list, item, limit) => {
+        list.push(item);
+        if (list.length > limit) list.splice(0, list.length - limit);
+    };
+    const round = value => Math.round(Number(value) || 0);
+    const wallAt = t => (
+        NPF_STARTUP_DIAGNOSTIC.state.monitorStartedWallAt
+        + (Number(t) - NPF_STARTUP_DIAGNOSTIC.state.monitorStartedAt)
+    );
+
+    /* ---------- État courant lu sans calcul de mise en page ---------- */
+
+    const getTileState = () => safe(() => {
+        let current = 0;
+        let loaded = 0;
+        const tiles = baseTileLayer && baseTileLayer._tiles ? baseTileLayer._tiles : {};
+        for (const key in tiles) {
+            const tile = tiles[key];
+            if (!tile || !tile.current) continue;
+            current += 1;
+            if (tile.loaded) loaded += 1;
+        }
+        return {
+            queued: Number(directOfflineNpfReadQueue?.length || 0),
+            active: Number(directOfflineNpfActiveReads || 0),
+            loaded,
+            current,
+            idb: Number(directOfflineNpfIndexedDbLookupCount || 0),
+            ram: Number(directOfflineNpfMainRamHitCount || 0)
+        };
+    }, { queued: 0, active: 0, loaded: 0, current: 0, idb: 0, ram: 0 });
+
+    const formatTileState = tileState => (
+        `file ${tileState.queued} / actives ${tileState.active} / tuiles ${tileState.loaded}/${tileState.current}`
+    );
+
+    const getHtZoomBand = zoom => {
+        const z = Number(zoom);
+        if (!Number.isFinite(z)) return null;
+        if (z <= 8) return '≤8';
+        if (z <= 9) return '9';
+        if (z <= 10) return '10';
+        return '≥11';
+    };
+
+    const getHtZoneState = () => safe(() => {
+        if (!showHighVoltageLinesLayer) return '—';
+        if (!isHighVoltageLayerEffectiveAtCurrentScale()) return 'masqué 50 NM';
+        if (!highVoltageLinesRenderedGeoJsonLayer) return 'non dessiné';
+        const sameBand = state.htRenderedZoomBand === getHtZoomBand(map?.getZoom?.());
+        return isHighVoltageCoverageValidForCurrentView() && sameBand ? 'oui' : 'non';
+    }, '?');
+
+    const getRoutesZoneState = () => safe(() => {
+        if (!showRoadOverlayLayer) return '—';
+        if (getRoadOverlayZoomTier() === 0) return 'niveau 0';
+        return isRoadOverlayCoverageValidForCurrentView() ? 'oui' : 'non';
+    }, '?');
+
+    const getRestoreStageName = ctx => {
+        if (!ctx) return '—';
+        if (ctx.tTiles == null) return 'tuiles';
+        if (ctx.tRoutesStart != null || ctx.tHt != null) return 'Routes';
+        if (ctx.tHtStart != null) return 'HT';
+        return 'VFR';
+    };
+
+    const describeRunningState = () => {
+        const tileState = getTileState();
+        return [
+            `geste=${state.motionActive || state.userContactActive ? 'oui' : 'non'}`,
+            `restitution=${getRestoreStageName(state.currentRestore)}`,
+            `tuiles q${tileState.queued}/a${tileState.active}`,
+            `SIA=${safe(() => (siaRefreshInProgress ? 'en cours' : '—'), '?')}`,
+            `Routes=${safe(() => (isRoadOverlayLoading ? 'en cours' : '—'), '?')}`,
+            `HT=${state.htInProgress ? 'en cours' : '—'}`
+        ].join(' · ');
+    };
+
+    const describeWindow = (start, end) => {
+        const syncItems = state.activities
+            .filter(item => item.t0 < end && item.t1 > start && item.t1 - item.t0 >= 1)
+            .sort((a, b) => (b.t1 - b.t0) - (a.t1 - a.t0))
+            .slice(0, 4);
+        const sync = syncItems.map(item => `${item.name} ${round(item.t1 - item.t0)} ms`);
+        const syncNames = new Set(syncItems.map(item => item.name));
+        const asyncNames = [];
+        state.activities.forEach(item => {
+            if (!item.async || item.t0 >= end) return;
+            if (item.tEnd !== null && item.tEnd < start) return;
+            if (syncNames.has(item.name) || asyncNames.includes(item.name)) return;
+            asyncNames.push(item.name);
+        });
+        const marks = NPF_STARTUP_DIAGNOSTIC.state.marks
+            .filter(entry => entry.t >= start - 20 && entry.t <= end + 50)
+            .slice(0, 8)
+            .map(entry => `${entry.label} (+${(entry.t / 1000).toFixed(2)} s)`);
+        return {
+            sync: sync.join(', '),
+            async: asyncNames.slice(-5).join(', '),
+            marks: marks.join(', '),
+            state: describeRunningState()
+        };
+    };
+
+    /* ---------- Activités (fonctions enveloppées) ---------- */
+
+    const recordActivity = (name, t0, t1, isAsync, options) => {
+        const entry = { name, t0, t1, tEnd: isAsync ? null : t1, async: !!isAsync };
+        if (!options.noActivity) pushCapped(state.activities, entry, LIMITS.activities);
+        if (!options.noStartup && t0 <= STARTUP_WINDOW_MS && (isAsync || t1 - t0 >= 2)) {
+            pushCapped(state.startupCalls, entry, LIMITS.startupCalls);
+        }
+        return entry;
+    };
+
+    const wrapGlobal = (name, options = {}) => {
+        const original = safe(() => window[name]);
+        if (typeof original !== 'function') {
+            state.missing.push(name);
+            return false;
+        }
+        if (original.__npfDiagWrapped) return true;
+        const label = options.label || name;
+        const wrapped = function (...args) {
+            const before = options.before ? safe(() => options.before(args)) : undefined;
+            const t0 = now();
+            let result;
+            try {
+                result = original.apply(this, args);
+            } catch (error) {
+                const t1 = now();
+                recordActivity(label, t0, t1, false, options);
+                if (options.after) safe(() => options.after({ args, before, t0, t1, tEnd: t1, error }));
+                throw error;
+            }
+            const t1 = now();
+            const isAsync = !!(result && typeof result.then === 'function');
+            const activity = recordActivity(label, t0, t1, isAsync, options);
+            if (isAsync) {
+                result.then(
+                    value => {
+                        activity.tEnd = now();
+                        if (options.after) safe(() => options.after({ args, before, t0, t1, tEnd: activity.tEnd, value }));
+                    },
+                    error => {
+                        activity.tEnd = now();
+                        activity.error = true;
+                        if (options.after) safe(() => options.after({ args, before, t0, t1, tEnd: activity.tEnd, error }));
+                    }
+                );
+            } else if (options.after) {
+                safe(() => options.after({ args, before, t0, t1, tEnd: t1, value: result }));
+            }
+            return result;
+        };
+        wrapped.__npfDiagWrapped = true;
+        try { window[name] = wrapped; } catch (_) {}
+        if (window[name] !== wrapped) {
+            state.missing.push(name);
+            return false;
+        }
+        state.wrapped.push(name);
+        return true;
+    };
+
+    /* ---------- Blocages JS > 100 ms (minuterie 50 ms) ---------- */
+
+    const recordBlock = (start, end, blockedMs) => {
+        const context = describeWindow(start, end);
+        state.blockCount += 1;
+        state.blockMaxMs = Math.max(state.blockMaxMs, blockedMs);
+        pushCapped(state.blocks, {
+            t: round(start),
+            end: round(end),
+            at: wallAt(start),
+            ms: round(blockedMs),
+            ...context
+        }, LIMITS.blocks);
+    };
+
+    const startBlockMonitor = () => {
+        let lastTick = now();
+        document.addEventListener('visibilitychange', () => {
+            lastTick = now();
+        }, { passive: true });
+        const tick = () => {
+            const current = now();
+            const blockedMs = current - lastTick - BLOCK_TICK_MS;
+            /* Au-delà de 20 s : suspension iPadOS / arrière-plan, pas un blocage. */
+            if (
+                document.visibilityState !== 'hidden'
+                && blockedMs >= BLOCK_MIN_MS
+                && blockedMs < 20000
+            ) {
+                safe(() => recordBlock(lastTick, current, blockedMs));
+            }
+            lastTick = current;
+            setTimeout(tick, BLOCK_TICK_MS);
+        };
+        setTimeout(tick, BLOCK_TICK_MS);
+    };
+
+    /* ---------- Mémoire des canvas ---------- */
+
+    const sampleCanvasMemory = (reason = 'intervalle') => {
+        const canvases = safe(() => document.getElementsByTagName('canvas'), []);
+        const items = [];
+        let total = 0;
+        for (let index = 0; index < canvases.length; index += 1) {
+            const canvas = canvases[index];
+            const width = Number(canvas.width) || 0;
+            const height = Number(canvas.height) || 0;
+            if (!width || !height) continue;
+            const bytes = width * height * 4;
+            total += bytes;
+            const pane = safe(() => canvas.closest('.leaflet-pane'), null);
+            const paneName = pane
+                ? ((String(pane.className).match(/leaflet-([A-Za-z0-9]+)-pane/) || [])[1] || 'pane')
+                : (canvas.id || 'hors carte');
+            items.push({
+                pane: paneName,
+                w: width,
+                h: height,
+                mb: Math.round(bytes / 104857.6) / 10,
+                hidden: !!(pane && pane.style && pane.style.display === 'none')
+            });
+        }
+        items.sort((a, b) => b.mb - a.mb);
+        const sample = {
+            t: round(now()),
+            at: Date.now(),
+            reason,
+            totalMb: Math.round(total / 104857.6) / 10,
+            count: items.length,
+            items
+        };
+        pushCapped(state.memorySamples, {
+            ...sample,
+            items: items.slice(0, 4)
+        }, LIMITS.memory);
+        if (!state.memoryPeak || sample.totalMb > state.memoryPeak.totalMb) {
+            state.memoryPeak = sample;
+        }
+        return sample;
+    };
+
+    const scheduleCanvasMemorySample = (reason, delayMs = 0, attempt = 0) => {
+        setTimeout(() => {
+            if ((state.motionActive || state.userContactActive || state.currentRestore) && attempt < 5) {
+                scheduleCanvasMemorySample(reason, 2000, attempt + 1);
+                return;
+            }
+            safe(() => sampleCanvasMemory(reason));
+        }, delayMs);
+    };
+
+    /* ---------- Chronologie tuiles au démarrage ---------- */
+
+    const startTileTimeline = () => {
+        let last = '';
+        let lastRecordedAt = -Infinity;
+        const tick = () => {
+            const t = now();
+            const baseLoaded = NPF_STARTUP_DIAGNOSTIC.state.marks.find(entry => entry.key === 'base_tiles_loaded');
+            if (t > STARTUP_WINDOW_MS || (baseLoaded && t > baseLoaded.t + 3000)) return;
+            const tileState = getTileState();
+            const signature = [
+                tileState.queued, tileState.active, tileState.loaded, tileState.current
+            ].join('|');
+            if (signature !== last || t - lastRecordedAt >= 1000) {
+                last = signature;
+                lastRecordedAt = t;
+                const marks = NPF_STARTUP_DIAGNOSTIC.state.marks;
+                pushCapped(state.tileTimeline, {
+                    t: round(t),
+                    ...tileState,
+                    phase: marks.length ? marks[marks.length - 1].label : '—'
+                }, LIMITS.tileTimeline);
+            }
+            setTimeout(tick, 100);
+        };
+        setTimeout(tick, 100);
+    };
+
+    const recordWait = (label, info) => {
+        const ms = info.tEnd - info.t0;
+        state.lastWaitByLabel[label] = { t0: info.t0, tEnd: info.tEnd, ok: info.value !== false };
+        if (!(info.t0 <= STARTUP_WINDOW_MS || ms >= 1000)) return;
+        const endState = getTileState();
+        /* Attente imbriquée (calque lourd -> activation) : l'attente englobante
+         * remplace l'attente interne du même calque. */
+        const last = state.waits[state.waits.length - 1];
+        if (last && last.label === label && Math.abs(last.t - info.t0) < 3) state.waits.pop();
+        pushCapped(state.waits, {
+            t: round(info.t0),
+            label,
+            ms: round(ms),
+            result: info.error ? 'erreur' : (info.value === false ? 'annulée ou délai dépassé' : 'prête'),
+            start: info.before ? formatTileState(info.before) : '—',
+            end: formatTileState(endState)
+        }, LIMITS.waits);
+    };
+
+    /* ---------- Gestes ---------- */
+
+    const recordGesture = (source, metrics) => {
+        const safeMetrics = metrics || {};
+        const durationMs = round(safeMetrics.dureeMs);
+        state.gestureCount += 1;
+        state.gesturesSinceRestore += 1;
+        pushCapped(state.gestures, {
+            t: round(now() - durationMs),
+            at: Date.now() - durationMs,
+            source: String(source || 'autre'),
+            ms: durationMs,
+            ev: round(safeMetrics.moveEvents),
+            gapAvg: round(safeMetrics.gapMoyMs),
+            gapMax: round(safeMetrics.gapMaxMs),
+            g100: round(safeMetrics.gaps100),
+            dx: safeMetrics.deplXPct,
+            dy: safeMetrics.deplYPct,
+            zFrom: safeMetrics.zoomDe,
+            zTo: safeMetrics.zoomA,
+            ht: safeMetrics.htZone || '—',
+            routes: safeMetrics.routesZone || '—'
+        }, LIMITS.gestures);
+    };
+
+    const getMapMotionExtraMetrics = sample => {
+        const out = {};
+        safe(() => {
+            const zoomFrom = Number(sample?.startZoom);
+            const zoomTo = Number(map.getZoom());
+            out.zoomDe = zoomFrom;
+            out.zoomA = zoomTo;
+            if (sample?.startCenter && zoomFrom === zoomTo) {
+                const size = map.getSize();
+                const point = map.latLngToContainerPoint(sample.startCenter);
+                if (size.x > 0 && size.y > 0) {
+                    out.deplXPct = Math.round((size.x / 2 - point.x) / size.x * 100);
+                    out.deplYPct = Math.round((size.y / 2 - point.y) / size.y * 100);
+                }
+            }
+        });
+        out.htZone = getHtZoneState();
+        out.routesZone = getRoutesZoneState();
+        return out;
+    };
+
+    /* v17.32 — piste 19 : un geste est « manuel » dès qu'un contact utilisateur
+     * sur la carte le précède, que le suivi GPS soit actif ou non. */
+    const isUserMapContactRecent = () => (
+        state.userContactActive || now() - state.userContactLastAt < 1200
+    );
+
+    const installMapHooks = () => {
+        if (!map || map.__npfDiagDetailBound) return;
+        map.__npfDiagDetailBound = true;
+
+        map.on('movestart', () => { state.motionActive = true; });
+        map.on('moveend', () => {
+            state.motionActive = false;
+            state.lastMoveEndAt = now();
+        });
+
+        const container = safe(() => map.getContainer(), null);
+        if (container) {
+            const ignore = event => safe(() => !!event?.target?.closest?.(
+                '.leaflet-control, .leaflet-popup, button, input, textarea, select, a'
+            ), false);
+            ['pointerdown', 'touchstart', 'mousedown'].forEach(name => {
+                container.addEventListener(name, event => {
+                    if (ignore(event)) return;
+                    state.userContactActive = true;
+                    state.userContactLastAt = now();
+                }, { passive: true, capture: true });
+            });
+            container.addEventListener('wheel', event => {
+                if (ignore(event)) return;
+                state.userContactLastAt = now();
+            }, { passive: true, capture: true });
+            ['pointerup', 'pointercancel', 'touchend', 'touchcancel', 'mouseup'].forEach(name => {
+                container.addEventListener(name, () => {
+                    if (!state.userContactActive) return;
+                    state.userContactActive = false;
+                    state.userContactLastAt = now();
+                }, { passive: true, capture: true });
+            });
+        }
+
+        const originalInvalidateSize = map.invalidateSize;
+        if (typeof originalInvalidateSize === 'function') {
+            map.invalidateSize = function (...args) {
+                const t0 = now();
+                try {
+                    return originalInvalidateSize.apply(this, args);
+                } finally {
+                    recordActivity('map.invalidateSize', t0, now(), false, {});
+                }
+            };
+        }
+    };
+
+    /* ---------- Restitutions ---------- */
+
+    const finishRestore = (ctx, info) => {
+        ctx.tEnd = info.tEnd;
+        const cancelled = safe(() => (
+            ctx.token !== npfMapOverlayPriorityToken || npfMapOverlayPriorityActive
+        ), false);
+        /* Fin VFR = début HT (ou Routes) ; fin HT = début Routes. */
+        let vfrMs = null;
+        let htMs = null;
+        let routesMs = null;
+        if (ctx.tTiles != null) {
+            const vfrEnd = ctx.tHtStart ?? ctx.tRoutesStart ?? ctx.tVfr ?? ctx.tEnd;
+            const htEnd = ctx.tHt ?? ctx.tRoutesStart ?? (ctx.tHtStart != null ? ctx.tEnd : vfrEnd);
+            vfrMs = round(vfrEnd - ctx.tTiles);
+            htMs = round(htEnd - vfrEnd);
+            routesMs = round(ctx.tEnd - htEnd);
+        }
+        if (!ctx.routes && safe(() => showRoadOverlayLayer && getRoadOverlayZoomTier() === 0, false)) {
+            ctx.routes = 'niveau 0';
+        }
+        const entry = {
+            t: round(ctx.t0),
+            at: wallAt(ctx.t0),
+            reason: String(ctx.reason || ''),
+            gestures: ctx.gestures,
+            sinceMoveEnd: ctx.sinceMoveEnd,
+            totalMs: round(ctx.tEnd - ctx.t0),
+            tilesMs: ctx.tTiles != null ? round(ctx.tTiles - ctx.t0) : round(ctx.tEnd - ctx.t0),
+            vfrMs,
+            htMs,
+            routesMs,
+            ht: ctx.ht || (safe(() => showHighVoltageLinesLayer, false) ? '—' : 'OFF'),
+            routes: ctx.routes || (safe(() => showRoadOverlayLayer, false) ? '—' : 'OFF'),
+            outcome: cancelled
+                ? `annulée pendant ${getRestoreStageName(ctx)}`
+                : 'terminée'
+        };
+        state.restoreCount += 1;
+        pushCapped(state.restores, entry, LIMITS.restores);
+        if (state.currentRestore === ctx) state.currentRestore = null;
+        if (!cancelled) scheduleCanvasMemorySample('après restitution', 300);
+    };
+
+    const restoreOf = token => {
+        const ctx = state.currentRestore;
+        return ctx && ctx.token === token ? ctx : null;
+    };
+
+    /* ---------- HT ---------- */
+
+    const finishHt = info => {
+        const before = info.before || {};
+        state.htInProgress = false;
+        const layerAfter = safe(() => highVoltageLinesRenderedGeoJsonLayer, null);
+        const source = String(info.args?.[0] || 'refresh');
+        let decision;
+        if (!safe(() => showHighVoltageLinesLayer, false)) decision = 'OFF';
+        else if (safe(() => highVoltageLinesScaleSuppressed, false)) decision = 'masqué 50 NM';
+        else if (layerAfter !== before.layer) decision = layerAfter ? 'reconstruit' : 'vidé';
+        else if (safe(() => highVoltageLinesRefreshToken, 0) !== before.token + 1) decision = 'interrompu';
+        else decision = 'inchangé';
+
+        if (decision === 'reconstruit') state.htRenderedZoomBand = before.band;
+        if (decision === 'OFF' || (decision === 'inchangé' && info.tEnd - info.t0 < 1)) return;
+
+        const wait = state.lastWaitByLabel.HT;
+        const waitMs = wait && wait.t0 >= info.t0 ? round(wait.tEnd - wait.t0) : 0;
+        const workMs = wait && wait.t0 >= info.t0 ? round(info.tEnd - wait.tEnd) : round(info.tEnd - info.t0);
+        const reason = decision === 'reconstruit'
+            ? `toujours reconstruit · réutilisable=${before.reusable ? 'oui' : 'non'}`
+            : '';
+        state.htCount += 1;
+        pushCapped(state.htRebuilds, {
+            t: round(info.t0),
+            at: wallAt(info.t0),
+            source,
+            zoom: before.zoom,
+            decision,
+            reason,
+            waitMs,
+            workMs,
+            totalMs: round(info.tEnd - info.t0),
+            rendered: safe(() => Number(highVoltageLinesRenderedFeatureCount || 0), 0)
+        }, LIMITS.ht);
+
+        const ctx = state.currentRestore;
+        if (ctx && source.startsWith('overlay-priority')) {
+            ctx.tHt = info.tEnd;
+            ctx.ht = decision + (reason ? ` (${reason})` : '');
+        }
+    };
+
+    /* ---------- Routes ---------- */
+
+    const startRoutes = args => {
+        const ctx = {
+            source: String(args?.[0] || 'refresh'),
+            t0: now(),
+            token: safe(() => roadOverlayRefreshToken, 0),
+            tier: safe(() => getRoadOverlayZoomTier(), null),
+            loadedTier: safe(() => roadOverlayLoadedZoomTier, null),
+            coverageValid: safe(() => isRoadOverlayCoverageValidForCurrentView(), false),
+            hadParts: safe(() => loadedRoadOverlayParts.size > 0, false),
+            readMs: 0, readParts: 0, worksetParts: 0, ram: 0, storage: 0, cells: 0,
+            filterMs: 0, buildMs: 0, labelsMs: 0, clearMs: 0, loadParts: 0, cleared: false
+        };
+        state.currentRoutes = ctx;
+        const restore = state.currentRestore;
+        if (restore && ctx.source.startsWith('overlay-priority') && restore.tRoutesStart == null) {
+            restore.tRoutesStart = ctx.t0;
+        }
+        return ctx;
+    };
+
+    const finishRoutes = info => {
+        const ctx = info.before;
+        if (!ctx) return;
+        const t1 = info.tEnd;
+        ctx.tEnd = t1;
+        const interrupted = safe(() => roadOverlayRefreshToken, 0) !== ctx.token + 1;
+        const wait = state.lastWaitByLabel.Routes;
+        const waitMs = wait && wait.t0 >= ctx.t0 ? round(wait.tEnd - wait.t0) : 0;
+        const tileWaitFailed = !!(wait && wait.t0 >= ctx.t0 && !wait.ok);
+        let decision;
+        let reason = '';
+        if (!safe(() => showRoadOverlayLayer, false)) decision = 'OFF';
+        else if (ctx.tier === 0) decision = ctx.hadParts || ctx.cleared ? 'niveau 0 : vidé' : 'niveau 0';
+        else if (ctx.loadParts > 0 || ctx.cleared) {
+            decision = interrupted ? 'reconstruction interrompue' : 'reconstruit';
+            if (ctx.tier !== ctx.loadedTier) reason = 'changement de niveau';
+            else if (!ctx.coverageValid) reason = 'sortie de couverture';
+            else if (ctx.source !== 'map-change') reason = `forcé (${ctx.source})`;
+            else reason = 'sources non couvrantes';
+        } else if (tileWaitFailed) decision = 'reporté (tuiles)';
+        else if (interrupted) decision = 'interrompu';
+        else decision = ctx.labelsMs > 0 ? 'réutilisé (cartouches refaits)' : 'réutilisé (couverture valide)';
+
+        if (state.currentRoutes === ctx) state.currentRoutes = null;
+        if (decision === 'OFF') return;
+        if (decision === 'niveau 0' && t1 - ctx.t0 < 1) return;
+
+        state.routesCount += 1;
+        pushCapped(state.routesRebuilds, {
+            t: round(ctx.t0),
+            at: wallAt(ctx.t0),
+            source: ctx.source,
+            tier: ctx.tier,
+            decision,
+            reason,
+            waitMs,
+            readMs: round(ctx.readMs),
+            readParts: ctx.readParts,
+            worksetParts: ctx.worksetParts,
+            cells: ctx.cells,
+            ram: ctx.ram,
+            storage: ctx.storage,
+            filterMs: round(ctx.filterMs),
+            buildMs: round(ctx.buildMs),
+            labelsMs: round(ctx.labelsMs),
+            clearMs: round(ctx.clearMs),
+            totalMs: round(t1 - ctx.t0),
+            rendered: safe(() => getNpfRenderedRoadFeatureCount(), 0)
+        }, LIMITS.routes);
+
+        const restore = state.currentRestore;
+        if (restore && ctx.source.startsWith('overlay-priority')) {
+            restore.routes = decision + (reason ? ` (${reason})` : '');
+        }
+    };
+
+    /* ---------- Cache des cellules Routes ---------- */
+
+    const estimateCellBytes = payload => {
+        let bytes = 200;
+        const entries = Array.isArray(payload?.e) ? payload.e : [];
+        for (let index = 0; index < entries.length; index += 1) {
+            const geometry = entries[index]?.[2]?.geometry;
+            const coordinates = geometry?.coordinates;
+            let points = 0;
+            let lines = 0;
+            if (geometry?.type === 'LineString' && Array.isArray(coordinates)) {
+                points = coordinates.length;
+                lines = 1;
+            } else if (geometry?.type === 'MultiLineString' && Array.isArray(coordinates)) {
+                coordinates.forEach(line => {
+                    points += Array.isArray(line) ? line.length : 0;
+                    lines += 1;
+                });
+            }
+            /* Estimation : entrée + emprise + objet feature/propriétés + points. */
+            bytes += 64 + 72 + 240 + points * 48 + lines * 32;
+        }
+        return bytes;
+    };
+
+    const refreshCellBytes = () => {
+        const ram = safe(() => roadOverlaySpatialCellRam, null);
+        if (!ram) return;
+        let total = 0;
+        state.cellBytesByKey.forEach((bytes, key) => {
+            if (!ram.has(key)) {
+                state.cellBytesByKey.delete(key);
+                return;
+            }
+            total += bytes;
+        });
+        const cache = state.cellCache;
+        cache.estimatedBytes = total;
+        if (total > cache.peakBytes) cache.peakBytes = total;
+        cache.peakCells = Math.max(cache.peakCells, ram.size);
+    };
+
+    /* ---------- Repères utilisateur ---------- */
+
+    const addMarker = () => {
+        const t = now();
+        const context = describeWindow(t - 1000, t);
+        const entry = {
+            n: state.markers.length + 1,
+            t: round(t),
+            at: Date.now(),
+            ...context
+        };
+        pushCapped(state.markers, entry, LIMITS.markers);
+        safe(() => npfDiagSiaInteraction('REPÈRE UTILISATEUR', `n°${entry.n} · ${context.state}`, null));
+        return entry;
+    };
+
+    /* ---------- Installation des enveloppes ---------- */
+
+    const installWrappers = () => {
+        const simple = [
+            'loadCommunesData', 'setupEventListeners', 'drawPermanentAirportMarkers',
+            'applyPelicanVisualScale', 'setupGpsResumeHandlers', 'primeGpsFromStoredPosition',
+            'requestOneShotGps', 'restartLiveGpsWatch', 'displayCommuneDetails',
+            'drawNpfRunwayMapLayer', 'drawFireHistoryMarkers', 'redrawGaarCircuits',
+            'initializeTeamChat', 'initializeSiaSystem', 'ensureCommunesLayerDataLoaded',
+            'loadCommunesAliases', 'displayInstalledMaps', 'initDB',
+            'reconcileVacInstalledIndexFromDb', 'checkVacUpdatesAtStartup', 'refreshUI',
+            'refreshBriefingDocMapButtons', 'reconcileNpfNotamsCoverageFromLocalRecord',
+            'drawWaterPointMarkersForCommune', 'refreshNearestCommuneDisplayFromKnownGps',
+            'refreshAirportOperationalLabels', 'renderVisibleCommuneLayers',
+            'renderVisibleCommuneLabels', 'refreshSiaLayers', 'loadHighVoltageLinesLayerData',
+            'toggleHighVoltageLinesLayer', 'toggleRoadOverlayLayer',
+            'suppressHighVoltageLinesForWideScale', 'clearRoadOverlayRenderedPartsProgressively'
+        ];
+        simple.forEach(name => wrapGlobal(name));
+
+        wrapGlobal('initMap', { after: () => installMapHooks() });
+
+        const waitWrapper = (name, labelOf) => wrapGlobal(name, {
+            noStartup: true,
+            before: () => getTileState(),
+            after: info => recordWait(labelOf(info.args), info)
+        });
+        waitWrapper('waitForNpfStartupFirstTile', () => 'première tuile');
+        waitWrapper('waitForNpfStartupMapPriorityRelease', () => 'priorité fond de carte');
+        waitWrapper('waitForNpfLayerActivationTileWindow', args => String(args?.[0] || 'activation'));
+        waitWrapper('waitForNpfHeavyOverlayTileWindow', args => String(args?.[0] || 'calque lourd'));
+        waitWrapper('waitForNpfVisibleBaseTilesReady', () => 'tuiles visibles');
+
+        wrapGlobal('runNpfMapOverlayPriorityRestore', {
+            before: args => {
+                const ctx = {
+                    token: args?.[0],
+                    reason: args?.[1],
+                    t0: now(),
+                    gestures: state.gesturesSinceRestore,
+                    sinceMoveEnd: state.lastMoveEndAt ? round(now() - state.lastMoveEndAt) : null,
+                    tTiles: null, tVfr: null, tHtStart: null, tHt: null, tRoutesStart: null,
+                    ht: null, routes: null
+                };
+                state.gesturesSinceRestore = 0;
+                state.currentRestore = ctx;
+                return ctx;
+            },
+            after: info => finishRestore(info.before, info)
+        });
+        wrapGlobal('waitForNpfMapOverlayPriorityTilesSettled', {
+            noStartup: true,
+            before: () => getTileState(),
+            after: info => {
+                recordWait('priorité carte (restitution)', info);
+                const ctx = restoreOf(info.args?.[0]);
+                if (ctx) ctx.tTiles = info.tEnd;
+            }
+        });
+        wrapGlobal('waitForNpfMapOverlayPrioritySiaIdle', {
+            after: info => {
+                const ctx = restoreOf(info.args?.[0]);
+                if (ctx) ctx.tVfr = info.tEnd;
+            }
+        });
+
+        wrapGlobal('refreshVisibleHighVoltageLines', {
+            before: args => {
+                state.htInProgress = true;
+                const ctx = state.currentRestore;
+                if (ctx && String(args?.[0] || '').startsWith('overlay-priority') && ctx.tHtStart == null) {
+                    ctx.tHtStart = now();
+                }
+                const zoom = safe(() => Number(map.getZoom()), null);
+                const band = getHtZoomBand(zoom);
+                return {
+                    zoom,
+                    band,
+                    layer: safe(() => highVoltageLinesRenderedGeoJsonLayer, null),
+                    token: safe(() => highVoltageLinesRefreshToken, 0),
+                    reusable: safe(() => (
+                        isHighVoltageCoverageValidForCurrentView()
+                        && state.htRenderedZoomBand === band
+                    ), false)
+                };
+            },
+            after: finishHt
+        });
+
+        wrapGlobal('refreshRoadOverlayVisibleParts', {
+            before: args => startRoutes(args),
+            after: finishRoutes
+        });
+        wrapGlobal('getRoadOverlaySourcePart', {
+            before: args => ({
+                ctx: state.currentRoutes,
+                cached: safe(() => roadOverlaySourceParts.get(args?.[0]?.key), null)
+            }),
+            after: info => {
+                const ctx = info.before?.ctx;
+                if (!ctx || ctx.tEnd) return;
+                const record = info.value;
+                if (record && record === info.before.cached) {
+                    ctx.worksetParts += 1;
+                    return;
+                }
+                ctx.readMs += info.tEnd - info.t0;
+                ctx.readParts += 1;
+                const stats = record?.geojson?.__npfSpatialStats;
+                if (stats) {
+                    ctx.cells += Number(stats.cells || 0);
+                    ctx.ram += Number(stats.ramHits || 0);
+                    ctx.storage += Number(stats.storageReads || 0);
+                }
+            }
+        });
+        wrapGlobal('buildRoadOverlayGeojsonForTierAndBounds', {
+            before: () => state.currentRoutes,
+            after: info => { if (info.before) info.before.filterMs += info.tEnd - info.t0; }
+        });
+        wrapGlobal('loadRoadOverlayPart', {
+            before: () => {
+                const ctx = state.currentRoutes;
+                return ctx ? { ctx, readMs: ctx.readMs, filterMs: ctx.filterMs } : null;
+            },
+            after: info => {
+                const before = info.before;
+                if (!before) return;
+                const ctx = before.ctx;
+                ctx.loadParts += 1;
+                ctx.buildMs += Math.max(
+                    0,
+                    (info.tEnd - info.t0) - (ctx.readMs - before.readMs) - (ctx.filterMs - before.filterMs)
+                );
+            }
+        });
+        wrapGlobal('rebuildRoadOverlayLabels', {
+            before: () => state.currentRoutes,
+            after: info => { if (info.before) info.before.labelsMs += info.t1 - info.t0; }
+        });
+        wrapGlobal('clearRoadOverlayRenderedParts', {
+            before: () => state.currentRoutes,
+            after: info => {
+                if (!info.before) return;
+                info.before.clearMs += info.t1 - info.t0;
+                info.before.cleared = true;
+            }
+        });
+
+        wrapGlobal('getRoadOverlaySpatialCellFromRam', {
+            noActivity: true,
+            noStartup: true,
+            after: info => {
+                if (info.value) state.cellCache.hits += 1;
+                else state.cellCache.misses += 1;
+            }
+        });
+        wrapGlobal('setRoadOverlaySpatialCellInRam', {
+            noActivity: true,
+            noStartup: true,
+            before: args => {
+                const key = safe(() => getRoadOverlaySpatialCellRamKey(args[0], args[1], args[2]), null);
+                return {
+                    key,
+                    size: safe(() => roadOverlaySpatialCellRam.size, 0),
+                    existed: safe(() => roadOverlaySpatialCellRam.has(key), false),
+                    bytes: estimateCellBytes(args?.[3])
+                };
+            },
+            after: info => {
+                const before = info.before;
+                if (!before) return;
+                const cache = state.cellCache;
+                const sizeAfter = safe(() => roadOverlaySpatialCellRam.size, 0);
+                cache.insertions += 1;
+                cache.evictions += Math.max(0, before.size + (before.existed ? 0 : 1) - sizeAfter);
+                if (before.key) state.cellBytesByKey.set(before.key, before.bytes);
+                refreshCellBytes();
+            }
+        });
+        wrapGlobal('clearRoadOverlaySpatialRamCaches', {
+            noActivity: true,
+            after: () => {
+                state.cellCache.clears += 1;
+                state.cellBytesByKey.clear();
+                state.cellCache.estimatedBytes = 0;
+            }
+        });
+    };
+
+    try { installWrappers(); } catch (error) { console.warn('[NPF DIAG] Enveloppes v17.32 :', error); }
+    try { startBlockMonitor(); } catch (_) {}
+    try { startTileTimeline(); } catch (_) {}
+    try {
+        [5000, 10000, 20000].forEach(delay => scheduleCanvasMemorySample(`démarrage +${delay / 1000} s`, delay));
+        setInterval(() => scheduleCanvasMemorySample('intervalle 30 s'), 30000);
+    } catch (_) {}
+
+    return {
+        state,
+        addMarker,
+        recordGesture,
+        getMapMotionExtraMetrics,
+        isUserMapContactRecent,
+        sampleCanvasMemory,
+        wallAt
+    };
+})();
+
+function npfDiagIsUserMapContactRecent() {
+    try { return NPF_DIAG_DETAIL.isUserMapContactRecent(); } catch (_) { return false; }
+}
+function npfDiagGetMapMotionExtraMetrics(sample) {
+    try { return NPF_DIAG_DETAIL.getMapMotionExtraMetrics(sample); } catch (_) { return {}; }
+}
+function npfDiagAddUserMarker() {
+    try { return NPF_DIAG_DETAIL.addMarker(); } catch (_) { return null; }
+}
+
+/* v17.32 — extrait compact persisté avec la session (restitué à l'export suivant). */
+function npfDiagDetailPersistSnapshot() {
+    try {
+        const s = NPF_DIAG_DETAIL.state;
+        return {
+            v: 1,
+            counts: {
+                gestures: s.gestureCount,
+                blocks: s.blockCount,
+                blockMaxMs: Math.round(s.blockMaxMs),
+                restores: s.restoreCount,
+                routes: s.routesCount,
+                ht: s.htCount
+            },
+            gestures: s.gestures.slice(-40),
+            blocks: s.blocks.slice(-30),
+            restores: s.restores.slice(-20),
+            routes: s.routesRebuilds.slice(-15),
+            ht: s.htRebuilds.slice(-15),
+            markers: s.markers.slice(-40),
+            memoryPeak: s.memoryPeak,
+            cellCache: { ...s.cellCache }
+        };
+    } catch (_) {
+        return null;
+    }
+}
+
+function formatNpfDiagClock(at) {
+    return Number(at) ? new Date(Number(at)).toLocaleTimeString('fr-FR') : '—';
+}
+
+function formatNpfDiagGestureLine(item) {
+    const zoom = Number.isFinite(Number(item.zFrom)) && Number(item.zFrom) !== Number(item.zTo)
+        ? ` · zoom ${item.zFrom}→${item.zTo}`
+        : '';
+    const move = Number.isFinite(Number(item.dx))
+        ? ` · dépl. x ${item.dx} % / y ${item.dy} %`
+        : '';
+    return formatNpfDiagClock(item.at) + ' | + ' + (item.t / 1000).toFixed(2) + ' s | '
+        + item.source + ' | ' + item.ms + ' ms · ' + item.ev + ' év. · écart moy ' + item.gapAvg
+        + ' / max ' + item.gapMax + ' ms' + (item.g100 ? ' · >100=' + item.g100 : '')
+        + move + zoom + ' | dans zone HT ' + item.ht + ' · Routes ' + item.routes;
+}
+
+function formatNpfDiagRestoreLine(item) {
+    const part = (label, value) => label + ' ' + (value === null || value === undefined ? '—' : value + ' ms');
+    return formatNpfDiagClock(item.at) + ' | + ' + (item.t / 1000).toFixed(2) + ' s | '
+        + item.outcome + ' · ' + item.totalMs + ' ms · ' + item.gestures + ' geste(s)'
+        + (item.sinceMoveEnd !== null && item.sinceMoveEnd !== undefined ? ' · fin geste +' + item.sinceMoveEnd + ' ms' : '')
+        + ' | ' + part('tuiles', item.tilesMs) + ' · ' + part('VFR', item.vfrMs)
+        + ' · ' + part('HT', item.htMs) + ' · ' + part('Routes', item.routesMs)
+        + ' | HT : ' + item.ht + ' | Routes : ' + item.routes;
+}
+
+function formatNpfDiagRoutesLine(item) {
+    return formatNpfDiagClock(item.at) + ' | + ' + (item.t / 1000).toFixed(2) + ' s | '
+        + item.source + ' · niveau ' + item.tier + ' | ' + item.decision
+        + (item.reason ? ' (' + item.reason + ')' : '')
+        + ' | total ' + item.totalMs + ' ms · attente tuiles ' + item.waitMs
+        + ' · vidage ' + item.clearMs
+        + ' · lecture ' + item.readMs + ' (' + item.readParts + ' parties, cellules ram '
+        + item.ram + ' / stockage ' + item.storage + ', ' + item.worksetParts + ' en jeu de travail)'
+        + ' · filtrage ' + item.filterMs + ' · tracés ' + item.buildMs
+        + ' · cartouches ' + item.labelsMs + ' ms | ' + item.rendered + ' segments rendus';
+}
+
+function formatNpfDiagHtLine(item) {
+    return formatNpfDiagClock(item.at) + ' | + ' + (item.t / 1000).toFixed(2) + ' s | '
+        + item.source + ' · zoom ' + item.zoom + ' | ' + item.decision
+        + (item.reason ? ' (' + item.reason + ')' : '')
+        + ' | total ' + item.totalMs + ' ms · attente tuiles ' + item.waitMs + ' · travail ' + item.workMs
+        + ' ms | ' + item.rendered + ' tronçons';
+}
+
+function formatNpfDiagBlockLine(item) {
+    return formatNpfDiagClock(item.at) + ' | + ' + (item.t / 1000).toFixed(2) + ' → ' + (item.end / 1000).toFixed(2)
+        + ' s | ≈ ' + item.ms + ' ms'
+        + ' | en cours : ' + (item.sync || '—')
+        + ' | async ouvertes : ' + (item.async || '—')
+        + ' | étapes : ' + (item.marks || '—')
+        + ' | ' + item.state;
+}
+
+function formatNpfDiagMemoryLine(item) {
+    return formatNpfDiagClock(item.at) + ' | + ' + (item.t / 1000).toFixed(2) + ' s | ' + item.reason
+        + ' | ' + item.totalMb + ' Mo / ' + item.count + ' canvas | '
+        + (item.items || []).map(canvas => canvas.pane + ' ' + canvas.w + '×' + canvas.h + ' ' + canvas.mb + ' Mo'
+            + (canvas.hidden ? ' (masqué)' : '')).join(' · ');
+}
+
+function formatNpfDiagMarkerLine(item) {
+    return 'Repère n°' + item.n + ' | ' + formatNpfDiagClock(item.at) + ' | + ' + (item.t / 1000).toFixed(2) + ' s'
+        + ' | en cours : ' + (item.sync || '—')
+        + ' | async ouvertes : ' + (item.async || '—')
+        + ' | ' + item.state;
+}
+
+function appendNpfDiagDetailExportSections(lines) {
+    const s = NPF_DIAG_DETAIL.state;
+    const fmtMb = bytes => (Math.round((Number(bytes) || 0) / 104857.6) / 10) + ' Mo';
+
+    lines.push('');
+    lines.push('REPÈRES UTILISATEUR (bouton « Repère » du DIAG)');
+    if (!s.markers.length) {
+        lines.push('Aucun repère.');
+    } else {
+        s.markers.forEach(item => {
+            lines.push(formatNpfDiagMarkerLine(item));
+            const near = (list, windowMs) => list.filter(entry => Math.abs(entry.t - item.t) <= windowMs);
+            const blocks = near(s.blocks, 10000);
+            const gestures = near(s.gestures, 10000);
+            lines.push(
+                '   ±10 s : ' + blocks.length + ' blocage(s) JS'
+                + (blocks.length ? ' (max ' + Math.max(...blocks.map(entry => entry.ms)) + ' ms)' : '')
+                + ' · ' + gestures.length + ' geste(s)'
+                + (gestures.length ? ' (écart max ' + Math.max(...gestures.map(entry => entry.gapMax)) + ' ms)' : '')
+            );
+        });
+    }
+
+    lines.push('');
+    lines.push('BLOCAGES JS > 100 ms — CHRONOLOGIQUE, TOUTE LA SESSION (minuterie 50 ms)');
+    lines.push('Total : ' + s.blockCount + ' | maximum ≈ ' + Math.round(s.blockMaxMs) + ' ms'
+        + (s.blockCount > s.blocks.length ? ' | ' + s.blocks.length + ' derniers listés' : ''));
+    s.blocks.forEach(item => lines.push(formatNpfDiagBlockLine(item)));
+
+    lines.push('');
+    lines.push('DÉMARRAGE — FONCTIONS MESURÉES (30 premières s, ≥ 2 ms ou async)');
+    lines.push('Début | Fonction | Synchrone | Total (async)');
+    s.startupCalls.forEach(item => {
+        lines.push(
+            '+ ' + (item.t0 / 1000).toFixed(2) + ' s | ' + item.name
+            + ' | ' + Math.round(item.t1 - item.t0) + ' ms'
+            + ' | ' + (item.async ? (item.tEnd !== null ? Math.round(item.tEnd - item.t0) + ' ms' : 'en cours') : '—')
+        );
+    });
+
+    lines.push('');
+    lines.push('DÉMARRAGE — CHRONOLOGIE TUILES (niveau courant, sans mesure DOM)');
+    lines.push('Instant | File | Lectures actives | Tuiles chargées / niveau | Accès IDB cumulés | Hits RAM | Dernière étape');
+    s.tileTimeline.forEach(item => {
+        lines.push(
+            '+ ' + (item.t / 1000).toFixed(2) + ' s | ' + item.queued + ' | ' + item.active
+            + ' | ' + item.loaded + '/' + item.current + ' | ' + item.idb + ' | ' + item.ram + ' | ' + item.phase
+        );
+    });
+
+    lines.push('');
+    lines.push('ATTENTES SUR LES TUILES (30 premières s, puis ≥ 1 s)');
+    s.waits.forEach(item => {
+        lines.push(
+            '+ ' + (item.t / 1000).toFixed(2) + ' s | ' + item.label + ' | ' + item.ms + ' ms | ' + item.result
+            + ' | début : ' + item.start + ' | fin : ' + item.end
+        );
+    });
+
+    lines.push('');
+    lines.push('GESTES (tous) — source · durée · événements · écarts · déplacement en % de la vue (x+ = est, y+ = sud) · vue finale dans la zone déjà dessinée');
+    lines.push('Total : ' + s.gestureCount + (s.gestureCount > s.gestures.length ? ' | ' + s.gestures.length + ' derniers listés' : ''));
+    s.gestures.forEach(item => lines.push(formatNpfDiagGestureLine(item)));
+
+    lines.push('');
+    lines.push('RESTITUTIONS APRÈS GESTE (tuiles → VFR → HT → Routes)');
+    lines.push('Total : ' + s.restoreCount + (s.restoreCount > s.restores.length ? ' | ' + s.restores.length + ' dernières listées' : ''));
+    s.restores.forEach(item => lines.push(formatNpfDiagRestoreLine(item)));
+
+    lines.push('');
+    lines.push('RECONSTRUCTIONS HT');
+    lines.push('Total : ' + s.htCount);
+    s.htRebuilds.forEach(item => lines.push(formatNpfDiagHtLine(item)));
+
+    lines.push('');
+    lines.push('RECONSTRUCTIONS ROUTES (durées en ms)');
+    lines.push('Total : ' + s.routesCount);
+    s.routesRebuilds.forEach(item => lines.push(formatNpfDiagRoutesLine(item)));
+
+    const cache = s.cellCache;
+    const ramSize = (() => { try { return Number(roadOverlaySpatialCellRam.size || 0); } catch (_) { return 0; } })();
+    const ramLimit = (() => { try { return Number(ROAD_OVERLAY_SPATIAL_RAM_CELL_LIMIT || 0); } catch (_) { return 0; } })();
+    lines.push('');
+    lines.push('CACHE CELLULES ROUTES (RAM)');
+    lines.push(
+        'Taille ' + ramSize + ' / ' + ramLimit + ' cellules (pic ' + cache.peakCells + ')'
+        + ' | lectures RAM ' + cache.hits + ' trouvées / ' + cache.misses + ' absentes'
+        + ' | insertions ' + cache.insertions + ' | évictions ' + cache.evictions
+        + ' | vidages ' + cache.clears
+        + ' | mémoire estimée ' + fmtMb(cache.estimatedBytes) + ' (pic ' + fmtMb(cache.peakBytes) + ')'
+    );
+
+    lines.push('');
+    lines.push('MÉMOIRE DES CALQUES (canvas : largeur × hauteur × 4 octets, densité écran comprise)');
+    const peak = s.memoryPeak;
+    if (peak) {
+        lines.push('Pic de la session : ' + peak.totalMb + ' Mo à + ' + (peak.t / 1000).toFixed(2) + ' s (' + peak.reason + ')');
+        peak.items.forEach(canvas => lines.push(
+            '   ' + canvas.pane + ' | ' + canvas.w + ' × ' + canvas.h + ' | ' + canvas.mb + ' Mo' + (canvas.hidden ? ' | pane masqué' : '')
+        ));
+    }
+    /* Relevés successifs identiques regroupés sur une ligne. */
+    let memoryRun = null;
+    const flushMemoryRun = () => {
+        if (!memoryRun) return;
+        lines.push(
+            formatNpfDiagMemoryLine(memoryRun.first)
+            + (memoryRun.count > 1
+                ? ' | identique ×' + memoryRun.count + ' jusqu’à ' + formatNpfDiagClock(memoryRun.last.at)
+                : '')
+        );
+        memoryRun = null;
+    };
+    s.memorySamples.forEach(item => {
+        const signature = item.totalMb + '|' + item.count;
+        if (memoryRun && memoryRun.signature === signature) {
+            memoryRun.count += 1;
+            memoryRun.last = item;
+            return;
+        }
+        flushMemoryRun();
+        memoryRun = { signature, first: item, last: item, count: 1 };
+    });
+    flushMemoryRun();
+
+    lines.push('');
+    lines.push(
+        'Instrumentation v17.32 : ' + s.wrapped.length + ' fonctions suivies'
+        + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
+    );
+}
+
+function appendNpfDiagDetailRestoredSections(lines, detail) {
+    if (!detail || typeof detail !== 'object') return;
+    const counts = detail.counts || {};
+    lines.push('');
+    lines.push(
+        'Totaux session précédente : ' + (counts.gestures || 0) + ' gestes | '
+        + (counts.blocks || 0) + ' blocages JS > 100 ms (max ≈ ' + (counts.blockMaxMs || 0) + ' ms) | '
+        + (counts.restores || 0) + ' restitutions | ' + (counts.ht || 0) + ' reconstructions HT | '
+        + (counts.routes || 0) + ' reconstructions Routes'
+    );
+    if (detail.memoryPeak) {
+        lines.push('Pic mémoire canvas : ' + detail.memoryPeak.totalMb + ' Mo (' + detail.memoryPeak.reason + ')');
+    }
+    const section = (title, list, formatter) => {
+        if (!Array.isArray(list) || !list.length) return;
+        lines.push(title);
+        list.forEach(item => {
+            try { lines.push(formatter(item)); } catch (_) {}
+        });
+    };
+    section('Repères :', detail.markers, formatNpfDiagMarkerLine);
+    section('Blocages JS > 100 ms (derniers) :', detail.blocks, formatNpfDiagBlockLine);
+    section('Gestes (derniers) :', detail.gestures, formatNpfDiagGestureLine);
+    section('Restitutions (dernières) :', detail.restores, formatNpfDiagRestoreLine);
+    section('Reconstructions HT (dernières) :', detail.ht, formatNpfDiagHtLine);
+    section('Reconstructions Routes (dernières) :', detail.routes, formatNpfDiagRoutesLine);
 }
 
 function escapeNpfStartupDiagnosticHtml(value) {
@@ -824,6 +2013,12 @@ function buildNpfStartupDiagnosticExportText() {
     lines.push('NPF-Q400 — Diagnostic démarrage');
     lines.push('Date : ' + generatedAt.toLocaleString('fr-FR'));
     lines.push('Build : ' + String(window.NPF_SCRIPT_BUILD_VERSION || NPF_SCRIPT_BUILD_VERSION || '—'));
+    lines.push('');
+    lines.push('################ SESSION COURANTE ################');
+    lines.push(
+        'Début : ' + new Date(Number(diag.monitorStartedWallAt) || Date.now()).toLocaleString('fr-FR')
+        + ' | toutes les sections jusqu’à « SESSION PRÉCÉDENTE » concernent cette session'
+    );
     lines.push('Carte : ' + runtime.source + ' | Zoom : ' + runtime.zoom);
     if (runtime.pack) lines.push('Packs : ' + runtime.pack);
     if (runtime.directHits !== null) {
@@ -979,7 +2174,7 @@ function buildNpfStartupDiagnosticExportText() {
     const restoredDiag = runtime.diagRestoredSession;
     if (restoredDiag) {
         lines.push(
-            'DIAG restauré après rechargement : sauvegarde '
+            'Session précédente restaurée (détail en fin de fichier) : sauvegarde '
             + new Date(Number(restoredDiag.savedAt) || Date.now()).toLocaleTimeString('fr-FR')
             + ' | session début '
             + new Date(Number(restoredDiag.sessionStartedAt) || Date.now()).toLocaleTimeString('fr-FR')
@@ -1025,10 +2220,62 @@ function buildNpfStartupDiagnosticExportText() {
         });
     }
 
+    /* v16.36 — événements de mise à jour PWA conservés brièvement entre deux rechargements. */
+    try {
+        const swDiagKey = window.NPF_SW_UPDATE_DIAG_STORAGE_KEY || 'npfSwUpdateDiagV1';
+        const swEvents = JSON.parse(sessionStorage.getItem(swDiagKey) || '[]');
+        const recentSwEvents = Array.isArray(swEvents)
+            ? swEvents.filter(item => item && Number(item.at) >= Date.now() - 15 * 60 * 1000)
+            : [];
+        lines.push('');
+        lines.push('MISE À JOUR PWA (15 dernières minutes, peut inclure la session précédente)');
+        if (!recentSwEvents.length) {
+            lines.push('Aucun événement de mise à jour récent.');
+        } else {
+            recentSwEvents.forEach(item => {
+                const time = new Date(Number(item.at) || Date.now()).toLocaleTimeString('fr-FR');
+                lines.push(`${time} | ${item.stage || 'événement'}${item.detail ? ' | ' + item.detail : ''}`);
+            });
+        }
+    } catch (_) {}
+
+    const stalls = diag.stalls.slice().sort((a, b) => b.delay - a.delay);
+    lines.push('');
+    lines.push('BLOCAGES JAVASCRIPT (mesure historique à 1 Hz, 20 plus longs — voir aussi la liste chronologique 50 ms)');
+    if (stalls.length) {
+        lines.push('Nombre : ' + stalls.length + ' | Maximum : ' + Math.round(stalls[0].delay) + ' ms');
+        stalls.forEach(item => {
+            lines.push('+ ' + (item.t / 1000).toFixed(2) + ' s : ≈ ' + Math.round(item.delay) + ' ms');
+        });
+    } else {
+        lines.push('Aucun blocage > 120 ms détecté.');
+    }
+
+    const longTasks = diag.longTasks.slice().sort((a, b) => b.duration - a.duration);
+    lines.push('');
+    lines.push('LONGTASK API');
+    if (!diag.longTaskObserverSupported) {
+        lines.push('Indisponible sur ce Safari — mesure par retard de boucle utilisée.');
+    } else if (!longTasks.length) {
+        lines.push('Aucune LongTask détectée.');
+    } else {
+        lines.push('Nombre : ' + longTasks.length);
+        longTasks.forEach(item => {
+            lines.push('+ ' + (item.t / 1000).toFixed(2) + ' s : ' + Math.round(item.duration) + ' ms');
+        });
+    }
+
+    try {
+        appendNpfDiagDetailExportSections(lines);
+    } catch (error) {
+        lines.push('DIAG détaillé indisponible : ' + (error?.message || error));
+    }
+
     const restoredSession = runtime.diagRestoredSession;
     if (restoredSession) {
         lines.push('');
-        lines.push('SESSION DIAG RESTAURÉE AVANT RECHARGEMENT');
+        lines.push('################ SESSION PRÉCÉDENTE RESTAURÉE (avant rechargement de NPF) ################');
+        lines.push('Les lignes ci-dessous ne concernent PAS la session courante.');
         lines.push(
             'Début : ' + new Date(Number(restoredSession.sessionStartedAt) || Date.now()).toLocaleString('fr-FR')
             + ' | sauvegarde : ' + new Date(Number(restoredSession.savedAt) || Date.now()).toLocaleString('fr-FR')
@@ -1065,54 +2312,11 @@ function buildNpfStartupDiagnosticExportText() {
                 lines.push(eventClock + ' | ≈ ' + Math.round(Number(item?.delay) || 0) + ' ms');
             });
         }
-    }
-
-    /* v16.36 — événements de mise à jour PWA conservés brièvement entre deux rechargements. */
-    try {
-        const swDiagKey = window.NPF_SW_UPDATE_DIAG_STORAGE_KEY || 'npfSwUpdateDiagV1';
-        const swEvents = JSON.parse(sessionStorage.getItem(swDiagKey) || '[]');
-        const recentSwEvents = Array.isArray(swEvents)
-            ? swEvents.filter(item => item && Number(item.at) >= Date.now() - 15 * 60 * 1000)
-            : [];
-        lines.push('');
-        lines.push('MISE À JOUR PWA');
-        if (!recentSwEvents.length) {
-            lines.push('Aucun événement de mise à jour récent.');
-        } else {
-            recentSwEvents.forEach(item => {
-                const time = new Date(Number(item.at) || Date.now()).toLocaleTimeString('fr-FR');
-                lines.push(`${time} | ${item.stage || 'événement'}${item.detail ? ' | ' + item.detail : ''}`);
-            });
-        }
-    } catch (_) {}
-
-    const stalls = diag.stalls.slice().sort((a, b) => b.delay - a.delay);
-    lines.push('');
-    lines.push('BLOCAGES JAVASCRIPT');
-    if (stalls.length) {
-        lines.push('Nombre : ' + stalls.length + ' | Maximum : ' + Math.round(stalls[0].delay) + ' ms');
-        stalls.forEach(item => {
-            lines.push('+ ' + (item.t / 1000).toFixed(2) + ' s : ≈ ' + Math.round(item.delay) + ' ms');
-        });
-    } else {
-        lines.push('Aucun blocage > 120 ms détecté.');
-    }
-
-    const longTasks = diag.longTasks.slice().sort((a, b) => b.duration - a.duration);
-    lines.push('');
-    lines.push('LONGTASK API');
-    if (!diag.longTaskObserverSupported) {
-        lines.push('Indisponible sur ce Safari — mesure par retard de boucle utilisée.');
-    } else if (!longTasks.length) {
-        lines.push('Aucune LongTask détectée.');
-    } else {
-        lines.push('Nombre : ' + longTasks.length);
-        longTasks.forEach(item => {
-            lines.push('+ ' + (item.t / 1000).toFixed(2) + ' s : ' + Math.round(item.duration) + ' ms');
-        });
+        appendNpfDiagDetailRestoredSections(lines, restoredSession.detail);
     }
 
     lines.push('');
+    lines.push('################ FIN ################');
     lines.push('Mesures enregistrées automatiquement depuis l’ouverture de NPF.');
     return lines.join('\n');
 }
@@ -1254,6 +2458,7 @@ function renderNpfStartupDiagnosticPanel() {
                 <div class="npf-startup-diag-page2-table">${table}</div>
                 <div class="npf-startup-diag-stalls">
                     <div><b>Blocages JS : ${diag.stalls.length}</b>${diag.stalls.length ? ` · max ≈ ${Math.round(maxStall)} ms` : ''}</div>
+                    <div>Blocages &gt; 100 ms (mesure 50 ms) : <b>${NPF_DIAG_DETAIL.state.blockCount}</b>${NPF_DIAG_DETAIL.state.blockCount ? ` · max ≈ ${Math.round(NPF_DIAG_DETAIL.state.blockMaxMs)} ms` : ''} · Repères : <b>${NPF_DIAG_DETAIL.state.markers.length}</b></div>
                     ${stallRows ? `<ul>${stallRows}</ul>` : '<div>Aucun blocage &gt; 120 ms.</div>'}
                     ${diag.longTaskObserverSupported
                         ? `<div class="npf-startup-diag-longtasks"><b>LongTask API : ${longTasks.length}</b>${longTaskRows ? `<ul>${longTaskRows}</ul>` : ''}</div>`
@@ -1297,6 +2502,7 @@ function ensureNpfStartupDiagnosticUi() {
                         <button type="button" class="npf-startup-diag-page-button active" data-diag-page="1" aria-pressed="true">1/2 Démarrage</button>
                         <button type="button" class="npf-startup-diag-page-button" data-diag-page="2" aria-pressed="false">2/2 Suite</button>
                     </div>
+                    <button type="button" id="npf-startup-diag-marker" aria-label="Marquer un ralentissement">Repère</button>
                     <button type="button" id="npf-startup-diag-export" aria-label="Exporter le diagnostic">Exporter</button>
                     <button type="button" id="npf-startup-diag-close" aria-label="Fermer">×</button>
                 </div>
@@ -1322,6 +2528,21 @@ function ensureNpfStartupDiagnosticUi() {
         open();
     });
     panel.querySelector('#npf-startup-diag-close')?.addEventListener('click', close);
+    /* v17.32 — l'heure est prise au contact, avant toute mise à jour du panneau. */
+    const markerButton = panel.querySelector('#npf-startup-diag-marker');
+    let markerFeedbackTimer = null;
+    markerButton?.addEventListener('pointerdown', event => {
+        event.stopPropagation();
+        const marker = npfDiagAddUserMarker();
+        if (!marker) return;
+        markerButton.textContent = `Repère ✓ ${marker.n}`;
+        clearTimeout(markerFeedbackTimer);
+        markerFeedbackTimer = setTimeout(() => { markerButton.textContent = 'Repère'; }, 1500);
+    });
+    markerButton?.addEventListener('click', event => {
+        event.preventDefault();
+        event.stopPropagation();
+    });
     panel.querySelector('#npf-startup-diag-export')?.addEventListener('click', async event => {
         event.preventDefault();
         event.stopPropagation();
@@ -6097,6 +7318,8 @@ async function loadCommunesData() {
 
     const parseAndStore = async (response) => {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        /* v17.32 — DIAG : sépare l'attente de la réponse de la lecture JSON. */
+        npfStartupDiagMark('communes_response', 'Communes — réponse reçue, lecture JSON');
         const payload = await response.json();
         if (!payload || !Array.isArray(payload.data)) {
             throw new Error("Format JSON invalide.");
@@ -51569,9 +52792,17 @@ function initializeSiaSystem() {
                     NPF_STARTUP_DIAGNOSTIC.state?.gpsSummary?.positions || 0
                 ),
                 startSnapshot,
+                /* v17.32 — centre / zoom de départ pour le déplacement du geste. */
+                startCenter: map.getCenter(),
+                startZoom: map.getZoom(),
+                /* v17.32 — piste 19 : « manuel » aussi sans suivi GPS actif. */
                 source: gpsFollowPan
                     ? 'gps-follow'
-                    : (centerGpsFollowUserGestureActive ? 'manual' : 'autre')
+                    : (
+                        centerGpsFollowUserGestureActive || npfDiagIsUserMapContactRecent()
+                            ? 'manual'
+                            : 'autre'
+                    )
             };
         });
         map.on('move', () => {
@@ -51615,7 +52846,8 @@ function initializeSiaSystem() {
                     leafletLayersDebut: Number(sample.startSnapshot?.leafletLayers || 0),
                     leafletLayersFin: Number(endSnapshot.leafletLayers || 0),
                     zoom: map.getZoom(),
-                    zonesVisibles: Array.isArray(siaRenderedAirspaceFeatures) ? siaRenderedAirspaceFeatures.length : 0
+                    zonesVisibles: Array.isArray(siaRenderedAirspaceFeatures) ? siaRenderedAirspaceFeatures.length : 0,
+                    ...npfDiagGetMapMotionExtraMetrics(sample)
                 });
 
                 if (

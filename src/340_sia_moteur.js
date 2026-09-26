@@ -3363,9 +3363,17 @@ function initializeSiaSystem() {
                     NPF_STARTUP_DIAGNOSTIC.state?.gpsSummary?.positions || 0
                 ),
                 startSnapshot,
+                /* v17.32 — centre / zoom de départ pour le déplacement du geste. */
+                startCenter: map.getCenter(),
+                startZoom: map.getZoom(),
+                /* v17.32 — piste 19 : « manuel » aussi sans suivi GPS actif. */
                 source: gpsFollowPan
                     ? 'gps-follow'
-                    : (centerGpsFollowUserGestureActive ? 'manual' : 'autre')
+                    : (
+                        centerGpsFollowUserGestureActive || npfDiagIsUserMapContactRecent()
+                            ? 'manual'
+                            : 'autre'
+                    )
             };
         });
         map.on('move', () => {
@@ -3409,7 +3417,8 @@ function initializeSiaSystem() {
                     leafletLayersDebut: Number(sample.startSnapshot?.leafletLayers || 0),
                     leafletLayersFin: Number(endSnapshot.leafletLayers || 0),
                     zoom: map.getZoom(),
-                    zonesVisibles: Array.isArray(siaRenderedAirspaceFeatures) ? siaRenderedAirspaceFeatures.length : 0
+                    zonesVisibles: Array.isArray(siaRenderedAirspaceFeatures) ? siaRenderedAirspaceFeatures.length : 0,
+                    ...npfDiagGetMapMotionExtraMetrics(sample)
                 });
 
                 if (

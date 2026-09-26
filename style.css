@@ -1,4 +1,4 @@
-/* NPF_STYLE_BUILD_VERSION: v17.31 */
+/* NPF_STYLE_BUILD_VERSION: v17.32 */
 /* v14.83 — nettoyage des références techniques et limitation des cartouches routiers. */
 /* v14.81 — recherche phonétique nationale élargie aux fragments sur deux lettres. */
 /* v14.80 — Brive conservé uniquement sous LFSL. */
@@ -18191,4 +18191,31 @@ body.npf-calculator-modal-open {
 .traffic-settings-actions-live {
     margin-top: 10px;
     margin-bottom: 10px;
+}
+
+/* v17.32 — DIAG : bouton « Repère » (heure exacte d'un ralentissement ressenti). */
+.npf-startup-diag-header {
+    grid-template-columns: minmax(160px, 1fr) auto auto auto 46px;
+}
+#npf-startup-diag-marker {
+    min-height: 36px;
+    padding: 5px 12px;
+    border: 1px solid #b45309;
+    border-radius: 9px;
+    background: #fffbeb;
+    color: #92400e;
+    font-size: 12px;
+    font-weight: 900;
+    white-space: nowrap;
+}
+#npf-startup-diag-marker:active {
+    transform: translateY(1px);
+}
+@media (max-width: 760px) {
+    .npf-startup-diag-header {
+        grid-template-columns: 1fr auto auto 40px;
+    }
+    #npf-startup-diag-marker { grid-column: 2; grid-row: 1; min-height: 34px; padding: 4px 8px; font-size: 11px; }
+    #npf-startup-diag-export { grid-column: 3; grid-row: 1; }
+    #npf-startup-diag-close { grid-column: 4; grid-row: 1; }
 }
