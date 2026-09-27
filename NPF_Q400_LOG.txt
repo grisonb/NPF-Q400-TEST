@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 27/09/2026
-Version de travail actuelle : TEST v17.35
+Version de travail actuelle : TEST v17.36
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,12 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.36 — « Recentrage économe » (GPS réel, suivi activé) : setView seulement
+  si le centre visé est à 8 px ou plus du centre actuel ; sous 30 kt, le cap
+  ne change plus le décalage devant l'avion (dernier décalage calculé au-dessus
+  de 30 kt, sinon aucun) ; interrupteur TEST dans le panneau DIAG (ON par
+  défaut, mémorisé ; OFF = v17.35) ; DIAG : périodes ON / OFF et statistiques
+  séparées, cap de chaque position, recentrages évités ;
 - v17.35 — la simulation respecte le bouton Suivi (suivi désactivé : l'avion
   simulé avance, la carte ne bouge pas) ; DIAG : simulation signalée partout,
   statistiques GPS / chaîne GPS / recentrages / corrélation HT séparées réel /
@@ -318,6 +324,8 @@ NON IMPLÉMENTÉ / OUVERT :
   (« ANALYSE DIAG v17.32 SOL + VOL ») : 5 défauts du DIAG lui-même relevés
   (D1 à D5) et 9 recommandations classées gain / risque (R1 à R9), aucune
   implémentée. Historique : À MESURER -> MESURÉ ;
+- v17.36 : À MESURER en VOL RÉEL, interrupteur « Recentrage économe » ON puis
+  OFF (protocole en fin d'entrée v17.36) ;
 - v17.35 : À MESURER sur iPad (simulation : suivi OFF -> carte fixe, suivi ON
   -> recentrages comme avant ; raison des recentrages en simulation) et en
   VOL RÉEL avec les points v17.33 / v17.34 ;
@@ -334,38 +342,38 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.35
+Version : TEST v17.36
 Date : 27/09/2026
-Base : v17.34 (commitée d7d12f1, À MESURER en vol)
+Base : v17.35 (commitée 8462deb, À MESURER)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.35.txt
-2_Index_v17.35.txt
-3_Manifest_v17.35.txt
-4_Script_v17.35.txt
-5_SIA_v17.35.txt
-6_Style_v17.35.txt
-7_Sw_v17.35.txt
+1_Modifications_v17.36.txt
+2_Index_v17.36.txt
+3_Manifest_v17.36.txt
+4_Script_v17.36.txt
+5_SIA_v17.36.txt
+6_Style_v17.36.txt
+7_Sw_v17.36.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.35
-- Manifest : start_url = ./index.html?appv=v17.35
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.35
-- Style : NPF_STYLE_BUILD_VERSION = v17.35
-- Service Worker : `sw-v17-35_simulation_suivi`
+- Index : APP_VERSION = v17.36
+- Manifest : start_url = ./index.html?appv=v17.36
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.36
+- Style : NPF_STYLE_BUILD_VERSION = v17.36
+- Service Worker : `sw-v17-36_recentrage_econome`
 - SIA_DATA_REVISION (SW / Index) : 15.69-radio1026-1-maplite1 (inchangée)
-- sia.js v17.35 : strictement identique à v17.34.
+- sia.js v17.36 : strictement identique à v17.35.
 
 STATUT DE VALIDATION :
-- validation statique v17.35 effectuée avant livraison : Script/SIA/SW OK, script
+- validation statique v17.36 effectuée avant livraison : Script/SIA/SW OK, script
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
-- `sia.js` et moteur tuiles (src/100) identiques à v17.34 ;
-- tests Chrome A/B v17.34 / v17.35 (positions réelles injectées + simulation
-  suivi OFF / ON) : entrée v17.35 ;
+- `sia.js` et moteur tuiles (src/100) identiques à v17.35 ;
+- tests Chrome A/B v17.35 / v17.36 ON / v17.36 OFF (positions réelles
+  injectées, immobile, cadence par échelle, simulation) : entrée v17.36 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
-  sur iPad ; v17.32 MESURÉE ; v17.29, v17.31, v17.33, v17.34 et v17.35 À
-  MESURER.
+  sur iPad ; v17.32 MESURÉE ; v17.29, v17.31, v17.33, v17.34, v17.35 et v17.36
+  À MESURER.
 
 
 2. PROTOCOLE DE TRAVAIL À RESPECTER
@@ -1887,6 +1895,134 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.36 — RECENTRAGE ÉCONOME (GPS RÉEL) ; INTERRUPTEUR TEST ON / OFF
+Date : 27/09/2026
+Base fonctionnelle : v17.35 (commit 8462deb)
+
+PARTIE 1 — RÉPONSES (code v17.35, lignes de src/260_etat_gps.js v17.35 ;
+DIAG NPF_DIAG_2026-09-27_19-57, fin de simulation 19:56:24 -> 19:57:23)
+a) Centre visé et 111 m à l'arrêt
+   - Centre visé : getCenterGpsFollowMapCenter (src/260:821-915). L'avion est
+     placé en arrière du centre de 25 % de la largeur visible (sin du cap) et
+     de 24 % de la hauteur visible (cos du cap) (ratios src/260:705-706), puis
+     borné par des marges (17 % gauche / droite, 15 % haut, 17 % bas,
+     src/260:707-710) et par les bandeaux affichés
+     (getCenterGpsFollowOverlayVerticalInsets, src/260:782). Le cap vient de
+     getCenterGpsFollowHeadingDegrees (src/260:740) : lastPosition.heading.
+   - GPS réel : aucun seuil. Chaque position appelle
+     recenterMapOnKnownGpsPosition('gps-update') (src/260:917-995), qui fait
+     map.setView(..., { animate: false }) (src/260:985) même pour un écart
+     nul. Le seuil de 8 px n'existe que pour la simulation.
+   - 111 m à l'arrêt = 0,5 px à z9 (≈ 222 m par pixel à 45° N) : Leaflet
+     arrondit le centre au pixel près après setView. Le centre relu à la
+     position suivante diffère donc de la cible d'un demi-pixel, et le DIAG
+     affiche ce reste (111 m) à chaque position, avion immobile.
+b) Recentrages de 57 km et 19,8 km après la fin de la simulation
+   - 57 km : saut du centre visé dû au CAP à l'arrêt. Le décalage vaut
+     ≈ 25 % de la largeur ou 24 % de la hauteur de la carte, soit plusieurs
+     dizaines de km aux petites échelles. À l'arrêt, le cap de l'iPad n'a pas
+     de sens : null (Number(null) = 0, donc cap nord), -1 (soit 359°) ou un
+     cap estimé (estimateMotionFromLastPosition, src/260:1858) qui suit les
+     petits sauts de position au-delà de 2 s et 3 m. Chaque changement de cap
+     fait basculer le décalage d'un côté à l'autre de l'avion.
+   - 19,8 km : même origine probable (cap différent) ou changement des marges
+     des bandeaux. La ressemblance avec la distance simulation -> position
+     réelle n'est PAS prouvée : le DIAG v17.35 n'enregistrait pas le cap
+     (ajouté en v17.36).
+   - Conclusion : aucune remise en cause de la partie 2. Le point 2 (cap figé
+     sous 30 kt) supprime les sauts dus au cap ; le point 1 (seuil de 8 px)
+     supprime les setView de 111 m.
+
+DEMANDE UTILISATEUR (partie 2)
+1. « Recentrage économe », GPS réel, suivi activé : setView seulement si
+   l'écart entre centre actuel et centre visé atteint 8 px au zoom courant.
+   Recentrage immédiat : activation du suivi, première position, bouton
+   « Centrer », retour au premier plan, fin de la pause après geste / zoom.
+2. Sous 30 kt, le cap ne change plus le décalage : dernier décalage calculé
+   au-dessus de 30 kt, ou aucun.
+3. Interrupteur « Recentrage économe » ON / OFF dans le panneau DIAG (TEST
+   seulement), ON par défaut, mémorisé. OFF = comportement v17.35 exact.
+4. DIAG : changements journalisés avec l'heure ; en tête de l'export, état
+   actuel et périodes ON / OFF ; statistiques séparées ON / OFF.
+5. La simulation ne change pas.
+
+MODIFICATIONS
+1. src/260 :
+   - état « recentrage économe » (clé localStorage npfEconomicRecenterV1,
+     absent = ON) ; isNpfEconomicRecenterEnabled / setNpfEconomicRecenterEnabled ;
+   - recenterMapOnKnownGpsPosition : pour 'gps-update' d'une position réelle,
+     interrupteur ON, pas de setView si l'écart est < 8 px (même calcul que la
+     simulation). Les autres raisons (enable, short-press-*, manual-delay =
+     fin de pause après geste / zoom) ne passent pas par ce seuil. Premier
+     recentrage forcé : première position, changement de l'interrupteur,
+     retour au premier plan (visibilitychange), premier recentrage réel après
+     une simulation ;
+   - getCenterGpsFollowHeadingDegrees : interrupteur ON et position réelle ->
+     cap retenu seulement à 30 kt ou plus ; sous 30 kt, dernier cap retenu,
+     sinon aucun décalage. Interrupteur OFF ou simulation : logique v17.35.
+   - Le reste de updateUserPosition ne change pas.
+2. src/010 (DIAG) :
+   - bouton « Recentrage économe ON / OFF » dans l'en-tête du panneau DIAG
+     (entre les pages et « Repère ») ;
+   - événement « RECENTRAGE ÉCONOME » ON / OFF avec l'heure ;
+   - en-tête de l'export : « Recentrage économe (TEST) : ON / OFF
+     actuellement | périodes : ... » ;
+   - section « RECENTRAGE ÉCONOME — COMPARAISON ON / OFF » : par mode, durée,
+     recentrages réels (total, par minute) et évités, blocages > 100 ms
+     (nombre, par minute, total, max), chaîne GPS réelle I1 (nombre, moyenne,
+     max), canvas I3 (appels, moyenne, max, total), attentes HT (total,
+     interrompues) ; liste des changements ;
+   - chaque position porte son cap ; « recentrage évité (x px < 8) » ; chaque
+     blocage porte le mode économe ; périodes persistées pour la session
+     restaurée.
+3. style.css : bouton de l'en-tête DIAG (bureau et mobile).
+
+TESTS CHROME (v17.35 / v17.36 ON / v17.36 OFF, positions réelles injectées)
+- Scénario habituel (pack NPF_France_TEST, OFFLINE, HT ON, z11, 40 positions
+  à 250 kt cap 090, 1 Hz, suivi activé) :
+  . v17.35 : 40 setView ; v17.36 OFF : 40 setView (IDENTIQUE, mêmes écarts
+    0,1-0,5 px) ; v17.36 ON : 6 setView (1 toutes les 7 positions) ;
+  . écart avion / place visée, interrupteur ON : 0,2 à 7,7 px, jamais 8 px ;
+  . canvas HT : couvert à chacune des 40 positions, dans les 3 versions ;
+  . reprise après glissement : pause 10 s, puis « manual-delay » immédiat
+    (écart 0,2 px) dans les 3 versions ; ensuite ON : pas de setView tant que
+    l'écart reste < 8 px ; OFF et v17.35 : un setView par position.
+- Immobile (0 kt, cap au hasard, 1 Hz, 20 positions, après activation du
+  suivi) : v17.35 et OFF : 20 setView ; ON : 0 setView (écart constant 0,2 px,
+  cap ignoré sous 30 kt).
+- 250 kt, interrupteur ON, positions par recentrage : z13 (0,5 NM) 1 ; z12
+  (1 NM) 2,1 ; z11 (2 NM) 4 ; z10 (5 NM) 7,5 ; z9 (10 NM) 13,3. Écart max
+  7,5 à 7,95 px. v17.35 / OFF : 1 à toutes les échelles.
+- Glissement, zooms, HT OFF / ON après le suivi : canvas HT couvert partout.
+- Simulation 250 kt, z13 à z9 : v17.35 et v17.36 identiques.
+- Interrupteur : texte ON -> OFF -> ON, état et localStorage suivent, deux
+  événements RECENTRAGE ÉCONOME journalisés, périodes en tête de l'export.
+- Export DIAG complet (89 à 110 ko), aucune exception, aucune erreur
+  console. Dans ce test Chrome (4 min), ON : 11,9 recentrages / min,
+  144 évités, canvas 251 appels (73 ms), attentes HT 37 (5 interrompues) ;
+  OFF : 47,5 / min, canvas 729 appels (272 ms), attentes HT 83
+  (9 interrompues). Chiffres Chrome indicatifs, À MESURER sur iPad.
+
+VERSIONS
+- Index / Manifest / Script / Style : v17.36.
+- Service Worker : `sw-v17-36_recentrage_econome`.
+- SIA_DATA_REVISION inchangée ; sia.js strictement identique à v17.35.
+
+VALIDATION AVANT LIVRAISON
+- `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés.
+- Syntaxe Script / SIA / SW : OK. Script inline Index : OK. Manifest JSON : OK.
+- Cohérence versions / caches : OK. sia.js et src/100 identiques à v17.35.
+
+À MESURER (VOL RÉEL)
+- Interrupteur ON, puis OFF, par tranches comparables (même phase de vol,
+  même échelle, HT dans le même état) ; comparer la section « RECENTRAGE
+  ÉCONOME — COMPARAISON ON / OFF » : recentrages / min, blocages > 100 ms,
+  chaîne GPS, canvas, attentes HT interrompues.
+- Au sol / à l'arrêt : plus aucun saut de carte dû au cap (colonne « cap »
+  des positions).
+
+--------------------------------------------------------------------------------
 
 VERSION TEST v17.35 — LA SIMULATION RESPECTE LE BOUTON SUIVI ; DIAG RÉEL / SIMULÉ
 Date : 27/09/2026

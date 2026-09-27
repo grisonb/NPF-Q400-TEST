@@ -713,6 +713,44 @@ const CENTER_GPS_FOLLOW_MIN_VERTICAL_MARGIN_PX = 105;
 const CENTER_GPS_FOLLOW_CARDINAL_EPSILON = 1e-8;
 
 /*
+ * v17.36 — « Recentrage économe » (GPS réel, suivi activé), interrupteur TEST
+ * du panneau DIAG, ON par défaut, mémorisé :
+ * - pas de setView tant que le centre visé est à moins de 8 px du centre
+ *   actuel (même règle que la simulation) ; recentrage immédiat pour la
+ *   première position, le retour au premier plan et la première position
+ *   réelle après une simulation (activation du Suivi, « Centrer » et fin de
+ *   pause après un geste passent déjà par d'autres raisons, sans seuil) ;
+ * - sous 30 kt, le cap ne modifie plus le décalage devant l'avion : dernier
+ *   cap RÉEL relevé à 30 kt ou plus, sinon aucun décalage.
+ * OFF = comportement v17.35 exact. La simulation ne change pas.
+ */
+const NPF_ECONOMIC_RECENTER_STORAGE_KEY = 'npfEconomicRecenterV1';
+const NPF_ECONOMIC_RECENTER_MIN_SHIFT_PX = 8;
+const NPF_ECONOMIC_RECENTER_MIN_SPEED_KT = 30;
+let npfEconomicRecenterEnabled = (() => {
+    try { return localStorage.getItem(NPF_ECONOMIC_RECENTER_STORAGE_KEY) !== 'false'; } catch (_) { return true; }
+})();
+let npfEconomicRecenterForceNext = true;
+let npfEconomicRecenterLastCallSimulation = false;
+let npfEconomicLastRealHeadingDeg = null;
+
+function isNpfEconomicRecenterEnabled() {
+    return !!npfEconomicRecenterEnabled;
+}
+
+function setNpfEconomicRecenterEnabled(enabled) {
+    npfEconomicRecenterEnabled = !!enabled;
+    try { localStorage.setItem(NPF_ECONOMIC_RECENTER_STORAGE_KEY, String(npfEconomicRecenterEnabled)); } catch (_) {}
+    npfEconomicRecenterForceNext = true;
+    try { npfDiagEconomicRecenterChanged(npfEconomicRecenterEnabled); } catch (_) {}
+    return npfEconomicRecenterEnabled;
+}
+
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') npfEconomicRecenterForceNext = true;
+}, { passive: true });
+
+/*
  * v17.14 — en mode simulation, un avion réellement en mouvement utilisait
  * automatiquement le cadrage anticipé du mode Suivi.
  *
@@ -738,6 +776,20 @@ function getCenterGpsFollowRecenterDelayMs() {
 }
 
 function getCenterGpsFollowHeadingDegrees() {
+    /* v17.36 — recentrage économe, GPS réel : cap figé sous 30 kt. */
+    if (isNpfEconomicRecenterEnabled() && lastPosition && lastPosition.simulation !== true) {
+        const speedKt = lastPosition.speedKt === null || lastPosition.speedKt === undefined
+            ? NaN
+            : Number(lastPosition.speedKt);
+        const realHeading = lastPosition.heading === null || lastPosition.heading === undefined
+            ? NaN
+            : Number(lastPosition.heading);
+        if (Number.isFinite(speedKt) && speedKt >= NPF_ECONOMIC_RECENTER_MIN_SPEED_KT && Number.isFinite(realHeading)) {
+            npfEconomicLastRealHeadingDeg = ((realHeading % 360) + 360) % 360;
+        }
+        return npfEconomicLastRealHeadingDeg;
+    }
+
     const heading = Number(lastPosition?.heading);
     if (Number.isFinite(heading)) {
         return ((heading % 360) + 360) % 360;
@@ -968,6 +1020,37 @@ function recenterMapOnKnownGpsPosition(reason = 'manual') {
             }
         } catch (_) {}
     }
+
+    /*
+     * v17.36 — recentrage économe (GPS réel, suivi activé) : même seuil de
+     * 8 px que la simulation, sauf recentrage immédiat demandé.
+     */
+    const realPositionCall = !!(lastPosition && lastPosition.simulation !== true);
+    const economicRealFollow = !!(
+        isNpfEconomicRecenterEnabled()
+        && realPositionCall
+        && String(reason || '') === 'gps-update'
+    );
+    if (economicRealFollow) {
+        if (npfEconomicRecenterForceNext || npfEconomicRecenterLastCallSimulation) {
+            npfEconomicRecenterForceNext = false;
+        } else {
+            try {
+                const currentCenter = map.getCenter?.();
+                if (currentCenter) {
+                    const currentCenterPixel = map.project(currentCenter, currentZoom);
+                    const targetCenterPixel = map.project(L.latLng(mapCenter.lat, mapCenter.lng), currentZoom);
+                    const centerShiftPx = currentCenterPixel.distanceTo(targetCenterPixel);
+                    if (Number.isFinite(centerShiftPx) && centerShiftPx < NPF_ECONOMIC_RECENTER_MIN_SHIFT_PX) {
+                        npfEconomicRecenterLastCallSimulation = false;
+                        try { npfDiagEconomicRecenterSkipped(centerShiftPx); } catch (_) {}
+                        return true;
+                    }
+                }
+            } catch (_) {}
+        }
+    }
+    npfEconomicRecenterLastCallSimulation = !realPositionCall;
 
     let npfDiagCenterShiftM = 0;
     try {

@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v17-35_simulation_suivi';
-const APP_VERSION = 'v17.35';
+const SW_VERSION = 'sw-v17-36_recentrage_econome';
+const APP_VERSION = 'v17.36';
 const SIA_DATA_REVISION = '15.69-radio1026-1-maplite1';
 const SIA_DATA_URL = './sia.js';
 const SIA_DATA_CACHE = `npf-q400-sia-data-${SIA_DATA_REVISION}`;

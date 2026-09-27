@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.35';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.36';
 
 
 /*
@@ -458,6 +458,13 @@ function npfDiagGpsPosition(coords, timestampMs = Date.now(), isSimulation = fal
     try { NPF_DIAG_DETAIL.notePosition(coords, !!isSimulation); } catch (_) {}
     return NPF_STARTUP_DIAGNOSTIC.recordGpsPosition(coords, timestampMs, !!isSimulation);
 }
+/* v17.36 — recentrage économe : points d'appel de src/260. */
+function npfDiagEconomicRecenterChanged(enabled) {
+    try { NPF_DIAG_DETAIL.economicRecenterChanged(!!enabled); } catch (_) {}
+}
+function npfDiagEconomicRecenterSkipped(shiftPx) {
+    try { NPF_DIAG_DETAIL.economicRecenterSkipped(shiftPx); } catch (_) {}
+}
 /* v17.35 — position courante simulée ? */
 function npfDiagIsSimulatedPosition() {
     try { return !!(isSimulationMode && lastPosition?.simulation === true); } catch (_) { return false; }
@@ -591,7 +598,10 @@ const NPF_DIAG_DETAIL = (() => {
         waitCorrelationSim: { interrupted: 0, startNear: 0, endNear: 0, bothNear: 0 },
         positions: [],
         simPeriods: [],
-        followChanges: []
+        followChanges: [],
+        /* v17.36 — recentrage économe : périodes ON / OFF et statistiques séparées. */
+        ecoPeriods: [],
+        ecoStats: Object.create(null)
     };
 
     const safe = (callback, fallback = undefined) => {
@@ -824,6 +834,11 @@ const NPF_DIAG_DETAIL = (() => {
         };
         /* v17.33 — D3 : les 40 premiers blocages (démarrage) restent conservés. */
         if (state.firstBlocks.length < LIMITS.firstBlocks) state.firstBlocks.push(entry);
+        const eco = ecoStat();
+        eco.blocks += 1;
+        eco.blockMs += blockedMs;
+        if (blockedMs > eco.blockMax) eco.blockMax = blockedMs;
+        entry.eco = ecoMode();
         pushCapped(state.blocks, entry, LIMITS.blocks);
         /* v17.33 — I7 : mémoire des canvas relevée après un gros blocage. */
         if (blockedMs >= 500) scheduleCanvasMemorySample('après blocage > 500 ms', 0);
@@ -978,6 +993,7 @@ const NPF_DIAG_DETAIL = (() => {
         pushCapped(isSimulation ? state.gpsRecenterTimesSim : state.gpsRecenterTimes, t, LIMITS.gpsRecenters);
         const bucket = minuteBucket(t);
         if (isSimulation) bucket.recentersSim += 1; else bucket.recenters += 1;
+        if (!isSimulation) ecoStat().recenters += 1;
         /* Rattacher le recentrage à la dernière position enregistrée (même mode). */
         const last = state.positions[state.positions.length - 1];
         if (last && last.sim === isSimulation && t - last.t < 1500 && !last.recenter) {
@@ -997,6 +1013,9 @@ const NPF_DIAG_DETAIL = (() => {
             lon: Math.round(Number(coords?.longitude) * 100000) / 100000,
             speedKt: Number.isFinite(speed) ? Math.round(speed * 1.9438444924406) : null,
             accuracyM: Number.isFinite(accuracy) ? Math.round(accuracy) : null,
+            heading: coords?.heading === null || coords?.heading === undefined || !Number.isFinite(Number(coords.heading))
+                ? null
+                : Math.round(Number(coords.heading)),
             follow: isGpsFollowActive(),
             recenter: null,
             shiftM: null
@@ -1082,6 +1101,9 @@ const NPF_DIAG_DETAIL = (() => {
         if (wait.htOn) total.htOn += 1;
 
         if (wait.label === 'HT' && wait.fnName !== 'restitution') {
+            const eco = ecoStat();
+            eco.htWaits += 1;
+            if (!ready) eco.htInterrupted += 1;
             const bucket = minuteBucket(wait.t0);
             if (ready) bucket.htReady += 1; else bucket.htInterrupted += 1;
             bucket.htWaitMs += ms;
@@ -1147,6 +1169,52 @@ const NPF_DIAG_DETAIL = (() => {
         bucket.checkTiles += tiles;
         bucket.byCaller[caller] = (bucket.byCaller[caller] || 0) + 1;
         if (isGpsFollowActive()) bucket.gpsFollow = true;
+    };
+
+    /* ---------- Recentrage économe (v17.36) ---------- */
+
+    const ecoMode = () => {
+        const periods = state.ecoPeriods;
+        if (periods.length) return periods[periods.length - 1].on ? 'ON' : 'OFF';
+        return safe(() => (isNpfEconomicRecenterEnabled() ? 'ON' : 'OFF'), '?');
+    };
+
+    const ecoStat = () => {
+        const mode = ecoMode();
+        let stat = state.ecoStats[mode];
+        if (!stat) {
+            stat = {
+                recenters: 0, skipped: 0, blocks: 0, blockMs: 0, blockMax: 0,
+                gpsCycles: 0, gpsMs: 0, gpsMax: 0, canvasCalls: 0, canvasMs: 0, canvasMax: 0,
+                htWaits: 0, htInterrupted: 0
+            };
+            state.ecoStats[mode] = stat;
+        }
+        return stat;
+    };
+
+    const startEcoPeriod = (on, t = now()) => {
+        const last = state.ecoPeriods[state.ecoPeriods.length - 1];
+        if (last && last.end === null) {
+            if (last.on === on) return;
+            last.end = round(t);
+            last.endAt = wallAt(t);
+        }
+        state.ecoPeriods.push({ on: !!on, start: round(t), startAt: wallAt(t), end: null, endAt: null });
+        if (state.ecoPeriods.length > 40) state.ecoPeriods.splice(0, state.ecoPeriods.length - 40);
+    };
+
+    const economicRecenterChanged = enabled => {
+        startEcoPeriod(!!enabled);
+        safe(() => npfDiagSiaInteraction('RECENTRAGE ÉCONOME', enabled ? 'ON' : 'OFF', null));
+    };
+
+    const economicRecenterSkipped = shiftPx => {
+        ecoStat().skipped += 1;
+        const last = state.positions[state.positions.length - 1];
+        if (last && !last.sim && now() - last.t < 1500 && !last.recenter) {
+            last.recenter = 'évité (' + (Math.round(Number(shiftPx) * 10) / 10) + ' px < 8)';
+        }
     };
 
     /* ---------- Gestes ---------- */
@@ -1290,7 +1358,12 @@ const NPF_DIAG_DETAIL = (() => {
                     try {
                         return original.apply(this, args);
                     } finally {
-                        recordActivity(name, t0, now(), false, { gpsPart: true });
+                        const t1 = now();
+                        recordActivity(name, t0, t1, false, { gpsPart: true });
+                        const eco = ecoStat();
+                        eco.canvasCalls += 1;
+                        eco.canvasMs += t1 - t0;
+                        if (t1 - t0 > eco.canvasMax) eco.canvasMax = t1 - t0;
                         const canvas = this._container;
                         if (canvas) {
                             const stat = state.fnStats.get(name);
@@ -1325,6 +1398,12 @@ const NPF_DIAG_DETAIL = (() => {
             return;
         }
         const gps = cycle.sim ? state.gpsSim : state.gps;
+        if (!cycle.sim) {
+            const eco = ecoStat();
+            eco.gpsCycles += 1;
+            eco.gpsMs += ms;
+            if (ms > eco.gpsMax) eco.gpsMax = ms;
+        }
         gps.cycles += 1;
         gps.totalMs += ms;
         if (ms > gps.maxMs) gps.maxMs = ms;
@@ -2044,6 +2123,12 @@ const NPF_DIAG_DETAIL = (() => {
     try { startBlockMonitor(); } catch (_) {}
     try { startTileTimeline(); } catch (_) {}
     try { watchPackChanges(); } catch (_) {}
+    /* v17.36 — période initiale du recentrage économe (réglage lu après chargement). */
+    setTimeout(() => {
+        safe(() => {
+            if (!state.ecoPeriods.length) startEcoPeriod(isNpfEconomicRecenterEnabled(), 0);
+        });
+    }, 0);
     try {
         [5000, 10000, 20000].forEach(delay => scheduleCanvasMemorySample(`démarrage +${delay / 1000} s`, delay));
         setInterval(() => scheduleCanvasMemorySample('intervalle 30 s'), 30000);
@@ -2064,7 +2149,10 @@ const NPF_DIAG_DETAIL = (() => {
         TILE_MS_BINS,
         noteGpsRecenter,
         isGpsFollowActive,
-        notePosition
+        notePosition,
+        economicRecenterChanged,
+        economicRecenterSkipped,
+        ecoMode
     };
 })();
 
@@ -2141,6 +2229,7 @@ function npfDiagDetailPersistSnapshot() {
             ht: s.htRebuilds.slice(-15),
             markers: s.markers.slice(-40),
             simPeriods: s.simPeriods.slice(-10),
+            ecoPeriods: s.ecoPeriods.slice(-10),
             followChanges: s.followChanges.slice(-20),
             memoryPeak: s.memoryPeak,
             cellCache: { ...s.cellCache }
@@ -2204,7 +2293,8 @@ function formatNpfDiagBlockLine(item) {
         + ' | en cours : ' + (item.sync || '—')
         + ' | async ouvertes : ' + (item.async || '—')
         + ' | étapes : ' + (item.marks || '—')
-        + ' | ' + item.state;
+        + ' | ' + item.state
+        + (item.eco ? ' · économe ' + item.eco : '');
 }
 
 function formatNpfDiagMemoryLine(item) {
@@ -2356,10 +2446,11 @@ function appendNpfDiagDetailExportSections(lines) {
     appendNpfDiagV1733ExportSections(lines);
     appendNpfDiagV1734ExportSections(lines);
     appendNpfDiagSimulationSection(lines);
+    appendNpfDiagEconomicSection(lines);
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.35 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.36 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -2550,9 +2641,60 @@ function appendNpfDiagSimulationSection(lines) {
         '   ' + formatNpfDiagClock(item.at) + ' | + ' + (item.t / 1000).toFixed(2) + ' s | ' + (item.sim ? 'SIM ' : 'RÉEL')
         + ' | ' + item.lat + ', ' + item.lon
         + ' | ' + (item.speedKt === null ? '—' : item.speedKt + ' kt')
+        + ' | cap ' + (item.heading === null || item.heading === undefined ? '—' : item.heading + '°')
         + ' | précision ' + (item.accuracyM === null ? 'non fournie' : item.accuracyM + ' m')
         + ' | suivi ' + (item.follow ? 'oui' : 'non')
-        + ' | ' + (item.recenter ? 'recentrage ' + item.recenter + ' (' + item.shiftM + ' m)' : 'pas de recentrage')
+        + ' | ' + (item.recenter ? 'recentrage ' + item.recenter + (item.shiftM === null || item.shiftM === undefined ? '' : ' (' + item.shiftM + ' m)') : 'pas de recentrage')
+    ));
+}
+
+/* v17.36 — recentrage économe : état, périodes, comparaison ON / OFF. */
+function getNpfDiagEcoPeriodDurationMs(period) {
+    const end = period.end === null ? NPF_STARTUP_DIAGNOSTIC.now() : period.end;
+    return Math.max(0, end - period.start);
+}
+
+function appendNpfDiagEconomicHeader(lines) {
+    const s = NPF_DIAG_DETAIL.state;
+    const current = (() => { try { return isNpfEconomicRecenterEnabled() ? 'ON' : 'OFF'; } catch (_) { return '?'; } })();
+    lines.push(
+        'Recentrage économe (TEST) : ' + current + ' actuellement | périodes : '
+        + (s.ecoPeriods.map(period => (period.on ? 'ON ' : 'OFF ') + formatNpfDiagClock(period.startAt) + ' -> '
+            + (period.endAt ? formatNpfDiagClock(period.endAt) : 'en cours')
+            + ' (' + Math.round(getNpfDiagEcoPeriodDurationMs(period) / 60000 * 10) / 10 + ' min)').join(' ; ') || '—')
+    );
+}
+
+function appendNpfDiagEconomicSection(lines) {
+    const s = NPF_DIAG_DETAIL.state;
+    const r = value => Math.round(Number(value) || 0);
+    const avg = (total, n) => (n > 0 ? Math.round(total / n * 10) / 10 : 0);
+    lines.push('');
+    lines.push('RECENTRAGE ÉCONOME — COMPARAISON ON / OFF (v17.36 ; GPS réel pour recentrages et chaîne GPS)');
+    ['ON', 'OFF'].forEach(mode => {
+        const stat = s.ecoStats[mode];
+        const minutes = s.ecoPeriods
+            .filter(period => (period.on ? 'ON' : 'OFF') === mode)
+            .reduce((sum, period) => sum + getNpfDiagEcoPeriodDurationMs(period), 0) / 60000;
+        if (!stat) {
+            lines.push(mode + ' | ' + (Math.round(minutes * 10) / 10) + ' min | aucune mesure');
+            return;
+        }
+        const perMinute = value => (minutes > 0 ? Math.round(value / minutes * 10) / 10 : 0);
+        lines.push(
+            mode + ' | ' + (Math.round(minutes * 10) / 10) + ' min'
+            + ' | recentrages ' + stat.recenters + ' (' + perMinute(stat.recenters) + ' / min) · évités ' + stat.skipped
+            + ' | blocages > 100 ms ' + stat.blocks + ' (' + perMinute(stat.blocks) + ' / min, total ' + r(stat.blockMs) + ' ms, max ' + r(stat.blockMax) + ' ms)'
+            + ' | chaîne GPS ' + stat.gpsCycles + ' positions, moy ' + avg(stat.gpsMs, stat.gpsCycles) + ' / max ' + r(stat.gpsMax) + ' ms'
+            + ' | canvas ' + stat.canvasCalls + ' appels, moy ' + avg(stat.canvasMs, stat.canvasCalls) + ' / max ' + r(stat.canvasMax) + ' ms, total ' + r(stat.canvasMs) + ' ms'
+            + ' | attentes HT ' + stat.htWaits + ' dont interrompues ' + stat.htInterrupted
+        );
+    });
+    lines.push('Changements de l\'interrupteur :');
+    const changes = s.ecoPeriods.slice(1);
+    if (!changes.length) lines.push('   Aucun.');
+    changes.forEach(period => lines.push(
+        '   ' + formatNpfDiagClock(period.startAt) + ' | + ' + (period.start / 1000).toFixed(2) + ' s | ' + (period.on ? 'ON' : 'OFF')
     ));
 }
 
@@ -3129,6 +3271,7 @@ function buildNpfStartupDiagnosticExportText() {
     lines.push('Date : ' + generatedAt.toLocaleString('fr-FR'));
     lines.push('Build : ' + String(window.NPF_SCRIPT_BUILD_VERSION || NPF_SCRIPT_BUILD_VERSION || '—'));
     try { appendNpfDiagSimulationHeader(lines); } catch (_) {}
+    try { appendNpfDiagEconomicHeader(lines); } catch (_) {}
     lines.push('');
     lines.push('################ SESSION COURANTE ################');
     lines.push(
@@ -3659,6 +3802,7 @@ function ensureNpfStartupDiagnosticUi() {
                         <button type="button" class="npf-startup-diag-page-button active" data-diag-page="1" aria-pressed="true">1/2 Démarrage</button>
                         <button type="button" class="npf-startup-diag-page-button" data-diag-page="2" aria-pressed="false">2/2 Suite</button>
                     </div>
+                    <button type="button" id="npf-startup-diag-economic" aria-label="Recentrage économe NPF-Q400 (TEST)">Recentrage économe</button>
                     <button type="button" id="npf-startup-diag-marker" aria-label="Marquer un ralentissement">Repère</button>
                     <button type="button" id="npf-startup-diag-export" aria-label="Exporter le diagnostic">Exporter</button>
                     <button type="button" id="npf-startup-diag-close" aria-label="Fermer">×</button>
@@ -3685,6 +3829,25 @@ function ensureNpfStartupDiagnosticUi() {
         open();
     });
     panel.querySelector('#npf-startup-diag-close')?.addEventListener('click', close);
+    /* v17.36 — interrupteur TEST « Recentrage économe » (ON par défaut, mémorisé). */
+    const economicButton = panel.querySelector('#npf-startup-diag-economic');
+    const refreshEconomicButton = () => {
+        if (!economicButton) return;
+        let enabled = true;
+        try { enabled = isNpfEconomicRecenterEnabled(); } catch (_) {}
+        economicButton.textContent = `Recentrage économe ${enabled ? 'ON' : 'OFF'}`;
+        economicButton.classList.toggle('active', enabled);
+        economicButton.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+    };
+    refreshEconomicButton();
+    economicButton?.addEventListener('click', event => {
+        event.preventDefault();
+        event.stopPropagation();
+        try { setNpfEconomicRecenterEnabled(!isNpfEconomicRecenterEnabled()); } catch (_) {}
+        refreshEconomicButton();
+    });
+    button.addEventListener('click', refreshEconomicButton);
+
     /* v17.32 — l'heure est prise au contact, avant toute mise à jour du panneau. */
     const markerButton = panel.querySelector('#npf-startup-diag-marker');
     let markerFeedbackTimer = null;

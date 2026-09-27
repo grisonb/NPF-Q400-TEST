@@ -1,4 +1,4 @@
-/* NPF_STYLE_BUILD_VERSION: v17.35 */
+/* NPF_STYLE_BUILD_VERSION: v17.36 */
 /* v14.83 — nettoyage des références techniques et limitation des cartouches routiers. */
 /* v14.81 — recherche phonétique nationale élargie aux fragments sur deux lettres. */
 /* v14.80 — Brive conservé uniquement sous LFSL. */
@@ -18218,4 +18218,34 @@ body.npf-calculator-modal-open {
     #npf-startup-diag-marker { grid-column: 2; grid-row: 1; min-height: 34px; padding: 4px 8px; font-size: 11px; }
     #npf-startup-diag-export { grid-column: 3; grid-row: 1; }
     #npf-startup-diag-close { grid-column: 4; grid-row: 1; }
+}
+
+/* v17.36 — DIAG : interrupteur TEST « Recentrage économe ». */
+.npf-startup-diag-header {
+    grid-template-columns: minmax(140px, 1fr) auto auto auto auto 46px;
+}
+#npf-startup-diag-economic {
+    min-height: 36px;
+    padding: 5px 12px;
+    border: 1px solid #64748b;
+    border-radius: 9px;
+    background: #f1f5f9;
+    color: #334155;
+    font-size: 12px;
+    font-weight: 900;
+    white-space: nowrap;
+}
+#npf-startup-diag-economic.active {
+    border-color: #1d4ed8;
+    background: #dbeafe;
+    color: #1e3a8a;
+}
+@media (max-width: 760px) {
+    .npf-startup-diag-header {
+        grid-template-columns: 1fr auto auto auto 40px;
+    }
+    #npf-startup-diag-economic { grid-column: 2; grid-row: 1; min-height: 34px; padding: 4px 8px; font-size: 11px; }
+    #npf-startup-diag-marker { grid-column: 3; grid-row: 1; }
+    #npf-startup-diag-export { grid-column: 4; grid-row: 1; }
+    #npf-startup-diag-close { grid-column: 5; grid-row: 1; }
 }
