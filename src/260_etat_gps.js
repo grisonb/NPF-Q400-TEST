@@ -713,17 +713,17 @@ const CENTER_GPS_FOLLOW_MIN_VERTICAL_MARGIN_PX = 105;
 const CENTER_GPS_FOLLOW_CARDINAL_EPSILON = 1e-8;
 
 /*
- * v17.14 — en mode simulation, un avion réellement en mouvement utilise
- * automatiquement le cadrage anticipé du mode Suivi, sans démarrer le GPS réel
- * et sans modifier l'état visuel du bouton Suivi.
+ * v17.14 — en mode simulation, un avion réellement en mouvement utilisait
+ * automatiquement le cadrage anticipé du mode Suivi.
+ *
+ * v17.35 — la simulation respecte le bouton Suivi, exactement comme le GPS
+ * réel : suivi désactivé, l'avion simulé avance et la carte ne bouge pas.
+ * Suivi activé : comportement de la simulation inchangé (seuil de 8 px,
+ * délai de 5 s après un geste, getCenterGpsFollowRecenterDelayMs).
+ * Pour le GPS réel, rien ne change (le terme simulation y était toujours faux).
  */
 function isCenterGpsFollowEffective() {
-    const simulationMoving = !!(
-        isSimulationMode
-        && simulationAircraftPositionReady
-        && Number(simulationSpeedKt) > 0
-    );
-    return !!(centerGpsFollowActive || simulationMoving);
+    return !!centerGpsFollowActive;
 }
 
 function getCenterGpsFollowRecenterDelayMs() {

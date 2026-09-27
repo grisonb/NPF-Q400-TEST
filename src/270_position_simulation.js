@@ -13,7 +13,7 @@ function updateUserPosition(pos) {
         ? `${Math.round(simulationAltitudeFt)} ft`
         : (shouldShowOwnGpsAltitude() ? formatGpsAltitudeFtFromCoords(pos.coords) : '');
     const gpsTimestampMs = Number(pos.timestamp) || Date.now();
-    try { npfDiagGpsPosition(pos.coords, gpsTimestampMs); } catch (_) {}
+    try { npfDiagGpsPosition(pos.coords, gpsTimestampMs, isSimulationPosition); } catch (_) {}
     const estimatedMotion = isSimulationPosition ? { heading: null, speed: null } : estimateMotionFromLastPosition(latitude, longitude, gpsTimestampMs);
     const rawHeading = Number(pos.coords.heading);
     const rawSpeed = Number(pos.coords.speed);

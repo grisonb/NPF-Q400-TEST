@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.34';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.35';
 
 
 /*
@@ -44,8 +44,11 @@ const NPF_STARTUP_DIAGNOSTIC = (() => {
             recenterCount: 0, gpsFollowRecenterCount: 0, lastRecenterAt: 0,
             recenterIntervalCount: 0, recenterIntervalTotalMs: 0, maxRecenterIntervalMs: 0,
             maxCenterShiftM: 0,
-            speedCount: 0, speedTotalMps: 0, maxSpeedMps: 0, lastSpeedMps: null
+            speedCount: 0, speedTotalMps: 0, maxSpeedMps: 0, lastSpeedMps: null,
+            recenterReasons: {}, recenterShiftTotalM: 0
         },
+        /* v17.35 — positions simulées : statistiques séparées (même forme). */
+        gpsSummarySim: null,
         layerSummary: {
             siaRefreshCount: 0, siaSlowCount: 0, siaMaxMs: 0, siaMaxPointsMs: 0, siaMaxDecorMs: 0,
             htRenderCount: 0, htMaxRendered: 0,
@@ -60,6 +63,8 @@ const NPF_STARTUP_DIAGNOSTIC = (() => {
         persistMaxMs: 0,
         persistTotalMs: 0
     };
+
+    state.gpsSummarySim = JSON.parse(JSON.stringify(state.gpsSummary));
 
     const DIAG_PERSIST_KEY = 'npfDiagSessionV3';
     const DIAG_PERSIST_INTERVAL_MS = 30000;
@@ -273,8 +278,9 @@ const NPF_STARTUP_DIAGNOSTIC = (() => {
         return null;
     };
 
-    const recordGpsPosition = (coords, timestampMs = Date.now()) => {
-        const summary = state.gpsSummary;
+    const recordGpsPosition = (coords, timestampMs = Date.now(), isSimulation = false) => {
+        /* v17.35 — positions réelles et simulées comptées séparément. */
+        const summary = isSimulation ? state.gpsSummarySim : state.gpsSummary;
         const at = Number(timestampMs) || Date.now();
         summary.positions += 1;
         if (summary.lastPositionAt > 0 && at > summary.lastPositionAt) {
@@ -285,7 +291,8 @@ const NPF_STARTUP_DIAGNOSTIC = (() => {
         }
         summary.lastPositionAt = at;
 
-        const accuracy = Number(coords?.accuracy);
+        /* v17.35 — précision absente (simulation) : non comptée (ne vaut pas 0 m). */
+        const accuracy = coords?.accuracy === null || coords?.accuracy === undefined ? NaN : Number(coords.accuracy);
         if (Number.isFinite(accuracy) && accuracy >= 0) {
             summary.accuracyCount += 1;
             summary.accuracyTotalM += accuracy;
@@ -302,10 +309,15 @@ const NPF_STARTUP_DIAGNOSTIC = (() => {
         }
     };
 
-    const recordGpsRecenter = (reason = '', centerShiftM = 0) => {
-        const summary = state.gpsSummary;
+    const recordGpsRecenter = (reason = '', centerShiftM = 0, isSimulation = false) => {
+        const summary = isSimulation ? state.gpsSummarySim : state.gpsSummary;
         const at = Date.now();
         summary.recenterCount += 1;
+        /* v17.35 — recentrages par raison (gps-update, manual-delay, enable…). */
+        const reasonKey = String(reason || '—');
+        summary.recenterReasons = summary.recenterReasons || {};
+        summary.recenterReasons[reasonKey] = (summary.recenterReasons[reasonKey] || 0) + 1;
+        summary.recenterShiftTotalM = Number(summary.recenterShiftTotalM || 0) + Math.max(0, Number(centerShiftM) || 0);
         if (String(reason || '') === 'gps-update') summary.gpsFollowRecenterCount += 1;
         if (summary.lastRecenterAt > 0 && at > summary.lastRecenterAt) {
             const delta = at - summary.lastRecenterAt;
@@ -324,6 +336,7 @@ const NPF_STARTUP_DIAGNOSTIC = (() => {
         sessionStartedAt: state.monitorStartedWallAt,
         mapMotionSummary: state.mapMotionSummary,
         gpsSummary: state.gpsSummary,
+        gpsSummarySim: state.gpsSummarySim,
         layerSummary: state.layerSummary,
         interactions: state.siaInteractions.slice(-80),
         stalls: state.stalls.slice(0, 20),
@@ -441,13 +454,19 @@ function npfDiagMapMotion(source, metrics = null) {
 function npfDiagZoom(metrics = null) {
     return NPF_STARTUP_DIAGNOSTIC.recordZoom(metrics);
 }
-function npfDiagGpsPosition(coords, timestampMs = Date.now()) {
-    return NPF_STARTUP_DIAGNOSTIC.recordGpsPosition(coords, timestampMs);
+function npfDiagGpsPosition(coords, timestampMs = Date.now(), isSimulation = false) {
+    try { NPF_DIAG_DETAIL.notePosition(coords, !!isSimulation); } catch (_) {}
+    return NPF_STARTUP_DIAGNOSTIC.recordGpsPosition(coords, timestampMs, !!isSimulation);
+}
+/* v17.35 — position courante simulée ? */
+function npfDiagIsSimulatedPosition() {
+    try { return !!(isSimulationMode && lastPosition?.simulation === true); } catch (_) { return false; }
 }
 function npfDiagGpsRecenter(reason = '', centerShiftM = 0) {
     /* v17.34 — heure du recentrage, pour la corrélation avec les attentes HT. */
-    try { NPF_DIAG_DETAIL.noteGpsRecenter(); } catch (_) {}
-    return NPF_STARTUP_DIAGNOSTIC.recordGpsRecenter(reason, centerShiftM);
+    const isSimulation = npfDiagIsSimulatedPosition();
+    try { NPF_DIAG_DETAIL.noteGpsRecenter(isSimulation, reason, centerShiftM); } catch (_) {}
+    return NPF_STARTUP_DIAGNOSTIC.recordGpsRecenter(reason, centerShiftM, isSimulation);
 }
 function npfDiagPersist() {
     try { return NPF_STARTUP_DIAGNOSTIC.persist(); } catch (_) { return null; }
@@ -490,7 +509,10 @@ const NPF_DIAG_DETAIL = (() => {
         packChanges: 20,
         gpsRecenters: 6000,
         layerWaits: 400,
-        waitMinutes: 180
+        waitMinutes: 180,
+        positions: 120,
+        simPeriods: 20,
+        followChanges: 60
     };
     const TILE_MS_BINS = [50, 100, 250, 500, 1000, 2000, 5000];
     const STARTUP_WINDOW_MS = 30000;
@@ -561,7 +583,15 @@ const NPF_DIAG_DETAIL = (() => {
             calls: 0, totalMs: 0, maxMs: 0, tiles: 0, byCaller: Object.create(null),
             secondIndex: -1, secondCalls: 0, maxPerSecond: 0
         },
-        waitMinutes: new Map()
+        waitMinutes: new Map(),
+        /* v17.35 — simulation : périodes, positions, cycles et recentrages séparés. */
+        gpsSim: { cycles: 0, totalMs: 0, maxMs: 0, parts: new Map(), slowest: [] },
+        gpsIgnoredDuringSimulation: 0,
+        gpsRecenterTimesSim: [],
+        waitCorrelationSim: { interrupted: 0, startNear: 0, endNear: 0, bothNear: 0 },
+        positions: [],
+        simPeriods: [],
+        followChanges: []
     };
 
     const safe = (callback, fallback = undefined) => {
@@ -649,7 +679,9 @@ const NPF_DIAG_DETAIL = (() => {
             `SIA=${safe(() => (siaRefreshInProgress ? 'en cours' : '—'), '?')}`,
             `Routes=${safe(() => (isRoadOverlayLoading ? 'en cours' : '—'), '?')}`,
             `HT=${state.htInProgress ? 'en cours' : '—'}`,
-            `v=${speedKt === null ? '—' : speedKt + ' kt'}`
+            `v=${speedKt === null ? '—' : speedKt + ' kt'}`,
+            safe(() => (isSimulationMode ? 'SIMULATION' : 'GPS réel'), '?'),
+            `suivi=${isGpsFollowActive() ? 'oui' : 'non'}`
         ].join(' · ');
     };
 
@@ -927,7 +959,7 @@ const NPF_DIAG_DETAIL = (() => {
         let bucket = state.waitMinutes.get(index);
         if (!bucket) {
             bucket = {
-                index, at: wallAt(index * 60000), gpsFollow: false, htOn: false, recenters: 0,
+                index, at: wallAt(index * 60000), gpsFollow: false, htOn: false, recenters: 0, recentersSim: 0,
                 htStarted: 0, htReady: 0, htInterrupted: 0, htWaitMs: 0, htWaitMax: 0,
                 checks: 0, checkMs: 0, checkMax: 0, checkTiles: 0, byCaller: Object.create(null)
             };
@@ -941,15 +973,44 @@ const NPF_DIAG_DETAIL = (() => {
 
     const isGpsFollowActive = () => safe(() => !!isCenterGpsFollowEffective(), false);
 
-    const noteGpsRecenter = () => {
+    const noteGpsRecenter = (isSimulation = false, reason = '', shiftM = 0) => {
         const t = now();
-        pushCapped(state.gpsRecenterTimes, t, LIMITS.gpsRecenters);
-        minuteBucket(t).recenters += 1;
+        pushCapped(isSimulation ? state.gpsRecenterTimesSim : state.gpsRecenterTimes, t, LIMITS.gpsRecenters);
+        const bucket = minuteBucket(t);
+        if (isSimulation) bucket.recentersSim += 1; else bucket.recenters += 1;
+        /* Rattacher le recentrage à la dernière position enregistrée (même mode). */
+        const last = state.positions[state.positions.length - 1];
+        if (last && last.sim === isSimulation && t - last.t < 1500 && !last.recenter) {
+            last.recenter = String(reason || '—');
+            last.shiftM = round(shiftM);
+        }
     };
 
+    const notePosition = (coords, isSimulation) => {
+        const speed = coords?.speed === null || coords?.speed === undefined ? NaN : Number(coords.speed);
+        const accuracy = coords?.accuracy === null || coords?.accuracy === undefined ? NaN : Number(coords.accuracy);
+        pushCapped(state.positions, {
+            t: round(now()),
+            at: Date.now(),
+            sim: !!isSimulation,
+            lat: Math.round(Number(coords?.latitude) * 100000) / 100000,
+            lon: Math.round(Number(coords?.longitude) * 100000) / 100000,
+            speedKt: Number.isFinite(speed) ? Math.round(speed * 1.9438444924406) : null,
+            accuracyM: Number.isFinite(accuracy) ? Math.round(accuracy) : null,
+            follow: isGpsFollowActive(),
+            recenter: null,
+            shiftM: null
+        }, LIMITS.positions);
+    };
+
+    const currentSimulationSettings = () => safe(() => ({
+        speedKt: Math.round(Number(simulationSpeedKt) || 0),
+        routeDeg: Math.round(Number(simulationRouteDeg) || 0),
+        altitudeFt: Math.round(Number(simulationAltitudeFt) || 0)
+    }), { speedKt: null, routeDeg: null, altitudeFt: null });
+
     /* Recentrage GPS à moins de 200 ms de l'instant t ? (tableau trié). */
-    const nearGpsRecenter = t => {
-        const times = state.gpsRecenterTimes;
+    const nearGpsRecenter = (t, times = state.gpsRecenterTimes) => {
         let low = 0;
         let high = times.length - 1;
         while (low <= high) {
@@ -1035,13 +1096,20 @@ const NPF_DIAG_DETAIL = (() => {
         /* Corrélation classée 250 ms plus tard (recentrages postérieurs à la fin connus). */
         if (!ready && wait.label === 'HT') {
             setTimeout(() => {
+                /* v17.35 — corrélation séparée : recentrages réels / simulés. */
                 entry.startNear = nearGpsRecenter(wait.t0);
                 entry.endNear = nearGpsRecenter(tEnd);
-                const correlation = state.waitCorrelation;
-                correlation.interrupted += 1;
-                if (entry.startNear) correlation.startNear += 1;
-                if (entry.endNear) correlation.endNear += 1;
-                if (entry.startNear && entry.endNear) correlation.bothNear += 1;
+                entry.startNearSim = nearGpsRecenter(wait.t0, state.gpsRecenterTimesSim);
+                entry.endNearSim = nearGpsRecenter(tEnd, state.gpsRecenterTimesSim);
+                [
+                    [state.waitCorrelation, entry.startNear, entry.endNear],
+                    [state.waitCorrelationSim, entry.startNearSim, entry.endNearSim]
+                ].forEach(([correlation, startNear, endNear]) => {
+                    correlation.interrupted += 1;
+                    if (startNear) correlation.startNear += 1;
+                    if (endNear) correlation.endNear += 1;
+                    if (startNear && endNear) correlation.bothNear += 1;
+                });
             }, 250);
         }
     };
@@ -1103,7 +1171,8 @@ const NPF_DIAG_DETAIL = (() => {
             zTo: safeMetrics.zoomA,
             ht: safeMetrics.htZone || '—',
             routes: safeMetrics.routesZone || '—',
-            speedKt: getSpeedKt()
+            speedKt: getSpeedKt(),
+            sim: safe(() => !!isSimulationMode, false)
         }, LIMITS.gestures);
     };
 
@@ -1235,8 +1304,11 @@ const NPF_DIAG_DETAIL = (() => {
 
     /* ---------- Chaîne GPS (I1) ---------- */
 
-    const startGpsCycle = () => {
-        const cycle = { t0: now(), parts: Object.create(null), done: false };
+    const startGpsCycle = args => {
+        const pos = args?.[0];
+        const sim = pos?.npfIsSimulation === true;
+        const ignored = !sim && safe(() => !!isSimulationMode, false);
+        const cycle = { t0: now(), parts: Object.create(null), done: false, sim, ignored };
         state.gpsCycle = cycle;
         return cycle;
     };
@@ -1247,7 +1319,12 @@ const NPF_DIAG_DETAIL = (() => {
         cycle.done = true;
         if (state.gpsCycle === cycle) state.gpsCycle = null;
         const ms = info.t1 - info.t0;
-        const gps = state.gps;
+        /* v17.35 — position réelle ignorée pendant la simulation : comptée à part. */
+        if (cycle.ignored) {
+            state.gpsIgnoredDuringSimulation += 1;
+            return;
+        }
+        const gps = cycle.sim ? state.gpsSim : state.gps;
         gps.cycles += 1;
         gps.totalMs += ms;
         if (ms > gps.maxMs) gps.maxMs = ms;
@@ -1267,6 +1344,7 @@ const NPF_DIAG_DETAIL = (() => {
                 t: round(info.t0),
                 at: wallAt(info.t0),
                 ms: round(ms),
+                sim: cycle.sim,
                 speedKt: getSpeedKt(),
                 parts: Object.keys(cycle.parts)
                     .sort((a, b) => cycle.parts[b] - cycle.parts[a])
@@ -1698,10 +1776,66 @@ const NPF_DIAG_DETAIL = (() => {
             }
         });
 
+        /* v17.35 — périodes de simulation et réglages (vitesse, route, altitude). */
+        wrapGlobal('enableSimulationMode', {
+            noStartup: true,
+            before: () => safe(() => !!isSimulationMode, false),
+            after: info => {
+                if (info.before || !safe(() => !!isSimulationMode, false)) return;
+                pushCapped(state.simPeriods, {
+                    start: round(info.t0), startAt: wallAt(info.t0), end: null, endAt: null,
+                    settings: [{ at: wallAt(info.t0), ...currentSimulationSettings() }]
+                }, LIMITS.simPeriods);
+                safe(() => npfDiagSiaInteraction('SIMULATION', 'début', currentSimulationSettings()));
+            }
+        });
+        wrapGlobal('disableSimulationMode', {
+            noStartup: true,
+            before: () => safe(() => !!isSimulationMode, false),
+            after: info => {
+                if (!info.before || safe(() => !!isSimulationMode, false)) return;
+                const period = state.simPeriods[state.simPeriods.length - 1];
+                if (period && period.end === null) {
+                    period.end = round(info.t0);
+                    period.endAt = wallAt(info.t0);
+                }
+                safe(() => npfDiagSiaInteraction('SIMULATION', 'fin', currentSimulationSettings()));
+            }
+        });
+        wrapGlobal('applySimulationMotionSettings', {
+            noStartup: true,
+            after: info => {
+                const period = state.simPeriods[state.simPeriods.length - 1];
+                if (period && period.end === null) {
+                    period.settings.push({ at: wallAt(info.t0), ...currentSimulationSettings() });
+                    if (period.settings.length > 20) period.settings.splice(1, period.settings.length - 20);
+                }
+                safe(() => npfDiagSiaInteraction('SIMULATION', 'réglages', currentSimulationSettings()));
+            }
+        });
+
+        /* v17.35 — changement d'état du bouton Suivi (réel comme simulation). */
+        const followWrapper = name => wrapGlobal(name, {
+            noStartup: true,
+            before: () => safe(() => !!centerGpsFollowActive, false),
+            after: info => {
+                const active = safe(() => !!centerGpsFollowActive, false);
+                if (active === info.before) return;
+                const entry = {
+                    t: round(info.t0), at: wallAt(info.t0), active,
+                    mode: safe(() => (isSimulationMode ? 'simulation' : 'GPS réel'), '?')
+                };
+                pushCapped(state.followChanges, entry, LIMITS.followChanges);
+                safe(() => npfDiagSiaInteraction('SUIVI GPS', `${active ? 'activé' : 'désactivé'} · ${entry.mode}`, null));
+            }
+        });
+        followWrapper('enableCenterGpsFollow');
+        followWrapper('disableCenterGpsFollow');
+
         /* v17.33 — I1 : chaîne GPS. */
         wrapGlobal('updateUserPosition', {
             noStartup: true,
-            before: () => startGpsCycle(),
+            before: args => startGpsCycle(args),
             after: finishGpsCycle
         });
         [
@@ -1929,7 +2063,8 @@ const NPF_DIAG_DETAIL = (() => {
         getSpeedKt,
         TILE_MS_BINS,
         noteGpsRecenter,
-        isGpsFollowActive
+        isGpsFollowActive,
+        notePosition
     };
 })();
 
@@ -2005,6 +2140,8 @@ function npfDiagDetailPersistSnapshot() {
             routes: s.routesRebuilds.slice(-15),
             ht: s.htRebuilds.slice(-15),
             markers: s.markers.slice(-40),
+            simPeriods: s.simPeriods.slice(-10),
+            followChanges: s.followChanges.slice(-20),
             memoryPeak: s.memoryPeak,
             cellCache: { ...s.cellCache }
         };
@@ -2025,7 +2162,7 @@ function formatNpfDiagGestureLine(item) {
         ? ` · dépl. x ${item.dx} % / y ${item.dy} %`
         : '';
     return formatNpfDiagClock(item.at) + ' | + ' + (item.t / 1000).toFixed(2) + ' s | '
-        + item.source + (item.speedKt !== null && item.speedKt !== undefined ? ' ' + item.speedKt + ' kt' : '')
+        + item.source + (item.sim ? ' SIM' : '') + (item.speedKt !== null && item.speedKt !== undefined ? ' ' + item.speedKt + ' kt' : '')
         + ' | ' + item.ms + ' ms · ' + item.ev + ' év. · écart moy ' + item.gapAvg
         + ' / max ' + item.gapMax + ' ms' + (item.g100 ? ' · >100=' + item.g100 : '')
         + move + zoom + ' | dans zone HT ' + item.ht + ' · Routes ' + item.routes;
@@ -2218,10 +2355,11 @@ function appendNpfDiagDetailExportSections(lines) {
 
     appendNpfDiagV1733ExportSections(lines);
     appendNpfDiagV1734ExportSections(lines);
+    appendNpfDiagSimulationSection(lines);
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.34 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.35 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -2245,27 +2383,30 @@ function appendNpfDiagV1733ExportSections(lines) {
         lines.push('Non mesurée.');
     }
 
-    const gps = s.gps;
     lines.push('');
-    lines.push('CHAÎNE GPS (I1 / I2) — durée synchrone de chaque position GPS et de ses étapes');
-    lines.push(
-        'Positions traitées : ' + gps.cycles + ' | moyenne ' + avg(gps.totalMs, gps.cycles)
-        + ' ms | max ' + r(gps.maxMs) + ' ms'
-    );
-    [...gps.parts.entries()]
-        .sort((a, b) => b[1].total - a[1].total)
-        .forEach(([name, part]) => lines.push(
-            '   ' + name + ' | ' + part.n + ' fois | moy ' + avg(part.total, part.n) + ' ms | max ' + r(part.max)
-            + ' ms | total ' + r(part.total) + ' ms'
-        ));
-    if (gps.slowest.length) {
-        lines.push('Positions GPS les plus lentes :');
-        gps.slowest.forEach(item => lines.push(
-            '   ' + formatNpfDiagClock(item.at) + ' | + ' + (item.t / 1000).toFixed(2) + ' s | ' + item.ms + ' ms'
-            + (item.speedKt !== null && item.speedKt !== undefined ? ' | ' + item.speedKt + ' kt' : '')
-            + ' | ' + (item.parts || '—')
-        ));
-    }
+    lines.push('CHAÎNE GPS (I1 / I2) — durée synchrone de chaque position GPS et de ses étapes (réel et simulé séparés)');
+    [['GPS RÉEL', s.gps], ['SIMULATION', s.gpsSim]].forEach(([title, gps]) => {
+        lines.push(
+            title + ' — positions traitées : ' + gps.cycles + ' | moyenne ' + avg(gps.totalMs, gps.cycles)
+            + ' ms | max ' + r(gps.maxMs) + ' ms'
+        );
+        [...gps.parts.entries()]
+            .sort((a, b) => b[1].total - a[1].total)
+            .forEach(([name, part]) => lines.push(
+                '   ' + name + ' | ' + part.n + ' fois | moy ' + avg(part.total, part.n) + ' ms | max ' + r(part.max)
+                + ' ms | total ' + r(part.total) + ' ms'
+            ));
+        if (gps.slowest.length) {
+            lines.push('   Positions les plus lentes :');
+            gps.slowest.forEach(item => lines.push(
+                '   ' + formatNpfDiagClock(item.at) + ' | + ' + (item.t / 1000).toFixed(2) + ' s | ' + (item.sim ? 'SIM' : 'RÉEL')
+                + ' | ' + item.ms + ' ms'
+                + (item.speedKt !== null && item.speedKt !== undefined ? ' | ' + item.speedKt + ' kt' : '')
+                + ' | ' + (item.parts || '—')
+            ));
+        }
+    });
+    lines.push('Positions réelles ignorées pendant la simulation : ' + s.gpsIgnoredDuringSimulation);
 
     const stats = [...s.fnStats.entries()];
     lines.push('');
@@ -2369,6 +2510,52 @@ function appendNpfDiagV1733ExportSections(lines) {
     ));
 }
 
+/* v17.35 — en tête de l'export : simulation utilisée, périodes et réglages. */
+function formatNpfDiagSimSettings(settings) {
+    if (!settings) return '—';
+    const route = Number.isFinite(Number(settings.routeDeg)) ? String(Math.round(settings.routeDeg)).padStart(3, '0') + '°' : '—';
+    return settings.speedKt + ' kt · route ' + route + ' · ' + settings.altitudeFt + ' ft';
+}
+
+function appendNpfDiagSimulationHeader(lines) {
+    const periods = NPF_DIAG_DETAIL.state.simPeriods;
+    const simPositions = Number(NPF_STARTUP_DIAGNOSTIC.state.gpsSummarySim?.positions || 0);
+    if (!periods.length && !simPositions) {
+        lines.push('Simulation : NON (aucune position simulée dans cette session)');
+        return;
+    }
+    lines.push('Simulation : OUI — ' + periods.length + ' période(s), ' + simPositions + ' positions simulées');
+    periods.forEach((period, index) => {
+        const last = period.settings[period.settings.length - 1];
+        lines.push(
+            '   Période ' + (index + 1) + ' : ' + formatNpfDiagClock(period.startAt) + ' -> '
+            + (period.endAt ? formatNpfDiagClock(period.endAt) : 'en cours')
+            + ' | réglages : ' + period.settings.map(item => formatNpfDiagClock(item.at) + ' ' + formatNpfDiagSimSettings(item)).join(' ; ')
+            + (last ? '' : '')
+        );
+    });
+}
+
+function appendNpfDiagSimulationSection(lines) {
+    const s = NPF_DIAG_DETAIL.state;
+    lines.push('');
+    lines.push('SIMULATION ET SUIVI GPS (v17.35)');
+    lines.push('Changements du bouton Suivi :');
+    if (!s.followChanges.length) lines.push('   Aucun.');
+    s.followChanges.forEach(item => lines.push(
+        '   ' + formatNpfDiagClock(item.at) + ' | + ' + (item.t / 1000).toFixed(2) + ' s | ' + (item.active ? 'ACTIVÉ' : 'DÉSACTIVÉ') + ' | ' + item.mode
+    ));
+    lines.push('Dernières positions enregistrées (' + s.positions.length + ') — SIM / RÉEL, suivi, recentrage (raison, décalage) :');
+    s.positions.forEach(item => lines.push(
+        '   ' + formatNpfDiagClock(item.at) + ' | + ' + (item.t / 1000).toFixed(2) + ' s | ' + (item.sim ? 'SIM ' : 'RÉEL')
+        + ' | ' + item.lat + ', ' + item.lon
+        + ' | ' + (item.speedKt === null ? '—' : item.speedKt + ' kt')
+        + ' | précision ' + (item.accuracyM === null ? 'non fournie' : item.accuracyM + ' m')
+        + ' | suivi ' + (item.follow ? 'oui' : 'non')
+        + ' | ' + (item.recenter ? 'recentrage ' + item.recenter + ' (' + item.shiftM + ' m)' : 'pas de recentrage')
+    ));
+}
+
 /* v17.34 — attentes de calque (HT surtout) et vérification des tuiles. */
 function appendNpfDiagV1734ExportSections(lines) {
     const s = NPF_DIAG_DETAIL.state;
@@ -2387,14 +2574,13 @@ function appendNpfDiagV1734ExportSections(lines) {
         + ' | ' + Object.entries(total.reasons).map(([reason, count]) => reason + ' ' + count).join(' · ')
     ));
 
-    const correlation = s.waitCorrelation;
-    const recenterCount = s.gpsRecenterTimes.length;
-    lines.push(
-        'Attentes HT interrompues et recentrages GPS (±200 ms) : ' + correlation.interrupted + ' interrompues | '
-        + correlation.startNear + ' commencent près d\'un recentrage · ' + correlation.endNear + ' finissent près d\'un recentrage · '
-        + correlation.bothNear + ' les deux | recentrages enregistrés : ' + recenterCount
-        + ' (au hasard, à 1 recentrage/s : ≈ 40 %)'
-    );
+    [['réels', s.waitCorrelation, s.gpsRecenterTimes], ['simulés', s.waitCorrelationSim, s.gpsRecenterTimesSim]]
+        .forEach(([title, correlation, times]) => lines.push(
+            'Attentes HT interrompues et recentrages ' + title + ' (±200 ms) : ' + correlation.interrupted + ' interrompues | '
+            + correlation.startNear + ' commencent près d\'un recentrage · ' + correlation.endNear + ' finissent près d\'un recentrage · '
+            + correlation.bothNear + ' les deux | recentrages enregistrés : ' + times.length
+            + ' (au hasard, à 1 recentrage/s : ≈ 40 %)'
+        ));
 
     const check = s.tileCheck;
     lines.push(
@@ -2415,7 +2601,7 @@ function appendNpfDiagV1734ExportSections(lines) {
     if (!minutes.length) lines.push('   Aucune activité.');
     minutes.forEach(bucket => lines.push(
         '   ' + formatNpfDiagClock(bucket.at) + ' | ' + (bucket.gpsFollow ? 'GPS' : '—') + ' · ' + (bucket.htOn ? 'HT' : '—')
-        + ' | ' + bucket.recenters
+        + ' | ' + bucket.recenters + (bucket.recentersSim ? ' + ' + bucket.recentersSim + ' SIM' : '')
         + ' | ' + bucket.htStarted + ' / ' + bucket.htReady + ' / ' + bucket.htInterrupted
         + ', ' + avg(bucket.htWaitMs, bucket.htReady + bucket.htInterrupted) + ' / ' + r(bucket.htWaitMax) + ' ms'
         + ' | ' + bucket.checks + ', ' + r(bucket.checkMs) + ' ms, ' + r(bucket.checkMax) + ' ms, '
@@ -2455,6 +2641,11 @@ function appendNpfDiagDetailRestoredSections(lines, detail) {
             try { lines.push(formatter(item)); } catch (_) {}
         });
     };
+    section('Périodes de simulation :', detail.simPeriods, period => '   ' + formatNpfDiagClock(period.startAt) + ' -> '
+        + (period.endAt ? formatNpfDiagClock(period.endAt) : 'fin non enregistrée') + ' | '
+        + (period.settings || []).map(item => formatNpfDiagSimSettings(item)).join(' ; '));
+    section('Changements du bouton Suivi :', detail.followChanges, item => '   ' + formatNpfDiagClock(item.at) + ' | '
+        + (item.active ? 'ACTIVÉ' : 'DÉSACTIVÉ') + ' | ' + item.mode);
     section('Repères :', detail.markers, formatNpfDiagMarkerLine);
     section('Blocages JS > 100 ms (premiers) :', detail.firstBlocks, formatNpfDiagBlockLine);
     section('Blocages JS > 100 ms (derniers) :', detail.blocks, formatNpfDiagBlockLine);
@@ -2917,6 +3108,7 @@ function getNpfStartupDiagnosticRuntimeInfo() {
         glrLastError: String(typeof npfGlobalLinkLastError !== 'undefined' ? npfGlobalLinkLastError : ''),
         diagMapMotion: NPF_STARTUP_DIAGNOSTIC.state.mapMotionSummary,
         diagGps: NPF_STARTUP_DIAGNOSTIC.state.gpsSummary,
+        diagGpsSim: NPF_STARTUP_DIAGNOSTIC.state.gpsSummarySim,
         diagLayers: NPF_STARTUP_DIAGNOSTIC.state.layerSummary,
         diagPersistCount: Number(NPF_STARTUP_DIAGNOSTIC.state.persistCount || 0),
         diagPersistMaxMs: Number(NPF_STARTUP_DIAGNOSTIC.state.persistMaxMs || 0),
@@ -2936,6 +3128,7 @@ function buildNpfStartupDiagnosticExportText() {
     lines.push('NPF-Q400 — Diagnostic démarrage');
     lines.push('Date : ' + generatedAt.toLocaleString('fr-FR'));
     lines.push('Build : ' + String(window.NPF_SCRIPT_BUILD_VERSION || NPF_SCRIPT_BUILD_VERSION || '—'));
+    try { appendNpfDiagSimulationHeader(lines); } catch (_) {}
     lines.push('');
     lines.push('################ SESSION COURANTE ################');
     lines.push(
@@ -3041,7 +3234,7 @@ function buildNpfStartupDiagnosticExportText() {
     const layerDiag = runtime.diagLayers || {};
     const fmtAvg = (total, count) => count > 0 ? Math.round(total / count) : 0;
     lines.push(
-        'Suivi GPS : '
+        'Suivi GPS réel : '
         + (gpsDiag.positions || 0) + ' positions | '
         + (gpsDiag.gpsFollowRecenterCount || 0) + ' recentrages auto | '
         + 'intervalle GPS moy ' + fmtAvg(gpsDiag.intervalTotalMs || 0, gpsDiag.intervalCount || 0) + ' ms / max ' + Math.round(gpsDiag.maxIntervalMs || 0) + ' ms | '
@@ -3051,6 +3244,29 @@ function buildNpfStartupDiagnosticExportText() {
             ? ' | vitesse moy ' + Math.round(Number(gpsDiag.speedTotalMps || 0) / Number(gpsDiag.speedCount) * 1.9438444924406)
                 + ' kt / max ' + Math.round(Number(gpsDiag.maxSpeedMps || 0) * 1.9438444924406) + ' kt'
             : ' | vitesse GPS non fournie')
+    );
+    /* v17.35 — positions simulées : ligne séparée ; recentrages par raison. */
+    const gpsSimDiag = runtime.diagGpsSim || {};
+    const formatReasons = summary => Object.entries(summary?.recenterReasons || {})
+        .map(([reason, count]) => reason + ' ' + count).join(' · ') || '—';
+    if (Number(gpsSimDiag.positions || 0) > 0 || Number(gpsSimDiag.recenterCount || 0) > 0) {
+        lines.push(
+            'Suivi GPS simulé : '
+            + (gpsSimDiag.positions || 0) + ' positions | '
+            + (gpsSimDiag.recenterCount || 0) + ' recentrages | '
+            + 'intervalle moy ' + fmtAvg(gpsSimDiag.intervalTotalMs || 0, gpsSimDiag.intervalCount || 0) + ' ms / max ' + Math.round(gpsSimDiag.maxIntervalMs || 0) + ' ms | '
+            + 'précision non fournie (non comptée) | '
+            + (Number(gpsSimDiag.speedCount || 0) > 0
+                ? 'vitesse moy ' + Math.round(Number(gpsSimDiag.speedTotalMps || 0) / Number(gpsSimDiag.speedCount) * 1.9438444924406)
+                    + ' kt / max ' + Math.round(Number(gpsSimDiag.maxSpeedMps || 0) * 1.9438444924406) + ' kt'
+                : 'vitesse —')
+        );
+    } else {
+        lines.push('Suivi GPS simulé : aucune position simulée');
+    }
+    lines.push(
+        'Recentrages par raison : réel ' + formatReasons(gpsDiag)
+        + ' | simulé ' + formatReasons(gpsSimDiag)
     );
     const fmtMotionBucket = bucket => {
         const safeBucket = bucket || {};

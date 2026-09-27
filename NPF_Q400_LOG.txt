@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 27/09/2026
-Version de travail actuelle : TEST v17.34
+Version de travail actuelle : TEST v17.35
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,10 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.35 — la simulation respecte le bouton Suivi (suivi désactivé : l'avion
+  simulé avance, la carte ne bouge pas) ; DIAG : simulation signalée partout,
+  statistiques GPS / chaîne GPS / recentrages / corrélation HT séparées réel /
+  simulé, recentrages par raison, changements du bouton Suivi journalisés ;
 - v17.34 — DIAG seulement : en suivi GPS, instantanés automatiques sans mesure
   DOM (et non calculés s'ils ne sont pas conservés) ; mesure des attentes HT
   (activation / fenêtre lourde) et des vérifications de tuiles
@@ -314,6 +318,9 @@ NON IMPLÉMENTÉ / OUVERT :
   (« ANALYSE DIAG v17.32 SOL + VOL ») : 5 défauts du DIAG lui-même relevés
   (D1 à D5) et 9 recommandations classées gain / risque (R1 à R9), aucune
   implémentée. Historique : À MESURER -> MESURÉ ;
+- v17.35 : À MESURER sur iPad (simulation : suivi OFF -> carte fixe, suivi ON
+  -> recentrages comme avant ; raison des recentrages en simulation) et en
+  VOL RÉEL avec les points v17.33 / v17.34 ;
 - v17.34 : À MESURER en VOL RÉEL avec les points v17.33 (liste des actions en
   fin d'entrée v17.34) ;
 - v17.33 : À MESURER en VOL RÉEL (liste des actions en fin d'entrée v17.33) :
@@ -327,38 +334,38 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.34
+Version : TEST v17.35
 Date : 27/09/2026
-Base : v17.33 (commitée e9bc769, À MESURER en vol)
+Base : v17.34 (commitée d7d12f1, À MESURER en vol)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.34.txt
-2_Index_v17.34.txt
-3_Manifest_v17.34.txt
-4_Script_v17.34.txt
-5_SIA_v17.34.txt
-6_Style_v17.34.txt
-7_Sw_v17.34.txt
+1_Modifications_v17.35.txt
+2_Index_v17.35.txt
+3_Manifest_v17.35.txt
+4_Script_v17.35.txt
+5_SIA_v17.35.txt
+6_Style_v17.35.txt
+7_Sw_v17.35.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.34
-- Manifest : start_url = ./index.html?appv=v17.34
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.34
-- Style : NPF_STYLE_BUILD_VERSION = v17.34
-- Service Worker : `sw-v17-34_diag_attentes_ht`
+- Index : APP_VERSION = v17.35
+- Manifest : start_url = ./index.html?appv=v17.35
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.35
+- Style : NPF_STYLE_BUILD_VERSION = v17.35
+- Service Worker : `sw-v17-35_simulation_suivi`
 - SIA_DATA_REVISION (SW / Index) : 15.69-radio1026-1-maplite1 (inchangée)
-- sia.js v17.34 : strictement identique à v17.33.
+- sia.js v17.35 : strictement identique à v17.34.
 
 STATUT DE VALIDATION :
-- validation statique v17.34 effectuée avant livraison : Script/SIA/SW OK, script
+- validation statique v17.35 effectuée avant livraison : Script/SIA/SW OK, script
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
-- `sia.js` identique à v17.33 ; moteur tuiles (src/100) identique à v17.33
-  (points de mesure I8 de v17.33 seulement) ;
-- tests Chrome A/B v17.33 / v17.34 (pack NPF synthétique, vol GPS simulé) :
-  entrée v17.34 ;
+- `sia.js` et moteur tuiles (src/100) identiques à v17.34 ;
+- tests Chrome A/B v17.34 / v17.35 (positions réelles injectées + simulation
+  suivi OFF / ON) : entrée v17.35 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
-  sur iPad ; v17.32 MESURÉE ; v17.29, v17.31, v17.33 et v17.34 À MESURER.
+  sur iPad ; v17.32 MESURÉE ; v17.29, v17.31, v17.33, v17.34 et v17.35 À
+  MESURER.
 
 
 2. PROTOCOLE DE TRAVAIL À RESPECTER
@@ -1880,6 +1887,145 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.35 — LA SIMULATION RESPECTE LE BOUTON SUIVI ; DIAG RÉEL / SIMULÉ
+Date : 27/09/2026
+Base fonctionnelle : v17.34 (commit d7d12f1)
+
+PARTIE 1 — DESCRIPTION DU DÉPLACEMENT DE LA CARTE (constaté dans le code v17.34
+et mesuré dans Chrome ; lignes de src/ v17.34)
+a) GPS réel, Suivi ACTIVÉ
+   - Rythme : celui du GPS de l'iPad (navigator.geolocation.watchPosition,
+     src/260:456 -> updateUserPosition, src/270:1). Aucun filtrage : en vol le
+     26/09, une position toutes les 1 191 ms en moyenne.
+   - Seuil de déplacement : AUCUN pour le GPS réel. Le seuil de 8 px
+     (src/260:953-970) ne s'applique qu'en simulation. Chaque position réelle
+     déclenche recenterMapOnKnownGpsPosition('gps-update') (src/270:162-168)
+     puis map.setView(..., { animate: false }) (src/260:985).
+   - Règle de temps : aucune, hors pause après geste.
+   - Cible : centre « anticipé » getCenterGpsFollowMapCenter (src/260:821) :
+     l'avion est placé en arrière de 25 % de la largeur / 24 % de la hauteur
+     selon le cap, dans des marges de sécurité (src/260:705-713), en tenant
+     compte des bandeaux affichés (getBoundingClientRect / getComputedStyle,
+     src/260:753-819).
+   - Reprise après geste : tout contact (pointerdown, touchstart, mousedown,
+     wheel) ou geste Leaflet (dragstart, zoomstart, movestart réel) arme une
+     pause de 10 s (CENTER_GPS_FOLLOW_RECENTER_DELAY_MS, src/030:291 ;
+     src/260:997-1014, 1030-1102) puis un recentrage « manual-delay » à la fin
+     de la pause. Un moveend non programmé (autre code) relance aussi cette pause
+     (src/260:1080-1093).
+   - À chaque position : écriture localStorage de la position, recadrage de
+     démarrage (une fois), icône de l'avion reconstruite, vecteur, WP / navette
+     Feu-PÉLIC, commune la plus proche (+ 250 ms), calculateur, déroutement,
+     recentrage (setView -> chaîne moveend : canvas, tuiles, HT, DIAG), tracé
+     vers la cible (src/270:1-192).
+b) GPS réel, Suivi DÉSACTIVÉ : la carte ne suit pas l'avion. Elle ne bouge
+   que : au démarrage (position mémorisée, src/060 applyStoredGpsStartupCenter
+   à 750 ms ; premier GPS réel s'il n'est pas dans les 70 % centraux de l'écran,
+   applyStartupGpsAutoCenter, src/260:286 ; feu mémorisé,
+   fitMapToStartupFireContext) ; sur appui « Centrer » (centerMapOnCurrentPosition,
+   src/260:1185) ; à l'activation du Suivi. Aucun recentrage quand l'avion sort
+   de l'écran.
+c) Simulation (v17.34)
+   - Pas de 500 ms (SIMULATION_MOTION_INTERVAL_MS, src/030:997), ligne droite,
+     vitesse / route réglées ; ~64 m par pas à 250 kt.
+   - Seuil de 8 px (SIMULATION_FOLLOW_MIN_CENTER_SHIFT_PX, src/030:1006 ;
+     src/260:953-970) : pour 'gps-update' en simulation, pas de setView tant que
+     le centre cible est à moins de 8 px du centre actuel.
+   - Délai après geste : 5 s (SIMULATION_FOLLOW_RECENTER_DELAY_MS, src/030:1005,
+     via getCenterGpsFollowRecenterDelayMs, src/260:729).
+   - MESURÉ dans Chrome (250 kt) : recentrage tous les 2 pas à z13 (0,5 NM),
+     4 à z12 (1 NM), 7 à z11 (2 NM), 13-14 à z10 (5 NM), ~26 à z9 (10 NM) :
+     exactement la règle des 8 px. Aucune règle de temps n'existe dans le code.
+     Le plafond d'environ 8 pas (4 s) observé sur iPad à 5 et 10 NM N'EST PAS
+     expliqué par le code et ne se produit pas dans Chrome. Hypothèses (À
+     MESURER) : un autre chemin de recentrage (« manual-delay », 5 s, qui ignore
+     le seuil) déclenché sur iPad par un moveend non programmé (redimensionnement
+     / barre Safari, autre code) ; ou un comptage différent des pas. La v17.35
+     enregistre la raison de chaque recentrage pour trancher.
+   - Constaté aussi : après chaque changement de zoom en simulation, un
+     recentrage « manual-delay » a lieu 5 s plus tard (zoomend compte comme un
+     mouvement manuel).
+d) isCenterGpsFollowEffective (src/260:720-727, v17.14) considérait le suivi
+   actif dès que la simulation avançait : choix v17.14 pour avoir le cadrage
+   anticipé en simulation SANS démarrer le GPS réel et sans changer l'état
+   visuel du bouton Suivi (enableCenterGpsFollow démarre le watch GPS réel,
+   src/260:1129-1136).
+Points signalés avant de coder (sans remise en cause de la partie 2) :
+   - le « plafond de temps » n'existe pas dans le code (voir c) ;
+   - le bouton Suivi démarre le GPS réel, y compris en simulation (positions
+     réelles ignorées pendant la simulation, updateUserPosition src/270:5) ;
+   - suivi désactivé, la carte ne se place pas d'elle-même sur l'avion simulé
+     (comme le GPS réel : utiliser « Centrer »).
+
+DEMANDE UTILISATEUR (partie 2)
+1. La simulation respecte le bouton Suivi comme le GPS réel ; Suivi activé :
+   comportement de la simulation inchangé ; chemin du GPS réel inchangé.
+2. DIAG : simulation signalée partout (en-tête, chaque position), statistiques
+   séparées réel / simulé (Suivi GPS, chaîne GPS I1, recentrages, corrélation
+   des attentes HT), précision nulle hors moyenne, changements du bouton Suivi
+   journalisés.
+
+MODIFICATIONS
+1. src/260 : isCenterGpsFollowEffective() = centerGpsFollowActive seul. Pour
+   le GPS réel, le terme « simulation en mouvement » était toujours faux : rien
+   ne change. Suivi activé en simulation : seuil de 8 px, délai de 5 s et
+   cadrage anticipé inchangés.
+2. src/270 : updateUserPosition transmet au DIAG si la position est simulée
+   (argument ajouté à npfDiagGpsPosition ; aucun autre changement).
+3. src/010 (DIAG) :
+   - statistiques « Suivi GPS » séparées (gpsSummary réel / gpsSummarySim) ;
+     précision absente non comptée ; recentrages par raison et par mode ;
+   - chaîne GPS (I1) séparée réel / simulé ; positions réelles ignorées pendant
+     la simulation comptées à part ;
+   - recentrages réels / simulés séparés dans la corrélation des attentes HT et
+     dans les résumés par minute ;
+   - périodes de simulation (début, fin, réglages vitesse / route / altitude,
+     changements de réglages) ; événements « SIMULATION » et « SUIVI GPS » ;
+   - 120 dernières positions enregistrées, chacune marquée SIM / RÉEL, avec
+     vitesse, précision, suivi, et recentrage (raison, décalage) ;
+   - gestes et état des blocages portant le mode (SIMULATION / GPS réel) ;
+   - en-tête : « Simulation : NON » ou « OUI » avec périodes et réglages ;
+   - section « SIMULATION ET SUIVI GPS » ; extrait persisté pour la session
+     restaurée.
+
+TESTS CHROME (v17.34 / v17.35)
+- Positions réelles injectées (scénario habituel : pack NPF_France_TEST,
+  OFFLINE, HT ON, 40 positions à 250 kt, suivi centré, glissement, deux zooms,
+  HT OFF / ON) : IDENTIQUE à chaque étape (centre, zoom, tronçons HT, tuiles
+  chargées, trouvées / absentes 60/54, canvas HT) ; 740 getBoundingClientRect
+  pendant le suivi GPS dans les deux versions ; export « Simulation : NON ».
+- Simulation 250 kt, route 090°, z11 :
+  . Suivi DÉSACTIVÉ, 15 s : v17.35 -> l'avion avance (lon 4,60080 -> 4,62566),
+    centre de carte inchangé, 0 recentrage. (v17.34 : 4 recentrages
+    « gps-update », suivi implicite.)
+  . Suivi ACTIVÉ (bouton), 20 s : v17.35 recentrages aux pas 3, 10, 17, 24, 31,
+    38 (décalage 8 à 9 px) ; v17.34 aux pas 3, 10, 17, 25, 32, 39 : même
+    cadence de 7 pas (écart d'un pas dû au minutage), même règle.
+  . Suivi désactivé à nouveau : carte fixe, avion continue.
+- Export simulation : en-tête « Simulation : OUI — 1 période », réglages
+  250 kt · route 090° · 1500 ft ; « Suivi GPS simulé : 85 positions, intervalle
+  500 ms, précision non fournie (non comptée) » ; « Recentrages par raison :
+  simulé enable 1 · gps-update 7 » ; chaîne GPS SIMULATION séparée ; bouton
+  Suivi ACTIVÉ / DÉSACTIVÉ journalisé ; 85 positions marquées SIM.
+- Aucune exception, aucune erreur console.
+
+VERSIONS
+- Index / Manifest / Script / Style : v17.35.
+- Service Worker : `sw-v17-35_simulation_suivi`.
+- SIA_DATA_REVISION inchangée ; sia.js strictement identique à v17.34.
+
+VALIDATION AVANT LIVRAISON
+- `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés.
+- Syntaxe Script / SIA / SW : OK. Script inline Index : OK. Manifest JSON : OK.
+- Cohérence versions / caches : OK. sia.js et src/100 identiques à v17.34.
+
+À MESURER
+- Sur iPad, en simulation : Suivi OFF -> carte fixe ; Suivi ON -> recentrages
+  comme avant ; section « SIMULATION ET SUIVI GPS » : raison de chaque
+  recentrage à 5 et 10 NM (explication du plafond d'environ 8 pas).
+
+--------------------------------------------------------------------------------
 
 VERSION TEST v17.34 — DIAG : INSTANTANÉS SANS DOM EN SUIVI GPS, ATTENTES HT
 Date : 27/09/2026
