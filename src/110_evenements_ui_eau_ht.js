@@ -2151,6 +2151,17 @@ async function toggleHighVoltageLinesLayer(forceState = null, options = {}) {
         if (highVoltageLinesLayer && map?.hasLayer(highVoltageLinesLayer)) {
             map.removeLayer(highVoltageLinesLayer);
         }
+        /*
+         * v17.33 — R6 : HT OFF -> le canvas HT quitte la carte (mémoire libérée,
+         * plus de remise à zéro à chaque moveend). Leaflet le recrée dans son
+         * pane dès que des tracés HT reviennent sur la carte (HT ON). Jamais
+         * pendant un geste : uniquement ici, au passage OFF.
+         */
+        try {
+            if (highVoltageLinesRenderer && map?.hasLayer(highVoltageLinesRenderer)) {
+                map.removeLayer(highVoltageLinesRenderer);
+            }
+        } catch (_) {}
         recordNpfStartupDiagnosticOverlaySnapshot(`lignes-ht OFF · ${options.source || 'toggle'}`);
         return;
     }

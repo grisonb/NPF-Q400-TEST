@@ -3347,7 +3347,14 @@ function initializeSiaSystem() {
                 siaDecorationProgressiveRun += 1;
             }
             const now = NPF_STARTUP_DIAGNOSTIC.now();
-            const startSnapshot = getNpfStartupDiagnosticOverlaySnapshot();
+            /*
+             * v17.33 — DIAG D1 : aucun instantané pour un recentrage GPS
+             * programmé ; pour un geste manuel, instantané sans mesure DOM
+             * (aucun calcul de mise en page forcé pendant le geste).
+             */
+            const startSnapshot = gpsFollowPan
+                ? null
+                : getNpfStartupDiagnosticOverlaySnapshot({ layoutFree: true });
             npfDiagMoveSample = {
                 startedAt: now,
                 lastAt: now,
@@ -3357,8 +3364,8 @@ function initializeSiaSystem() {
                 gaps100: 0,
                 gaps150: 0,
                 gaps250: 0,
-                maxReadsActive: Number(startSnapshot.npfReadsActive || 0),
-                maxReadsQueued: Number(startSnapshot.npfReadsQueued || 0),
+                maxReadsActive: Number(directOfflineNpfActiveReads || 0),
+                maxReadsQueued: Number(directOfflineNpfReadQueue?.length || 0),
                 gpsPositionsStart: Number(
                     NPF_STARTUP_DIAGNOSTIC.state?.gpsSummary?.positions || 0
                 ),
@@ -3403,7 +3410,9 @@ function initializeSiaSystem() {
             if (sample) {
                 const now = NPF_STARTUP_DIAGNOSTIC.now();
                 const avgGap = sample.events > 0 ? sample.gapTotal / sample.events : 0;
-                const endSnapshot = getNpfStartupDiagnosticOverlaySnapshot();
+                const endSnapshot = sample.source === 'gps-follow'
+                    ? null
+                    : getNpfStartupDiagnosticOverlaySnapshot({ layoutFree: true });
                 npfDiagMapMotion(sample.source || 'autre', {
                     dureeMs: Math.round(now - sample.startedAt),
                     moveEvents: sample.events,
@@ -3415,7 +3424,7 @@ function initializeSiaSystem() {
                     tileQueueMaxPendantPan: Number(sample.maxReadsQueued || 0),
                     tileActiveMaxPendantPan: Number(sample.maxReadsActive || 0),
                     leafletLayersDebut: Number(sample.startSnapshot?.leafletLayers || 0),
-                    leafletLayersFin: Number(endSnapshot.leafletLayers || 0),
+                    leafletLayersFin: Number(endSnapshot?.leafletLayers || 0),
                     zoom: map.getZoom(),
                     zonesVisibles: Array.isArray(siaRenderedAirspaceFeatures) ? siaRenderedAirspaceFeatures.length : 0,
                     ...npfDiagGetMapMotionExtraMetrics(sample)

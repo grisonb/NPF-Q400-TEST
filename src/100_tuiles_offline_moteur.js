@@ -2337,17 +2337,24 @@ window.getNpfTilePerformanceStatus = function getNpfTilePerformanceStatus() {
     };
 };
 
-async function findDirectOfflineTileBlobUnqueued(coords) {
+async function findDirectOfflineTileBlobUnqueued(coords, npfDiagOptions = null) {
     const cacheKey = buildDirectOfflineTileBlobCacheKey(coords);
+    /* v17.33 — DIAG I8 : mesure seule (durée, bases / URL essayées, délais
+     * dépassés). Aucun effet sur la file, le cache, l'ordre ni les délais. */
+    const npfDiagLookup = npfDiagTileLookupStart(coords, npfDiagOptions);
 
     const cachedBlob = getDirectOfflineCachedTileBlob(coords);
-    if (cachedBlob) return cachedBlob;
+    if (cachedBlob) {
+        npfDiagTileLookupEnd(npfDiagLookup, 'ram');
+        return cachedBlob;
+    }
 
     if (directOfflineTileMissCache.has(cacheKey)) {
         const cachedMissAt = Number(directOfflineTileMissCache.get(cacheKey)) || 0;
         if (Date.now() - cachedMissAt <= DIRECT_OFFLINE_TILE_MISS_CACHE_TTL_MS) {
             directOfflineTileMissCache.delete(cacheKey);
             directOfflineTileMissCache.set(cacheKey, cachedMissAt);
+            npfDiagTileLookupEnd(npfDiagLookup, 'absente-cache');
             return null;
         }
         directOfflineTileMissCache.delete(cacheKey);
@@ -2367,10 +2374,16 @@ async function findDirectOfflineTileBlobUnqueued(coords) {
     if (hintedTileUrl) {
         tileUrls = promoteDirectOfflineLookupCandidate(tileUrls, hintedTileUrl);
     }
+    if (npfDiagLookup) {
+        npfDiagLookup.hintDb = String(lookupHint?.dbName || '');
+        npfDiagLookup.dbCandidates = dbNames.length;
+        npfDiagLookup.urlCandidates = tileUrls.length;
+    }
     let hadRecoverableTechnicalError = false;
 
     for (const dbName of dbNames) {
         let tileDb;
+        if (npfDiagLookup) npfDiagLookup.opens += 1;
         try {
             const openTimeoutMs = isNpfOfflinePackSelection() ? 7000 : 2200;
             tileDb = await withTimeout(
@@ -2379,6 +2392,7 @@ async function findDirectOfflineTileBlobUnqueued(coords) {
                 `Timeout ouverture ${dbName}`
             );
         } catch (error) {
+            npfDiagTileLookupError(npfDiagLookup, error, 'ouverture');
             if (
                 isPrimaryDirectOfflineDatabaseCandidate(dbName)
                 && registerDirectOfflineReadError(
@@ -2392,6 +2406,7 @@ async function findDirectOfflineTileBlobUnqueued(coords) {
         }
 
         for (const tileUrl of tileUrls) {
+            if (npfDiagLookup) npfDiagLookup.reads += 1;
             try {
                 const readTimeoutMs = isNpfOfflinePackSelection() ? 5200 : 1800;
                 const allowLegacyFallback = String(dbName || '') === String(OFFLINE_DB_NAME || '');
@@ -2420,8 +2435,10 @@ async function findDirectOfflineTileBlobUnqueued(coords) {
                         'Mode OFFLINE — tuiles locales chargées.'
                     );
                 }
+                npfDiagTileLookupEnd(npfDiagLookup, 'trouvée', dbName);
                 return blob;
             } catch (error) {
+                npfDiagTileLookupError(npfDiagLookup, error, 'lecture');
                 if (
                     isPrimaryDirectOfflineDatabaseCandidate(dbName)
                     && registerDirectOfflineReadError(
@@ -2440,9 +2457,11 @@ async function findDirectOfflineTileBlobUnqueued(coords) {
      * raison technique : la récupération automatique est déjà en cours.
      */
     if (hadRecoverableTechnicalError) {
+        npfDiagTileLookupEnd(npfDiagLookup, 'erreur-technique');
         return null;
     }
 
+    npfDiagTileLookupEnd(npfDiagLookup, 'absente');
     rememberDirectOfflineTileMiss(cacheKey);
     directOfflineTileMissCount += 1;
     if (
@@ -2481,12 +2500,14 @@ async function findDirectOfflineTileBlob(coords) {
     const existing = directOfflineNpfInflightReads.get(inflightKey);
     if (existing) return existing;
 
+    /* v17.33 — DIAG I8 : heure de mise en file, pour mesurer l'attente. */
+    const npfDiagQueuedAt = npfDiagTileNow();
     const pending = enqueueDirectOfflineNpfRead(async () => {
         if (hardGeneration !== directOfflineTileReadGeneration) {
             directOfflineNpfAbortedReadCount += 1;
             return DIRECT_OFFLINE_TILE_ABORTED;
         }
-        const blob = await findDirectOfflineTileBlobUnqueued(coords);
+        const blob = await findDirectOfflineTileBlobUnqueued(coords, { queuedAt: npfDiagQueuedAt });
         if (hardGeneration !== directOfflineTileReadGeneration) {
             directOfflineNpfAbortedReadCount += 1;
             return DIRECT_OFFLINE_TILE_ABORTED;

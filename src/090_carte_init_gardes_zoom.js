@@ -320,10 +320,14 @@ function initMap() {
      * Sans option `pane`, Leaflet plaçait ce canvas dans overlayPane (z400) :
      * le masquage de highVoltageLinesPane pendant les gestes n'avait aucun
      * effet sur HT. Le canvas passe ainsi en z385, sous les pistes (z390).
+     *
+     * v17.33 — marge 0,35 -> 0,10 (journal, section 16, R2) : HT est masquée
+     * pendant les gestes manuels et Leaflet redessine ce canvas à chaque
+     * moveend ; mémoire et surface effacée à chaque recentrage divisées par 2.
      */
     highVoltageLinesRenderer = L.canvas
         ? L.canvas({
-            padding: 0.35,
+            padding: 0.10,
             pane: 'highVoltageLinesPane'
         })
         : null;

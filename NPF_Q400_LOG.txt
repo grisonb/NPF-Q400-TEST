@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
-Mise à jour : 26/09/2026
-Version de travail actuelle : TEST v17.32
+Mise à jour : 27/09/2026
+Version de travail actuelle : TEST v17.33
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,11 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.33 — canvas HT : marge 0,35 -> 0,10 (R2) et canvas retiré de la carte à
+  HT OFF, recréé à HT ON (R6) ; DIAG : plus d'instantané DOM sur les
+  recentrages GPS ni pendant un geste manuel (D1), « SIA GPS » compté (D2),
+  premiers blocages conservés (D3), changements de pack (D4 / I9), vitesse GPS
+  (D5), instrumentation I1 à I8 (dont lectures de tuiles, mesure seule) ;
 - v17.32 — DIAG détaillé (aucun changement de comportement) : mémoire des
   canvas, chaque geste, chaque restitution, reconstructions HT / Routes, cache
   des cellules Routes, blocages JS > 100 ms à 50 ms avec contexte, chronologie
@@ -305,6 +310,10 @@ NON IMPLÉMENTÉ / OUVERT :
   (« ANALYSE DIAG v17.32 SOL + VOL ») : 5 défauts du DIAG lui-même relevés
   (D1 à D5) et 9 recommandations classées gain / risque (R1 à R9), aucune
   implémentée. Historique : À MESURER -> MESURÉ ;
+- v17.33 : À MESURER en VOL RÉEL (liste des actions en fin d'entrée v17.33) :
+  aucun bord vide HT en suivi GPS ; HT OFF sans canvas ; blocages à 1 Hz en
+  suivi GPS comparés au vol v17.32 ; cause des 4,5 à 18 s de tuiles après zoom
+  (sections TUILES du DIAG) ;
 
 IMPORTANT : cette liste de statut ne remplace pas les sections détaillées plus bas.
 Elle sert à savoir immédiatement ce qui est réellement codé, ce qui reste ouvert
@@ -312,37 +321,38 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.32
-Date : 26/09/2026
-Base : v17.31 (commitée, À MESURER sur iPad)
+Version : TEST v17.33
+Date : 27/09/2026
+Base : v17.32 (MESURÉE sur iPad le 26/09/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.32.txt
-2_Index_v17.32.txt
-3_Manifest_v17.32.txt
-4_Script_v17.32.txt
-5_SIA_v17.32.txt
-6_Style_v17.32.txt
-7_Sw_v17.32.txt
+1_Modifications_v17.33.txt
+2_Index_v17.33.txt
+3_Manifest_v17.33.txt
+4_Script_v17.33.txt
+5_SIA_v17.33.txt
+6_Style_v17.33.txt
+7_Sw_v17.33.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.32
-- Manifest : start_url = ./index.html?appv=v17.32
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.32
-- Style : NPF_STYLE_BUILD_VERSION = v17.32
-- Service Worker : `sw-v17-32_diag_detail`
+- Index : APP_VERSION = v17.33
+- Manifest : start_url = ./index.html?appv=v17.33
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.33
+- Style : NPF_STYLE_BUILD_VERSION = v17.33
+- Service Worker : `sw-v17-33_diag_gps_tuiles_ht`
 - SIA_DATA_REVISION (SW / Index) : 15.69-radio1026-1-maplite1 (inchangée)
-- sia.js v17.32 : strictement identique à v17.31.
+- sia.js v17.33 : strictement identique à v17.32.
 
 STATUT DE VALIDATION :
-- validation statique v17.32 effectuée avant livraison : Script/SIA/SW OK, script
+- validation statique v17.33 effectuée avant livraison : Script/SIA/SW OK, script
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
-- `sia.js` et moteur tuiles (src/100) identiques à v17.31 ;
-- tests Chrome A/B v17.31 / v17.32 (servies en local, profils neufs) : entrée
-  v17.32 ;
+- `sia.js` identique à v17.32 ; moteur tuiles (src/100) : UNIQUEMENT des
+  points de mesure I8 (accord explicite du 26/09/2026), aucune logique changée ;
+- tests Chrome A/B v17.32 / v17.33 (pack NPF synthétique, vol GPS simulé) :
+  entrée v17.33 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
-  sur iPad ; v17.29, v17.31 et v17.32 À MESURER.
+  sur iPad ; v17.32 MESURÉE ; v17.29, v17.31 et v17.33 À MESURER.
 
 
 2. PROTOCOLE DE TRAVAIL À RESPECTER
@@ -1383,12 +1393,12 @@ mesurer.
   D5 vitesse GPS non enregistrée (débit de tuiles non rapportable à la vitesse).
 
 RECOMMANDATIONS CLASSÉES GAIN / RISQUE (aucune implémentée — À DÉCIDER)
-R1 [risque nul, DIAG seul] Corriger D1 à D5 : pas d'instantané pour les
+R1 [IMPLÉMENTÉ en v17.33 — À MESURER] [risque nul, DIAG seul] Corriger D1 à D5 : pas d'instantané pour les
    mouvements GPS, « SIA GPS » en compteur seulement, garder les 40 premiers +
    80 derniers blocages, événement de changement de pack, vitesse GPS ; ajouter
    I1 à I7. Gain : suppression d'une mise en page forcée par seconde en vol
    (SUPPOSÉ) et prochain vol conclusif.
-R2 [risque faible, gain mémoire CONSTATÉ par calcul] Marge du canvas HT 0,35 ->
+R2 [IMPLÉMENTÉ en v17.33 — À MESURER] [risque faible, gain mémoire CONSTATÉ par calcul] Marge du canvas HT 0,35 ->
    0,10 (HT masquées pendant les gestes) : -50 % de mémoire HT et de surface
    remise à zéro par recentrage.
 R3 [risque faible] Démarrage : invalidateSize au prochain rafraîchissement
@@ -1399,11 +1409,13 @@ R4 [risque faible à modéré] Démarrage : rendre la main (une image) entre ind
    étapes. Temps total inchangé, blocage le plus long réduit (SUPPOSÉ).
 R5 [risque faible, visible seulement si Routes affichées hors geste] Marge des
    2 canvas Routes 0,55 -> 0,20 : ≈ -85 Mo au pic.
-R6 [À DÉCIDER, historique v17.09-v17.11] Retirer le renderer HT de la carte
+R6 [IMPLÉMENTÉ en v17.33 — À MESURER ; décision utilisateur du 26/09/2026]
+   [historique v17.09-v17.11] Retirer le renderer HT de la carte
    quand HT est OFF (libère 51,4 Mo, supprime sa remise à zéro à chaque
    recentrage). Uniquement au passage OFF, jamais pendant un geste (le retrait
    pendant les gestes reste ABANDONNÉ).
-R7 [demande explicite requise — moteur tuiles, règle I] Instrumenter I8 / I9
+R7 [IMPLÉMENTÉ en v17.33, MESURE SEULE — accord explicite du 26/09/2026]
+   [moteur tuiles, règle I] Instrumenter I8 / I9
    avant toute modification du chargement des tuiles après zoom.
 R8 [À DÉCIDER, effet opérationnel visible] Recentrage GPS seulement au-delà
    d'un déplacement de N pixels : réduirait tout le coût par moveend, mais
@@ -1862,6 +1874,138 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.33 — DIAG GPS / TUILES + CANVAS HT (R2, R6)
+Date : 27/09/2026
+Base fonctionnelle : v17.32
+
+DEMANDE UTILISATEUR (décisions validées pour le prochain vol réel)
+1. D1 : plus d'instantané ni de mesure des tuiles (countVisibleLoadedBaseTiles,
+   getBoundingClientRect) sur les recentrages GPS programmés ; pour les gestes
+   manuels, aucune mesure qui force un calcul de mise en page pendant le geste.
+2. R6 : HT OFF -> canvas HT retiré de la carte ; recréé à HT ON. Aucun
+   changement visible attendu.
+3. R2 : marge du canvas HT 0,35 -> 0,10 ; vérifier l'absence de bord vide en
+   suivi GPS (sans masquage) et après un geste.
+4. DIAG : D2 à D5 corrigés, instrumentation I1 à I7.
+5. Accord explicite pour instrumenter le moteur de tuiles (I8, I9), EN MESURE
+   SEULEMENT : aucun changement de file, concurrence, cache, priorité ni délai.
+Hors de ces points rien ne change (R3 / R4 plus tard, sia.js identique, hors
+ligne inchangé).
+
+MODIFICATIONS
+1. src/090 : `highVoltageLinesRenderer` : padding 0,10 (au lieu de 0,35).
+2. src/110 : toggleHighVoltageLinesLayer(OFF) retire aussi le renderer HT de la
+   carte (map.removeLayer). À HT ON, Leaflet le rajoute dès que des tracés HT
+   reviennent (même objet, nouveau canvas, même pane). Jamais pendant un geste.
+3. src/340 : enregistreur de gestes : aucun instantané pour un recentrage GPS ;
+   instantané SANS mesure DOM pour un geste manuel ; file / lectures tuiles lues
+   directement dans les compteurs.
+4. src/010 :
+   - getNpfStartupDiagnosticOverlaySnapshot({ layoutFree }) : sur demande ou
+     pendant un geste manuel (verrou de geste ou contact), tuiles comptées
+     depuis la GridLayer (niveau courant) au lieu de getBoundingClientRect ;
+     champ `tilesMeasure=sans-DOM` ; s'applique aussi aux instantanés
+     « priorité carte · début geste verrouillé » ;
+   - D2 : « SIA GPS » sans traitement comptés (en-tête « Synthèse
+     performance »), plus listés ;
+   - D3 : 40 premiers + 80 derniers blocages conservés (session courante),
+     15 premiers + 30 derniers dans la session restaurée ;
+   - D4 / I9 : événement « PACK CARTE » à chaque changement (relevé toutes les
+     secondes à partir de +3 s) avec les compteurs de tuiles à cet instant ;
+     statistiques de lecture par pack ;
+   - D5 : vitesse GPS (moyenne / max dans « Suivi GPS », dans les gestes
+     gps-follow, les blocages et les cycles GPS) ;
+   - I1 : cycle GPS (updateUserPosition) décomposé : recenterMapOnKnownGpsPosition,
+     updateOwnGpsVector, updateNearestCommuneDisplay, updateCalculatorData,
+     drawUserToTargetRoute, saveStoredGpsPosition, buildOwnGpsIcon,
+     applyOwnGpsPlaneHeading, handleNpfFirePelicAutoCycle ; 15 positions les
+     plus lentes avec leurs étapes ;
+   - I2 : map.setView (instance) mesuré ;
+   - I3 : renderers canvas HT, pistes, Routes (bordure / ligne) : _update et
+     _redraw mesurés sur l'instance, avec la taille du canvas ;
+   - I4 : getNpfStartupDiagnosticOverlaySnapshot mesuré ;
+   - I5 : refreshTrafficLayer, redrawTrafficLayerFromSnapshot,
+     updateTrafficSmoothPositions (contexte des blocages au-delà de 8 ms),
+     refreshGlobalLinkPositions ;
+   - I6 : sonde de mise en page (lecture forcée) avant / après
+     setupEventListeners, nombre d'éléments du DOM — au démarrage, une fois ;
+   - I7 : relevé mémoire canvas après tout blocage > 500 ms ;
+   - statistiques de toutes les fonctions suivies (30 plus coûteuses) ;
+   - 68 fonctions suivies au total.
+5. src/100 (MESURE SEULE, I8) : dans findDirectOfflineTileBlobUnqueued,
+   compteurs par recherche (ouvertures de base, lectures, délais dépassés,
+   erreurs, indice de base utilisé / faux) et durée ; dans
+   findDirectOfflineTileBlob, heure de mise en file transmise en second
+   argument optionnel (attente en file). Aucune condition, ordre, délai, cache,
+   concurrence ni priorité modifiés.
+
+NOUVELLES SECTIONS DE L'EXPORT
+- SONDE DE MISE EN PAGE AU DÉMARRAGE (I6) ; CHAÎNE GPS (I1 / I2) ; RENDERERS
+  CANVAS (I3) ; FONCTIONS SUIVIES — 30 PLUS COÛTEUSES (I4 / I5) ;
+- TUILES — RECHERCHES INDEXEDDB (I8) : résultats, histogramme des durées,
+  histogramme de l'attente en file NPF, lectures par tuile trouvée, tuiles hors
+  première base, indice faux, délais dépassés, par pack ;
+- TUILES — APRÈS CHAQUE ZOOM (recherches des 20 s suivantes : durée et attente
+  médianes / max, lectures, délais, heure de la dernière tuile) ;
+- TUILES — 25 RECHERCHES LES PLUS LENTES ; CHANGEMENTS DE PACK (I9).
+
+TESTS CHROME (A/B v17.32 / v17.33, profils neufs, densité ×2, 1180 × 820)
+- Scénario identique dans les deux versions : import RÉEL (handleZipImport)
+  d'un pack synthétique « NPF_France_TEST » (264 tuiles z8-z12), mode OFFLINE
+  activé, HT ON, 40 positions GPS injectées à 1 Hz (250 kt vers l'est) avec
+  suivi centré, glissement souris, zoom avant / arrière, HT OFF puis ON, export.
+- Comportement IDENTIQUE à chaque étape (centre, zoom, tronçons HT rendus,
+  tuiles chargées, tuiles trouvées / absentes : 30/20, 45/33, 45/37, 60/47,
+  60/54). Seules différences, attendues :
+  . R2 : canvas HT 2 832 × 1 968 px au lieu de 4 012 × 2 788 (surface ×0,50) ;
+  . R6 : HT OFF -> 0 canvas dans la page (v17.32 : canvas conservé) ; HT ON ->
+    canvas recréé, 790 tronçons, dans highVoltageLinesPane.
+- R2 : canvas HT COUVRANT toute la vue à chacun des 40 recentrages GPS, après
+  le glissement, après le zoom et après HT OFF / ON (contrôle des bornes du
+  renderer contre la vue, en coordonnées de calque) : aucun bord vide.
+- D1 : instantané DIAG 1 fois sur 41 cycles GPS (au lieu de 2 par cycle).
+- D2 : 0 ligne « SIA GPS » listée (v17.32 : 41).
+- I8 exercé sur le vrai chemin NPF : 178 recherches, attente en file et durées
+  relevées, 0 délai dépassé (Chrome, base locale minuscule : valeurs non
+  représentatives de l'iPad).
+- Aucune exception, aucune erreur console, dans les deux versions.
+
+VERSIONS
+- Index / Manifest / Script / Style : v17.33.
+- Service Worker : `sw-v17-33_diag_gps_tuiles_ht`.
+- SIA_DATA_REVISION inchangée ; sia.js strictement identique à v17.32.
+
+VALIDATION AVANT LIVRAISON
+- `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés.
+- Syntaxe Script / SIA / SW : OK. Script inline Index : OK. Manifest JSON : OK.
+- Cohérence versions / caches : OK. sia.js identique à v17.32.
+
+RESTE CONNU (non demandé, non modifié)
+- L'instantané « lignes-ht rendu gps-follow-edge » (toutes les ~4 s en suivi
+  GPS, après la fenêtre calme des tuiles) mesure encore les tuiles par le DOM
+  hors geste : hors du périmètre du point 1 (enregistreur de gestes).
+
+À FAIRE PENDANT LE PROCHAIN VOL RÉEL (pour un DIAG concluant)
+1. Avant le vol, au sol : installer v17.33 (vérifier le numéro), puis redémarrer
+   NPF UNE fois pour démarrer une session propre.
+2. Garder le même pack que d'habitude (NPF_France) ; si le pack est changé en
+   vol, le faire exprès et le noter (heure) : l'événement « PACK CARTE » doit
+   apparaître.
+3. Suivi GPS centré actif la plus grande partie du vol ; HT ON une partie du
+   vol, puis OFF au moins 10 min (contrôle R6 et comparaison des blocages).
+4. Plusieurs zooms (avant / arrière, 1 à 2 crans) en croisière, espacés d'au
+   moins 30 s, pour la section « TUILES — APRÈS CHAQUE ZOOM ».
+5. Appuyer sur « Repère » (panneau DIAG) à chaque lenteur ressentie, surtout
+   pendant un rechargement de tuiles après zoom.
+6. Regarder les bords de l'écran avec HT ON en suivi GPS : signaler tout bord
+   sans lignes HT (R2).
+7. Exporter le DIAG AVANT de fermer NPF ou de changer de version, idéalement
+   une fois en milieu de vol et une fois en fin de vol.
+8. Noter à part : heure de décollage / atterrissage, zones de travail, et tout
+   moment d'application en arrière-plan (écran verrouillé).
+
+--------------------------------------------------------------------------------
 
 VERSION TEST v17.32 — DIAG DÉTAILLÉ (AUCUN CHANGEMENT DE COMPORTEMENT)
 Date : 26/09/2026
