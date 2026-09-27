@@ -1,8 +1,15 @@
-const SW_VERSION = 'sw-v17-36_recentrage_econome';
-const APP_VERSION = 'v17.36';
+const SW_VERSION = 'sw-v17-37_caches_test';
+const APP_VERSION = 'v17.37';
 const SIA_DATA_REVISION = '15.69-radio1026-1-maplite1';
 const SIA_DATA_URL = './sia.js';
-const SIA_DATA_CACHE = `npf-q400-sia-data-${SIA_DATA_REVISION}`;
+/*
+ * v17.37 — la TEST a ses propres noms de cache (préfixe « npf-q400-test- ») et
+ * n'efface que les siens. Les anciens caches partagés sont seulement RELUS en
+ * secours (copie vers le cache TEST), jamais effacés : la version pérenne
+ * NPF-Q400 est servie depuis la même origine et utilise « npf-q400-app-* ».
+ */
+const SIA_DATA_CACHE = `npf-q400-test-sia-data-${SIA_DATA_REVISION}`;
+const LEGACY_SIA_DATA_CACHE = `npf-q400-sia-data-${SIA_DATA_REVISION}`;
 
 const DB_NAME = 'OfflineTilesDB_v13_70_clean';
 const LEGACY_TILE_DB_NAME = DB_NAME;
@@ -15,9 +22,13 @@ const OFFLINE_ACTIVE_PACK_DATABASES_KEY = 'offlineActivePackDatabases';
 const OFFLINE_ACTIVE_PACK_ALIASES_KEY = 'offlineActivePackAliases';
 const OFFLINE_MAP_DATABASE_PREFIX = 'OfflineMap_';
 
-const APP_SHELL_CACHE = `npf-q400-app-shell-${SW_VERSION}`;
-const APP_DATA_CACHE = 'npf-q400-app-data-v1';
-const APP_SHELL_CACHE_PREFIX = 'npf-q400-app-shell-';
+const APP_SHELL_CACHE = `npf-q400-test-app-shell-${SW_VERSION}`;
+const APP_DATA_CACHE = 'npf-q400-test-app-data-v1';
+const APP_SHELL_CACHE_PREFIX = 'npf-q400-test-app-shell-';
+const APP_SHELL_INSTALL_CACHE_PREFIX = 'npf-q400-test-install-';
+/* Anciens shells TEST (« npf-q400-app-shell-sw-v17-36_… ») : la pérenne utilise
+ * « npf-q400-app-shell-sw-v2026-… » et n'est jamais concernée par ce motif. */
+const LEGACY_TEST_APP_SHELL_PATTERN = /^npf-q400-app-shell-sw-v1\d-/;
 const DEPARTMENTS_GEOJSON_URL = 'https://etalab-datasets.geo.data.gouv.fr/contours-administratifs/latest/geojson/departements-1000m.geojson';
 const COMMUNES_GEOJSON_1000M_URL = 'https://etalab-datasets.geo.data.gouv.fr/contours-administratifs/latest/geojson/communes-1000m.geojson';
 const COMMUNES_GEOJSON_1000M_GZIP_URL = 'https://etalab-datasets.geo.data.gouv.fr/contours-administratifs/latest/geojson/communes-1000m.geojson.gz';
@@ -235,8 +246,13 @@ self.addEventListener('install', event => {
         const installStartedAt = Date.now();
         await notifyClientsOfSwInstallStage('start', APP_VERSION);
 
-        await caches.delete(APP_SHELL_CACHE).catch(() => false);
-        const cache = await caches.open(APP_SHELL_CACHE);
+        /*
+         * v17.37 — la copie hors ligne en service n'est plus effacée au début
+         * de l'installation. Le nouveau shell est préparé dans un cache
+         * temporaire, puis copié seulement lorsqu'il est complet et validé.
+         */
+        const installCacheName = `${APP_SHELL_INSTALL_CACHE_PREFIX}${SW_VERSION}-${installStartedAt}`;
+        const cache = await caches.open(installCacheName);
         const failedCoreUrls = [];
 
         const versionSensitiveUrls = CORE_APP_SHELL_URLS.filter(url => (
@@ -287,7 +303,7 @@ self.addEventListener('install', event => {
         }));
 
         if (failedCoreUrls.length) {
-            await caches.delete(APP_SHELL_CACHE).catch(() => false);
+            await caches.delete(installCacheName).catch(() => false);
             await notifyClientsOfSwInstallStage(
                 'refused',
                 failedCoreUrls.join(', ')
@@ -306,6 +322,12 @@ self.addEventListener('install', event => {
          *   demande si nécessaire.
          * Les bases IndexedDB de cartes Offline ne sont jamais touchées.
          */
+        const finalShellCache = await caches.open(APP_SHELL_CACHE);
+        for (const shellRequest of await cache.keys()) {
+            const shellResponse = await cache.match(shellRequest);
+            if (shellResponse) await finalShellCache.put(shellRequest, shellResponse);
+        }
+        await caches.delete(installCacheName).catch(() => false);
         await notifyClientsOfSwInstallStage(
             'shell-ready',
             `${Date.now() - installStartedAt} ms`
@@ -321,13 +343,27 @@ self.addEventListener('activate', event => {
             name => name.startsWith(APP_SHELL_CACHE_PREFIX)
                 && name !== APP_SHELL_CACHE
         );
+        const legacyTestShells = cacheNames.filter(
+            name => LEGACY_TEST_APP_SHELL_PATTERN.test(name)
+        );
+        const leftoverInstallCaches = cacheNames.filter(
+            name => name.startsWith(APP_SHELL_INSTALL_CACHE_PREFIX)
+        );
 
         /*
          * Conserver le shell précédent comme secours. Les shells plus anciens
          * sont supprimés ; le cache stable des données n'est jamais touché.
+         * v17.37 — seuls les caches TEST sont concernés. Tant qu'aucun shell
+         * « npf-q400-test-app-shell- » précédent n'existe, le dernier ancien
+         * shell TEST reste le secours.
          */
-        const shellsToDelete = previousShells.slice(0, Math.max(0, previousShells.length - 1));
-        await Promise.all(shellsToDelete.map(name => caches.delete(name)));
+        const shellsToDelete = previousShells.length
+            ? [
+                ...previousShells.slice(0, previousShells.length - 1),
+                ...legacyTestShells
+            ]
+            : legacyTestShells.slice(0, Math.max(0, legacyTestShells.length - 1));
+        await Promise.all([...shellsToDelete, ...leftoverInstallCaches].map(name => caches.delete(name)));
 
         /*
          * L'ouverture de la grande base IndexedDB ne doit jamais retenir le
@@ -840,8 +876,20 @@ async function handleSiaDataRequest(request) {
      * caches.match() global avec ignoreSearch : c'était la cause du recyclage
      * du sia.js 15.69 historique après l'intégration radio AIRAC 10/26.
      */
-    const cached = await siaCache.match(SIA_DATA_URL, { ignoreSearch: true })
+    let cached = await siaCache.match(SIA_DATA_URL, { ignoreSearch: true })
         || await siaCache.match(request, { ignoreSearch: true });
+
+    /* v17.37 — première ouverture après le changement de nom du cache :
+     * relire (sans l'effacer) l'ancien cache SIA de même révision. */
+    if (!cached) {
+        try {
+            if (await caches.has(LEGACY_SIA_DATA_CACHE)) {
+                const legacySiaCache = await caches.open(LEGACY_SIA_DATA_CACHE);
+                cached = await legacySiaCache.match(SIA_DATA_URL, { ignoreSearch: true })
+                    || await legacySiaCache.match(request, { ignoreSearch: true });
+            }
+        } catch (_) {}
+    }
 
     if (cached) {
         try {

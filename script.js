@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.36';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.37';
 
 
 /*
@@ -2447,10 +2447,11 @@ function appendNpfDiagDetailExportSections(lines) {
     appendNpfDiagV1734ExportSections(lines);
     appendNpfDiagSimulationSection(lines);
     appendNpfDiagEconomicSection(lines);
+    appendNpfDiagLaunchSection(lines);
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.36 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.37 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -2646,6 +2647,111 @@ function appendNpfDiagSimulationSection(lines) {
         + ' | suivi ' + (item.follow ? 'oui' : 'non')
         + ' | ' + (item.recenter ? 'recentrage ' + item.recenter + (item.shiftM === null || item.shiftM === undefined ? '' : ' (' + item.shiftM + ' m)') : 'pas de recentrage')
     ));
+}
+
+/* v17.37 — journal des lancements et stockage local (mesure seule). */
+function formatNpfDiagChars(count) {
+    const chars = Math.max(0, Math.round(Number(count) || 0));
+    return chars.toLocaleString('fr-FR') + ' car. (≈ ' + (chars * 2 / 1048576).toFixed(2).replace('.', ',') + ' Mo)';
+}
+
+function formatNpfDiagDateTime(at) {
+    return Number(at)
+        ? new Date(Number(at)).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }) + ' ' + formatNpfDiagClock(at)
+        : '—';
+}
+
+function describeNpfDiagGlrExpiry(token, exp, referenceAt) {
+    if (!token) return 'aucune session enregistrée';
+    if (!Number(exp)) return 'session présente, échéance inconnue';
+    const deltaMin = Math.round((Number(exp) - Number(referenceAt)) / 60000);
+    return 'échéance ' + formatNpfDiagDateTime(exp)
+        + (deltaMin >= 0 ? ' — encore ' + deltaMin + ' min' : ' — dépassée de ' + (-deltaMin) + ' min');
+}
+
+function formatNpfDiagStorageTop(top) {
+    return (Array.isArray(top) ? top : [])
+        .map(([key, size]) => key + ' ' + Math.round(Number(size) || 0).toLocaleString('fr-FR'))
+        .join(' · ') || '—';
+}
+
+function formatNpfDiagRefusedWrites(list) {
+    return (Array.isArray(list) && list.length)
+        ? list.map(item => formatNpfDiagClock(item.at) + ' ' + item.key + ' (' + Math.round(Number(item.size) || 0).toLocaleString('fr-FR') + ' car., ' + (item.error || 'refus') + ')').join(' · ')
+        : 'aucune';
+}
+
+function appendNpfDiagLaunchStorageHeader(lines) {
+    const launchLog = window.NPF_LAUNCH_LOG;
+    if (!launchLog) {
+        lines.push('Journal des lancements NPF-Q400 : indisponible');
+        return;
+    }
+    const summary = launchLog.storageSummary();
+    const current = launchLog.current();
+    const readRaw = key => { try { return localStorage.getItem(key); } catch (_) { return null; } };
+    const glrToken = !!readRaw('npfGlobalLinkSessionV1');
+    const glrExp = Number(readRaw('npfGlobalLinkSessionExpV1')) || 0;
+    lines.push(
+        'Stockage local : total ' + formatNpfDiagChars(summary.total)
+        + ' | 5 plus grosses clés (car.) : ' + formatNpfDiagStorageTop(summary.top)
+    );
+    lines.push('Écritures localStorage refusées (cette session) : ' + formatNpfDiagRefusedWrites(launchLog.refusedWrites()));
+    lines.push(
+        'SafeSky (showTrafficLayer) relu au lancement : ' + JSON.stringify(current.safeSkyAtLaunch)
+        + ' | valeur actuelle : ' + JSON.stringify(readRaw('showTrafficLayer'))
+    );
+    lines.push(
+        'GLR échéance locale (expiresAt) : ' + describeNpfDiagGlrExpiry(glrToken, glrExp, Date.now())
+        + ' | heure iPad ' + formatNpfDiagDateTime(Date.now())
+        + ' | au lancement : ' + describeNpfDiagGlrExpiry(current.glrAtLaunch?.token, current.glrAtLaunch?.exp, current.at)
+    );
+}
+
+function appendNpfDiagLaunchSection(lines) {
+    const launchLog = window.NPF_LAUNCH_LOG;
+    lines.push('');
+    lines.push('DERNIERS LANCEMENTS (5 derniers, NPF-Q400 TEST ; écrits à la carte complète ou dès une erreur)');
+    if (!launchLog) {
+        lines.push('   Journal indisponible.');
+        return;
+    }
+    const list = launchLog.readAll().slice();
+    const current = launchLog.current();
+    if (!list.some(item => item && item.id === current.id)) {
+        list.push({ ...current, steps: [], notWritten: true });
+    }
+    list.reverse().forEach((item, index) => {
+        const isCurrent = item.id === current.id;
+        lines.push(
+            (index + 1) + '. ' + formatNpfDiagDateTime(item.at) + ' | ' + (item.version || '—')
+            + ' | ' + (item.status || '—') + (item.notWritten ? ' (lancement en cours, pas encore écrit)' : '')
+            + (isCurrent ? ' | lancement actuel' : '')
+            + ' | page contrôlée par le service worker : ' + (item.controlled ? 'oui' : 'non')
+            + (item.reloadReason ? ' | rechargement : ' + item.reloadReason : '')
+        );
+        lines.push(
+            '   SafeSky (showTrafficLayer) relu au lancement ' + JSON.stringify(item.safeSkyAtLaunch)
+            + (item.safeSkyAtWrite !== undefined ? ' · à l’écriture ' + JSON.stringify(item.safeSkyAtWrite) : '')
+            + ' | GLR au lancement : ' + describeNpfDiagGlrExpiry(item.glrAtLaunch?.token, item.glrAtLaunch?.exp, item.at)
+        );
+        if (item.storage) {
+            lines.push('   Stockage local : ' + formatNpfDiagChars(item.storage.total) + ' | ' + formatNpfDiagStorageTop(item.storage.top));
+        }
+        lines.push('   Écritures refusées : ' + formatNpfDiagRefusedWrites(item.refusedWrites));
+        const errors = Array.isArray(item.errors) ? item.errors : [];
+        if (!errors.length) lines.push('   Erreurs : aucune');
+        errors.forEach(error => lines.push(
+            '   Erreur + ' + ((Number(error.t) || 0) / 1000).toFixed(2) + ' s | ' + error.type + ' | ' + error.message
+            + (error.source ? ' | ' + error.source : '')
+        ));
+        const steps = Array.isArray(item.steps) ? item.steps : [];
+        if (steps.length) {
+            lines.push('   Étapes : ' + steps.map(([label, t, detail]) => (
+                label + ' ' + ((Number(t) || 0) / 1000).toFixed(2) + ' s' + (detail ? ' (' + detail + ')' : '')
+            )).join(' · '));
+        }
+    });
 }
 
 /* v17.36 — recentrage économe : état, périodes, comparaison ON / OFF. */
@@ -3272,6 +3378,7 @@ function buildNpfStartupDiagnosticExportText() {
     lines.push('Build : ' + String(window.NPF_SCRIPT_BUILD_VERSION || NPF_SCRIPT_BUILD_VERSION || '—'));
     try { appendNpfDiagSimulationHeader(lines); } catch (_) {}
     try { appendNpfDiagEconomicHeader(lines); } catch (_) {}
+    try { appendNpfDiagLaunchStorageHeader(lines); } catch (_) {}
     lines.push('');
     lines.push('################ SESSION COURANTE ################');
     lines.push(
@@ -3446,6 +3553,18 @@ function buildNpfStartupDiagnosticExportText() {
         + Math.round(runtime.diagPersistCount || 0) + ' écritures groupées | '
         + 'écriture max ' + Math.round(runtime.diagPersistMaxMs || 0) + ' ms | '
         + 'temps total ' + Math.round(runtime.diagPersistTotalMs || 0) + ' ms'
+        + (() => {
+            try {
+                const launchCost = window.NPF_LAUNCH_LOG?.cost?.();
+                if (!launchCost) return '';
+                return ' | journal des lancements : ' + launchCost.writes + ' écriture(s)'
+                    + ', max ' + Math.round(launchCost.maxMs) + ' ms'
+                    + ', total ' + Math.round(launchCost.totalMs) + ' ms'
+                    + (launchCost.refused ? ', ' + launchCost.refused + ' refusée(s)' : '');
+            } catch (_) {
+                return '';
+            }
+        })()
     );
     lines.push(
         'Authentification : BFG↔NPF associé ' + (runtime.bfgPaired ? 'OUI' : 'NON')
@@ -7954,6 +8073,68 @@ function waitForNpfStartupFirstTile(timeoutMs = 4500) {
     });
 }
 
+/*
+ * v17.37 — carte visible complète : toutes les tuiles visibles du niveau
+ * courant sont chargées, ou remplacées par l'image « absente du pack » (une
+ * tuile absente compte donc comme terminée). Une seule surveillance, pendant
+ * le démarrage seulement : elle libère les communes (carte complète, ou 15 s
+ * après l'ouverture au plus tard) puis signale la carte complète au journal
+ * des lancements (au plus tard 60 s après l'ouverture). Aucun calcul pendant
+ * un geste manuel.
+ */
+const NPF_STARTUP_COMMUNES_MAX_WAIT_FROM_OPEN_MS = 15000;
+const NPF_STARTUP_MAP_COMPLETE_WATCH_LIMIT_MS = 60000;
+let npfStartupVisibleMapWatchPromise = null;
+let npfStartupCommunesReadyPromise = Promise.resolve();
+
+function watchNpfStartupVisibleMapComplete() {
+    if (npfStartupVisibleMapWatchPromise) return npfStartupVisibleMapWatchPromise;
+    npfStartupVisibleMapWatchPromise = new Promise(resolveCommunesGate => {
+        let gateResolved = false;
+        let lastCoverage = { total: 0, loaded: 0 };
+        const releaseGate = reason => {
+            if (gateResolved) return;
+            gateResolved = true;
+            resolveCommunesGate({ reason, total: lastCoverage.total, loaded: lastCoverage.loaded });
+        };
+        const poll = () => {
+            const elapsed = performance.now();
+            const gestureActive = typeof npfMapManualGestureLockActive !== 'undefined' && npfMapManualGestureLockActive;
+            if (!gestureActive) {
+                try {
+                    const coverage = getNpfCurrentZoomVisibleTileCoverage();
+                    lastCoverage = {
+                        total: Math.max(0, Number(coverage?.total) || 0),
+                        loaded: Math.max(0, Number(coverage?.loaded) || 0)
+                    };
+                } catch (_) {}
+            }
+            const complete = !gestureActive && lastCoverage.total > 0 && lastCoverage.loaded >= lastCoverage.total;
+            if (complete) {
+                npfStartupDiagMark(
+                    'startup_visible_map_complete',
+                    'Carte visible complète',
+                    `${lastCoverage.loaded}/${lastCoverage.total} tuiles`
+                );
+                releaseGate('carte-complete');
+                try {
+                    window.dispatchEvent(new CustomEvent('npf-startup-map-complete', {
+                        detail: { total: lastCoverage.total, loaded: lastCoverage.loaded }
+                    }));
+                } catch (_) {}
+                return;
+            }
+            if (!gateResolved && elapsed >= NPF_STARTUP_COMMUNES_MAX_WAIT_FROM_OPEN_MS) {
+                releaseGate('delai-15s');
+            }
+            if (elapsed >= NPF_STARTUP_MAP_COMPLETE_WATCH_LIMIT_MS) return;
+            setTimeout(poll, gateResolved ? 1000 : 200);
+        };
+        setTimeout(poll, 0);
+    });
+    return npfStartupVisibleMapWatchPromise;
+}
+
 function waitForNpfStartupMapPriorityRelease({ timeoutMs = 8000, minCoverageRatio = 0.80 } = {}) {
     if (npfStartupMapPriorityPromise) return npfStartupMapPriorityPromise;
 
@@ -8204,73 +8385,104 @@ async function initializeApp() {
 
     /*
      * v17.20 — PRIORITÉ 2 : la base communes ne concurrence plus la toute
-     * première tuile. La recherche devient disponible juste après le premier
-     * rendu cartographique, avec un timeout de secours si aucune tuile n'existe.
+     * première tuile.
+     * v17.37 — option B : boutons, PÉLIC et « Démarrage principal prêt »
+     * partent après la première tuile, sans attendre les communes. Seules les
+     * communes attendent la carte visible complète, ou au plus tard 15 s après
+     * l'ouverture ; le DIAG indique la condition qui les a libérées.
      */
-    npfStartupDiagMark('communes_wait_first_tile', 'Communes — attente première tuile');
-    const startupFirstTileReady = await waitForNpfStartupFirstTile(4500);
-    npfStartupDiagMark(
-        'communes_first_tile_gate',
-        'Communes — priorité carte libérée',
-        startupFirstTileReady ? 'première tuile affichée' : 'timeout sécurité'
-    );
-
-    let communesLoadError = null;
-    npfStartupDiagMark('communes_start', 'Communes — chargement');
-    try {
-        let data = null;
-
-        if (FORCE_DISPLAY_MODE) {
-            const cachedData = localStorage.getItem(COMMUNES_CACHE_KEY);
-            if (cachedData) {
-                try {
-                    const parsed = JSON.parse(cachedData);
-                    if (parsed && Array.isArray(parsed.data)) data = parsed;
-                } catch (_) {}
-            }
-        }
-
-        if (!data) data = await loadCommunesData();
-        npfStartupDiagMark('communes_data_ready', 'Communes — données prêtes', `${Array.isArray(data?.data) ? data.data.length : 0} communes`);
-
-        allCommunes = data.data.map(c => {
-            const normalizedName = simplifyString(c.nom_standard);
-            const searchParts = normalizedName.split(' ').filter(Boolean);
-            return {
-                ...c,
-                normalized_name: normalizedName,
-                search_parts: searchParts,
-                search_compact: searchParts.join(''),
-                soundex_parts: searchParts.map(part => soundex(part))
-            };
-        });
-
-        npfStartupDiagMark('communes_index_ready', 'Communes — index recherche prêt', `${allCommunes.length} entrées`);
-
-        communesByCodeInsee = new Map(
-            allCommunes
-                .map(commune => [
-                    String(commune.code_insee || '').trim(),
-                    commune
-                ])
-                .filter(([code]) => code)
+    npfStartupCommunesReadyPromise = (async () => {
+        npfStartupDiagMark('communes_wait_map', 'Communes — attente carte visible complète');
+        const communesGate = await watchNpfStartupVisibleMapComplete();
+        npfStartupDiagMark(
+            'communes_map_gate',
+            'Communes — priorité carte libérée',
+            communesGate.reason === 'carte-complete'
+                ? `carte visible complète (${communesGate.loaded}/${communesGate.total} tuiles)`
+                : `délai 15 s après l’ouverture (${communesGate.loaded}/${communesGate.total} tuiles)`
         );
 
-        /* v16.66 — les alias ne bloquent plus le démarrage principal.
-         * Le DIAG v16.65 a montré un blocage JavaScript d'environ 2,7 s au
-         * moment de leur chargement/normalisation. La recherche des 34 935
-         * communes reste disponible immédiatement ; les alias sont chargés
-         * après l'affichage PÉLIC, au repos. */
-        communeAliases = [];
-        communeAliasesLoadSource = 'differe-apres-demarrage';
-        npfStartupDiagMark('communes_aliases_deferred', 'Alias communes — chargement différé', 'après démarrage principal');
-    } catch (error) {
-        communesLoadError = error;
-        allCommunes = [];
-        communeAliases = [];
-        npfStartupDiagMark('communes_error', 'Communes / alias en erreur', error?.message || error);
-        console.error('Chargement communes/alias indisponible:', error);
-    }
+        let communesLoadError = null;
+        npfStartupDiagMark('communes_start', 'Communes — chargement');
+        try {
+            let data = null;
+
+            if (FORCE_DISPLAY_MODE) {
+                const cachedData = localStorage.getItem(COMMUNES_CACHE_KEY);
+                if (cachedData) {
+                    try {
+                        const parsed = JSON.parse(cachedData);
+                        if (parsed && Array.isArray(parsed.data)) data = parsed;
+                    } catch (_) {}
+                }
+            }
+
+            if (!data) data = await loadCommunesData();
+            npfStartupDiagMark('communes_data_ready', 'Communes — données prêtes', `${Array.isArray(data?.data) ? data.data.length : 0} communes`);
+
+            allCommunes = data.data.map(c => {
+                const normalizedName = simplifyString(c.nom_standard);
+                const searchParts = normalizedName.split(' ').filter(Boolean);
+                return {
+                    ...c,
+                    normalized_name: normalizedName,
+                    search_parts: searchParts,
+                    search_compact: searchParts.join(''),
+                    soundex_parts: searchParts.map(part => soundex(part))
+                };
+            });
+
+            npfStartupDiagMark('communes_index_ready', 'Communes — index recherche prêt', `${allCommunes.length} entrées`);
+
+            communesByCodeInsee = new Map(
+                allCommunes
+                    .map(commune => [
+                        String(commune.code_insee || '').trim(),
+                        commune
+                    ])
+                    .filter(([code]) => code)
+            );
+
+            /* v16.66 — les alias ne bloquent plus le démarrage principal.
+             * Le DIAG v16.65 a montré un blocage JavaScript d'environ 2,7 s au
+             * moment de leur chargement/normalisation. La recherche des 34 935
+             * communes reste disponible immédiatement ; les alias sont chargés
+             * après l'affichage PÉLIC, au repos. */
+            communeAliases = [];
+            communeAliasesLoadSource = 'differe-apres-demarrage';
+            npfStartupDiagMark('communes_aliases_deferred', 'Alias communes — chargement différé', 'après démarrage principal');
+        } catch (error) {
+            communesLoadError = error;
+            allCommunes = [];
+            communeAliases = [];
+            npfStartupDiagMark('communes_error', 'Communes / alias en erreur', error?.message || error);
+            console.error('Chargement communes/alias indisponible:', error);
+        }
+
+        /* v17.37 — la commune la plus proche était calculée sans la base
+         * communes pendant son chargement : la recalculer une fois prête. */
+        try {
+            if (typeof refreshNearestCommuneDisplayFromKnownGps === 'function') {
+                refreshNearestCommuneDisplayFromKnownGps();
+            }
+        } catch (_) {}
+
+        if (communesLoadError) {
+            setTimeout(() => {
+                alert(
+                    "Mode dégradé: base communes/alias indisponible. La carte reste utilisable ; réessayez avec réseau pour la recherche commune."
+                );
+            }, 400);
+        }
+    })();
+
+    npfStartupDiagMark('startup_wait_first_tile', 'Démarrage — attente première tuile');
+    const startupFirstTileReady = await waitForNpfStartupFirstTile(4500);
+    npfStartupDiagMark(
+        'startup_first_tile_gate',
+        'Démarrage — suite après première tuile',
+        startupFirstTileReady ? 'première tuile affichée' : 'timeout sécurité'
+    );
 
     if (searchSection) searchSection.style.display = 'block';
 
@@ -8316,6 +8528,8 @@ async function initializeApp() {
     const startDeferredCommuneAliasesLoad = async () => {
         if (communeAliasesStartupLoadStarted) return;
         communeAliasesStartupLoadStarted = true;
+        /* v17.37 — les alias s'appuient sur la base communes (codes INSEE). */
+        try { await npfStartupCommunesReadyPromise; } catch (_) {}
         try {
             communeAliases = await loadCommunesAliases();
             npfStartupDiagMark(
@@ -8616,13 +8830,6 @@ async function initializeApp() {
         }, 1200);
     });
 
-    if (communesLoadError) {
-        setTimeout(() => {
-            alert(
-                "Mode dégradé: base communes/alias indisponible. La carte reste utilisable ; réessayez avec réseau pour la recherche commune."
-            );
-        }, 400);
-    }
 }
 
 async function loadCommunesData() {
@@ -30138,6 +30345,10 @@ let npfGlobalLinkLastAuthState = 'non-testé';
 let npfGlobalLinkLastAction = '—';
 let npfGlobalLinkLastHttpStatus = 0;
 let npfGlobalLinkLastError = '';
+/* v17.37 — dernière session acceptée par le NAS (POSITIONS HTTP 200), même
+ * après l'échéance locale expiresAt. Le NAS reste seul juge de la validité. */
+let npfGlobalLinkNasConfirmedToken = '';
+let npfGlobalLinkNasConfirmedAt = 0;
 
 function rememberGlobalLinkRequestState(action, response = null, error = '') {
     npfGlobalLinkLastAction = String(action || '—');
@@ -30183,18 +30394,35 @@ function setGlobalLinkShowOffTraffic(enabled) {
     }
 }
 
-function getStoredGlobalLinkSession() {
+/*
+ * v17.37 — l'échéance locale (expiresAt) n'efface plus la session. La session
+ * enregistrée n'est effacée que lorsque le NAS la refuse réellement
+ * (401 global_session_invalid). Le bouton OFF ne l'efface jamais.
+ */
+function readStoredGlobalLinkSessionForNas() {
     try {
         const token = String(localStorage.getItem(NPF_GLOBAL_LINK_SESSION_KEY) || '');
+        if (!token) return null;
         const exp = Number(localStorage.getItem(NPF_GLOBAL_LINK_SESSION_EXP_KEY) || 0);
-        if (!token || !Number.isFinite(exp) || exp <= Date.now()) {
-            clearStoredGlobalLinkSession();
-            return null;
-        }
-        return { token, exp };
+        return { token, exp: Number.isFinite(exp) ? exp : 0 };
     } catch (_) {
         return null;
     }
+}
+
+function getStoredGlobalLinkSession() {
+    const session = readStoredGlobalLinkSessionForNas();
+    if (!session) return null;
+    if (session.exp > Date.now()) return session;
+    /* Échéance locale dépassée : session considérée valide si le NAS l'a
+     * acceptée après cette échéance. */
+    if (
+        npfGlobalLinkNasConfirmedToken === session.token
+        && npfGlobalLinkNasConfirmedAt > session.exp
+    ) {
+        return session;
+    }
+    return null;
 }
 
 function storeGlobalLinkSession(token, expiresAt) {
@@ -31491,16 +31719,17 @@ async function refreshGlobalLinkPositions(options = {}) {
         return false;
     }
     const docsSession = getStoredBriefingDocsSession();
-    const globalSession = getStoredGlobalLinkSession();
+    /* v17.37 — réessayer avec la session existante, même après l'échéance locale. */
+    const globalSession = readStoredGlobalLinkSessionForNas();
     if (!docsSession || !globalSession) {
         if (!docsSession) clearBriefingDocsSession();
-        if (!globalSession) clearStoredGlobalLinkSession();
         updateGlobalLinkButton();
         if (!options.silent) await loadGlobalLinkCaptcha();
         return false;
     }
     npfGlobalLinkFetchInProgress = true;
     updateGlobalLinkButton({ loading: true });
+    let globalLinkSessionRefusedByNas = false;
     try {
         let response = null;
         let payload = null;
@@ -31547,7 +31776,12 @@ async function refreshGlobalLinkPositions(options = {}) {
         if (!response?.ok || !payload || payload.ok !== true) {
             if (response?.status === 401) {
                 if (payload?.error === 'npf_authorization_required') clearBriefingDocsSession();
-                if (payload?.error === 'global_session_invalid') clearStoredGlobalLinkSession();
+                if (payload?.error === 'global_session_invalid') {
+                    clearStoredGlobalLinkSession();
+                    npfGlobalLinkNasConfirmedToken = '';
+                    npfGlobalLinkNasConfirmedAt = 0;
+                    globalLinkSessionRefusedByNas = true;
+                }
             }
             if (isGlobalLinkTemporaryLoadFail(lastMessage)) {
                 npfGlobalLinkLastAuthState = 'positions-load-fail-temporaire';
@@ -31557,6 +31791,8 @@ async function refreshGlobalLinkPositions(options = {}) {
 
         rememberGlobalLinkRequestState('positions', response, '');
         npfGlobalLinkLastAuthState = 'positions-ok';
+        npfGlobalLinkNasConfirmedToken = globalSession.token;
+        npfGlobalLinkNasConfirmedAt = Date.now();
         renderGlobalLinkPositions(payload.positions || []);
         return true;
     } catch (error) {
@@ -31581,7 +31817,10 @@ async function refreshGlobalLinkPositions(options = {}) {
         );
         console.warn('[Global Link]', error);
         updateGlobalLinkButton();
-        if (!options.silent && !isGlobalLinkAbortError(error)) {
+        if (!options.silent && globalLinkSessionRefusedByNas) {
+            /* v17.37 — session réellement refusée par le NAS : nouveau code. */
+            await loadGlobalLinkCaptcha();
+        } else if (!options.silent && !isGlobalLinkAbortError(error)) {
             alert(`Global Link : ${userMessage}`);
         }
         return false;
@@ -31632,7 +31871,9 @@ async function handleGlobalLinkButtonClick() {
         return;
     }
     const docsSession = await ensureGlobalLinkNpfAuthorization();
-    let globalSession = getStoredGlobalLinkSession();
+    /* v17.37 — OFF -> ON : pas de nouveau code tant qu'une session existe ;
+     * le NAS dira si elle est encore valide. */
+    let globalSession = readStoredGlobalLinkSessionForNas();
     if (!globalSession) {
         await loadGlobalLinkCaptcha();
         return;
@@ -31844,7 +32085,7 @@ function initializeGlobalLinkUi() {
         if (!getStoredBriefingDocsSession()) {
             await tryAuthorizeBriefingDocsFromBfgBridge({ silent: true });
         }
-        if (!getStoredGlobalLinkSession() || !getStoredBriefingDocsSession()) {
+        if (!readStoredGlobalLinkSessionForNas() || !getStoredBriefingDocsSession()) {
             npfGlobalLinkEnabled = false;
             try { localStorage.setItem(NPF_GLOBAL_LINK_LAYER_ENABLED_KEY, '0'); } catch (_) {}
             updateGlobalLinkButton();
@@ -41561,9 +41802,14 @@ async function synchronizeOfflineConfigurationWithServiceWorker({
     let registration = null;
     try {
         registration = await withTimeout(
-            navigator.serviceWorker.register('./sw.js', {
-                updateViaCache: 'none'
-            }),
+            /*
+             * v17.37 — même URL que index.html (avec appv). Une URL différente
+             * relançait l'installation de la même version du service worker.
+             */
+            navigator.serviceWorker.register(
+                `./sw.js?appv=${encodeURIComponent(window.APP_VERSION || '')}`,
+                { updateViaCache: 'none' }
+            ),
             timeoutMs,
             'Timeout enregistrement service worker'
         );

@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 27/09/2026
-Version de travail actuelle : TEST v17.36
+Version de travail actuelle : TEST v17.37
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,15 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.37 — mise à jour sans page blanche (TEST) : sw.js enregistré partout
+  avec appv ; installation préparée dans un cache temporaire, la copie hors
+  ligne en service n'est plus effacée ; caches TEST propres
+  (« npf-q400-test-* »), la TEST n'efface que les siens ; journal des 5
+  derniers lancements (« DERNIERS LANCEMENTS ») ; communes libérées à la carte
+  visible complète ou 15 s après l'ouverture (boutons, PÉLIC et démarrage
+  principal après la première tuile) ; GLR : OFF -> ON réessaie la session
+  existante, code redemandé seulement si le NAS la refuse, OFF n'efface jamais
+  la session ; mesure seule stockage local / SafeSky / échéance GLR ;
 - v17.36 — « Recentrage économe » (GPS réel, suivi activé) : setView seulement
   si le centre visé est à 8 px ou plus du centre actuel ; sous 30 kt, le cap
   ne change plus le décalage devant l'avion (dernier décalage calculé au-dessus
@@ -324,6 +333,13 @@ NON IMPLÉMENTÉ / OUVERT :
   (« ANALYSE DIAG v17.32 SOL + VOL ») : 5 défauts du DIAG lui-même relevés
   (D1 à D5) et 9 recommandations classées gain / risque (R1 à R9), aucune
   implémentée. Historique : À MESURER -> MESURÉ ;
+- v17.37 : À MESURER sur iPad (mise à jour v17.36 -> v17.37 sans page
+  blanche ; démarrage hors ligne ; GLR OFF -> ON sans code ; section
+  « DERNIERS LANCEMENTS » et en-tête stockage / SafeSky / GLR) ;
+- SafeSky repasse PARFOIS sur ON au lancement (intermittent, constaté par
+  l'utilisateur le 27/09, sans lien avec la pérenne) : NON CORRIGÉ, À MESURER
+  avec le journal des lancements v17.37 (valeur relue au lancement, écritures
+  refusées) ;
 - v17.36 : À MESURER en VOL RÉEL, interrupteur « Recentrage économe » ON puis
   OFF (protocole en fin d'entrée v17.36) ;
 - v17.35 : À MESURER sur iPad (simulation : suivi OFF -> carte fixe, suivi ON
@@ -342,38 +358,38 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.36
+Version : TEST v17.37
 Date : 27/09/2026
-Base : v17.35 (commitée 8462deb, À MESURER)
+Base : v17.36 (commitée d6e9bb8, À MESURER)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.36.txt
-2_Index_v17.36.txt
-3_Manifest_v17.36.txt
-4_Script_v17.36.txt
-5_SIA_v17.36.txt
-6_Style_v17.36.txt
-7_Sw_v17.36.txt
+1_Modifications_v17.37.txt
+2_Index_v17.37.txt
+3_Manifest_v17.37.txt
+4_Script_v17.37.txt
+5_SIA_v17.37.txt
+6_Style_v17.37.txt
+7_Sw_v17.37.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.36
-- Manifest : start_url = ./index.html?appv=v17.36
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.36
-- Style : NPF_STYLE_BUILD_VERSION = v17.36
-- Service Worker : `sw-v17-36_recentrage_econome`
+- Index : APP_VERSION = v17.37
+- Manifest : start_url = ./index.html?appv=v17.37
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.37
+- Style : NPF_STYLE_BUILD_VERSION = v17.37
+- Service Worker : `sw-v17-37_caches_test` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-37_caches_test`, `npf-q400-test-app-data-v1`,
+  `npf-q400-test-sia-data-15.69-radio1026-1-maplite1`
 - SIA_DATA_REVISION (SW / Index) : 15.69-radio1026-1-maplite1 (inchangée)
-- sia.js v17.36 : strictement identique à v17.35.
+- sia.js v17.37 : strictement identique à v17.36.
 
 STATUT DE VALIDATION :
-- validation statique v17.36 effectuée avant livraison : Script/SIA/SW OK, script
+- validation statique v17.37 effectuée avant livraison : Script/SIA/SW OK, script
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
-- `sia.js` et moteur tuiles (src/100) identiques à v17.35 ;
-- tests Chrome A/B v17.35 / v17.36 ON / v17.36 OFF (positions réelles
-  injectées, immobile, cadence par échelle, simulation) : entrée v17.36 ;
+- `sia.js` et moteur tuiles (src/100) identiques à v17.36 ;
+- tests Chrome v17.36 / v17.37 : entrée v17.37 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
-  sur iPad ; v17.32 MESURÉE ; v17.29, v17.31, v17.33, v17.34, v17.35 et v17.36
-  À MESURER.
+  sur iPad ; v17.32 MESURÉE ; v17.29, v17.31, v17.33 à v17.37 À MESURER.
 
 
 2. PROTOCOLE DE TRAVAIL À RESPECTER
@@ -1895,6 +1911,227 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.37 — MISE À JOUR SANS PAGE BLANCHE ; JOURNAL DES LANCEMENTS ;
+COMMUNES APRÈS LA CARTE COMPLÈTE ; GLR SANS NOUVEAU CODE ; MESURE STOCKAGE
+Date : 27/09/2026
+Base fonctionnelle : v17.36 (commit d6e9bb8)
+DIAG de référence : NPF_DIAG_2026-09-27_20-52 (iPad, v17.36, au sol, sans suivi).
+
+PARTIE 1 — ANALYSE (sans correction, sauf les points décidés plus bas)
+a) Tuiles lentes avec HT et Routes (restitutions de 3 à 8,4 s)
+   MESURÉ dans le DIAG :
+   - fil principal libre pendant les recherches lentes : aucun blocage
+     > 100 ms entre + 229 s et + 288 s, sauf 121 ms ;
+   - chaque recherche : 1 ouverture, 1 lecture, aucun délai dépassé, indice de
+     base jamais faux (pas de balayage de l'ancienne base) ;
+   - les 5 lectures d'un paquet partent ensemble (attente en file 1 à 23 ms)
+     et finissent à la même milliseconde : c'est le moteur IndexedDB qui
+     répond lentement, pas l'application ;
+   - les cellules Routes sont lues dans le Cache API (pas IndexedDB) et jamais
+     pendant les paquets lents (lectures à 251, 267, 281, 297 s ; paquets
+     lents 241-243, 262-265, 271-275, 284-289 s) ; aucune écriture IndexedDB
+     après un geste ;
+   - le phénomène existe aussi calques OFF : à + 74 s (HT et Routes OFF), un
+     paquet de 5 à 2,8 s ; restitutions de 1,9 à 3,1 s entre 53 et 85 s. Les
+     restitutions rapides calques OFF en fin de session portaient sur des
+     zones déjà lues (tuiles en mémoire) ;
+   - durée d'un paquet croissante (2,4 -> 3,4 -> 4,0 -> 5,1 s) pendant que la
+     mémoire des canvas monte à 182 puis 234 Mo (2 canvas Routes de 78,5 Mo,
+     marge 0,55, src/090:348,354). HYPOTHÈSE non prouvée : pression mémoire
+     iPad qui ralentit IndexedDB.
+   - HT et Routes ajoutent 1,2 à 1,6 s par restitution, dont ≈ 1,05 s de deux
+     attentes fixes ≈ 530 ms (waitForNpfHeavyOverlayTileWindow,
+     src/090:1020-1081) refaites alors que les tuiles sont déjà prêtes. La
+     reconstruction HT « toujours reconstruit » ne coûte que 15 à 55 ms.
+   - 350 « demandes en file abandonnées » : à chaque zoom ou déplacement
+     manuel, pruneDirectOfflineNpfQueueForCurrentView (src/100:1179-1221)
+     supprime les demandes de tuiles qui ne sont plus affichées. Compteur
+     cumulé (10 zooms, 47 gestes), pas une panne.
+   Corrections proposées, NON IMPLÉMENTÉES (À DÉCIDER) :
+   1. supprimer la seconde attente quand le séquenceur a déjà attendu les
+      tuiles (≈ 1 s par restitution) — risque faible, touche le séquenceur ;
+   2. marge du canvas Routes 0,55 -> 0,10-0,20 (≈ 100 Mo libérés) — risque :
+      bords vides pendant un glissement ;
+   3. d'abord une mesure DIAG seule : ouverture / transaction / lecture de
+      chaque recherche, et essai ON / OFF sur les mêmes zones neuves ;
+   4. seulement après, modification du moteur (lecture par clé) — risque
+      élevé.
+b) Démarrage (première tuile 4,55 s, carte complète 8,4 s)
+   - 762 ms à + 3,38 s : partie d'un blocage de 1,7 s (1,62 -> 3,38 s) :
+     évaluation de script.js (3,1 Mo, données embarquées) et initMap
+     (304 ms) ;
+   - 912 ms à + 8,30 s : partie d'un blocage de 1,5 s (6,74 -> 8,27 s) :
+     lecture de communes.json (62 Mo, 0,55 s), index de recherche (0,26 s),
+     mise en page (456 ms), PÉLIC (0,2 s) ;
+   - première tuile à 1,16 s : les 5 lectures attendent la même première
+     ouverture de la base du pack (src/100:1597-1637) pendant qu'initDB ouvre
+     la base des réglages (0,38 s rien que pour l'ouverture) ; fil principal
+     occupé jusqu'à 3,53 s.
+   Corrections proposées : communes après la carte complète (FAIT, v17.37,
+   point 2) ; plus tard, données embarquées chargées à la demande et mesure
+   de l'ouverture de la base du pack (NON IMPLÉMENTÉ, À DÉCIDER).
+c) Voyant GLR
+   - Le voyant est le bouton GLR (updateGlobalLinkButton, src/180) : couleur
+     fondée sur la session enregistrée et le nombre de trafics, pas sur la
+     réussite des requêtes. Bord rouge (style.css ≈ 14085) : pas de session,
+     GLR ON sans trafic, OFF, et pendant chaque rafraîchissement.
+   - « session GLR ABSENTE/EXPIRÉE » avec « HTTP 200 » : la session est testée
+     à l'export contre l'échéance locale expiresAt ; HTTP 200 est la dernière
+     requête réussie gardée en mémoire. Après l'échéance locale, le
+     rafraîchissement s'arrêtait sans effacer l'affichage.
+   - OFF puis ON redemandait le code parce que l'échéance locale était
+     dépassée : getStoredGlobalLinkSession effaçait alors la session (y compris
+     au passage OFF, via la mise à jour du bouton). Hypothèse sur l'échéance
+     trop courte : date du NAS sans fuseau lue comme heure locale (code PHP du
+     NAS non disponible, À VÉRIFIER).
+d) Relances après la mise à jour en v17.36
+   1. src/280 enregistrait « ./sw.js » sans appv (index.html : avec appv) :
+      réinstallation possible de la même version ; l'installation effaçait
+      d'abord son propre cache (sw.js) : si elle échouait, plus de copie hors
+      ligne -> page blanche, ou écran « Chargement NPF-Q400… Patience »
+      bloqué si script.js ne se charge pas ;
+   2. TEST et pérenne sur la même origine (grisonb.github.io) : chaque
+      activation effaçait tous les caches « npf-q400-app-shell-* » sauf un,
+      y compris ceux de l'autre application (si le stockage est partagé) ;
+   3. versions mélangées possibles (recherche en cache sans tenir compte
+      d'appv) ; 4. nouveau service worker sans pack pendant ≤ 1,5 s.
+e) Historique SafeSky / GLR (recherche des régressions, 27/09)
+   - SafeSky : la relecture de l'état au lancement (src/030:682) est inchangée
+     depuis v13.97 ; l'enregistrement ON / OFF (toggleTrafficLayer) et la
+     reprise au démarrage (src/100:1011) depuis v15.29 ; code identique dans la
+     pérenne (même clé showTrafficLayer). Aucun commit ne remet SafeSky sur ON.
+   - GLR : session et OFF / ON inchangés depuis v15.42, identiques à la
+     pérenne ; bord rouge du bouton depuis v15.46 ; changements GLR depuis
+     septembre limités aux messages d'erreur réseau (v16.58-v16.62) et à la
+     fusion SafeSky (v16.99).
+   - Test utilisateur sur iPad : aucun lien avec la pérenne ; SafeSky repasse
+     PARFOIS sur ON (intermittent). Cause NON TROUVÉE -> mesure v17.37.
+   - Mesure Chrome, session d'environ 10 min, clé DIAG « npfDiagSessionV3 »
+     (une seule clé, remplacée à chaque écriture) : v17.31 14 k car., v17.32
+     30 k, v17.36 39 k. localStorage total ≈ 2,06-2,08 M car. dans les trois
+     versions (communesAliasesCacheV3 1,53 M depuis v16.66 ;
+     npfCommunesPopulationV1 0,50 M). Le DIAG a grossi de ≈ 25 k car. depuis
+     v17.32, soit ≈ 2 % du total ; écriture ≤ 1 ms.
+
+DEMANDE UTILISATEUR (partie 2, v17.37)
+1. Page blanche après mise à jour (TEST seulement) : sw.js enregistré
+   partout avec appv ; l'installation n'efface plus la copie hors ligne avant
+   que la nouvelle soit complète ; caches TEST propres, la TEST n'efface que
+   les siens ; journal des 5 derniers lancements (étapes + erreurs), aucune
+   écriture pendant le démarrage, section « DERNIERS LANCEMENTS ».
+2. Communes (option B) : seules les communes attendent la carte visible
+   complète, ou 15 s après l'ouverture ; le DIAG indique la condition.
+3. GLR : OFF -> ON réessaie la session existante ; code redemandé seulement
+   si le NAS la refuse ; OFF n'efface jamais la session.
+4. Mesure seule SafeSky / GLR : taille du localStorage, 5 plus grosses clés,
+   écritures refusées, showTrafficLayer relu au lancement, échéance GLR
+   comparée à l'heure de l'iPad (journal et en-tête de l'export).
+Hors périmètre (À DÉCIDER, version suivante) : tuiles, canvas Routes, fichier
+communes, fenêtre de recherche SafeSky, correction SafeSky.
+
+MODIFICATIONS
+1. sw.js :
+   - caches TEST : « npf-q400-test-app-shell-<version> »,
+     « npf-q400-test-app-data-v1 », « npf-q400-test-sia-data-<révision> » ;
+   - installation dans un cache temporaire « npf-q400-test-install-… », copié
+     dans le cache final seulement s'il est complet et validé ; la copie en
+     service n'est plus effacée ; en cas d'échec seul le cache temporaire est
+     supprimé ;
+   - activation : ne supprime que des caches TEST (shells TEST précédents
+     sauf un, anciens shells TEST « npf-q400-app-shell-sw-v1x-… », caches
+     temporaires). Tant qu'aucun shell « npf-q400-test- » précédent n'existe,
+     le dernier ancien shell TEST reste le secours. Les caches de la pérenne
+     (« npf-q400-app-shell-sw-v2026-… », « npf-q400-app-data-v1 ») ne sont
+     jamais effacés ;
+   - données : l'ancien cache partagé est relu (sans être effacé) par la
+     recherche existante ; SIA : l'ancien cache SIA TEST de même révision est
+     relu puis copié dans le cache TEST.
+2. src/280 : enregistrement « ./sw.js?appv=<version> », comme index.html.
+3. index.html : journal des lancements (clé npfQ400TestLaunchLogV1, 5
+   derniers) : étapes du démarrage, erreurs JavaScript, promesses rejetées,
+   échec de chargement de script / feuille de style, texte d'erreur affiché
+   (status-message, alertes d'erreur pendant 60 s) ; une écriture à la carte
+   visible complète, immédiate en cas d'erreur ; si la carte n'est jamais
+   complète : à 60 s ou en quittant. Mesure : taille du localStorage, 5 plus
+   grosses clés, écritures refusées (clé, taille, heure — l'écriture reste
+   refusée comme avant), showTrafficLayer au lancement et à l'écriture,
+   échéance GLR.
+4. src/060 : les communes attendent la carte visible complète (toutes les
+   tuiles visibles chargées ou « absentes du pack ») ou 15 s après
+   l'ouverture ; étapes DIAG « Communes — priorité carte libérée » (carte
+   visible complète n/n, ou délai 15 s) et « Carte visible complète ».
+   Boutons, PÉLIC et « Démarrage principal prêt » partent après la première
+   tuile (en v17.36 ils attendaient la fin des communes, ≈ 8,2 s dans le DIAG
+   de référence). Vérifié avant : aucune fonction lancée à « Démarrage
+   principal prêt » n'a besoin des communes ; les alias (codes INSEE)
+   attendent désormais les communes ; la commune la plus proche est
+   recalculée quand les communes sont prêtes ; la recherche reste vide tant
+   qu'elles ne le sont pas.
+5. src/180 (GLR) : l'échéance locale n'efface plus la session ; OFF -> ON et
+   le rafraîchissement automatique réessaient la session existante ; seul un
+   refus du NAS (401 global_session_invalid) efface la session et, si
+   l'action vient de l'utilisateur, affiche le code. Le bouton reste vert si
+   le NAS a accepté la session après l'échéance locale.
+6. src/010 (DIAG) : en-tête « Stockage local », « Écritures localStorage
+   refusées », « SafeSky (showTrafficLayer) relu au lancement », « GLR
+   échéance locale » ; section « DERNIERS LANCEMENTS » ; coût du journal dans
+   « Charge DIAG ».
+
+TESTS CHROME (v17.36 / v17.37)
+- Scénario habituel (pack NPF_France_TEST, hors ligne, HT ON, 40 positions
+  GPS, suivi, glissement, zooms, HT OFF / ON) : IDENTIQUE à chaque étape
+  (setView 6, écart max 7,7 px, canvas HT couvert 40/40, centres, zooms,
+  tuiles, trouvées / absentes 89/116) ; aucune exception, aucune erreur.
+- Mise à jour simulée v17.36 -> v17.37 (même adresse, pack hors ligne actif) :
+  v17.37 prend le contrôle ; caches TEST créés ; faux caches pérenne intacts ;
+  ancien shell v17.36 gardé en secours. Serveur arrêté (hors ligne) : la
+  v17.37 démarre, carte OFFLINE, 20 tuiles trouvées dans le pack, 34 935
+  communes, SIA 15.69 ; index servi hors ligne (200).
+- Communes : libérées à la carte visible complète (20/20) ; tuiles absentes du
+  pack comptées comme terminées ; processeur ralenti ×25 : carte non complète,
+  communes libérées à 15,3 s (« délai 15 s après l'ouverture »), journal
+  « carte non complète à 60 s ».
+- GLR (NAS simulé dans la page, échéance locale dépassée de 20 min) :
+  v17.36 -> code redemandé, session effacée, aucune requête au NAS ;
+  v17.37 -> pas de code, positions reçues, bouton vert, rafraîchissement
+  automatique OK, OFF garde la session ; session refusée (401) -> session
+  effacée et code affiché. NON TESTÉ : NAS réel, format réel d'expiresAt,
+  durée réelle des sessions, pont BFG.
+- Journal : lancement normal (« carte complète ») ; script.js absent
+  (« erreur », « échec du chargement de script.js », écrit aussitôt) ;
+  erreur JavaScript + promesse rejetées provoquées (« carte complète (avec
+  erreurs) », 2 écritures). Coût : 1 écriture de 3 ms par lancement normal.
+- Export DIAG complet sans erreur.
+
+VERSIONS
+- Index / Manifest / Script / Style : v17.37.
+- Service Worker : `sw-v17-37_caches_test`.
+- SIA_DATA_REVISION inchangée ; sia.js strictement identique à v17.36.
+
+VALIDATION AVANT LIVRAISON
+- `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés.
+- Syntaxe Script / SIA / SW : OK. Script inline Index : OK. Manifest JSON : OK.
+- Cohérence versions / caches : OK. sia.js et src/100 identiques à v17.36.
+
+PÉRENNE (NON MODIFIÉE)
+- Ne subit plus d'effacement de cache par la TEST à partir de l'activation
+  v17.37.
+- Reste exposée par son propre code : script.js enregistre « ./sw.js » sans
+  appv (réinstallation possible de la même version) et son installation
+  efface d'abord sa copie hors ligne (page blanche hors ligne si la
+  réinstallation échoue) ; ses activations effacent les anciens caches
+  « npf-q400-app-shell-* » (dont les anciens caches TEST, sans gravité).
+  Noms partagés sur la même origine (données, bases de tuiles, localStorage)
+  si le stockage est partagé — sans lien constaté sur iPad (test du 27/09).
+
+À MESURER (iPad)
+- Prochaine mise à jour : démarrage sans page blanche ; hors ligne ensuite.
+- DERNIERS LANCEMENTS : erreurs éventuelles, valeur SafeSky relue au
+  lancement (intermittence ON), écritures refusées, échéance GLR.
+- GLR : OFF -> ON sans code tant que le NAS accepte la session.
+
+--------------------------------------------------------------------------------
 
 VERSION TEST v17.36 — RECENTRAGE ÉCONOME (GPS RÉEL) ; INTERRUPTEUR TEST ON / OFF
 Date : 27/09/2026

@@ -33,6 +33,10 @@ let npfGlobalLinkLastAuthState = 'non-testé';
 let npfGlobalLinkLastAction = '—';
 let npfGlobalLinkLastHttpStatus = 0;
 let npfGlobalLinkLastError = '';
+/* v17.37 — dernière session acceptée par le NAS (POSITIONS HTTP 200), même
+ * après l'échéance locale expiresAt. Le NAS reste seul juge de la validité. */
+let npfGlobalLinkNasConfirmedToken = '';
+let npfGlobalLinkNasConfirmedAt = 0;
 
 function rememberGlobalLinkRequestState(action, response = null, error = '') {
     npfGlobalLinkLastAction = String(action || '—');
@@ -78,18 +82,35 @@ function setGlobalLinkShowOffTraffic(enabled) {
     }
 }
 
-function getStoredGlobalLinkSession() {
+/*
+ * v17.37 — l'échéance locale (expiresAt) n'efface plus la session. La session
+ * enregistrée n'est effacée que lorsque le NAS la refuse réellement
+ * (401 global_session_invalid). Le bouton OFF ne l'efface jamais.
+ */
+function readStoredGlobalLinkSessionForNas() {
     try {
         const token = String(localStorage.getItem(NPF_GLOBAL_LINK_SESSION_KEY) || '');
+        if (!token) return null;
         const exp = Number(localStorage.getItem(NPF_GLOBAL_LINK_SESSION_EXP_KEY) || 0);
-        if (!token || !Number.isFinite(exp) || exp <= Date.now()) {
-            clearStoredGlobalLinkSession();
-            return null;
-        }
-        return { token, exp };
+        return { token, exp: Number.isFinite(exp) ? exp : 0 };
     } catch (_) {
         return null;
     }
+}
+
+function getStoredGlobalLinkSession() {
+    const session = readStoredGlobalLinkSessionForNas();
+    if (!session) return null;
+    if (session.exp > Date.now()) return session;
+    /* Échéance locale dépassée : session considérée valide si le NAS l'a
+     * acceptée après cette échéance. */
+    if (
+        npfGlobalLinkNasConfirmedToken === session.token
+        && npfGlobalLinkNasConfirmedAt > session.exp
+    ) {
+        return session;
+    }
+    return null;
 }
 
 function storeGlobalLinkSession(token, expiresAt) {
@@ -1386,16 +1407,17 @@ async function refreshGlobalLinkPositions(options = {}) {
         return false;
     }
     const docsSession = getStoredBriefingDocsSession();
-    const globalSession = getStoredGlobalLinkSession();
+    /* v17.37 — réessayer avec la session existante, même après l'échéance locale. */
+    const globalSession = readStoredGlobalLinkSessionForNas();
     if (!docsSession || !globalSession) {
         if (!docsSession) clearBriefingDocsSession();
-        if (!globalSession) clearStoredGlobalLinkSession();
         updateGlobalLinkButton();
         if (!options.silent) await loadGlobalLinkCaptcha();
         return false;
     }
     npfGlobalLinkFetchInProgress = true;
     updateGlobalLinkButton({ loading: true });
+    let globalLinkSessionRefusedByNas = false;
     try {
         let response = null;
         let payload = null;
@@ -1442,7 +1464,12 @@ async function refreshGlobalLinkPositions(options = {}) {
         if (!response?.ok || !payload || payload.ok !== true) {
             if (response?.status === 401) {
                 if (payload?.error === 'npf_authorization_required') clearBriefingDocsSession();
-                if (payload?.error === 'global_session_invalid') clearStoredGlobalLinkSession();
+                if (payload?.error === 'global_session_invalid') {
+                    clearStoredGlobalLinkSession();
+                    npfGlobalLinkNasConfirmedToken = '';
+                    npfGlobalLinkNasConfirmedAt = 0;
+                    globalLinkSessionRefusedByNas = true;
+                }
             }
             if (isGlobalLinkTemporaryLoadFail(lastMessage)) {
                 npfGlobalLinkLastAuthState = 'positions-load-fail-temporaire';
@@ -1452,6 +1479,8 @@ async function refreshGlobalLinkPositions(options = {}) {
 
         rememberGlobalLinkRequestState('positions', response, '');
         npfGlobalLinkLastAuthState = 'positions-ok';
+        npfGlobalLinkNasConfirmedToken = globalSession.token;
+        npfGlobalLinkNasConfirmedAt = Date.now();
         renderGlobalLinkPositions(payload.positions || []);
         return true;
     } catch (error) {
@@ -1476,7 +1505,10 @@ async function refreshGlobalLinkPositions(options = {}) {
         );
         console.warn('[Global Link]', error);
         updateGlobalLinkButton();
-        if (!options.silent && !isGlobalLinkAbortError(error)) {
+        if (!options.silent && globalLinkSessionRefusedByNas) {
+            /* v17.37 — session réellement refusée par le NAS : nouveau code. */
+            await loadGlobalLinkCaptcha();
+        } else if (!options.silent && !isGlobalLinkAbortError(error)) {
             alert(`Global Link : ${userMessage}`);
         }
         return false;
@@ -1527,7 +1559,9 @@ async function handleGlobalLinkButtonClick() {
         return;
     }
     const docsSession = await ensureGlobalLinkNpfAuthorization();
-    let globalSession = getStoredGlobalLinkSession();
+    /* v17.37 — OFF -> ON : pas de nouveau code tant qu'une session existe ;
+     * le NAS dira si elle est encore valide. */
+    let globalSession = readStoredGlobalLinkSessionForNas();
     if (!globalSession) {
         await loadGlobalLinkCaptcha();
         return;
@@ -1739,7 +1773,7 @@ function initializeGlobalLinkUi() {
         if (!getStoredBriefingDocsSession()) {
             await tryAuthorizeBriefingDocsFromBfgBridge({ silent: true });
         }
-        if (!getStoredGlobalLinkSession() || !getStoredBriefingDocsSession()) {
+        if (!readStoredGlobalLinkSessionForNas() || !getStoredBriefingDocsSession()) {
             npfGlobalLinkEnabled = false;
             try { localStorage.setItem(NPF_GLOBAL_LINK_LAYER_ENABLED_KEY, '0'); } catch (_) {}
             updateGlobalLinkButton();

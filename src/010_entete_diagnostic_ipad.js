@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.36';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.37';
 
 
 /*
@@ -2447,10 +2447,11 @@ function appendNpfDiagDetailExportSections(lines) {
     appendNpfDiagV1734ExportSections(lines);
     appendNpfDiagSimulationSection(lines);
     appendNpfDiagEconomicSection(lines);
+    appendNpfDiagLaunchSection(lines);
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.36 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.37 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -2646,6 +2647,111 @@ function appendNpfDiagSimulationSection(lines) {
         + ' | suivi ' + (item.follow ? 'oui' : 'non')
         + ' | ' + (item.recenter ? 'recentrage ' + item.recenter + (item.shiftM === null || item.shiftM === undefined ? '' : ' (' + item.shiftM + ' m)') : 'pas de recentrage')
     ));
+}
+
+/* v17.37 — journal des lancements et stockage local (mesure seule). */
+function formatNpfDiagChars(count) {
+    const chars = Math.max(0, Math.round(Number(count) || 0));
+    return chars.toLocaleString('fr-FR') + ' car. (≈ ' + (chars * 2 / 1048576).toFixed(2).replace('.', ',') + ' Mo)';
+}
+
+function formatNpfDiagDateTime(at) {
+    return Number(at)
+        ? new Date(Number(at)).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }) + ' ' + formatNpfDiagClock(at)
+        : '—';
+}
+
+function describeNpfDiagGlrExpiry(token, exp, referenceAt) {
+    if (!token) return 'aucune session enregistrée';
+    if (!Number(exp)) return 'session présente, échéance inconnue';
+    const deltaMin = Math.round((Number(exp) - Number(referenceAt)) / 60000);
+    return 'échéance ' + formatNpfDiagDateTime(exp)
+        + (deltaMin >= 0 ? ' — encore ' + deltaMin + ' min' : ' — dépassée de ' + (-deltaMin) + ' min');
+}
+
+function formatNpfDiagStorageTop(top) {
+    return (Array.isArray(top) ? top : [])
+        .map(([key, size]) => key + ' ' + Math.round(Number(size) || 0).toLocaleString('fr-FR'))
+        .join(' · ') || '—';
+}
+
+function formatNpfDiagRefusedWrites(list) {
+    return (Array.isArray(list) && list.length)
+        ? list.map(item => formatNpfDiagClock(item.at) + ' ' + item.key + ' (' + Math.round(Number(item.size) || 0).toLocaleString('fr-FR') + ' car., ' + (item.error || 'refus') + ')').join(' · ')
+        : 'aucune';
+}
+
+function appendNpfDiagLaunchStorageHeader(lines) {
+    const launchLog = window.NPF_LAUNCH_LOG;
+    if (!launchLog) {
+        lines.push('Journal des lancements NPF-Q400 : indisponible');
+        return;
+    }
+    const summary = launchLog.storageSummary();
+    const current = launchLog.current();
+    const readRaw = key => { try { return localStorage.getItem(key); } catch (_) { return null; } };
+    const glrToken = !!readRaw('npfGlobalLinkSessionV1');
+    const glrExp = Number(readRaw('npfGlobalLinkSessionExpV1')) || 0;
+    lines.push(
+        'Stockage local : total ' + formatNpfDiagChars(summary.total)
+        + ' | 5 plus grosses clés (car.) : ' + formatNpfDiagStorageTop(summary.top)
+    );
+    lines.push('Écritures localStorage refusées (cette session) : ' + formatNpfDiagRefusedWrites(launchLog.refusedWrites()));
+    lines.push(
+        'SafeSky (showTrafficLayer) relu au lancement : ' + JSON.stringify(current.safeSkyAtLaunch)
+        + ' | valeur actuelle : ' + JSON.stringify(readRaw('showTrafficLayer'))
+    );
+    lines.push(
+        'GLR échéance locale (expiresAt) : ' + describeNpfDiagGlrExpiry(glrToken, glrExp, Date.now())
+        + ' | heure iPad ' + formatNpfDiagDateTime(Date.now())
+        + ' | au lancement : ' + describeNpfDiagGlrExpiry(current.glrAtLaunch?.token, current.glrAtLaunch?.exp, current.at)
+    );
+}
+
+function appendNpfDiagLaunchSection(lines) {
+    const launchLog = window.NPF_LAUNCH_LOG;
+    lines.push('');
+    lines.push('DERNIERS LANCEMENTS (5 derniers, NPF-Q400 TEST ; écrits à la carte complète ou dès une erreur)');
+    if (!launchLog) {
+        lines.push('   Journal indisponible.');
+        return;
+    }
+    const list = launchLog.readAll().slice();
+    const current = launchLog.current();
+    if (!list.some(item => item && item.id === current.id)) {
+        list.push({ ...current, steps: [], notWritten: true });
+    }
+    list.reverse().forEach((item, index) => {
+        const isCurrent = item.id === current.id;
+        lines.push(
+            (index + 1) + '. ' + formatNpfDiagDateTime(item.at) + ' | ' + (item.version || '—')
+            + ' | ' + (item.status || '—') + (item.notWritten ? ' (lancement en cours, pas encore écrit)' : '')
+            + (isCurrent ? ' | lancement actuel' : '')
+            + ' | page contrôlée par le service worker : ' + (item.controlled ? 'oui' : 'non')
+            + (item.reloadReason ? ' | rechargement : ' + item.reloadReason : '')
+        );
+        lines.push(
+            '   SafeSky (showTrafficLayer) relu au lancement ' + JSON.stringify(item.safeSkyAtLaunch)
+            + (item.safeSkyAtWrite !== undefined ? ' · à l’écriture ' + JSON.stringify(item.safeSkyAtWrite) : '')
+            + ' | GLR au lancement : ' + describeNpfDiagGlrExpiry(item.glrAtLaunch?.token, item.glrAtLaunch?.exp, item.at)
+        );
+        if (item.storage) {
+            lines.push('   Stockage local : ' + formatNpfDiagChars(item.storage.total) + ' | ' + formatNpfDiagStorageTop(item.storage.top));
+        }
+        lines.push('   Écritures refusées : ' + formatNpfDiagRefusedWrites(item.refusedWrites));
+        const errors = Array.isArray(item.errors) ? item.errors : [];
+        if (!errors.length) lines.push('   Erreurs : aucune');
+        errors.forEach(error => lines.push(
+            '   Erreur + ' + ((Number(error.t) || 0) / 1000).toFixed(2) + ' s | ' + error.type + ' | ' + error.message
+            + (error.source ? ' | ' + error.source : '')
+        ));
+        const steps = Array.isArray(item.steps) ? item.steps : [];
+        if (steps.length) {
+            lines.push('   Étapes : ' + steps.map(([label, t, detail]) => (
+                label + ' ' + ((Number(t) || 0) / 1000).toFixed(2) + ' s' + (detail ? ' (' + detail + ')' : '')
+            )).join(' · '));
+        }
+    });
 }
 
 /* v17.36 — recentrage économe : état, périodes, comparaison ON / OFF. */
@@ -3272,6 +3378,7 @@ function buildNpfStartupDiagnosticExportText() {
     lines.push('Build : ' + String(window.NPF_SCRIPT_BUILD_VERSION || NPF_SCRIPT_BUILD_VERSION || '—'));
     try { appendNpfDiagSimulationHeader(lines); } catch (_) {}
     try { appendNpfDiagEconomicHeader(lines); } catch (_) {}
+    try { appendNpfDiagLaunchStorageHeader(lines); } catch (_) {}
     lines.push('');
     lines.push('################ SESSION COURANTE ################');
     lines.push(
@@ -3446,6 +3553,18 @@ function buildNpfStartupDiagnosticExportText() {
         + Math.round(runtime.diagPersistCount || 0) + ' écritures groupées | '
         + 'écriture max ' + Math.round(runtime.diagPersistMaxMs || 0) + ' ms | '
         + 'temps total ' + Math.round(runtime.diagPersistTotalMs || 0) + ' ms'
+        + (() => {
+            try {
+                const launchCost = window.NPF_LAUNCH_LOG?.cost?.();
+                if (!launchCost) return '';
+                return ' | journal des lancements : ' + launchCost.writes + ' écriture(s)'
+                    + ', max ' + Math.round(launchCost.maxMs) + ' ms'
+                    + ', total ' + Math.round(launchCost.totalMs) + ' ms'
+                    + (launchCost.refused ? ', ' + launchCost.refused + ' refusée(s)' : '');
+            } catch (_) {
+                return '';
+            }
+        })()
     );
     lines.push(
         'Authentification : BFG↔NPF associé ' + (runtime.bfgPaired ? 'OUI' : 'NON')

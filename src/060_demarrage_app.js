@@ -67,6 +67,68 @@ function waitForNpfStartupFirstTile(timeoutMs = 4500) {
     });
 }
 
+/*
+ * v17.37 — carte visible complète : toutes les tuiles visibles du niveau
+ * courant sont chargées, ou remplacées par l'image « absente du pack » (une
+ * tuile absente compte donc comme terminée). Une seule surveillance, pendant
+ * le démarrage seulement : elle libère les communes (carte complète, ou 15 s
+ * après l'ouverture au plus tard) puis signale la carte complète au journal
+ * des lancements (au plus tard 60 s après l'ouverture). Aucun calcul pendant
+ * un geste manuel.
+ */
+const NPF_STARTUP_COMMUNES_MAX_WAIT_FROM_OPEN_MS = 15000;
+const NPF_STARTUP_MAP_COMPLETE_WATCH_LIMIT_MS = 60000;
+let npfStartupVisibleMapWatchPromise = null;
+let npfStartupCommunesReadyPromise = Promise.resolve();
+
+function watchNpfStartupVisibleMapComplete() {
+    if (npfStartupVisibleMapWatchPromise) return npfStartupVisibleMapWatchPromise;
+    npfStartupVisibleMapWatchPromise = new Promise(resolveCommunesGate => {
+        let gateResolved = false;
+        let lastCoverage = { total: 0, loaded: 0 };
+        const releaseGate = reason => {
+            if (gateResolved) return;
+            gateResolved = true;
+            resolveCommunesGate({ reason, total: lastCoverage.total, loaded: lastCoverage.loaded });
+        };
+        const poll = () => {
+            const elapsed = performance.now();
+            const gestureActive = typeof npfMapManualGestureLockActive !== 'undefined' && npfMapManualGestureLockActive;
+            if (!gestureActive) {
+                try {
+                    const coverage = getNpfCurrentZoomVisibleTileCoverage();
+                    lastCoverage = {
+                        total: Math.max(0, Number(coverage?.total) || 0),
+                        loaded: Math.max(0, Number(coverage?.loaded) || 0)
+                    };
+                } catch (_) {}
+            }
+            const complete = !gestureActive && lastCoverage.total > 0 && lastCoverage.loaded >= lastCoverage.total;
+            if (complete) {
+                npfStartupDiagMark(
+                    'startup_visible_map_complete',
+                    'Carte visible complète',
+                    `${lastCoverage.loaded}/${lastCoverage.total} tuiles`
+                );
+                releaseGate('carte-complete');
+                try {
+                    window.dispatchEvent(new CustomEvent('npf-startup-map-complete', {
+                        detail: { total: lastCoverage.total, loaded: lastCoverage.loaded }
+                    }));
+                } catch (_) {}
+                return;
+            }
+            if (!gateResolved && elapsed >= NPF_STARTUP_COMMUNES_MAX_WAIT_FROM_OPEN_MS) {
+                releaseGate('delai-15s');
+            }
+            if (elapsed >= NPF_STARTUP_MAP_COMPLETE_WATCH_LIMIT_MS) return;
+            setTimeout(poll, gateResolved ? 1000 : 200);
+        };
+        setTimeout(poll, 0);
+    });
+    return npfStartupVisibleMapWatchPromise;
+}
+
 function waitForNpfStartupMapPriorityRelease({ timeoutMs = 8000, minCoverageRatio = 0.80 } = {}) {
     if (npfStartupMapPriorityPromise) return npfStartupMapPriorityPromise;
 
@@ -317,73 +379,104 @@ async function initializeApp() {
 
     /*
      * v17.20 — PRIORITÉ 2 : la base communes ne concurrence plus la toute
-     * première tuile. La recherche devient disponible juste après le premier
-     * rendu cartographique, avec un timeout de secours si aucune tuile n'existe.
+     * première tuile.
+     * v17.37 — option B : boutons, PÉLIC et « Démarrage principal prêt »
+     * partent après la première tuile, sans attendre les communes. Seules les
+     * communes attendent la carte visible complète, ou au plus tard 15 s après
+     * l'ouverture ; le DIAG indique la condition qui les a libérées.
      */
-    npfStartupDiagMark('communes_wait_first_tile', 'Communes — attente première tuile');
-    const startupFirstTileReady = await waitForNpfStartupFirstTile(4500);
-    npfStartupDiagMark(
-        'communes_first_tile_gate',
-        'Communes — priorité carte libérée',
-        startupFirstTileReady ? 'première tuile affichée' : 'timeout sécurité'
-    );
-
-    let communesLoadError = null;
-    npfStartupDiagMark('communes_start', 'Communes — chargement');
-    try {
-        let data = null;
-
-        if (FORCE_DISPLAY_MODE) {
-            const cachedData = localStorage.getItem(COMMUNES_CACHE_KEY);
-            if (cachedData) {
-                try {
-                    const parsed = JSON.parse(cachedData);
-                    if (parsed && Array.isArray(parsed.data)) data = parsed;
-                } catch (_) {}
-            }
-        }
-
-        if (!data) data = await loadCommunesData();
-        npfStartupDiagMark('communes_data_ready', 'Communes — données prêtes', `${Array.isArray(data?.data) ? data.data.length : 0} communes`);
-
-        allCommunes = data.data.map(c => {
-            const normalizedName = simplifyString(c.nom_standard);
-            const searchParts = normalizedName.split(' ').filter(Boolean);
-            return {
-                ...c,
-                normalized_name: normalizedName,
-                search_parts: searchParts,
-                search_compact: searchParts.join(''),
-                soundex_parts: searchParts.map(part => soundex(part))
-            };
-        });
-
-        npfStartupDiagMark('communes_index_ready', 'Communes — index recherche prêt', `${allCommunes.length} entrées`);
-
-        communesByCodeInsee = new Map(
-            allCommunes
-                .map(commune => [
-                    String(commune.code_insee || '').trim(),
-                    commune
-                ])
-                .filter(([code]) => code)
+    npfStartupCommunesReadyPromise = (async () => {
+        npfStartupDiagMark('communes_wait_map', 'Communes — attente carte visible complète');
+        const communesGate = await watchNpfStartupVisibleMapComplete();
+        npfStartupDiagMark(
+            'communes_map_gate',
+            'Communes — priorité carte libérée',
+            communesGate.reason === 'carte-complete'
+                ? `carte visible complète (${communesGate.loaded}/${communesGate.total} tuiles)`
+                : `délai 15 s après l’ouverture (${communesGate.loaded}/${communesGate.total} tuiles)`
         );
 
-        /* v16.66 — les alias ne bloquent plus le démarrage principal.
-         * Le DIAG v16.65 a montré un blocage JavaScript d'environ 2,7 s au
-         * moment de leur chargement/normalisation. La recherche des 34 935
-         * communes reste disponible immédiatement ; les alias sont chargés
-         * après l'affichage PÉLIC, au repos. */
-        communeAliases = [];
-        communeAliasesLoadSource = 'differe-apres-demarrage';
-        npfStartupDiagMark('communes_aliases_deferred', 'Alias communes — chargement différé', 'après démarrage principal');
-    } catch (error) {
-        communesLoadError = error;
-        allCommunes = [];
-        communeAliases = [];
-        npfStartupDiagMark('communes_error', 'Communes / alias en erreur', error?.message || error);
-        console.error('Chargement communes/alias indisponible:', error);
-    }
+        let communesLoadError = null;
+        npfStartupDiagMark('communes_start', 'Communes — chargement');
+        try {
+            let data = null;
+
+            if (FORCE_DISPLAY_MODE) {
+                const cachedData = localStorage.getItem(COMMUNES_CACHE_KEY);
+                if (cachedData) {
+                    try {
+                        const parsed = JSON.parse(cachedData);
+                        if (parsed && Array.isArray(parsed.data)) data = parsed;
+                    } catch (_) {}
+                }
+            }
+
+            if (!data) data = await loadCommunesData();
+            npfStartupDiagMark('communes_data_ready', 'Communes — données prêtes', `${Array.isArray(data?.data) ? data.data.length : 0} communes`);
+
+            allCommunes = data.data.map(c => {
+                const normalizedName = simplifyString(c.nom_standard);
+                const searchParts = normalizedName.split(' ').filter(Boolean);
+                return {
+                    ...c,
+                    normalized_name: normalizedName,
+                    search_parts: searchParts,
+                    search_compact: searchParts.join(''),
+                    soundex_parts: searchParts.map(part => soundex(part))
+                };
+            });
+
+            npfStartupDiagMark('communes_index_ready', 'Communes — index recherche prêt', `${allCommunes.length} entrées`);
+
+            communesByCodeInsee = new Map(
+                allCommunes
+                    .map(commune => [
+                        String(commune.code_insee || '').trim(),
+                        commune
+                    ])
+                    .filter(([code]) => code)
+            );
+
+            /* v16.66 — les alias ne bloquent plus le démarrage principal.
+             * Le DIAG v16.65 a montré un blocage JavaScript d'environ 2,7 s au
+             * moment de leur chargement/normalisation. La recherche des 34 935
+             * communes reste disponible immédiatement ; les alias sont chargés
+             * après l'affichage PÉLIC, au repos. */
+            communeAliases = [];
+            communeAliasesLoadSource = 'differe-apres-demarrage';
+            npfStartupDiagMark('communes_aliases_deferred', 'Alias communes — chargement différé', 'après démarrage principal');
+        } catch (error) {
+            communesLoadError = error;
+            allCommunes = [];
+            communeAliases = [];
+            npfStartupDiagMark('communes_error', 'Communes / alias en erreur', error?.message || error);
+            console.error('Chargement communes/alias indisponible:', error);
+        }
+
+        /* v17.37 — la commune la plus proche était calculée sans la base
+         * communes pendant son chargement : la recalculer une fois prête. */
+        try {
+            if (typeof refreshNearestCommuneDisplayFromKnownGps === 'function') {
+                refreshNearestCommuneDisplayFromKnownGps();
+            }
+        } catch (_) {}
+
+        if (communesLoadError) {
+            setTimeout(() => {
+                alert(
+                    "Mode dégradé: base communes/alias indisponible. La carte reste utilisable ; réessayez avec réseau pour la recherche commune."
+                );
+            }, 400);
+        }
+    })();
+
+    npfStartupDiagMark('startup_wait_first_tile', 'Démarrage — attente première tuile');
+    const startupFirstTileReady = await waitForNpfStartupFirstTile(4500);
+    npfStartupDiagMark(
+        'startup_first_tile_gate',
+        'Démarrage — suite après première tuile',
+        startupFirstTileReady ? 'première tuile affichée' : 'timeout sécurité'
+    );
 
     if (searchSection) searchSection.style.display = 'block';
 
@@ -429,6 +522,8 @@ async function initializeApp() {
     const startDeferredCommuneAliasesLoad = async () => {
         if (communeAliasesStartupLoadStarted) return;
         communeAliasesStartupLoadStarted = true;
+        /* v17.37 — les alias s'appuient sur la base communes (codes INSEE). */
+        try { await npfStartupCommunesReadyPromise; } catch (_) {}
         try {
             communeAliases = await loadCommunesAliases();
             npfStartupDiagMark(
@@ -729,12 +824,5 @@ async function initializeApp() {
         }, 1200);
     });
 
-    if (communesLoadError) {
-        setTimeout(() => {
-            alert(
-                "Mode dégradé: base communes/alias indisponible. La carte reste utilisable ; réessayez avec réseau pour la recherche commune."
-            );
-        }, 400);
-    }
 }
 

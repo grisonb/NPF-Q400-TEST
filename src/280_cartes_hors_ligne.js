@@ -683,9 +683,14 @@ async function synchronizeOfflineConfigurationWithServiceWorker({
     let registration = null;
     try {
         registration = await withTimeout(
-            navigator.serviceWorker.register('./sw.js', {
-                updateViaCache: 'none'
-            }),
+            /*
+             * v17.37 — même URL que index.html (avec appv). Une URL différente
+             * relançait l'installation de la même version du service worker.
+             */
+            navigator.serviceWorker.register(
+                `./sw.js?appv=${encodeURIComponent(window.APP_VERSION || '')}`,
+                { updateViaCache: 'none' }
+            ),
             timeoutMs,
             'Timeout enregistrement service worker'
         );

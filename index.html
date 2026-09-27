@@ -6,8 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>NPF-Q400</title>
     <link rel="stylesheet" href="leaflet.css">
-    <link rel="stylesheet" href="style.css?appv=v17.36">
-    <link rel="manifest" href="manifest.json?appv=v17.36">
+    <link rel="stylesheet" href="style.css?appv=v17.37">
+    <link rel="manifest" href="manifest.json?appv=v17.37">
     <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192x192.png?appv=v13.92">
     <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512x512.png?appv=v13.92">
     <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png?appv=v13.92">
@@ -579,7 +579,7 @@
 
     <!-- v17.20 — le splash est parsé avant le gros contrôleur PWA afin de réduire le blanc initial Safari. -->
     <script>
-        const APP_VERSION = 'v17.36';
+        const APP_VERSION = 'v17.37';
         const SERVICE_WORKER_URL = `./sw.js?appv=${encodeURIComponent(APP_VERSION)}`;
         const APP_VERSION_STORAGE_KEY = 'appVersion';
         const SW_CONTROLLER_RELOAD_GUARD_KEY = 'swControllerReloadGuard';
@@ -592,6 +592,231 @@
         window.APP_VERSION = APP_VERSION;
         window.SW_DISABLED_FOR_PLATFORM = false;
         window.NPF_POST_UPDATE_NOTICE_MANAGED = true;
+
+        /*
+         * v17.37 — journal des 5 derniers lancements NPF-Q400 TEST, le plus léger
+         * possible : étapes du démarrage et messages d'erreur seulement.
+         * Aucune écriture pendant le démarrage : une seule écriture quand la
+         * carte visible est complète, ou immédiatement en cas d'erreur. Si la
+         * carte n'est jamais complète : écriture à 60 s ou en quittant.
+         * Mesure seule (SafeSky / GLR) : taille du localStorage, écritures
+         * refusées, showTrafficLayer relu au lancement, échéance GLR.
+         */
+        (function installNpfLaunchLog() {
+            const LAUNCH_LOG_KEY = 'npfQ400TestLaunchLogV1';
+            const LAUNCH_LOG_MAX = 5;
+            const ERROR_TEXT_PATTERN = /erreur|échec|impossible|indisponible|dégradé|❌/i;
+            const readRaw = key => {
+                try { return localStorage.getItem(key); } catch (_) { return null; }
+            };
+            const launch = {
+                id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                at: Date.now(),
+                version: APP_VERSION,
+                controlled: !!(navigator.serviceWorker && navigator.serviceWorker.controller),
+                reloadReason: (() => {
+                    try {
+                        const params = new URL(window.location.href).searchParams;
+                        return ['swrefresh', 'swctl', 'ts', 'npfupdate'].filter(name => params.has(name)).join(',');
+                    } catch (_) { return ''; }
+                })(),
+                status: 'en cours',
+                steps: [],
+                errors: [],
+                safeSkyAtLaunch: readRaw('showTrafficLayer'),
+                glrAtLaunch: {
+                    token: !!readRaw('npfGlobalLinkSessionV1'),
+                    exp: Number(readRaw('npfGlobalLinkSessionExpV1')) || 0
+                }
+            };
+            const refusedWrites = [];
+            const cost = { writes: 0, maxMs: 0, totalMs: 0, refused: 0 };
+            let written = false;
+            let finalWriteDone = false;
+            let pendingErrorWrite = 0;
+
+            /* Écritures localStorage refusées (quota…) : notées puis relancées telles quelles. */
+            try {
+                const storageProto = window.Storage && window.Storage.prototype;
+                const originalSetItem = storageProto && storageProto.setItem;
+                if (originalSetItem) {
+                    storageProto.setItem = function npfLaunchLogSetItem(key, value) {
+                        try {
+                            return originalSetItem.call(this, key, value);
+                        } catch (error) {
+                            try {
+                                if (this === window.localStorage && refusedWrites.length < 20) {
+                                    refusedWrites.push({
+                                        at: Date.now(),
+                                        key: String(key),
+                                        size: String(value).length,
+                                        error: String(error && error.name || error || '')
+                                    });
+                                }
+                            } catch (_) {}
+                            throw error;
+                        }
+                    };
+                }
+            } catch (_) {}
+
+            const storageSummary = () => {
+                let total = 0;
+                const keys = [];
+                try {
+                    for (let index = 0; index < localStorage.length; index += 1) {
+                        const key = localStorage.key(index);
+                        const size = String(key || '').length + String(localStorage.getItem(key) || '').length;
+                        total += size;
+                        keys.push([key, size]);
+                    }
+                } catch (_) {}
+                keys.sort((a, b) => b[1] - a[1]);
+                return { total, top: keys.slice(0, 5) };
+            };
+
+            const collectSteps = () => {
+                try {
+                    const marks = window.NPF_STARTUP_DIAGNOSTIC?.state?.marks;
+                    if (!Array.isArray(marks)) return [];
+                    return marks
+                        .filter(mark => !String(mark.key || '').startsWith('sw_') || /MAJ/.test(String(mark.label || '')))
+                        .slice(0, 60)
+                        .map(mark => [
+                            String(mark.label || mark.key || '').slice(0, 60),
+                            Math.round(Number(mark.t) || 0),
+                            String(mark.detail || '').slice(0, 60)
+                        ]);
+                } catch (_) {
+                    return [];
+                }
+            };
+
+            const writeLaunch = status => {
+                const started = performance.now();
+                try {
+                    if (status) launch.status = status;
+                    launch.steps = collectSteps();
+                    launch.writtenAt = Date.now();
+                    launch.safeSkyAtWrite = readRaw('showTrafficLayer');
+                    launch.storage = storageSummary();
+                    launch.refusedWrites = refusedWrites.slice(-10);
+                    let list = [];
+                    try { list = JSON.parse(readRaw(LAUNCH_LOG_KEY) || '[]'); } catch (_) { list = []; }
+                    if (!Array.isArray(list)) list = [];
+                    list = list.filter(item => item && item.id !== launch.id);
+                    list.push(launch);
+                    localStorage.setItem(LAUNCH_LOG_KEY, JSON.stringify(list.slice(-LAUNCH_LOG_MAX)));
+                    written = true;
+                } catch (_) {
+                    cost.refused += 1;
+                }
+                const elapsed = performance.now() - started;
+                cost.writes += 1;
+                cost.totalMs += elapsed;
+                cost.maxMs = Math.max(cost.maxMs, elapsed);
+            };
+
+            const addError = (type, message, source = '') => {
+                if (launch.errors.length >= 12) return;
+                launch.errors.push({
+                    t: Math.round(performance.now()),
+                    type,
+                    message: String(message || '').replace(/\s+/g, ' ').trim().slice(0, 220),
+                    source: String(source || '').slice(0, 140)
+                });
+                if (launch.status === 'en cours') launch.status = 'erreur';
+                if (pendingErrorWrite) return;
+                pendingErrorWrite = setTimeout(() => {
+                    pendingErrorWrite = 0;
+                    writeLaunch();
+                }, 0);
+            };
+
+            window.addEventListener('error', event => {
+                try {
+                    const target = event && event.target;
+                    if (target && target !== window && (target.src || target.href)) {
+                        const url = String(target.src || target.href || '');
+                        if (/\.(js|css)(\?|$)/i.test(url)) {
+                            addError('ressource', `échec du chargement de ${url.replace(/^.*\//, '')}`, target.tagName || '');
+                        }
+                        return;
+                    }
+                    const where = event.filename
+                        ? `${String(event.filename).replace(/^.*\//, '')}:${event.lineno || 0}:${event.colno || 0}`
+                        : '';
+                    addError('javascript', event.message || event.error?.message || 'erreur', where);
+                } catch (_) {}
+            }, true);
+
+            window.addEventListener('unhandledrejection', event => {
+                try {
+                    const reason = event && event.reason;
+                    addError('promesse', reason?.message || String(reason || 'rejet sans motif'));
+                } catch (_) {}
+            });
+
+            /* Texte d'erreur affiché à l'écran pendant le démarrage (60 s). */
+            try {
+                const originalAlert = window.alert;
+                window.alert = function npfLaunchLogAlert(message) {
+                    try {
+                        if (performance.now() < 60000 && ERROR_TEXT_PATTERN.test(String(message || ''))) {
+                            addError('message affiché', message);
+                        }
+                    } catch (_) {}
+                    return originalAlert.apply(this, arguments);
+                };
+            } catch (_) {}
+            try {
+                const statusElement = document.getElementById('status-message');
+                if (statusElement && typeof MutationObserver === 'function') {
+                    const observer = new MutationObserver(() => {
+                        const text = String(statusElement.textContent || '');
+                        if (ERROR_TEXT_PATTERN.test(text)) addError('message affiché', text);
+                    });
+                    observer.observe(statusElement, { childList: true, characterData: true, subtree: true });
+                    setTimeout(() => observer.disconnect(), 60000);
+                }
+            } catch (_) {}
+
+            const finalWrite = status => {
+                if (finalWriteDone) return;
+                finalWriteDone = true;
+                writeLaunch(status);
+            };
+            window.addEventListener('npf-startup-map-complete', () => {
+                finalWrite(launch.errors.length ? 'carte complète (avec erreurs)' : 'carte complète');
+            });
+            setTimeout(() => {
+                if (!finalWriteDone) finalWrite('carte non complète à 60 s');
+            }, 60000);
+            const leave = () => {
+                if (!finalWriteDone) finalWrite('quitté avant carte complète');
+            };
+            window.addEventListener('pagehide', leave);
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'hidden') leave();
+            });
+
+            window.NPF_LAUNCH_LOG = {
+                key: LAUNCH_LOG_KEY,
+                current: () => launch,
+                isWritten: () => written,
+                cost: () => ({ ...cost }),
+                refusedWrites: () => refusedWrites.slice(),
+                storageSummary,
+                readAll: () => {
+                    try {
+                        const list = JSON.parse(readRaw(LAUNCH_LOG_KEY) || '[]');
+                        return Array.isArray(list) ? list : [];
+                    } catch (_) {
+                        return [];
+                    }
+                }
+            };
+        })();
 
         function clearLegacyPostUpdateNoticeMarkers() {
             try {
@@ -1176,7 +1401,7 @@
     <script src="suncalc.js"></script>
     <script src="jszip.min.js"></script>
     <script src="sia.js?siav=15.69-radio1026-1-maplite1"></script>
-    <script src="script.js?appv=v17.36"></script>
+    <script src="script.js?appv=v17.37"></script>
     
     <div id="fuel-split-modal" class="fuel-split-modal" style="display: none;">
         <div class="fuel-split-modal-content">
