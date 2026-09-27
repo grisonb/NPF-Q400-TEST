@@ -969,7 +969,7 @@ async function waitForNpfLayerActivationTileWindow(layerKey, options = {}) {
                         maxQueued,
                         maxActive,
                         blankPasses,
-                        tilesVisible: countVisibleLoadedBaseTiles(),
+                        ...npfDiagTilesVisibleFields(),
                         npfReadsQueued: Number(directOfflineNpfReadQueue?.length || 0),
                         npfReadsActive: Number(directOfflineNpfActiveReads || 0)
                     }
@@ -989,7 +989,7 @@ async function waitForNpfLayerActivationTileWindow(layerKey, options = {}) {
                     maxQueued,
                     maxActive,
                     blankPasses,
-                    tilesVisible: countVisibleLoadedBaseTiles(),
+                    ...npfDiagTilesVisibleFields(),
                     npfReadsQueued: Number(directOfflineNpfReadQueue?.length || 0),
                     npfReadsActive: Number(directOfflineNpfActiveReads || 0)
                 }

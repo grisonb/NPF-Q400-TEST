@@ -1874,7 +1874,7 @@ async function waitForNpfFinalZoomFirstTiles(options = {}) {
 
     npfDiagSiaInteraction(
         'TUILES ZOOM FINAL',
-        `état=timeout · mode=${diagnosticMode} · zoom=${map?.getZoom?.() ?? '—'} · visibles=${countVisibleLoadedBaseTiles()}/${getNpfRetainedBaseTileCount()}`,
+        `état=timeout · mode=${diagnosticMode} · zoom=${map?.getZoom?.() ?? '—'} · visibles=${npfDiagTilesVisibleLabel()}/${getNpfRetainedBaseTileCount()}`,
         {
             waitMs: Math.round(NPF_STARTUP_DIAGNOSTIC.now() - startedAt),
             maxQueued,
@@ -2201,7 +2201,7 @@ async function toggleHighVoltageLinesLayer(forceState = null, options = {}) {
             npfDiagSiaInteraction('FILTRE CARTE', 'couche=HT · données-prêtes', {
                 layerMs: Math.round(NPF_STARTUP_DIAGNOSTIC.now() - loadStartedAt),
                 htSegments: Number(highVoltageLinesFeatureCount || 0),
-                tilesVisible: countVisibleLoadedBaseTiles(),
+                ...npfDiagTilesVisibleFields(),
                 npfReadsQueued: Number(directOfflineNpfReadQueue?.length || 0),
                 npfReadsActive: Number(directOfflineNpfActiveReads || 0)
             });

@@ -2709,7 +2709,7 @@ async function toggleRoadOverlayLayer(forceState = null, options = {}) {
                     zoom: Number(map?.getZoom?.() ?? 0),
                     routesSource: getNpfRoadSourceFeatureCount(),
                     routesRendered: getNpfRenderedRoadFeatureCount(),
-                    tilesVisible: countVisibleLoadedBaseTiles()
+                    ...npfDiagTilesVisibleFields()
                 }
             );
         } else {
@@ -2739,7 +2739,7 @@ async function toggleRoadOverlayLayer(forceState = null, options = {}) {
                 layerMs: Math.round(NPF_STARTUP_DIAGNOSTIC.now() - renderStartedAt),
                 routesSource: getNpfRoadSourceFeatureCount(),
                 routesRendered: getNpfRenderedRoadFeatureCount(),
-                tilesVisible: countVisibleLoadedBaseTiles(),
+                ...npfDiagTilesVisibleFields(),
                 npfReadsQueued: Number(directOfflineNpfReadQueue?.length || 0),
                 npfReadsActive: Number(directOfflineNpfActiveReads || 0)
             });

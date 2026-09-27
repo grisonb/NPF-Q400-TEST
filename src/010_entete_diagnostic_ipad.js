@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.33';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.34';
 
 
 /*
@@ -419,6 +419,7 @@ const NPF_STARTUP_DIAGNOSTIC = (() => {
 
     return {
         state, mark, has, now, addSiaInteraction,
+        wouldRetainInteraction: shouldRetainInteraction,
         recordMapMotion, recordZoom, recordGpsPosition, recordGpsRecenter,
         persist
     };
@@ -444,6 +445,8 @@ function npfDiagGpsPosition(coords, timestampMs = Date.now()) {
     return NPF_STARTUP_DIAGNOSTIC.recordGpsPosition(coords, timestampMs);
 }
 function npfDiagGpsRecenter(reason = '', centerShiftM = 0) {
+    /* v17.34 — heure du recentrage, pour la corrélation avec les attentes HT. */
+    try { NPF_DIAG_DETAIL.noteGpsRecenter(); } catch (_) {}
     return NPF_STARTUP_DIAGNOSTIC.recordGpsRecenter(reason, centerShiftM);
 }
 function npfDiagPersist() {
@@ -484,7 +487,10 @@ const NPF_DIAG_DETAIL = (() => {
         tileLookups: 600,
         tileSlowest: 25,
         zoomEvents: 60,
-        packChanges: 20
+        packChanges: 20,
+        gpsRecenters: 6000,
+        layerWaits: 400,
+        waitMinutes: 180
     };
     const TILE_MS_BINS = [50, 100, 250, 500, 1000, 2000, 5000];
     const STARTUP_WINDOW_MS = 30000;
@@ -541,7 +547,21 @@ const NPF_DIAG_DETAIL = (() => {
         },
         zoomEvents: [],
         packChanges: [],
-        packKey: null
+        packKey: null,
+        /* v17.34 — instantanés DIAG : avec / sans mesure DOM, non calculés. */
+        snapshotStats: { dom: 0, gesture: 0, gpsFollow: 0, requested: 0, skipped: 0 },
+        /* v17.34 — attentes de calque et vérification des tuiles (mesure seule). */
+        gpsRecenterTimes: [],
+        activeWaits: new Map(),
+        waitSeq: 0,
+        layerWaits: [],
+        layerWaitTotals: Object.create(null),
+        waitCorrelation: { interrupted: 0, startNear: 0, endNear: 0, bothNear: 0 },
+        tileCheck: {
+            calls: 0, totalMs: 0, maxMs: 0, tiles: 0, byCaller: Object.create(null),
+            secondIndex: -1, secondCalls: 0, maxPerSecond: 0
+        },
+        waitMinutes: new Map()
     };
 
     const safe = (callback, fallback = undefined) => {
@@ -895,9 +915,170 @@ const NPF_DIAG_DETAIL = (() => {
             label,
             ms: round(ms),
             result: info.error ? 'erreur' : (info.value === false ? 'annulée ou délai dépassé' : 'prête'),
-            start: info.before ? formatTileState(info.before) : '—',
+            start: info.before?.tiles ? formatTileState(info.before.tiles) : '—',
             end: formatTileState(endState)
         }, LIMITS.waits);
+    };
+
+    /* ---------- Attentes de calque et vérification des tuiles (v17.34) ---------- */
+
+    const minuteBucket = t => {
+        const index = Math.floor(Number(t) / 60000);
+        let bucket = state.waitMinutes.get(index);
+        if (!bucket) {
+            bucket = {
+                index, at: wallAt(index * 60000), gpsFollow: false, htOn: false, recenters: 0,
+                htStarted: 0, htReady: 0, htInterrupted: 0, htWaitMs: 0, htWaitMax: 0,
+                checks: 0, checkMs: 0, checkMax: 0, checkTiles: 0, byCaller: Object.create(null)
+            };
+            state.waitMinutes.set(index, bucket);
+            if (state.waitMinutes.size > LIMITS.waitMinutes) {
+                state.waitMinutes.delete(state.waitMinutes.keys().next().value);
+            }
+        }
+        return bucket;
+    };
+
+    const isGpsFollowActive = () => safe(() => !!isCenterGpsFollowEffective(), false);
+
+    const noteGpsRecenter = () => {
+        const t = now();
+        pushCapped(state.gpsRecenterTimes, t, LIMITS.gpsRecenters);
+        minuteBucket(t).recenters += 1;
+    };
+
+    /* Recentrage GPS à moins de 200 ms de l'instant t ? (tableau trié). */
+    const nearGpsRecenter = t => {
+        const times = state.gpsRecenterTimes;
+        let low = 0;
+        let high = times.length - 1;
+        while (low <= high) {
+            const mid = (low + high) >> 1;
+            if (times[mid] < t) low = mid + 1; else high = mid - 1;
+        }
+        return [times[low], times[low - 1]].some(value => Number.isFinite(value) && Math.abs(value - t) <= 200);
+    };
+
+    const waitCategory = (fnName, label) => {
+        const text = String(label || '');
+        if (fnName === 'restitution') return 'restitution';
+        if (text === 'HT') return 'attente HT';
+        if (text === 'Routes') return 'attente Routes';
+        if (text === 'Routes+HT') return 'attente Routes+HT';
+        if (text.startsWith('SIA')) return 'attente SIA';
+        return 'attente ' + (text || 'autre');
+    };
+
+    const startLayerWait = (fnName, args) => {
+        const t0 = now();
+        const id = ++state.waitSeq;
+        const label = fnName === 'restitution' ? 'restitution' : String(args?.[0] || '—');
+        const wait = {
+            id, fnName, label, t0,
+            category: waitCategory(fnName, label),
+            gpsFollow: isGpsFollowActive(),
+            htOn: safe(() => !!showHighVoltageLinesLayer, false),
+            maxWaitMs: Number(args?.[1]?.maxWaitMs) || null,
+            isCancelled: typeof args?.[1]?.isCancelled === 'function' ? args[1].isCancelled : null
+        };
+        state.activeWaits.set(id, wait);
+        const bucket = minuteBucket(t0);
+        if (wait.gpsFollow) bucket.gpsFollow = true;
+        if (wait.htOn) bucket.htOn = true;
+        if (label === 'HT' && fnName !== 'restitution') bucket.htStarted += 1;
+        return wait;
+    };
+
+    const finishLayerWait = (wait, info) => {
+        if (!wait) return;
+        state.activeWaits.delete(wait.id);
+        const tEnd = info.tEnd;
+        const ms = tEnd - wait.t0;
+        const ready = !info.error && info.value !== false;
+        let reason = 'prête';
+        if (info.error) {
+            reason = 'erreur';
+        } else if (!ready) {
+            const cancelled = safe(() => (wait.isCancelled ? !!wait.isCancelled() : false), false);
+            if (wait.label === 'HT' && !safe(() => showHighVoltageLinesLayer, true)) reason = 'annulée : HT désactivé';
+            else if (wait.label === 'Routes' && !safe(() => showRoadOverlayLayer, true)) reason = 'annulée : Routes désactivé';
+            else if (cancelled) reason = 'annulée : nouvelle demande';
+            else if (wait.maxWaitMs && ms >= wait.maxWaitMs - 5) reason = 'délai dépassé';
+            else reason = 'non prête (tuiles en cours)';
+        }
+        const key = `${wait.fnName} · ${wait.label}`;
+        let total = state.layerWaitTotals[key];
+        if (!total) {
+            total = { started: 0, ready: 0, interrupted: 0, reasons: Object.create(null), totalMs: 0, maxMs: 0, gpsFollow: 0, htOn: 0 };
+            state.layerWaitTotals[key] = total;
+        }
+        total.started += 1;
+        if (ready) total.ready += 1; else total.interrupted += 1;
+        total.reasons[reason] = (total.reasons[reason] || 0) + 1;
+        total.totalMs += ms;
+        if (ms > total.maxMs) total.maxMs = ms;
+        if (wait.gpsFollow) total.gpsFollow += 1;
+        if (wait.htOn) total.htOn += 1;
+
+        if (wait.label === 'HT' && wait.fnName !== 'restitution') {
+            const bucket = minuteBucket(wait.t0);
+            if (ready) bucket.htReady += 1; else bucket.htInterrupted += 1;
+            bucket.htWaitMs += ms;
+            if (ms > bucket.htWaitMax) bucket.htWaitMax = ms;
+        }
+
+        const entry = {
+            t: round(wait.t0), at: wallAt(wait.t0), ms: round(ms), fnName: wait.fnName, label: wait.label,
+            reason, gpsFollow: wait.gpsFollow, htOn: wait.htOn, startNear: null, endNear: null
+        };
+        pushCapped(state.layerWaits, entry, LIMITS.layerWaits);
+        /* Corrélation classée 250 ms plus tard (recentrages postérieurs à la fin connus). */
+        if (!ready && wait.label === 'HT') {
+            setTimeout(() => {
+                entry.startNear = nearGpsRecenter(wait.t0);
+                entry.endNear = nearGpsRecenter(tEnd);
+                const correlation = state.waitCorrelation;
+                correlation.interrupted += 1;
+                if (entry.startNear) correlation.startNear += 1;
+                if (entry.endNear) correlation.endNear += 1;
+                if (entry.startNear && entry.endNear) correlation.bothNear += 1;
+            }, 250);
+        }
+    };
+
+    /* Appelant d'une vérification des tuiles : attente(s) en cours à cet instant. */
+    const currentWaitCaller = () => {
+        const categories = new Set();
+        state.activeWaits.forEach(wait => categories.add(wait.category));
+        if (!categories.size) return 'autre (hors attente)';
+        if (categories.size === 1) return categories.values().next().value;
+        return 'plusieurs attentes : ' + [...categories].sort().join(' + ');
+    };
+
+    const recordTileCheck = info => {
+        const ms = info.t1 - info.t0;
+        const caller = info.before || 'autre (hors attente)';
+        const tiles = safe(() => Object.keys(baseTileLayer?._tiles || {}).length, 0);
+        const check = state.tileCheck;
+        check.calls += 1;
+        check.totalMs += ms;
+        if (ms > check.maxMs) check.maxMs = ms;
+        check.tiles += tiles;
+        check.byCaller[caller] = (check.byCaller[caller] || 0) + 1;
+        const second = Math.floor(info.t0 / 1000);
+        if (second !== check.secondIndex) {
+            check.secondIndex = second;
+            check.secondCalls = 0;
+        }
+        check.secondCalls += 1;
+        if (check.secondCalls > check.maxPerSecond) check.maxPerSecond = check.secondCalls;
+        const bucket = minuteBucket(info.t0);
+        bucket.checks += 1;
+        bucket.checkMs += ms;
+        if (ms > bucket.checkMax) bucket.checkMax = ms;
+        bucket.checkTiles += tiles;
+        bucket.byCaller[caller] = (bucket.byCaller[caller] || 0) + 1;
+        if (isGpsFollowActive()) bucket.gpsFollow = true;
     };
 
     /* ---------- Gestes ---------- */
@@ -1529,6 +1710,15 @@ const NPF_DIAG_DETAIL = (() => {
             'buildOwnGpsIcon', 'applyOwnGpsPlaneHeading', 'handleNpfFirePelicAutoCycle'
         ].forEach(name => wrapGlobal(name, { noStartup: true, gpsPart: true }));
 
+        /* v17.34 — vérification des tuiles (getBoundingClientRect sur chaque
+         * tuile) : appels, durée, tuiles, appelant. Mesure seule. */
+        wrapGlobal('getVisibleBaseTileLoadStateForSia', {
+            noStartup: true,
+            activityMinMs: 8,
+            before: () => currentWaitCaller(),
+            after: recordTileCheck
+        });
+
         /* v17.33 — I4 : instantanés DIAG (dont ceux qui mesurent les tuiles). */
         wrapGlobal('getNpfStartupDiagnosticOverlaySnapshot', { noStartup: true, gpsPart: true });
 
@@ -1541,15 +1731,21 @@ const NPF_DIAG_DETAIL = (() => {
 
         wrapGlobal('initMap', { after: () => installMapHooks() });
 
-        const waitWrapper = (name, labelOf) => wrapGlobal(name, {
+        const waitWrapper = (name, labelOf, layerWaitName = null) => wrapGlobal(name, {
             noStartup: true,
-            before: () => getTileState(),
-            after: info => recordWait(labelOf(info.args), info)
+            before: args => ({
+                tiles: getTileState(),
+                wait: layerWaitName ? startLayerWait(layerWaitName, args) : null
+            }),
+            after: info => {
+                recordWait(labelOf(info.args), info);
+                if (info.before?.wait) finishLayerWait(info.before.wait, info);
+            }
         });
         waitWrapper('waitForNpfStartupFirstTile', () => 'première tuile');
         waitWrapper('waitForNpfStartupMapPriorityRelease', () => 'priorité fond de carte');
-        waitWrapper('waitForNpfLayerActivationTileWindow', args => String(args?.[0] || 'activation'));
-        waitWrapper('waitForNpfHeavyOverlayTileWindow', args => String(args?.[0] || 'calque lourd'));
+        waitWrapper('waitForNpfLayerActivationTileWindow', args => String(args?.[0] || 'activation'), 'activation');
+        waitWrapper('waitForNpfHeavyOverlayTileWindow', args => String(args?.[0] || 'calque lourd'), 'fenêtre lourde');
         waitWrapper('waitForNpfVisibleBaseTilesReady', () => 'tuiles visibles');
 
         wrapGlobal('runNpfMapOverlayPriorityRestore', {
@@ -1571,9 +1767,10 @@ const NPF_DIAG_DETAIL = (() => {
         });
         wrapGlobal('waitForNpfMapOverlayPriorityTilesSettled', {
             noStartup: true,
-            before: () => getTileState(),
+            before: () => ({ tiles: getTileState(), wait: startLayerWait('restitution', null) }),
             after: info => {
                 recordWait('priorité carte (restitution)', info);
+                if (info.before?.wait) finishLayerWait(info.before.wait, info);
                 const ctx = restoreOf(info.args?.[0]);
                 if (ctx) ctx.tTiles = info.tEnd;
             }
@@ -1730,7 +1927,9 @@ const NPF_DIAG_DETAIL = (() => {
         tileLookupError,
         tileLookupEnd,
         getSpeedKt,
-        TILE_MS_BINS
+        TILE_MS_BINS,
+        noteGpsRecenter,
+        isGpsFollowActive
     };
 })();
 
@@ -2018,10 +2217,11 @@ function appendNpfDiagDetailExportSections(lines) {
     flushMemoryRun();
 
     appendNpfDiagV1733ExportSections(lines);
+    appendNpfDiagV1734ExportSections(lines);
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.33 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.34 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -2169,6 +2369,72 @@ function appendNpfDiagV1733ExportSections(lines) {
     ));
 }
 
+/* v17.34 — attentes de calque (HT surtout) et vérification des tuiles. */
+function appendNpfDiagV1734ExportSections(lines) {
+    const s = NPF_DIAG_DETAIL.state;
+    const r = value => Math.round(Number(value) || 0);
+    const avg = (total, n) => (n > 0 ? Math.round(total / n) : 0);
+
+    lines.push('');
+    lines.push('ATTENTES HT ET VÉRIFICATION DES TUILES (v17.34, mesure seule)');
+    lines.push('Attentes par fonction et calque (démarrées · prêtes · interrompues | durée moy / max | au départ : suivi GPS, HT ON) :');
+    const totals = Object.entries(s.layerWaitTotals).sort((a, b) => b[1].started - a[1].started);
+    if (!totals.length) lines.push('   Aucune attente.');
+    totals.forEach(([key, total]) => lines.push(
+        '   ' + key + ' | ' + total.started + ' · ' + total.ready + ' · ' + total.interrupted
+        + ' | moy ' + avg(total.totalMs, total.started) + ' / max ' + r(total.maxMs) + ' ms'
+        + ' | suivi GPS ' + total.gpsFollow + ' · HT ON ' + total.htOn
+        + ' | ' + Object.entries(total.reasons).map(([reason, count]) => reason + ' ' + count).join(' · ')
+    ));
+
+    const correlation = s.waitCorrelation;
+    const recenterCount = s.gpsRecenterTimes.length;
+    lines.push(
+        'Attentes HT interrompues et recentrages GPS (±200 ms) : ' + correlation.interrupted + ' interrompues | '
+        + correlation.startNear + ' commencent près d\'un recentrage · ' + correlation.endNear + ' finissent près d\'un recentrage · '
+        + correlation.bothNear + ' les deux | recentrages enregistrés : ' + recenterCount
+        + ' (au hasard, à 1 recentrage/s : ≈ 40 %)'
+    );
+
+    const check = s.tileCheck;
+    lines.push(
+        'Vérifications des tuiles (getVisibleBaseTileLoadStateForSia, getBoundingClientRect sur chaque tuile) : '
+        + check.calls + ' appels | moy ' + (check.calls ? (check.totalMs / check.calls).toFixed(1) : '0') + ' ms · max '
+        + r(check.maxMs) + ' ms · total ' + r(check.totalMs) + ' ms | max ' + check.maxPerSecond + ' appels en 1 s'
+        + ' | tuiles mesurées ≈ ' + (check.calls ? Math.round(check.tiles / check.calls) : 0) + ' par appel'
+    );
+    lines.push(
+        '   Appelants : ' + (Object.entries(check.byCaller)
+            .sort((a, b) => b[1] - a[1])
+            .map(([caller, count]) => caller + ' ' + count)
+            .join(' · ') || '—')
+    );
+
+    lines.push('Par minute (heure | suivi GPS · HT | recentrages | attentes HT démarrées / prêtes / interrompues, moy / max | vérifications : appels, total, max, tuiles moy | appelants) :');
+    const minutes = [...s.waitMinutes.values()].filter(bucket => bucket.checks || bucket.htStarted || bucket.recenters);
+    if (!minutes.length) lines.push('   Aucune activité.');
+    minutes.forEach(bucket => lines.push(
+        '   ' + formatNpfDiagClock(bucket.at) + ' | ' + (bucket.gpsFollow ? 'GPS' : '—') + ' · ' + (bucket.htOn ? 'HT' : '—')
+        + ' | ' + bucket.recenters
+        + ' | ' + bucket.htStarted + ' / ' + bucket.htReady + ' / ' + bucket.htInterrupted
+        + ', ' + avg(bucket.htWaitMs, bucket.htReady + bucket.htInterrupted) + ' / ' + r(bucket.htWaitMax) + ' ms'
+        + ' | ' + bucket.checks + ', ' + r(bucket.checkMs) + ' ms, ' + r(bucket.checkMax) + ' ms, '
+        + (bucket.checks ? Math.round(bucket.checkTiles / bucket.checks) : 0)
+        + ' | ' + Object.entries(bucket.byCaller).map(([caller, count]) => caller + ' ' + count).join(' · ')
+    ));
+
+    const interrupted = s.layerWaits.filter(item => item.label === 'HT' && item.reason !== 'prête').slice(-20);
+    if (interrupted.length) {
+        lines.push('20 dernières attentes HT interrompues :');
+        interrupted.forEach(item => lines.push(
+            '   ' + formatNpfDiagClock(item.at) + ' | + ' + (item.t / 1000).toFixed(2) + ' s | ' + item.fnName + ' | ' + item.ms + ' ms | '
+            + item.reason + ' | suivi GPS ' + (item.gpsFollow ? 'oui' : 'non') + ' · HT ' + (item.htOn ? 'ON' : 'OFF')
+            + ' | recentrage ±200 ms : début ' + (item.startNear === null ? '?' : (item.startNear ? 'oui' : 'non'))
+            + ' · fin ' + (item.endNear === null ? '?' : (item.endNear ? 'oui' : 'non'))
+        ));
+    }
+}
+
 function appendNpfDiagDetailRestoredSections(lines, detail) {
     if (!detail || typeof detail !== 'object') return;
     const counts = detail.counts || {};
@@ -2249,7 +2515,18 @@ function getNpfStartupDiagnosticOverlaySnapshot(options = {}) {
      * qui force un calcul de mise en page : les tuiles chargées sont comptées
      * depuis la GridLayer (niveau courant) au lieu de getBoundingClientRect.
      */
-    const layoutFree = !!options?.layoutFree || npfDiagIsManualGestureInProgress();
+    /* v17.34 — suivi GPS actif : tout instantané automatique passe aussi en
+     * mode sans mesure DOM. */
+    const inGesture = npfDiagIsManualGestureInProgress();
+    const inGpsFollow = !inGesture && npfDiagIsGpsFollowActive();
+    const layoutFree = !!options?.layoutFree || inGesture || inGpsFollow;
+    try {
+        const stats = NPF_DIAG_DETAIL.state.snapshotStats;
+        if (!layoutFree) stats.dom += 1;
+        else if (inGesture) stats.gesture += 1;
+        else if (inGpsFollow) stats.gpsFollow += 1;
+        else stats.requested += 1;
+    } catch (_) {}
     let roadOverlayInstalledParts = 0;
     try {
         roadOverlayInstalledParts = Number(getRoadOverlayManifest?.()?.parts?.length || 0);
@@ -2306,8 +2583,61 @@ function getNpfStartupDiagnosticOverlaySnapshot(options = {}) {
 }
 
 function recordNpfStartupDiagnosticOverlaySnapshot(detail = '') {
+    const safeDetail = detail || 'état';
+    /*
+     * v17.34 — suivi GPS actif, hors geste : si l'événement ne sera pas
+     * conservé, l'instantané complet n'est pas calculé. Les compteurs de la
+     * synthèse reçoivent les mêmes champs, lus sans mesure DOM ; le tri des
+     * événements utilise ces mêmes valeurs (celles qu'aurait donné
+     * l'instantané sans mesure DOM).
+     */
+    if (npfDiagIsGpsFollowActive() && !npfDiagIsManualGestureInProgress()) {
+        const light = getNpfDiagLightOverlayMetrics();
+        let retained = true;
+        try { retained = NPF_STARTUP_DIAGNOSTIC.wouldRetainInteraction('Couches carte', safeDetail, light); } catch (_) {}
+        if (!retained) {
+            try { NPF_DIAG_DETAIL.state.snapshotStats.skipped += 1; } catch (_) {}
+            return npfDiagSiaInteraction('Couches carte', safeDetail, light);
+        }
+    }
     const snapshot = getNpfStartupDiagnosticOverlaySnapshot();
-    return npfDiagSiaInteraction('Couches carte', detail || 'état', snapshot);
+    return npfDiagSiaInteraction('Couches carte', safeDetail, snapshot);
+}
+
+/* v17.34 — champs utiles à la synthèse et au tri, lus sans mesure DOM. */
+function getNpfDiagLightOverlayMetrics() {
+    return {
+        htRenderedSegments: Number(highVoltageLinesRenderedFeatureCount || 0),
+        routesRenderedSegments: getNpfRenderedRoadFeatureCount(),
+        tilesVisible: npfDiagCountLoadedCurrentTiles(),
+        tilesMeasure: 'sans-DOM',
+        npfReadsActive: Number(directOfflineNpfActiveReads || 0),
+        npfReadsQueued: Number(directOfflineNpfReadQueue?.length || 0),
+        npfReadsAborted: Number(directOfflineNpfAbortedReadCount || 0),
+        npfQueuedDiscarded: Number(directOfflineNpfQueuedDiscardCount || 0),
+        npfTileRetries: Number(directOfflineNpfTileRetryCount || 0)
+    };
+}
+
+/*
+ * v17.34 — champ « tilesVisible » des événements DIAG : en suivi GPS, hors
+ * geste, compté sans mesure DOM (et marqué). Valeur DIAG seulement : aucune
+ * décision de l'application ne l'utilise.
+ */
+function npfDiagTilesVisibleFields() {
+    if (npfDiagIsGpsFollowActive() && !npfDiagIsManualGestureInProgress()) {
+        return { tilesVisible: npfDiagCountLoadedCurrentTiles(), tilesMeasure: 'sans-DOM' };
+    }
+    return { tilesVisible: typeof countVisibleLoadedBaseTiles === 'function' ? countVisibleLoadedBaseTiles() : 0 };
+}
+function npfDiagTilesVisibleLabel() {
+    const fields = npfDiagTilesVisibleFields();
+    return String(fields.tilesVisible) + (fields.tilesMeasure ? ' (sans-DOM)' : '');
+}
+
+/* v17.34 — suivi GPS centré actif. */
+function npfDiagIsGpsFollowActive() {
+    try { return NPF_DIAG_DETAIL.isGpsFollowActive(); } catch (_) { return false; }
 }
 
 /*
@@ -2797,6 +3127,19 @@ function buildNpfStartupDiagnosticExportText() {
     const siaInteractions = Array.isArray(diag.siaInteractions) ? diag.siaInteractions.slice() : [];
     lines.push('');
     lines.push('ÉVÉNEMENTS LENTS / CHANGEMENTS DE COUCHES');
+    try {
+        const snapshotStats = NPF_DIAG_DETAIL.state.snapshotStats;
+        lines.push(
+            'Instantanés : ' + snapshotStats.dom + ' avec mesure DOM | sans mesure DOM : '
+            + snapshotStats.gesture + ' pendant un geste, ' + snapshotStats.gpsFollow + ' en suivi GPS, '
+            + snapshotStats.requested + ' sur demande | ' + snapshotStats.skipped
+            + ' non calculés (suivi GPS, événement non conservé)'
+        );
+        lines.push(
+            'ATTENTION : « tilesMeasure=sans-DOM » = tuiles chargées du niveau courant, marge comprise ;'
+            + ' à ne pas comparer aux « tilesVisible » mesurés par le DOM (anciens DIAG).'
+        );
+    } catch (_) {}
     if (!siaInteractions.length) {
         lines.push('Aucun événement lent ou changement de couche retenu.');
     } else {
