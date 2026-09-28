@@ -343,15 +343,20 @@ function initMap() {
      * Le partage d'un même renderer entre l'entourage et la ligne pouvait
      * provoquer des redessins incomplets sur Safari/iPadOS.
      */
+    /*
+     * v17.38 — marge Routes 0,55 -> 0,10 (comme HT en v17.33) : les panes Routes
+     * sont masqués pendant les gestes manuels et redessinés au moveend ; deux
+     * canvas d'environ 78 Mo chacun sur iPad passent à environ 26 Mo.
+     */
     roadOverlayCasingRenderer = L.canvas
         ? L.canvas({
-            padding: 0.55,
+            padding: 0.10,
             pane: 'roadOverlayCasingPane'
         })
         : null;
     roadOverlayLineRenderer = L.canvas
         ? L.canvas({
-            padding: 0.55,
+            padding: 0.10,
             pane: 'roadOverlayLinePane'
         })
         : null;
@@ -1026,6 +1031,45 @@ async function waitForNpfHeavyOverlayTileWindow(layerKey, options = {}) {
     const maxWaitMs = Number.isFinite(Number(options.maxWaitMs))
         ? Math.max(1000, Number(options.maxWaitMs))
         : 30000;
+
+    /*
+     * v17.38 — restitution après geste : le séquenceur (tuiles -> VFR -> HT ->
+     * Routes) vient de vérifier que les tuiles visibles sont stables. HT puis
+     * Routes refaisaient chacun ≈ 530 ms d'attente (3 passes + 2 frames + 320 ms
+     * de calme) sans nouvelle information. Une seule vérification immédiate
+     * suffit : tuiles toutes peintes, niveau prêt, aucune lecture en cours ou
+     * en file. Sinon, l'attente complète historique s'applique.
+     */
+    if (options.sequencerTilesSettled === true && !isCancelled()) {
+        const tileState = typeof getVisibleBaseTileLoadStateForSia === 'function'
+            ? getVisibleBaseTileLoadStateForSia()
+            : {
+                total: getNpfRetainedBaseTileCount(),
+                loaded: countVisibleLoadedBaseTiles(),
+                tileZoomReady: true
+            };
+        const activeReads = Math.max(0, Number(directOfflineNpfActiveReads || 0));
+        const queuedReads = Math.max(0, Number(directOfflineNpfReadQueue?.length || 0));
+        if (
+            Number(tileState.total || 0) > 0
+            && Number(tileState.loaded || 0) >= Number(tileState.total || 0)
+            && tileState.tileZoomReady
+            && activeReads === 0
+            && queuedReads === 0
+        ) {
+            npfDiagSiaInteraction(
+                'FILTRE CARTE',
+                `couche=${String(layerKey || 'inconnue')} · tuiles-prêtes (séquenceur, sans seconde attente)`,
+                {
+                    waitMs: 0,
+                    ...npfDiagTilesVisibleFields(),
+                    npfReadsQueued: queuedReads,
+                    npfReadsActive: activeReads
+                }
+            );
+            return true;
+        }
+    }
 
     const ready = await waitForNpfLayerActivationTileWindow(layerKey, {
         maxWaitMs,

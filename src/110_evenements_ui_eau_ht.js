@@ -1723,6 +1723,8 @@ async function refreshVisibleHighVoltageLines(source = 'refresh') {
      */
     const tilesReady = await waitForNpfHeavyOverlayTileWindow('HT', {
         maxWaitMs: 30000,
+        /* v17.38 — restitution : tuiles déjà vérifiées par le séquenceur. */
+        sequencerTilesSettled: source === 'overlay-priority-ht',
         isCancelled: () => (
             token !== highVoltageLinesRefreshToken
             || !showHighVoltageLinesLayer

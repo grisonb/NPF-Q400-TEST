@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.37';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.38';
 
 
 /*
@@ -356,7 +356,7 @@ const NPF_STARTUP_DIAGNOSTIC = (() => {
         } catch (_) {}
     };
 
-    mark('script_eval', 'Script NPF exécuté');
+    mark('script_eval', 'Script NPF-Q400 exécuté');
 
     try {
         setInterval(persist, DIAG_PERSIST_INTERVAL_MS);
@@ -601,7 +601,17 @@ const NPF_DIAG_DETAIL = (() => {
         followChanges: [],
         /* v17.36 — recentrage économe : périodes ON / OFF et statistiques séparées. */
         ecoPeriods: [],
-        ecoStats: Object.create(null)
+        ecoStats: Object.create(null),
+        /* v17.38 — FdS / BFG / GLR : requêtes NAS (30 dernières), temps ressenti,
+         * messages affichés, tentatives du pont BFG. Mémoire seule : écrits
+         * uniquement avec l'enregistrement DIAG existant (30 s). */
+        nasRequests: [],
+        felt: [],
+        messages: [],
+        bfgAttempts: [],
+        glrClickAt: 0,
+        glrClickCaptcha: false,
+        fdsClick: null
     };
 
     const safe = (callback, fallback = undefined) => {
@@ -1855,6 +1865,104 @@ const NPF_DIAG_DETAIL = (() => {
             }
         });
 
+        /* v17.38 — requêtes NAS : heure, action, durée, code de réponse. */
+        const pushLimited = (list, entry, max) => {
+            list.push(entry);
+            if (list.length > max) list.splice(0, list.length - max);
+        };
+        const noteNasRequest = (service, action, t0, tEnd, value, error) => pushLimited(state.nasRequests, {
+            at: wallAt(t0),
+            service,
+            action: String(action || '—').slice(0, 30),
+            ms: round(tEnd - t0),
+            status: value && typeof value.status === 'number' ? value.status : 0,
+            error: error
+                ? String(error.name === 'AbortError' ? 'délai dépassé' : (error.message || error)).slice(0, 90)
+                : ''
+        }, 30);
+        wrapGlobal('fetchBriefingDocsNas', {
+            after: ({ args, t0, tEnd, value, error }) => {
+                const action = safe(() => new URL(String(args[0]), window.location.href).searchParams.get('action'), '?');
+                noteNasRequest('FdS/BFG', action, t0, tEnd, value, error);
+            }
+        });
+        wrapGlobal('fetchGlobalLinkNas', {
+            after: ({ args, t0, tEnd, value, error }) => noteNasRequest('GLR', args[0], t0, tEnd, value, error)
+        });
+
+        /* v17.38 — temps ressenti : appui GLR -> code affiché, appui FdS ->
+         * document affiché ou message. */
+        const noteFelt = (kind, result, ms, extra = {}) => pushLimited(state.felt, {
+            at: Date.now(), kind, result: String(result || '').slice(0, 200), ms: round(ms), ...extra
+        }, 20);
+        wrapGlobal('handleGlobalLinkButtonClick', {
+            before: () => {
+                state.glrClickAt = now();
+                state.glrClickCaptcha = false;
+            },
+            after: ({ t0, tEnd, error }) => {
+                if (state.glrClickCaptcha) return;
+                const enabled = safe(() => npfGlobalLinkEnabled, false);
+                noteFelt('GLR', error
+                    ? 'erreur : ' + String(error.message || error)
+                    : (enabled ? 'GLR ON (positions demandées)' : 'GLR OFF'), tEnd - t0);
+            }
+        });
+        wrapGlobal('loadGlobalLinkCaptcha', {
+            after: ({ t0, tEnd, error }) => {
+                const clickAt = state.glrClickAt;
+                const fromClick = clickAt && t0 - clickAt < 120000;
+                if (fromClick) state.glrClickCaptcha = true;
+                state.glrClickAt = 0;
+                noteFelt('GLR', error ? 'code non affiché : ' + String(error.message || error) : 'code affiché',
+                    fromClick ? tEnd - clickAt : tEnd - t0,
+                    { captchaMs: round(tEnd - t0), fromClick: !!fromClick });
+            }
+        });
+        wrapGlobal('handleBriefingDocMapButtonClick', {
+            before: args => {
+                state.fdsClick = { t0: now(), type: String(args[0] || ''), messageCount: state.messages.length };
+            },
+            after: ({ t0, tEnd, value, error }) => {
+                const click = state.fdsClick;
+                state.fdsClick = null;
+                const newMessages = click ? state.messages.slice(click.messageCount) : [];
+                const lastMessage = newMessages.length ? newMessages[newMessages.length - 1].text : '';
+                const label = String(click?.type || 'fds').toLowerCase() === 'gaar' ? 'GAAR' : 'FdS';
+                noteFelt(label, value === true
+                    ? 'document affiché'
+                    : (error ? 'erreur : ' + String(error.message || error) : (lastMessage ? 'message : ' + lastMessage : 'pas de document')),
+                tEnd - t0);
+            }
+        });
+
+        /* v17.38 — texte exact des messages FdS / BFG / GLR affichés, à toute heure. */
+        const noteMessage = (source, text) => {
+            const clean = String(text || '').replace(/\s+/g, ' ').trim();
+            if (!clean) return;
+            pushLimited(state.messages, { at: Date.now(), source, text: clean.slice(0, 300) }, 30);
+        };
+        const RELATED_MESSAGE = /FdS|GAAR|BFG|NAS|Global Link|GLR|associ|autorisation|captcha|code de sécurité/i;
+        safe(() => {
+            const previousAlert = window.alert;
+            if (typeof previousAlert !== 'function' || previousAlert.__npfDiagMessages) return;
+            const alertWrapper = function (message) {
+                safe(() => { if (RELATED_MESSAGE.test(String(message || ''))) noteMessage('alerte', message); });
+                return previousAlert.apply(this, arguments);
+            };
+            alertWrapper.__npfDiagMessages = true;
+            window.alert = alertWrapper;
+        });
+        wrapGlobal('setBriefingDocViewerStatus', {
+            before: args => { if (args[1] && args[1].error) noteMessage('lecteur FdS / GAAR', args[0]); }
+        });
+        wrapGlobal('setGlobalLinkAuthStatus', {
+            before: args => { if (args[1] === 'error') noteMessage('fenêtre code GLR', args[0]); }
+        });
+        wrapGlobal('setGlobalLinkPasswordStatus', {
+            before: args => { if (args[1] === 'error') noteMessage('fenêtre mot de passe GLR', args[0]); }
+        });
+
         /* v17.35 — périodes de simulation et réglages (vitesse, route, altitude). */
         wrapGlobal('enableSimulationMode', {
             noStartup: true,
@@ -2152,9 +2260,25 @@ const NPF_DIAG_DETAIL = (() => {
         notePosition,
         economicRecenterChanged,
         economicRecenterSkipped,
-        ecoMode
+        ecoMode,
+        bfgBridgeAttempt: entry => {
+            state.bfgAttempts.push({
+                at: Date.now(),
+                attempt: Number(entry?.attempt) || 1,
+                ms: round(entry?.ms),
+                result: String(entry?.result || '—'),
+                httpStatus: Number(entry?.httpStatus) || 0,
+                error: String(entry?.error || '').slice(0, 90)
+            });
+            if (state.bfgAttempts.length > 20) state.bfgAttempts.splice(0, state.bfgAttempts.length - 20);
+        }
     };
 })();
+
+/* v17.38 — tentative du pont BFG (appelé par src/170). */
+function npfDiagBfgBridgeAttempt(entry) {
+    try { NPF_DIAG_DETAIL.bfgBridgeAttempt(entry); } catch (_) {}
+}
 
 /* v17.33 — DIAG I8 : points d'appel du moteur de tuiles (mesure seule). */
 function npfDiagTileNow() {
@@ -2231,6 +2355,10 @@ function npfDiagDetailPersistSnapshot() {
             simPeriods: s.simPeriods.slice(-10),
             ecoPeriods: s.ecoPeriods.slice(-10),
             followChanges: s.followChanges.slice(-20),
+            nasRequests: s.nasRequests.slice(-30),
+            felt: s.felt.slice(-20),
+            messages: s.messages.slice(-30),
+            bfgAttempts: s.bfgAttempts.slice(-20),
             memoryPeak: s.memoryPeak,
             cellCache: { ...s.cellCache }
         };
@@ -2448,10 +2576,11 @@ function appendNpfDiagDetailExportSections(lines) {
     appendNpfDiagSimulationSection(lines);
     appendNpfDiagEconomicSection(lines);
     appendNpfDiagLaunchSection(lines);
+    appendNpfDiagNasSection(lines);
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.37 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.38 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -2536,9 +2665,11 @@ function appendNpfDiagV1733ExportSections(lines) {
         + ' | max ' + r(tiles.maxMs) + ' ms'
     );
     lines.push('Durée d\'une recherche : ' + formatHisto(tiles.histo));
-    lines.push('Attente en file NPF (' + tiles.waitCount + ') : ' + formatHisto(tiles.waitHisto) + ' | max ' + r(tiles.maxWait) + ' ms');
+    lines.push('Attente en file NPF-Q400 (' + tiles.waitCount + ') : ' + formatHisto(tiles.waitHisto) + ' | max ' + r(tiles.maxWait) + ' ms');
     lines.push(
-        'Lectures ' + tiles.reads + ' · ouvertures de base ' + tiles.opens
+        /* v17.38 — « accès base » : la connexion IndexedDB de chaque pack est
+         * ouverte une seule fois puis réutilisée (src/100, openDirectOfflineTileDatabase). */
+        'Lectures ' + tiles.reads + ' · accès base ' + tiles.opens + ' (connexion ouverte une seule fois par pack, puis réutilisée)'
         + ' | par tuile trouvée : moy ' + (tiles.foundCount ? (tiles.foundReads / tiles.foundCount).toFixed(2) : '0')
         + ' lecture(s), max ' + tiles.maxFoundReads
         + ' | trouvées hors première base ' + tiles.foundAfterFirstDb
@@ -2565,7 +2696,7 @@ function appendNpfDiagV1733ExportSections(lines) {
     zoomEvents.forEach(event => {
         const inWindow = tiles.recent.filter(item => item.t >= event.t && item.t <= event.t + 20000);
         if (!inWindow.length) {
-            lines.push(formatNpfDiagClock(event.at) + ' | zoom ' + event.z + ' | aucune recherche (tuiles en RAM ou hors pack NPF)');
+            lines.push(formatNpfDiagClock(event.at) + ' | zoom ' + event.z + ' | aucune recherche (tuiles en RAM ou hors pack NPF-Q400)');
             return;
         }
         const durations = inWindow.map(item => item.ms);
@@ -2588,7 +2719,7 @@ function appendNpfDiagV1733ExportSections(lines) {
     tiles.slowest.forEach(item => lines.push(
         '   ' + formatNpfDiagClock(item.at) + ' | + ' + (item.t / 1000).toFixed(2) + ' s | z' + item.z + ' | ' + item.ms + ' ms'
         + ' | attente file ' + (item.wait === null ? '—' : item.wait + ' ms')
-        + ' | ' + item.outcome + ' | lectures ' + item.reads + ' · ouvertures ' + item.opens
+        + ' | ' + item.outcome + ' | lectures ' + item.reads + ' · accès base ' + item.opens
         + ' · délais dépassés ' + item.timeouts + ' · erreurs ' + item.errors + (item.hintMiss ? ' · indice faux' : '')
     ));
 
@@ -2647,6 +2778,60 @@ function appendNpfDiagSimulationSection(lines) {
         + ' | suivi ' + (item.follow ? 'oui' : 'non')
         + ' | ' + (item.recenter ? 'recentrage ' + item.recenter + (item.shiftM === null || item.shiftM === undefined ? '' : ' (' + item.shiftM + ' m)') : 'pas de recentrage')
     ));
+}
+
+/* v17.38 — FdS / BFG / GLR : requêtes NAS, temps ressenti, messages, pont BFG. */
+function isNpfDiagFirstLaunchOfDay() {
+    try {
+        const launchLog = window.NPF_LAUNCH_LOG;
+        if (!launchLog) return null;
+        const current = launchLog.current();
+        const day = new Date(current.at).toDateString();
+        return !launchLog.readAll().some(item => item && item.id !== current.id && new Date(item.at).toDateString() === day && item.at < current.at);
+    } catch (_) {
+        return null;
+    }
+}
+
+function formatNpfDiagNasRequestLine(item) {
+    return '   ' + formatNpfDiagClock(item.at) + ' | ' + item.service + ' | ' + item.action
+        + ' | ' + Math.round(Number(item.ms) || 0) + ' ms | HTTP ' + (item.status || '—')
+        + (item.error ? ' | ' + item.error : '');
+}
+
+function formatNpfDiagFeltLine(item) {
+    return '   ' + formatNpfDiagClock(item.at) + ' | appui ' + item.kind + ' -> ' + item.result
+        + ' | ' + (Math.round(Number(item.ms) || 0) / 1000).toFixed(1) + ' s'
+        + (Number.isFinite(Number(item.captchaMs)) ? ' (requête du code ' + (Math.round(Number(item.captchaMs)) / 1000).toFixed(1) + ' s)' : '');
+}
+
+function formatNpfDiagMessageLine(item) {
+    return '   ' + formatNpfDiagClock(item.at) + ' | ' + item.source + ' | « ' + item.text + ' »';
+}
+
+function formatNpfDiagBfgAttemptLine(item) {
+    return '   ' + formatNpfDiagClock(item.at) + ' | tentative ' + item.attempt + ' | ' + item.result
+        + ' | ' + Math.round(Number(item.ms) || 0) + ' ms'
+        + (item.httpStatus ? ' | HTTP ' + item.httpStatus : '')
+        + (item.error ? ' | ' + item.error : '');
+}
+
+function appendNpfDiagNasSection(lines) {
+    const s = NPF_DIAG_DETAIL.state;
+    const firstOfDay = isNpfDiagFirstLaunchOfDay();
+    lines.push('');
+    lines.push('FdS / BFG / GLR — PONT BFG, TEMPS RESSENTI, MESSAGES, REQUÊTES NAS (v17.38, mesure seule)');
+    lines.push('Premier lancement de la journée : ' + (firstOfDay === null ? 'inconnu' : (firstOfDay ? 'OUI' : 'NON'))
+        + ' | pont BFG : ' + (typeof npfBfgBridgeLastStatus !== 'undefined' ? npfBfgBridgeLastStatus : '—'));
+    const block = (title, list, formatter, empty) => {
+        lines.push(title);
+        if (!list.length) lines.push('   ' + empty);
+        list.forEach(item => { try { lines.push(formatter(item)); } catch (_) {} });
+    };
+    block('Pont BFG (tentatives) :', s.bfgAttempts, formatNpfDiagBfgAttemptLine, 'Aucune tentative dans cette session.');
+    block('Temps ressenti (appui -> affichage) :', s.felt, formatNpfDiagFeltLine, 'Aucun appui FdS / GAAR / GLR.');
+    block('Messages FdS / BFG / GLR affichés :', s.messages, formatNpfDiagMessageLine, 'Aucun message.');
+    block('Requêtes NAS (30 dernières) :', s.nasRequests, formatNpfDiagNasRequestLine, 'Aucune requête.');
 }
 
 /* v17.37 — journal des lancements et stockage local (mesure seule). */
@@ -2894,6 +3079,10 @@ function appendNpfDiagDetailRestoredSections(lines, detail) {
         + (period.settings || []).map(item => formatNpfDiagSimSettings(item)).join(' ; '));
     section('Changements du bouton Suivi :', detail.followChanges, item => '   ' + formatNpfDiagClock(item.at) + ' | '
         + (item.active ? 'ACTIVÉ' : 'DÉSACTIVÉ') + ' | ' + item.mode);
+    section('Pont BFG (tentatives) :', detail.bfgAttempts, formatNpfDiagBfgAttemptLine);
+    section('Temps ressenti FdS / GLR :', detail.felt, formatNpfDiagFeltLine);
+    section('Messages FdS / BFG / GLR affichés :', detail.messages, formatNpfDiagMessageLine);
+    section('Requêtes NAS (dernières) :', detail.nasRequests, formatNpfDiagNasRequestLine);
     section('Repères :', detail.markers, formatNpfDiagMarkerLine);
     section('Blocages JS > 100 ms (premiers) :', detail.firstBlocks, formatNpfDiagBlockLine);
     section('Blocages JS > 100 ms (derniers) :', detail.blocks, formatNpfDiagBlockLine);
@@ -3440,7 +3629,7 @@ function buildNpfStartupDiagnosticExportText() {
         + runtime.vacInstalledCount + ' téléchargées / '
         + runtime.vacAvailableCount + ' disponibles dans le dépôt | '
         + runtime.vacManifestAirportCount + ' terrains dans le manifest / '
-        + runtime.vacDisplayedAirportCount + ' aérodromes OACI affichés dans NPF'
+        + runtime.vacDisplayedAirportCount + ' aérodromes OACI affichés dans NPF-Q400'
         + (runtime.vacManifestUnavailableCount
             ? ' | ' + runtime.vacManifestUnavailableCount + ' sans VAC publiée'
             : '')
@@ -3567,7 +3756,7 @@ function buildNpfStartupDiagnosticExportText() {
         })()
     );
     lines.push(
-        'Authentification : BFG↔NPF associé ' + (runtime.bfgPaired ? 'OUI' : 'NON')
+        'Authentification : BFG↔NPF-Q400 associé ' + (runtime.bfgPaired ? 'OUI' : 'NON')
         + ' | session FdS/GAAR ' + (runtime.briefingSessionActive ? 'ACTIVE' : 'ABSENTE/EXPIRÉE')
         + ' | pont BFG ' + (runtime.bfgBridgeLastStatus || '—')
         + (runtime.bfgBridgeLastError ? ' (' + runtime.bfgBridgeLastError + ')' : '')
@@ -3693,7 +3882,7 @@ function buildNpfStartupDiagnosticExportText() {
     const restoredSession = runtime.diagRestoredSession;
     if (restoredSession) {
         lines.push('');
-        lines.push('################ SESSION PRÉCÉDENTE RESTAURÉE (avant rechargement de NPF) ################');
+        lines.push('################ SESSION PRÉCÉDENTE RESTAURÉE (avant rechargement de NPF-Q400) ################');
         lines.push('Les lignes ci-dessous ne concernent PAS la session courante.');
         lines.push(
             'Début : ' + new Date(Number(restoredSession.sessionStartedAt) || Date.now()).toLocaleString('fr-FR')
@@ -3736,7 +3925,7 @@ function buildNpfStartupDiagnosticExportText() {
 
     lines.push('');
     lines.push('################ FIN ################');
-    lines.push('Mesures enregistrées automatiquement depuis l’ouverture de NPF.');
+    lines.push('Mesures enregistrées automatiquement depuis l’ouverture de NPF-Q400.');
     return lines.join('\n');
 }
 

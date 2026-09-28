@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
-Mise à jour : 27/09/2026
-Version de travail actuelle : TEST v17.37
+Mise à jour : 28/09/2026
+Version de travail actuelle : TEST v17.38
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,13 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.38 — FdS : pont BFG après le chargement des communes (limite 15 s) ;
+  une seule nouvelle tentative sur délai dépassé / erreur réseau ; message
+  « NAS lent ou injoignable, réessaie dans un moment. » sauf refus réel du NAS
+  (message d'association conservé) ; tuiles : restitution après geste sans
+  seconde attente HT / Routes, marge canvas Routes 0,55 -> 0,10 ; DIAG :
+  requêtes NAS, temps ressenti FdS / GLR, messages affichés, tentatives du pont
+  BFG, « NPF » seul remplacé par « NPF-Q400 » ;
 - v17.37 — mise à jour sans page blanche (TEST) : sw.js enregistré partout
   avec appv ; installation préparée dans un cache temporaire, la copie hors
   ligne en service n'est plus effacée ; caches TEST propres
@@ -333,6 +340,9 @@ NON IMPLÉMENTÉ / OUVERT :
   (« ANALYSE DIAG v17.32 SOL + VOL ») : 5 défauts du DIAG lui-même relevés
   (D1 à D5) et 9 recommandations classées gain / risque (R1 à R9), aucune
   implémentée. Historique : À MESURER -> MESURÉ ;
+- v17.38 : À MESURER sur iPad, sans mode avion (premier lancement du matin :
+  FdS ; code GLR ; déplacements avec HT et Routes ; section « FdS / BFG / GLR »
+  de l'export) ;
 - v17.37 : À MESURER sur iPad (mise à jour v17.36 -> v17.37 sans page
   blanche ; démarrage hors ligne ; GLR OFF -> ON sans code ; section
   « DERNIERS LANCEMENTS » et en-tête stockage / SafeSky / GLR) ;
@@ -358,38 +368,38 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.37
-Date : 27/09/2026
-Base : v17.36 (commitée d6e9bb8, À MESURER)
+Version : TEST v17.38
+Date : 28/09/2026
+Base : v17.37 (commitée 3f9155d, À MESURER)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.37.txt
-2_Index_v17.37.txt
-3_Manifest_v17.37.txt
-4_Script_v17.37.txt
-5_SIA_v17.37.txt
-6_Style_v17.37.txt
-7_Sw_v17.37.txt
+1_Modifications_v17.38.txt
+2_Index_v17.38.txt
+3_Manifest_v17.38.txt
+4_Script_v17.38.txt
+5_SIA_v17.38.txt
+6_Style_v17.38.txt
+7_Sw_v17.38.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.37
-- Manifest : start_url = ./index.html?appv=v17.37
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.37
-- Style : NPF_STYLE_BUILD_VERSION = v17.37
-- Service Worker : `sw-v17-37_caches_test` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-37_caches_test`, `npf-q400-test-app-data-v1`,
+- Index : APP_VERSION = v17.38
+- Manifest : start_url = ./index.html?appv=v17.38
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.38
+- Style : NPF_STYLE_BUILD_VERSION = v17.38
+- Service Worker : `sw-v17-38_fds_tuiles` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-38_fds_tuiles`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-15.69-radio1026-1-maplite1`
 - SIA_DATA_REVISION (SW / Index) : 15.69-radio1026-1-maplite1 (inchangée)
-- sia.js v17.37 : strictement identique à v17.36.
+- sia.js v17.38 : strictement identique à v17.37.
 
 STATUT DE VALIDATION :
-- validation statique v17.37 effectuée avant livraison : Script/SIA/SW OK, script
+- validation statique v17.38 effectuée avant livraison : Script/SIA/SW OK, script
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
-- `sia.js` et moteur tuiles (src/100) identiques à v17.36 ;
-- tests Chrome v17.36 / v17.37 : entrée v17.37 ;
+- `sia.js` et moteur tuiles (src/100) identiques à v17.37 ;
+- tests Chrome v17.37 / v17.38 : entrée v17.38 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
-  sur iPad ; v17.32 MESURÉE ; v17.29, v17.31, v17.33 à v17.37 À MESURER.
+  sur iPad ; v17.32 MESURÉE ; v17.29, v17.31, v17.33 à v17.38 À MESURER.
 
 
 2. PROTOCOLE DE TRAVAIL À RESPECTER
@@ -1912,6 +1922,142 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
 
+VERSION TEST v17.38 — FdS / PONT BFG ; MESURES DIAG FdS / GLR ; TUILES AVEC
+HT ET ROUTES
+Date : 28/09/2026
+Base fonctionnelle : v17.37 (commit 3f9155d)
+DIAG de référence : NPF_DIAG_2026-09-28_11-33 (iPad, v17.37) et
+NPF_DIAG_2026-09-27_20-52 (tuiles).
+
+ANALYSE PRÉALABLE (lecture seule du 28/09)
+- DIAG 28/09 11:33 : le lancement de 11:28:35 était déjà en v17.37 (installée
+  la veille à 22:48), pas de mise à jour le matin ; relance à 11:29:55.
+- GLR : l'échéance locale expiresAt de la veille était 28/09 00:00:00 : la
+  session GLR du NAS dure jusqu'à minuit. L'hypothèse « date sans fuseau lue
+  comme heure locale » (v17.37, c) est ÉCARTÉE.
+- Code GLR lent à s'afficher : sans session enregistrée, chemin identique à
+  v17.36 (fenêtre ouverte, puis une seule requête NAS « captcha », 45 s
+  maximum). Cause probable côté NAS / Global Link. Rien de changé en v17.38
+  sur ce chemin ; mesure ajoutée.
+- FdS au premier lancement du matin : la session FdS expire à minuit ; le
+  pont BFG (9 s maximum) doit en redemander une ; un NAS lent au premier appel
+  ou un réseau pas prêt faisait afficher le message d'association. En v17.37
+  le pont partait 3 à 4 s plus tôt, en même temps que la lecture des communes.
+- sw.js : les requêtes NAS (FdS, BFG, GLR) ne passent pas par les caches ;
+  rien à corriger.
+
+DEMANDE UTILISATEUR
+Partie 1 — FdS / pont BFG : 1.1 pont après la fin du chargement des communes,
+limite 15 s ; 1.2 une nouvelle tentative sur délai dépassé / erreur réseau,
+puis « NAS lent ou injoignable, réessaie dans un moment » ; message
+d'association seulement sur refus réel ; 1.3 captcha GLR et délais NAS
+inchangés.
+Partie 2 — DIAG : 2.1 requêtes NAS (30 dernières, en mémoire, écrites avec
+l'enregistrement existant) ; 2.2 temps ressenti GLR / FdS ; 2.3 messages
+FdS / BFG / GLR affichés à toute heure, filtre du journal des lancements
+corrigé ; 2.4 tentatives du pont BFG ; 2.5 « NPF » seul -> « NPF-Q400 » ; 2.6
+journal : échéance GLR à minuit.
+Partie 3 — Tuiles : 3.0 mesure avant / après ; 3.1 ouverture du pack ; 3.2
+double attente ; 3.3 marge Routes ; 3.4 disparition des tuiles.
+
+MODIFICATIONS
+1. src/060 : départ du pont BFG après la priorité fond de carte ET la fin du
+   chargement des communes, plus 1,6 s ; sinon 15 s après l'ouverture. Étape
+   DIAG « Pont BFG — départ » (après communes / limite 15 s).
+2. src/170 (tryAuthorizeBriefingDocsFromBfgBridge) : une seule nouvelle
+   tentative (après 0,8 s) si la première échoue par délai dépassé (9 s,
+   inchangé) ou erreur réseau ; statuts « session-ok », « refusé » (réponse
+   4xx ou erreur explicite du NAS), « indisponible » (réseau ou réponse 5xx /
+   illisible), « délai dépassé », « hors ligne ».
+   ensureBriefingDocsInteractiveAuthorization : message d'association
+   seulement si « refusé », sinon « NAS lent ou injoignable, réessaie dans un
+   moment. ». Le chemin du lecteur (bouton Maj, session refusée par le NAS en
+   401) est inchangé.
+3. src/010 (DIAG) : section « FdS / BFG / GLR — PONT BFG, TEMPS RESSENTI,
+   MESSAGES, REQUÊTES NAS » : premier lancement de la journée (d'après le
+   journal des lancements), tentatives du pont (heure, n°, résultat, durée,
+   HTTP), temps ressenti (appui GLR -> code affiché avec durée de la requête
+   du code ; appui FdS / GAAR -> document ou message), messages affichés
+   (alertes, lecteur FdS, fenêtres GLR), 30 dernières requêtes NAS (heure,
+   service, action, durée, HTTP, erreur). Mémoire seule, écrite avec
+   l'enregistrement DIAG existant (30 s) ; restituée pour la session
+   précédente. Libellés « NPF » seul -> « NPF-Q400 » (étapes, file,
+   authentification, session restaurée…). « ouvertures de base » ->
+   « accès base (connexion ouverte une seule fois par pack) ».
+4. index.html : le filtre du journal des lancements reconnaît aussi « n’est
+   pas disponible » et « injoignable ».
+5. src/090 / 110 / 120 : waitForNpfHeavyOverlayTileWindow accepte
+   sequencerTilesSettled ; appelée par la restitution (overlay-priority-ht /
+   overlay-priority-routes), elle fait une seule vérification immédiate
+   (tuiles toutes peintes, niveau prêt, aucune lecture en cours ni en file) ;
+   sinon l'attente complète historique s'applique. Événement DIAG « FILTRE
+   CARTE … tuiles-prêtes (séquenceur, sans seconde attente) ».
+6. src/090 : marge des deux canvas Routes 0,55 -> 0,10 (HT reste 0,10).
+7. Versions v17.38 (index, manifest, style, script, sw
+   `sw-v17-38_fds_tuiles` : constantes de version seulement).
+
+TUILES — ANALYSE (partie 3)
+- 3.1 : la connexion IndexedDB de chaque pack est ouverte UNE seule fois puis
+  réutilisée (openDirectOfflineTileDatabase, src/100:1597-1637, promesse
+  gardée par nom de base). « ouvertures de base 35 » comptait des accès à la
+  connexion déjà ouverte (libellé corrigé). Chaque tuile ouvre sa propre
+  transaction de lecture (usage normal d'IndexedDB). Rien à corriger dans le
+  moteur. Piste NON IMPLÉMENTÉE (moteur, risque élevé) : lire les 5 tuiles
+  d'un paquet dans une seule transaction.
+- 3.4 : aucun code ne retire les tuiles de fond à cause de HT / Routes ; le
+  seul nettoyage (releaseStaleOfflineTileResources, après zoom) est commun.
+  Dans Chrome, les tuiles reviennent aussi vite calques ON qu'OFF. Sur iPad,
+  la disparition correspond aux lectures du pack devenues lentes (secondes),
+  en même temps que la mémoire des canvas monte (234 Mo le 27/09). Cause
+  PROBABLE non prouvée : pression mémoire iPad. Réponse v17.38 : mémoire des
+  canvas Routes réduite. Pistes NON IMPLÉMENTÉES : marge du canvas pistes
+  (0,35, 51 Mo sur iPad) ; ne pas redimensionner les canvas HT / Routes
+  pendant qu'ils sont masqués.
+
+TESTS CHROME (v17.37 / v17.38)
+- Mesure 3.0 (pack NPF_France_TEST élargi, routes synthétiques 9 000
+  tronçons, processeur ralenti ×4, 12 gestes : glissements de 30 à 50 % et
+  zooms, puis 20 positions GPS en suivi) :
+  . calques ON : restitution complète moy 1 851 -> 650 ms, max 2 453 ->
+    1 442 ms ; mémoire des canvas 194 -> 106,5 Mo ; retour des tuiles
+    visibles moy 82 -> 32 ms (bruit de mesure important) ; recherches
+    IndexedDB < 350 ms dans les deux versions ;
+  . calques OFF : restitution moy 269 / 323 ms (identique au bruit près) ;
+    43 Mo ;
+  . canvas Routes et HT couvrant toute la vue après les 12 gestes et aux 20
+    positions GPS (marge 0,10) ; aucune exception.
+  . La lenteur IndexedDB de l'iPad (secondes) n'est PAS reproductible dans
+    Chrome.
+- Scénario habituel (pack, hors ligne, HT ON, 40 positions GPS, suivi,
+  glissement, zooms, HT OFF / ON) : IDENTIQUE à chaque étape ; aucune erreur ;
+  export v17.38 sans « NPF » seul.
+- Démarrage hors ligne sur les packs (serveur arrêté) : carte visible complète
+  20/20, communes prêtes, pont BFG « après communes », journal « carte
+  complète ».
+- Pont BFG avec NAS simulé : réussite (1 tentative, départ à 2,4 s après les
+  communes) ; délai dépassé ×2 -> « NAS lent ou injoignable… » (18 s, capté
+  par le journal des lancements) ; délai dépassé puis réussite à la 2e
+  tentative, sans message ; refus réel 401 -> message d'association, 1
+  tentative ; NAS 503 -> message NAS, 1 tentative. Constat : au démarrage,
+  après un pont en échec, la synchronisation NOTAM relance le pont en
+  arrière-plan (comportement existant, désormais jusqu'à 2 tentatives).
+- GLR avec NAS simulé (code en 1,5 s) : « appui GLR -> code affiché 1,5 s ».
+- Charge DIAG : journal des lancements ≤ 2 ms par écriture ; aucune écriture
+  nouvelle.
+
+VALIDATION AVANT LIVRAISON
+- `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés.
+- Syntaxe Script / SIA / SW : OK. Script inline Index : OK. Manifest JSON : OK.
+- sia.js et moteur tuiles (src/100) identiques à v17.37.
+
+À MESURER (iPad, sans mode avion)
+- Premier lancement du matin : FdS ; section « FdS / BFG / GLR » (premier
+  lancement de la journée OUI, tentatives du pont, temps ressenti).
+- Code GLR : « appui GLR -> code affiché » et durée de la requête du code.
+- Déplacements avec HT et Routes : restitutions, mémoire des canvas, tuiles.
+
+--------------------------------------------------------------------------------
+
 VERSION TEST v17.37 — MISE À JOUR SANS PAGE BLANCHE ; JOURNAL DES LANCEMENTS ;
 COMMUNES APRÈS LA CARTE COMPLÈTE ; GLR SANS NOUVEAU CODE ; MESURE STOCKAGE
 Date : 27/09/2026
@@ -1984,7 +2130,8 @@ c) Voyant GLR
      dépassée : getStoredGlobalLinkSession effaçait alors la session (y compris
      au passage OFF, via la mise à jour du bouton). Hypothèse sur l'échéance
      trop courte : date du NAS sans fuseau lue comme heure locale (code PHP du
-     NAS non disponible, À VÉRIFIER).
+     NAS non disponible, À VÉRIFIER). -> ÉCARTÉE le 28/09 (v17.38) :
+     l'échéance GLR enregistrée est minuit (28/09 00:00:00).
 d) Relances après la mise à jour en v17.36
    1. src/280 enregistrait « ./sw.js » sans appv (index.html : avec appv) :
       réinstallation possible de la même version ; l'installation effaçait

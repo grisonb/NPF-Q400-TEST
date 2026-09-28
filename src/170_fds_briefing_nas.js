@@ -141,13 +141,38 @@ async function tryAuthorizeBriefingDocsFromBfgBridge(options = {}) {
     const silent = options.silent !== false;
     const existing = getStoredBriefingDocsSession();
     if (existing) return existing;
-    if (!navigator.onLine) return null;
 
     const credentials = getStoredNpfBfgBridgeCredentials();
+    if (!navigator.onLine) {
+        if (credentials) {
+            npfBfgBridgeLastStatus = 'hors ligne';
+            npfBfgBridgeLastError = 'navigator.onLine=false';
+            try { npfDiagBfgBridgeAttempt({ attempt: 1, ms: 0, result: 'hors ligne', httpStatus: 0, error: '' }); } catch (_) {}
+        }
+        return null;
+    }
+
     if (!credentials) return null;
     if (npfBfgBridgeAuthorizationPromise) return npfBfgBridgeAuthorizationPromise;
 
-    npfBfgBridgeAuthorizationPromise = (async () => {
+    /*
+     * v17.38 — une seule nouvelle tentative, et seulement si l'échec vient d'un
+     * délai dépassé ou d'une erreur réseau. Le délai de chaque requête reste
+     * 9 s. Un refus réel du NAS n'est jamais relancé.
+     */
+    const runBridgeAttempt = async attempt => {
+        const startedAt = performance.now();
+        const report = (result, httpStatus = 0, error = '') => {
+            try {
+                npfDiagBfgBridgeAttempt({
+                    attempt,
+                    ms: Math.round(performance.now() - startedAt),
+                    result,
+                    httpStatus,
+                    error
+                });
+            } catch (_) {}
+        };
         try {
             const response = await fetchBriefingDocsNas(`${NPF_BRIEFING_DOCS_API_URL}?action=bridge-session&t=${Date.now()}`, {
                 method: 'POST',
@@ -158,27 +183,48 @@ async function tryAuthorizeBriefingDocsFromBfgBridge(options = {}) {
             if (!response.ok || !payload || payload.ok !== true || !payload.token || !payload.expiresAt) {
                 const errorCode = String(payload?.error || '');
                 npfBfgBridgeLastError = errorCode || `http_${response.status}`;
-                npfBfgBridgeLastStatus = 'refusé';
+                /* v17.38 — refus réel = réponse du NAS 4xx ou erreur explicite.
+                 * Une réponse 5xx ou illisible signale un NAS indisponible. */
+                const realRefusal = response.status < 500 && (response.status >= 400 || !!errorCode);
+                npfBfgBridgeLastStatus = realRefusal ? 'refusé' : 'indisponible';
                 /*
                  * v16.53 — ne pas effacer silencieusement l'association BFG.
                  * Une panne/transitoire NAS ne doit plus forcer un nouveau
                  * code à 8 chiffres.
                  */
                 if (!silent && errorCode !== 'bridge_not_granted') {
-                    console.warn('[BFG -> NPF] Autorisation refusée:', payload?.message || errorCode || response.status);
+                    console.warn('[BFG -> NPF-Q400] Autorisation refusée:', payload?.message || errorCode || response.status);
                 }
-                return null;
+                report(npfBfgBridgeLastStatus, response.status, npfBfgBridgeLastError);
+                return { session: null, retry: false };
             }
-            if (!storeBriefingDocsSession(payload.token, payload.expiresAt)) return null;
+            if (!storeBriefingDocsSession(payload.token, payload.expiresAt)) {
+                report('session non enregistrée', response.status, '');
+                return { session: null, retry: false };
+            }
             npfBfgBridgeLastError = '';
             npfBfgBridgeLastStatus = 'session-ok';
-            console.info('[BFG -> NPF] Session NPF récupérée automatiquement.');
-            return getStoredBriefingDocsSession();
+            console.info('[BFG -> NPF-Q400] Session récupérée automatiquement.');
+            report('réussi', response.status, '');
+            return { session: getStoredBriefingDocsSession(), retry: false };
         } catch (error) {
+            const timedOut = error?.name === 'AbortError';
             npfBfgBridgeLastError = String(error?.message || error || 'pont_indisponible');
-            npfBfgBridgeLastStatus = 'indisponible';
-            if (!silent) console.warn('[BFG -> NPF] Pont indisponible:', error);
-            return null;
+            npfBfgBridgeLastStatus = timedOut ? 'délai dépassé' : 'indisponible';
+            if (!silent) console.warn('[BFG -> NPF-Q400] Pont indisponible:', error);
+            report(npfBfgBridgeLastStatus, 0, npfBfgBridgeLastError);
+            return { session: null, retry: true };
+        }
+    };
+
+    npfBfgBridgeAuthorizationPromise = (async () => {
+        try {
+            const first = await runBridgeAttempt(1);
+            if (first.session || !first.retry) return first.session;
+            if (!navigator.onLine) return null;
+            await new Promise(resolve => setTimeout(resolve, 800));
+            const second = await runBridgeAttempt(2);
+            return second.session;
         } finally {
             npfBfgBridgeAuthorizationPromise = null;
         }
@@ -870,7 +916,11 @@ async function ensureBriefingDocsInteractiveAuthorization(type, options = {}) {
     if (paired) {
         await tryAuthorizeBriefingDocsFromBfgBridge({ silent: true });
         if (getStoredBriefingDocsSession()) return true;
-        const message = getBriefingDocsBfgAuthorizationUnavailableMessage();
+        /* v17.38 — le message d'association n'apparaît que si le NAS refuse
+         * réellement ; délai dépassé, réseau ou NAS indisponible : message NAS. */
+        const message = npfBfgBridgeLastStatus === 'refusé'
+            ? getBriefingDocsBfgAuthorizationUnavailableMessage()
+            : 'NAS lent ou injoignable, réessaie dans un moment.';
         if (options.viewer === true) setBriefingDocViewerStatus(message, { error: true });
         else alert(message);
         return false;

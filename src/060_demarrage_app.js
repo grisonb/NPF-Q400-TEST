@@ -189,7 +189,7 @@ function runNpfStartupMeasuredSync(key, label, callback) {
 }
 
 async function initializeApp() {
-    npfStartupDiagMark('init_start', 'Initialisation NPF');
+    npfStartupDiagMark('init_start', 'Initialisation NPF-Q400');
     const statusMessage = document.getElementById('status-message');
     const searchSection = document.getElementById('search-section');
 
@@ -623,19 +623,34 @@ async function initializeApp() {
     /*
      * v15.99 — autorisation BFG -> NPF silencieuse et non bloquante.
      * Elle reste postérieure à carte -> recherche/alias -> PÉLIC.
+     * v17.38 — comme en v17.36 : le pont BFG part après la fin du chargement
+     * des communes (et la priorité fond de carte), plus 1,6 s. Limite de
+     * sécurité : s'il n'est pas parti 15 s après l'ouverture, il part quand même.
      */
-    startupMapPriorityGate.then(() => {
-        setTimeout(() => {
-            // v17.29 — couverture NOTAM de la copie locale, y compris hors ligne.
-            reconcileNpfNotamsCoverageFromLocalRecord();
-            tryAuthorizeBriefingDocsFromBfgBridge({ silent: true })
-                .then(async () => {
-                    await refreshBriefingDocMapButtons().catch(() => {});
-                    await syncNpfBfgNotamsFromNas({ silent: true }).catch(() => false);
-                })
-                .catch(() => {});
-        }, 1600);
+    let startupBfgBridgeStarted = false;
+    const startStartupBfgBridge = reason => {
+        if (startupBfgBridgeStarted) return;
+        startupBfgBridgeStarted = true;
+        npfStartupDiagMark('startup_bfg_bridge', 'Pont BFG — départ', reason);
+        // v17.29 — couverture NOTAM de la copie locale, y compris hors ligne.
+        reconcileNpfNotamsCoverageFromLocalRecord();
+        tryAuthorizeBriefingDocsFromBfgBridge({ silent: true })
+            .then(async () => {
+                await refreshBriefingDocMapButtons().catch(() => {});
+                await syncNpfBfgNotamsFromNas({ silent: true }).catch(() => false);
+            })
+            .catch(() => {});
+    };
+    Promise.all([
+        startupMapPriorityGate,
+        npfStartupCommunesReadyPromise.catch(() => {})
+    ]).then(() => {
+        setTimeout(() => startStartupBfgBridge('après communes'), 1600);
     });
+    setTimeout(
+        () => startStartupBfgBridge('limite 15 s après l’ouverture'),
+        Math.max(0, 15000 - performance.now())
+    );
 
     // v16.06 — si BFG a été utilisé pendant que NPF était en arrière-plan,
     // le retour au premier plan récupère automatiquement le snapshot NAS.

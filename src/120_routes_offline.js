@@ -2374,6 +2374,8 @@ async function refreshRoadOverlayVisibleParts(source = 'refresh') {
      */
     const heavyTileWindowReady = await waitForNpfHeavyOverlayTileWindow('Routes', {
         maxWaitMs: 30000,
+        /* v17.38 — restitution : tuiles déjà vérifiées par le séquenceur. */
+        sequencerTilesSettled: source === 'overlay-priority-routes',
         isCancelled: () => (
             token !== roadOverlayRefreshToken
             || !showRoadOverlayLayer
