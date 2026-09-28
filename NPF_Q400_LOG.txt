@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 28/09/2026
-Version de travail actuelle : TEST v17.38
+Version de travail actuelle : TEST v17.39
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,11 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.39 — HT n'attend plus les tuiles de marge : après un geste et après un
+  déplacement hors geste, HT dessine dès que les tuiles VISIBLES sont peintes ;
+  attente complète gardée si elles ne le sont pas, au démarrage et à
+  l'allumage ; DIAG : 20 premières lectures du pack par lancement, lectures
+  par minute avec état des calques, paquets de lectures lents (> 1 s) ;
 - v17.38 — FdS : pont BFG après le chargement des communes (limite 15 s) ;
   une seule nouvelle tentative sur délai dépassé / erreur réseau ; message
   « NAS lent ou injoignable, réessaie dans un moment. » sauf refus réel du NAS
@@ -340,6 +345,12 @@ NON IMPLÉMENTÉ / OUVERT :
   (« ANALYSE DIAG v17.32 SOL + VOL ») : 5 défauts du DIAG lui-même relevés
   (D1 à D5) et 9 recommandations classées gain / risque (R1 à R9), aucune
   implémentée. Historique : À MESURER -> MESURÉ ;
+- v17.39 : À MESURER sur iPad, sans mode avion, protocole alterné (calques
+  éteints / HT / calques éteints / HT, application fermée et 5 min de pause
+  entre essais) : sections « LECTURES DU PACK » et « DERNIERS LANCEMENTS » ;
+- Lectures du pack lentes sur iPad avec HT (28/09 15:00-15:18) : cause NON
+  PROUVÉE ; l'essai 15:04 était lent avant toute action HT et suivait l'essai
+  15:00 : effet d'ordre probable. À MESURER avec le protocole v17.39 ;
 - v17.38 : À MESURER sur iPad, sans mode avion (premier lancement du matin :
   FdS ; code GLR ; déplacements avec HT et Routes ; section « FdS / BFG / GLR »
   de l'export) ;
@@ -368,38 +379,38 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.38
+Version : TEST v17.39
 Date : 28/09/2026
-Base : v17.37 (commitée 3f9155d, À MESURER)
+Base : v17.38 (commitée bba76ef, À MESURER)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.38.txt
-2_Index_v17.38.txt
-3_Manifest_v17.38.txt
-4_Script_v17.38.txt
-5_SIA_v17.38.txt
-6_Style_v17.38.txt
-7_Sw_v17.38.txt
+1_Modifications_v17.39.txt
+2_Index_v17.39.txt
+3_Manifest_v17.39.txt
+4_Script_v17.39.txt
+5_SIA_v17.39.txt
+6_Style_v17.39.txt
+7_Sw_v17.39.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.38
-- Manifest : start_url = ./index.html?appv=v17.38
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.38
-- Style : NPF_STYLE_BUILD_VERSION = v17.38
-- Service Worker : `sw-v17-38_fds_tuiles` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-38_fds_tuiles`, `npf-q400-test-app-data-v1`,
+- Index : APP_VERSION = v17.39
+- Manifest : start_url = ./index.html?appv=v17.39
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.39
+- Style : NPF_STYLE_BUILD_VERSION = v17.39
+- Service Worker : `sw-v17-39_ht_marge` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-39_ht_marge`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-15.69-radio1026-1-maplite1`
 - SIA_DATA_REVISION (SW / Index) : 15.69-radio1026-1-maplite1 (inchangée)
-- sia.js v17.38 : strictement identique à v17.37.
+- sia.js v17.39 : strictement identique à v17.38.
 
 STATUT DE VALIDATION :
-- validation statique v17.38 effectuée avant livraison : Script/SIA/SW OK, script
+- validation statique v17.39 effectuée avant livraison : Script/SIA/SW OK, script
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
-- `sia.js` et moteur tuiles (src/100) identiques à v17.37 ;
-- tests Chrome v17.37 / v17.38 : entrée v17.38 ;
+- `sia.js` et moteur tuiles (src/100) identiques à v17.38 ;
+- tests Chrome v17.38 / v17.39 : entrée v17.39 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
-  sur iPad ; v17.32 MESURÉE ; v17.29, v17.31, v17.33 à v17.38 À MESURER.
+  sur iPad ; v17.32 MESURÉE ; v17.29, v17.31, v17.33 à v17.39 À MESURER.
 
 
 2. PROTOCOLE DE TRAVAIL À RESPECTER
@@ -1921,6 +1932,102 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.39 — HT N'ATTEND PLUS LES TUILES DE MARGE ; MESURES DES
+LECTURES DU PACK
+Date : 28/09/2026
+Base fonctionnelle : v17.38 (commit bba76ef)
+DIAG de référence : NPF_DIAG_2026-09-28_15-00, 15-04, 15-18 (iPad, v17.38).
+
+ANALYSE PRÉALABLE (lecture seule du 28/09)
+- 15:04 (HT seul) : les premiers paquets lents (5 × 2,57 s) commencent à
+  + 2,07 s, AVANT toute action HT (activation HT à + 2,22 s) : l'essai était
+  lent dès l'ouverture. Il suivait de 4 min l'essai 15:00 (HT + Routes,
+  dégradation progressive) ; l'essai rapide 15:18 venait après 14 min de
+  pause. Effet d'ordre PROBABLE (état de l'iPad persistant malgré la relance).
+- 15:18 : HT a aussi sondé les tuiles 3,5 s au démarrage sans ralentissement :
+  les sondages seuls n'expliquent pas l'écart. Aucun blocage du fil principal
+  pendant les lectures lentes : les réponses IndexedDB ne sont pas retenues
+  par l'application.
+- Paquets de 5 : limite de 5 lectures simultanées (src/100:1117), une
+  transaction par lecture (src/100:1699), nouvelle lecture seulement quand une
+  autre finit (src/100:1353-1360) -> l'effet de paquet s'entretient ; la fin
+  simultanée vient PROBABLEMENT du moteur de stockage de Safari.
+- 15:04 : la vérification unique v17.38 de HT échouait quand des tuiles de
+  marge étaient encore en lecture (séquenceur : tuiles visibles peintes,
+  5 lectures actives) -> attente complète ≈ 1,1 s par restitution.
+- Hypothèse la plus crédible, NON PROUVÉE : pression mémoire iPad (dessin HT
+  25,6 Mo redimensionné et masqué / réaffiché à chaque geste).
+
+DEMANDE UTILISATEUR
+1. HT dessine dès que les tuiles visibles sont peintes (restitution après
+   geste ; relance après un déplacement hors geste) ; attente gardée si elles
+   ne le sont pas, au démarrage et à l'allumage. D2 (retirer le dessin HT
+   pendant un geste) NON codée. Routes, moteur de tuiles, limite de 5
+   lectures, recentrage économe, suivi GPS, sia.js, service worker inchangés.
+2. DIAG minimal : 20 premières lectures du pack par lancement, état HT /
+   Routes au lancement, temps depuis le lancement précédent ; paquets lents
+   (> 1 s) avec état des calques, temps depuis le dernier redimensionnement du
+   dessin HT et depuis le dernier masquage / réaffichage du calque HT ;
+   synthèse par minute. Mémoire seule, écrite avec l'enregistrement DIAG
+   existant et l'écriture unique du journal des lancements.
+
+MODIFICATIONS
+1. src/090 (waitForNpfHeavyOverlayTileWindow) : option visibleTilesEnough :
+   une seule vérification ; si les tuiles visibles sont toutes peintes et le
+   niveau prêt, retour immédiat même si des tuiles de marge sont en lecture ;
+   sinon attente complète historique. Événement DIAG « FILTRE CARTE … tuiles
+   visibles peintes (sans attendre la marge) ».
+2. src/110 (refreshVisibleHighVoltageLines) : visibleTilesEnough pour les
+   sources « overlay-priority-ht » (restitution après geste), « map-change » et
+   « gps-follow-edge » (relance après un déplacement hors geste). Démarrage,
+   allumage, « scale-enter » et « tile-priority-retry » : attente complète
+   inchangée.
+3. src/010 (DIAG) : section « LECTURES DU PACK — PAR MINUTE ET PAQUETS LENTS »
+   (20 premières lectures ; par minute : nombre, médiane, maximum, état HT /
+   Routes ; paquets > 1 s : état des calques, temps depuis le dernier
+   redimensionnement du dessin HT et depuis le dernier masquage / réaffichage
+   du calque HT, observé sur le style du pane sans mesure de mise en page).
+   Lectures comptées : trouvées, absentes, erreurs (hors tuiles en mémoire).
+4. index.html (journal des lancements) : état HT / Routes au lancement,
+   résumé des 20 premières lectures, heure du lancement précédent ; affichés
+   dans « DERNIERS LANCEMENTS ».
+5. Versions v17.39 (sw `sw-v17-39_ht_marge` : constantes seulement).
+
+TESTS CHROME (processeur ralenti ×4, v17.38 / v17.39, HT seul)
+- Lectures du pack ralenties dans le script de test (0,6 s par tuile
+  visible, 2,5 s hors vue) et tuiles de bordure demandées au moteur juste
+  après chaque geste, pour que des lectures de marge soient en cours à
+  l'étape HT (34 lectures de marge lentes dans chaque version).
+  . attente « tuiles » HT après geste : moy 3 309 -> 2 ms ;
+  . étape HT de la restitution : moy 3 340 -> 54 ms ;
+  . restitution complète : moy 4 079 -> 1 103 ms ;
+  . vérifications de tuiles pendant les 10 gestes : 267 -> 89 ;
+  . HT complet (couverture valide, dessin couvrant la vue) après les 10
+    gestes : 10/10 dans les deux versions ;
+  . suivi GPS (20 positions, lectures lentes) : 14/20 positions à jour dans
+    les DEUX versions (HT attend, comme prévu, que les tuiles visibles soient
+    peintes), complet à la fin du suivi.
+  . Sans lectures de marge forcées, les deux versions sont identiques (les
+    demandes hors vue sont retirées de la file à la fin du geste dans Chrome).
+- Scénario habituel : IDENTIQUE à chaque étape ; aucune erreur ; Charge DIAG
+  ≤ 1 ms.
+- Démarrage hors ligne sur les packs : carte visible complète 20/20,
+  communes prêtes, journal « carte complète ».
+- Export : section « LECTURES DU PACK » et lignes « 20 premières lectures du
+  pack » dans « DERNIERS LANCEMENTS » présentes ; clé DIAG 43,8 k car.
+  (43,3 k en v17.38).
+
+VALIDATION AVANT LIVRAISON
+- `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés.
+- Syntaxe Script / SIA / SW : OK. Script inline Index : OK. Manifest JSON : OK.
+- sia.js, moteur tuiles (src/100) et Routes (src/120) identiques à v17.38.
+
+NON CODÉ
+- D2 : retirer le dessin HT de la carte pendant un geste (À DÉCIDER après la
+  mesure iPad).
+
+--------------------------------------------------------------------------------
 
 VERSION TEST v17.38 — FdS / PONT BFG ; MESURES DIAG FdS / GLR ; TUILES AVEC
 HT ET ROUTES

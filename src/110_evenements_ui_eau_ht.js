@@ -1725,6 +1725,12 @@ async function refreshVisibleHighVoltageLines(source = 'refresh') {
         maxWaitMs: 30000,
         /* v17.38 — restitution : tuiles déjà vérifiées par le séquenceur. */
         sequencerTilesSettled: source === 'overlay-priority-ht',
+        /* v17.39 — restitution après geste et relance après un déplacement hors
+         * geste : les tuiles visibles peintes suffisent. Démarrage, allumage du
+         * calque et nouvelles tentatives gardent l'attente complète. */
+        visibleTilesEnough: source === 'overlay-priority-ht'
+            || source === 'map-change'
+            || source === 'gps-follow-edge',
         isCancelled: () => (
             token !== highVoltageLinesRefreshToken
             || !showHighVoltageLinesLayer

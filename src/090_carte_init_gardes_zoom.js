@@ -1040,7 +1040,14 @@ async function waitForNpfHeavyOverlayTileWindow(layerKey, options = {}) {
      * suffit : tuiles toutes peintes, niveau prêt, aucune lecture en cours ou
      * en file. Sinon, l'attente complète historique s'applique.
      */
-    if (options.sequencerTilesSettled === true && !isCancelled()) {
+    /*
+     * v17.39 — HT seul (visibleTilesEnough) : les tuiles VISIBLES peintes
+     * suffisent ; les tuiles de marge encore en lecture ne retardent plus HT.
+     * Si les tuiles visibles ne sont pas toutes peintes, l'attente complète
+     * historique s'applique comme avant.
+     */
+    const visibleTilesEnough = options.visibleTilesEnough === true;
+    if ((options.sequencerTilesSettled === true || visibleTilesEnough) && !isCancelled()) {
         const tileState = typeof getVisibleBaseTileLoadStateForSia === 'function'
             ? getVisibleBaseTileLoadStateForSia()
             : {
@@ -1050,16 +1057,17 @@ async function waitForNpfHeavyOverlayTileWindow(layerKey, options = {}) {
             };
         const activeReads = Math.max(0, Number(directOfflineNpfActiveReads || 0));
         const queuedReads = Math.max(0, Number(directOfflineNpfReadQueue?.length || 0));
-        if (
+        const visiblePainted = (
             Number(tileState.total || 0) > 0
             && Number(tileState.loaded || 0) >= Number(tileState.total || 0)
             && tileState.tileZoomReady
-            && activeReads === 0
-            && queuedReads === 0
-        ) {
+        );
+        if (visiblePainted && (visibleTilesEnough || (activeReads === 0 && queuedReads === 0))) {
             npfDiagSiaInteraction(
                 'FILTRE CARTE',
-                `couche=${String(layerKey || 'inconnue')} · tuiles-prêtes (séquenceur, sans seconde attente)`,
+                visibleTilesEnough
+                    ? `couche=${String(layerKey || 'inconnue')} · tuiles visibles peintes (sans attendre la marge)`
+                    : `couche=${String(layerKey || 'inconnue')} · tuiles-prêtes (séquenceur, sans seconde attente)`,
                 {
                     waitMs: 0,
                     ...npfDiagTilesVisibleFields(),

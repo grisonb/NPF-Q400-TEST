@@ -6,8 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>NPF-Q400</title>
     <link rel="stylesheet" href="leaflet.css">
-    <link rel="stylesheet" href="style.css?appv=v17.38">
-    <link rel="manifest" href="manifest.json?appv=v17.38">
+    <link rel="stylesheet" href="style.css?appv=v17.39">
+    <link rel="manifest" href="manifest.json?appv=v17.39">
     <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192x192.png?appv=v13.92">
     <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512x512.png?appv=v13.92">
     <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png?appv=v13.92">
@@ -579,7 +579,7 @@
 
     <!-- v17.20 — le splash est parsé avant le gros contrôleur PWA afin de réduire le blanc initial Safari. -->
     <script>
-        const APP_VERSION = 'v17.38';
+        const APP_VERSION = 'v17.39';
         const SERVICE_WORKER_URL = `./sw.js?appv=${encodeURIComponent(APP_VERSION)}`;
         const APP_VERSION_STORAGE_KEY = 'appVersion';
         const SW_CONTROLLER_RELOAD_GUARD_KEY = 'swControllerReloadGuard';
@@ -625,6 +625,11 @@
                 steps: [],
                 errors: [],
                 safeSkyAtLaunch: readRaw('showTrafficLayer'),
+                /* v17.39 — état des calques HT / Routes au lancement. */
+                layersAtLaunch: {
+                    ht: readRaw('showHighVoltageLinesLayer'),
+                    routes: readRaw('showRoadOverlayLayer')
+                },
                 glrAtLaunch: {
                     token: !!readRaw('npfGlobalLinkSessionV1'),
                     exp: Number(readRaw('npfGlobalLinkSessionExpV1')) || 0
@@ -702,10 +707,17 @@
                     launch.safeSkyAtWrite = readRaw('showTrafficLayer');
                     launch.storage = storageSummary();
                     launch.refusedWrites = refusedWrites.slice(-10);
+                    /* v17.39 — 20 premières lectures du pack (mesurées par le DIAG). */
+                    try {
+                        if (typeof npfDiagFirstPackReadsSummary === 'function') launch.firstReads = npfDiagFirstPackReadsSummary();
+                    } catch (_) {}
                     let list = [];
                     try { list = JSON.parse(readRaw(LAUNCH_LOG_KEY) || '[]'); } catch (_) { list = []; }
                     if (!Array.isArray(list)) list = [];
                     list = list.filter(item => item && item.id !== launch.id);
+                    /* v17.39 — heure du lancement précédent (temps écoulé depuis). */
+                    const previous = list.filter(item => Number(item.at) < launch.at).pop();
+                    if (previous) launch.previousAt = Number(previous.at);
                     list.push(launch);
                     localStorage.setItem(LAUNCH_LOG_KEY, JSON.stringify(list.slice(-LAUNCH_LOG_MAX)));
                     written = true;
@@ -1402,7 +1414,7 @@
     <script src="suncalc.js"></script>
     <script src="jszip.min.js"></script>
     <script src="sia.js?siav=15.69-radio1026-1-maplite1"></script>
-    <script src="script.js?appv=v17.38"></script>
+    <script src="script.js?appv=v17.39"></script>
     
     <div id="fuel-split-modal" class="fuel-split-modal" style="display: none;">
         <div class="fuel-split-modal-content">

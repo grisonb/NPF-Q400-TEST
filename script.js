@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.38';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.39';
 
 
 /*
@@ -611,7 +611,16 @@ const NPF_DIAG_DETAIL = (() => {
         bfgAttempts: [],
         glrClickAt: 0,
         glrClickCaptcha: false,
-        fdsClick: null
+        fdsClick: null,
+        /* v17.39 — lectures du pack : 20 premières, paquets lents (> 1 s),
+         * synthèse par minute, et repères HT (redimensionnement du dessin,
+         * masquage / réaffichage du calque). Mémoire seule. */
+        firstPackReads: [],
+        slowReadBatches: [],
+        readMinutes: new Map(),
+        lastHtCanvasUpdateAt: null,
+        lastHtPaneToggleAt: null,
+        lastHtPaneVisible: null
     };
 
     const safe = (callback, fallback = undefined) => {
@@ -1341,6 +1350,22 @@ const NPF_DIAG_DETAIL = (() => {
             };
         }
 
+        /* v17.39 — masquage / réaffichage du calque HT : observateur du style du
+         * pane (aucune lecture de mise en page). */
+        safe(() => {
+            const htPane = map.getPane('highVoltageLinesPane');
+            if (!htPane || typeof MutationObserver !== 'function') return;
+            const paneVisible = () => htPane.style.display !== 'none' && htPane.style.visibility !== 'hidden';
+            state.lastHtPaneVisible = paneVisible();
+            new MutationObserver(() => {
+                const visible = paneVisible();
+                if (visible !== state.lastHtPaneVisible) {
+                    state.lastHtPaneVisible = visible;
+                    state.lastHtPaneToggleAt = now();
+                }
+            }).observe(htPane, { attributes: true, attributeFilter: ['style'] });
+        });
+
         /* v17.33 — I8 : heure de chaque zoom, pour regrouper les lectures de tuiles. */
         map.on('zoomend', () => {
             pushCapped(state.zoomEvents, { t: now(), at: Date.now(), z: safe(() => map.getZoom(), null) }, LIMITS.zoomEvents);
@@ -1369,6 +1394,7 @@ const NPF_DIAG_DETAIL = (() => {
                         return original.apply(this, args);
                     } finally {
                         const t1 = now();
+                        if (label === 'canvas HT' && method === '_update') state.lastHtCanvasUpdateAt = t1;
                         recordActivity(name, t0, t1, false, { gpsPart: true });
                         const eco = ecoStat();
                         eco.canvasCalls += 1;
@@ -1486,6 +1512,48 @@ const NPF_DIAG_DETAIL = (() => {
         }
     };
 
+    /* v17.39 — lectures réelles du pack (IndexedDB) : premières lectures,
+     * synthèse par minute, paquets lents. */
+    const layerStateNow = () => ({
+        ht: !!safe(() => showHighVoltageLinesLayer, false),
+        routes: !!safe(() => showRoadOverlayLayer, false)
+    });
+    const notePackRead = (outcome, ms) => {
+        if (outcome !== 'trouvée' && outcome !== 'absente' && outcome !== 'erreur-technique') return;
+        const t = now();
+        const layers = layerStateNow();
+        if (state.firstPackReads.length < 20) {
+            state.firstPackReads.push({ ms: round(ms), ht: layers.ht, routes: layers.routes });
+        }
+        const index = Math.floor(t / 60000);
+        let minute = state.readMinutes.get(index);
+        if (!minute) {
+            minute = { index, at: wallAt(index * 60000), durations: [], n: 0, max: 0, htOn: false, htOff: false, routesOn: false, routesOff: false };
+            state.readMinutes.set(index, minute);
+            if (state.readMinutes.size > 60) state.readMinutes.delete(state.readMinutes.keys().next().value);
+        }
+        minute.n += 1;
+        if (minute.durations.length < 600) minute.durations.push(round(ms));
+        if (ms > minute.max) minute.max = round(ms);
+        if (layers.ht) minute.htOn = true; else minute.htOff = true;
+        if (layers.routes) minute.routesOn = true; else minute.routesOff = true;
+        if (ms > 1000) {
+            const last = state.slowReadBatches[state.slowReadBatches.length - 1];
+            if (last && Math.abs(t - last.endT) < 80) {
+                last.n += 1;
+                if (ms > last.maxMs) last.maxMs = round(ms);
+            } else {
+                const since = at => (at === null ? null : round(t - at));
+                pushCapped(state.slowReadBatches, {
+                    at: Date.now(), endT: t, n: 1, maxMs: round(ms), ht: layers.ht, routes: layers.routes,
+                    sinceHtCanvasUpdate: since(state.lastHtCanvasUpdateAt),
+                    sinceHtPaneToggle: since(state.lastHtPaneToggleAt),
+                    htPaneVisible: state.lastHtPaneVisible
+                }, 30);
+            }
+        }
+    };
+
     const tileLookupEnd = (lookup, outcome, dbName) => {
         if (!lookup || lookup.done) return;
         lookup.done = true;
@@ -1541,6 +1609,7 @@ const NPF_DIAG_DETAIL = (() => {
             hintMiss: !!(outcome === 'trouvée' && lookup.hintDb && dbName && dbName !== lookup.hintDb)
         };
         pushCapped(tiles.recent, compact, LIMITS.tileLookups);
+        notePackRead(outcome, ms);
         const slowest = tiles.slowest;
         if (slowest.length < LIMITS.tileSlowest || compact.ms > slowest[slowest.length - 1].ms) {
             slowest.push({ ...compact, at: wallAt(lookup.t0) });
@@ -2359,6 +2428,8 @@ function npfDiagDetailPersistSnapshot() {
             felt: s.felt.slice(-20),
             messages: s.messages.slice(-30),
             bfgAttempts: s.bfgAttempts.slice(-20),
+            readMinutes: Array.from(s.readMinutes.values()).slice(-15).map(npfDiagCompactReadMinute),
+            slowReadBatches: s.slowReadBatches.slice(-20),
             memoryPeak: s.memoryPeak,
             cellCache: { ...s.cellCache }
         };
@@ -2577,10 +2648,11 @@ function appendNpfDiagDetailExportSections(lines) {
     appendNpfDiagEconomicSection(lines);
     appendNpfDiagLaunchSection(lines);
     appendNpfDiagNasSection(lines);
+    appendNpfDiagPackReadSection(lines);
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.38 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.39 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -2780,6 +2852,76 @@ function appendNpfDiagSimulationSection(lines) {
     ));
 }
 
+/* v17.39 — lectures du pack : synthèse par minute, paquets lents, 20 premières. */
+function npfDiagMedian(values) {
+    const sorted = (Array.isArray(values) ? values : []).filter(Number.isFinite).slice().sort((a, b) => a - b);
+    if (!sorted.length) return null;
+    const middle = Math.floor(sorted.length / 2);
+    return sorted.length % 2 ? sorted[middle] : Math.round((sorted[middle - 1] + sorted[middle]) / 2);
+}
+
+function npfDiagLayerMix(on, off) {
+    if (on && off) return 'ON puis OFF (mixte)';
+    return on ? 'ON' : 'OFF';
+}
+
+function npfDiagCompactReadMinute(minute) {
+    return {
+        at: minute.at, n: minute.n, median: npfDiagMedian(minute.durations), max: minute.max,
+        ht: npfDiagLayerMix(minute.htOn, minute.htOff), routes: npfDiagLayerMix(minute.routesOn, minute.routesOff)
+    };
+}
+
+function formatNpfDiagReadMinuteLine(item) {
+    return '   ' + formatNpfDiagClock(item.at) + ' | ' + item.n + ' lectures | médiane '
+        + (item.median === null ? '—' : item.median + ' ms') + ' | max ' + item.max + ' ms'
+        + ' | HT ' + item.ht + ' · Routes ' + item.routes;
+}
+
+function formatNpfDiagSlowBatchLine(item) {
+    const since = value => (value === null || value === undefined ? 'jamais' : (value / 1000).toFixed(1) + ' s');
+    return '   ' + formatNpfDiagClock(item.at) + ' | paquet de ' + item.n + ' lecture(s) | max ' + item.maxMs + ' ms'
+        + ' | HT ' + (item.ht ? 'ON' : 'OFF') + ' · Routes ' + (item.routes ? 'ON' : 'OFF')
+        + ' | dernier redimensionnement du dessin HT il y a ' + since(item.sinceHtCanvasUpdate)
+        + ' | dernier masquage / réaffichage du calque HT il y a ' + since(item.sinceHtPaneToggle)
+        + (item.htPaneVisible === null || item.htPaneVisible === undefined ? '' : ' (calque HT ' + (item.htPaneVisible ? 'affiché' : 'masqué') + ')');
+}
+
+/* Résumé des 20 premières lectures du pack (appelé par le journal des lancements). */
+function npfDiagFirstPackReadsSummary() {
+    try {
+        const reads = NPF_DIAG_DETAIL.state.firstPackReads;
+        if (!reads.length) return { n: 0, median: null, max: null, layers: '—' };
+        const ht = reads.some(item => item.ht);
+        const routes = reads.some(item => item.routes);
+        return {
+            n: reads.length,
+            median: npfDiagMedian(reads.map(item => item.ms)),
+            max: Math.max(...reads.map(item => item.ms)),
+            layers: ht && routes ? 'HT + Routes' : (ht ? 'HT' : (routes ? 'Routes' : 'aucun'))
+        };
+    } catch (_) {
+        return null;
+    }
+}
+
+function appendNpfDiagPackReadSection(lines) {
+    const s = NPF_DIAG_DETAIL.state;
+    const first = npfDiagFirstPackReadsSummary();
+    lines.push('');
+    lines.push('LECTURES DU PACK — PAR MINUTE ET PAQUETS LENTS (v17.39, mesure seule)');
+    lines.push('20 premières lectures du pack : ' + (first && first.n
+        ? first.n + ' lectures · médiane ' + first.median + ' ms · max ' + first.max + ' ms · calque allumé pendant ces lectures : ' + first.layers
+        : 'aucune'));
+    lines.push('Par minute (lectures réelles du pack, hors tuiles déjà en mémoire) :');
+    const minutes = Array.from(s.readMinutes.values());
+    if (!minutes.length) lines.push('   Aucune lecture.');
+    minutes.forEach(minute => lines.push(formatNpfDiagReadMinuteLine(npfDiagCompactReadMinute(minute))));
+    lines.push('Paquets de lectures lents (> 1 s) :');
+    if (!s.slowReadBatches.length) lines.push('   Aucun.');
+    s.slowReadBatches.forEach(item => lines.push(formatNpfDiagSlowBatchLine(item)));
+}
+
 /* v17.38 — FdS / BFG / GLR : requêtes NAS, temps ressenti, messages, pont BFG. */
 function isNpfDiagFirstLaunchOfDay() {
     try {
@@ -2920,6 +3062,17 @@ function appendNpfDiagLaunchSection(lines) {
             + (item.safeSkyAtWrite !== undefined ? ' · à l’écriture ' + JSON.stringify(item.safeSkyAtWrite) : '')
             + ' | GLR au lancement : ' + describeNpfDiagGlrExpiry(item.glrAtLaunch?.token, item.glrAtLaunch?.exp, item.at)
         );
+        if (item.firstReads !== undefined || item.layersAtLaunch) {
+            const first = item.firstReads;
+            const sincePrevious = Number(item.previousAt) ? Math.round((Number(item.at) - Number(item.previousAt)) / 1000) : null;
+            lines.push('   20 premières lectures du pack : ' + (first && first.n
+                ? first.n + ' lectures · médiane ' + first.median + ' ms · max ' + first.max + ' ms · calque allumé pendant ces lectures : ' + first.layers
+                : 'aucune au moment de l’écriture')
+                + ' | au lancement : HT ' + (item.layersAtLaunch?.ht === 'true' ? 'ON' : 'OFF')
+                + ' · Routes ' + (item.layersAtLaunch?.routes === 'true' ? 'ON' : 'OFF')
+                + ' | depuis le lancement précédent : ' + (sincePrevious === null ? 'inconnu'
+                    : (sincePrevious >= 60 ? Math.floor(sincePrevious / 60) + ' min ' + (sincePrevious % 60) + ' s' : sincePrevious + ' s')));
+        }
         if (item.storage) {
             lines.push('   Stockage local : ' + formatNpfDiagChars(item.storage.total) + ' | ' + formatNpfDiagStorageTop(item.storage.top));
         }
@@ -3079,6 +3232,8 @@ function appendNpfDiagDetailRestoredSections(lines, detail) {
         + (period.settings || []).map(item => formatNpfDiagSimSettings(item)).join(' ; '));
     section('Changements du bouton Suivi :', detail.followChanges, item => '   ' + formatNpfDiagClock(item.at) + ' | '
         + (item.active ? 'ACTIVÉ' : 'DÉSACTIVÉ') + ' | ' + item.mode);
+    section('Lectures du pack par minute :', detail.readMinutes, formatNpfDiagReadMinuteLine);
+    section('Paquets de lectures lents (> 1 s) :', detail.slowReadBatches, formatNpfDiagSlowBatchLine);
     section('Pont BFG (tentatives) :', detail.bfgAttempts, formatNpfDiagBfgAttemptLine);
     section('Temps ressenti FdS / GLR :', detail.felt, formatNpfDiagFeltLine);
     section('Messages FdS / BFG / GLR affichés :', detail.messages, formatNpfDiagMessageLine);
@@ -12760,7 +12915,14 @@ async function waitForNpfHeavyOverlayTileWindow(layerKey, options = {}) {
      * suffit : tuiles toutes peintes, niveau prêt, aucune lecture en cours ou
      * en file. Sinon, l'attente complète historique s'applique.
      */
-    if (options.sequencerTilesSettled === true && !isCancelled()) {
+    /*
+     * v17.39 — HT seul (visibleTilesEnough) : les tuiles VISIBLES peintes
+     * suffisent ; les tuiles de marge encore en lecture ne retardent plus HT.
+     * Si les tuiles visibles ne sont pas toutes peintes, l'attente complète
+     * historique s'applique comme avant.
+     */
+    const visibleTilesEnough = options.visibleTilesEnough === true;
+    if ((options.sequencerTilesSettled === true || visibleTilesEnough) && !isCancelled()) {
         const tileState = typeof getVisibleBaseTileLoadStateForSia === 'function'
             ? getVisibleBaseTileLoadStateForSia()
             : {
@@ -12770,16 +12932,17 @@ async function waitForNpfHeavyOverlayTileWindow(layerKey, options = {}) {
             };
         const activeReads = Math.max(0, Number(directOfflineNpfActiveReads || 0));
         const queuedReads = Math.max(0, Number(directOfflineNpfReadQueue?.length || 0));
-        if (
+        const visiblePainted = (
             Number(tileState.total || 0) > 0
             && Number(tileState.loaded || 0) >= Number(tileState.total || 0)
             && tileState.tileZoomReady
-            && activeReads === 0
-            && queuedReads === 0
-        ) {
+        );
+        if (visiblePainted && (visibleTilesEnough || (activeReads === 0 && queuedReads === 0))) {
             npfDiagSiaInteraction(
                 'FILTRE CARTE',
-                `couche=${String(layerKey || 'inconnue')} · tuiles-prêtes (séquenceur, sans seconde attente)`,
+                visibleTilesEnough
+                    ? `couche=${String(layerKey || 'inconnue')} · tuiles visibles peintes (sans attendre la marge)`
+                    : `couche=${String(layerKey || 'inconnue')} · tuiles-prêtes (séquenceur, sans seconde attente)`,
                 {
                     waitMs: 0,
                     ...npfDiagTilesVisibleFields(),
@@ -17574,6 +17737,12 @@ async function refreshVisibleHighVoltageLines(source = 'refresh') {
         maxWaitMs: 30000,
         /* v17.38 — restitution : tuiles déjà vérifiées par le séquenceur. */
         sequencerTilesSettled: source === 'overlay-priority-ht',
+        /* v17.39 — restitution après geste et relance après un déplacement hors
+         * geste : les tuiles visibles peintes suffisent. Démarrage, allumage du
+         * calque et nouvelles tentatives gardent l'attente complète. */
+        visibleTilesEnough: source === 'overlay-priority-ht'
+            || source === 'map-change'
+            || source === 'gps-follow-edge',
         isCancelled: () => (
             token !== highVoltageLinesRefreshToken
             || !showHighVoltageLinesLayer
