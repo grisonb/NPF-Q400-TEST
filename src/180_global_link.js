@@ -1400,6 +1400,22 @@ function renderGlobalLinkPositions(positions) {
     updateGlobalLinkButton();
 }
 
+/*
+ * v17.40 — POSITIONS : une seule requête par rafraîchissement (plus de doublon
+ * immédiat) ; après 3 échecs de suite, un essai par minute seulement ; tests du
+ * NAS une seule fois par série d'échecs ; retour au rythme normal (15 s) dès
+ * qu'une réponse réussit. Une session expirée localement arrête les requêtes.
+ */
+const NPF_GLOBAL_LINK_BACKOFF_AFTER_FAILURES = 3;
+const NPF_GLOBAL_LINK_BACKOFF_INTERVAL_MS = 60000;
+let npfGlobalLinkConsecutiveFailures = 0;
+let npfGlobalLinkLastAttemptAt = 0;
+let npfGlobalLinkSeriesDiagnosticMessage = '';
+
+function isGlobalLinkSessionLocallyExpired(session) {
+    return !!session && !(Number(session.exp) > Date.now());
+}
+
 async function refreshGlobalLinkPositions(options = {}) {
     if (!npfGlobalLinkEnabled || npfGlobalLinkFetchInProgress) return false;
     if (!navigator.onLine) {
@@ -1407,62 +1423,53 @@ async function refreshGlobalLinkPositions(options = {}) {
         return false;
     }
     const docsSession = getStoredBriefingDocsSession();
-    /* v17.37 — réessayer avec la session existante, même après l'échéance locale. */
     const globalSession = readStoredGlobalLinkSessionForNas();
-    if (!docsSession || !globalSession) {
+    /* v17.40 — session expirée localement (échéance minuit) : aucune requête
+     * au NAS ; le code est demandé directement (comportement v17.36). */
+    const locallyExpired = isGlobalLinkSessionLocallyExpired(globalSession);
+    if (!docsSession || !globalSession || locallyExpired) {
         if (!docsSession) clearBriefingDocsSession();
+        if (locallyExpired) {
+            stopGlobalLinkRefreshTimer();
+            npfGlobalLinkLastAuthState = 'session-expirée-locale';
+        }
         updateGlobalLinkButton();
         if (!options.silent) await loadGlobalLinkCaptcha();
         return false;
     }
+    if (
+        options.silent
+        && npfGlobalLinkConsecutiveFailures >= NPF_GLOBAL_LINK_BACKOFF_AFTER_FAILURES
+        && Date.now() - npfGlobalLinkLastAttemptAt < NPF_GLOBAL_LINK_BACKOFF_INTERVAL_MS
+    ) {
+        return false;
+    }
+    npfGlobalLinkLastAttemptAt = Date.now();
     npfGlobalLinkFetchInProgress = true;
     updateGlobalLinkButton({ loading: true });
     let globalLinkSessionRefusedByNas = false;
     try {
-        let response = null;
-        let payload = null;
         let lastMessage = '';
-
-        /* v16.60 — Safari peut échouer AVANT toute réponse HTTP avec
-         * TypeError('Load failed'). Cette exception doit entrer elle aussi dans
-         * l'unique relance POSITIONS ; elle ne doit jamais invalider la session. */
-        for (let attemptIndex = 0; attemptIndex < 2; attemptIndex += 1) {
-            try {
-                response = await fetchGlobalLinkNas('positions', {
-                    method: 'GET',
-                    headers: globalLinkAuthHeaders(docsSession, globalSession)
-                }, 20000);
-                payload = await response.json().catch(() => null);
-                lastMessage = payload?.message || payload?.error || (!response.ok ? `Positions Global Link indisponibles (${response.status})` : '');
-                rememberGlobalLinkRequestState('positions', response, lastMessage);
-
-                if (response.ok && payload && payload.ok === true) break;
-
-                const temporaryLoadFail = isGlobalLinkTemporaryLoadFail(lastMessage);
-                if (temporaryLoadFail && attemptIndex === 0) {
-                    npfGlobalLinkLastAuthState = 'positions-load-fail-retry';
-                    await new Promise(resolve => setTimeout(resolve, 650));
-                    continue;
-                }
-                break;
-            } catch (requestError) {
-                lastMessage = String(requestError?.message || requestError || '');
-                rememberGlobalLinkRequestState('positions', { status: 0 }, lastMessage);
-                if (isGlobalLinkTemporaryNetworkError(requestError)) {
-                    npfGlobalLinkLastAuthState = attemptIndex === 0
-                        ? 'positions-network-retry'
-                        : 'positions-network-fail-temporaire';
-                    if (attemptIndex === 0) {
-                        await new Promise(resolve => setTimeout(resolve, 650));
-                        continue;
-                    }
-                }
-                throw requestError;
+        let response = null;
+        try {
+            response = await fetchGlobalLinkNas('positions', {
+                method: 'GET',
+                headers: globalLinkAuthHeaders(docsSession, globalSession)
+            }, 20000);
+        } catch (requestError) {
+            lastMessage = String(requestError?.message || requestError || '');
+            rememberGlobalLinkRequestState('positions', { status: 0 }, lastMessage);
+            if (isGlobalLinkTemporaryNetworkError(requestError)) {
+                npfGlobalLinkLastAuthState = 'positions-network-fail-temporaire';
             }
+            throw requestError;
         }
+        const payload = await response.json().catch(() => null);
+        lastMessage = payload?.message || payload?.error || (!response.ok ? `Positions Global Link indisponibles (${response.status})` : '');
+        rememberGlobalLinkRequestState('positions', response, lastMessage);
 
-        if (!response?.ok || !payload || payload.ok !== true) {
-            if (response?.status === 401) {
+        if (!response.ok || !payload || payload.ok !== true) {
+            if (response.status === 401) {
                 if (payload?.error === 'npf_authorization_required') clearBriefingDocsSession();
                 if (payload?.error === 'global_session_invalid') {
                     clearStoredGlobalLinkSession();
@@ -1474,28 +1481,38 @@ async function refreshGlobalLinkPositions(options = {}) {
             if (isGlobalLinkTemporaryLoadFail(lastMessage)) {
                 npfGlobalLinkLastAuthState = 'positions-load-fail-temporaire';
             }
-            throw new Error(lastMessage || `Positions Global Link indisponibles (${response?.status || 0})`);
+            throw new Error(lastMessage || `Positions Global Link indisponibles (${response.status || 0})`);
         }
 
         rememberGlobalLinkRequestState('positions', response, '');
         npfGlobalLinkLastAuthState = 'positions-ok';
         npfGlobalLinkNasConfirmedToken = globalSession.token;
         npfGlobalLinkNasConfirmedAt = Date.now();
+        npfGlobalLinkConsecutiveFailures = 0;
+        npfGlobalLinkSeriesDiagnosticMessage = '';
         renderGlobalLinkPositions(payload.positions || []);
         return true;
     } catch (error) {
+        npfGlobalLinkConsecutiveFailures += 1;
+        const firstFailureOfSeries = npfGlobalLinkConsecutiveFailures === 1;
+        const temporaryNetworkError = isGlobalLinkTemporaryNetworkError(error);
         let userMessage = String(error?.message || error || 'Erreur Global Link');
-        if (isGlobalLinkTemporaryNetworkError(error)) {
-            const diagnostic = await diagnoseGlobalLinkLoadFailure();
-            npfGlobalLinkLastAuthState = diagnostic.state;
-            if (diagnostic.state === 'positions-cors-fail') {
-                userMessage = 'Load failed — relais GLR joignable sans CORS : blocage CORS probable sur npf-global-link-api.php.';
-            } else if (diagnostic.state === 'positions-endpoint-glr-fail') {
-                userMessage = 'Load failed — NAS joignable via FDS/GAAR, mais endpoint npf-global-link-api.php inaccessible.';
-            } else if (diagnostic.state === 'positions-nas-reseau-fail') {
-                userMessage = 'Load failed — NAS non joignable depuis Safari, y compris via le relais FDS/GAAR.';
+        if (temporaryNetworkError) {
+            if (firstFailureOfSeries || !npfGlobalLinkSeriesDiagnosticMessage) {
+                const diagnostic = await diagnoseGlobalLinkLoadFailure();
+                npfGlobalLinkLastAuthState = diagnostic.state;
+                if (diagnostic.state === 'positions-cors-fail') {
+                    userMessage = 'Load failed — relais GLR joignable sans CORS : blocage CORS probable sur npf-global-link-api.php.';
+                } else if (diagnostic.state === 'positions-endpoint-glr-fail') {
+                    userMessage = 'Load failed — NAS joignable via FDS/GAAR, mais endpoint npf-global-link-api.php inaccessible.';
+                } else if (diagnostic.state === 'positions-nas-reseau-fail') {
+                    userMessage = 'Load failed — NAS non joignable depuis Safari, y compris via le relais FDS/GAAR.';
+                } else {
+                    userMessage = `Load failed — relais GLR joignable en CORS (HTTP ${diagnostic.glrCors?.status || 'réponse'}), requête authentifiée/en-têtes à contrôler.`;
+                }
+                npfGlobalLinkSeriesDiagnosticMessage = userMessage;
             } else {
-                userMessage = `Load failed — relais GLR joignable en CORS (HTTP ${diagnostic.glrCors?.status || 'réponse'}), requête authentifiée/en-têtes à contrôler.`;
+                userMessage = npfGlobalLinkSeriesDiagnosticMessage;
             }
         }
         rememberGlobalLinkRequestState(
@@ -1508,8 +1525,12 @@ async function refreshGlobalLinkPositions(options = {}) {
         if (!options.silent && globalLinkSessionRefusedByNas) {
             /* v17.37 — session réellement refusée par le NAS : nouveau code. */
             await loadGlobalLinkCaptcha();
-        } else if (!options.silent && !isGlobalLinkAbortError(error)) {
-            alert(`Global Link : ${userMessage}`);
+        } else if (!isGlobalLinkAbortError(error) && (!options.silent || firstFailureOfSeries)) {
+            /* v17.40 — bandeau discret, jamais de fenêtre bloquante ; la
+             * session valide est conservée. */
+            showNpfInfoBanner(temporaryNetworkError
+                ? 'GLR : positions indisponibles (réseau). Session conservée, nouvel essai automatique.'
+                : `Global Link : ${userMessage}`, { kind: temporaryNetworkError ? 'info' : 'error' });
         }
         return false;
     } finally {
@@ -1541,6 +1562,9 @@ function setGlobalLinkEnabled(enabled, options = {}) {
         updateGlobalLinkButton();
         return;
     }
+    /* v17.40 — nouvel allumage : rythme normal. */
+    npfGlobalLinkConsecutiveFailures = 0;
+    npfGlobalLinkLastAttemptAt = 0;
     startGlobalLinkRefreshTimer();
     updateGlobalLinkButton();
     if (options.refresh !== false) refreshGlobalLinkPositions({ silent: !!options.silent });
@@ -1559,10 +1583,10 @@ async function handleGlobalLinkButtonClick() {
         return;
     }
     const docsSession = await ensureGlobalLinkNpfAuthorization();
-    /* v17.37 — OFF -> ON : pas de nouveau code tant qu'une session existe ;
-     * le NAS dira si elle est encore valide. */
+    /* v17.37 — OFF -> ON : pas de nouveau code tant que la session est valide.
+     * v17.40 — session expirée localement : code directement (v17.36). */
     let globalSession = readStoredGlobalLinkSessionForNas();
-    if (!globalSession) {
+    if (!globalSession || isGlobalLinkSessionLocallyExpired(globalSession)) {
         await loadGlobalLinkCaptcha();
         return;
     }
@@ -1677,7 +1701,7 @@ function installGlobalLinkButtonInteractions(button) {
                 && error.message !== 'Autorisation annulée.'
                 && !isGlobalLinkAbortError(error)
             ) {
-                alert(`Global Link : ${error.message}`);
+                showNpfInfoBanner(`Global Link : ${error.message}`, { kind: 'error' });
             }
             updateGlobalLinkButton();
         });
@@ -1753,11 +1777,17 @@ function initializeGlobalLinkUi() {
     }
     if (!window.__npfGlobalLinkLifecycleBound) {
         window.__npfGlobalLinkLifecycleBound = true;
+        /* v17.40 — retour du réseau / premier plan : essai immédiat, même
+         * pendant l'espacement à un essai par minute. */
         window.addEventListener('online', () => {
-            if (npfGlobalLinkEnabled && window.__npfStartupCoreReady !== false) refreshGlobalLinkPositions({ silent: true });
+            if (npfGlobalLinkEnabled && window.__npfStartupCoreReady !== false) {
+                npfGlobalLinkLastAttemptAt = 0;
+                refreshGlobalLinkPositions({ silent: true });
+            }
         });
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible' && npfGlobalLinkEnabled && window.__npfStartupCoreReady !== false) {
+                npfGlobalLinkLastAttemptAt = 0;
                 refreshGlobalLinkPositions({ silent: true });
             }
         });
@@ -1773,7 +1803,8 @@ function initializeGlobalLinkUi() {
         if (!getStoredBriefingDocsSession()) {
             await tryAuthorizeBriefingDocsFromBfgBridge({ silent: true });
         }
-        if (!readStoredGlobalLinkSessionForNas() || !getStoredBriefingDocsSession()) {
+        const storedGlobalSession = readStoredGlobalLinkSessionForNas();
+        if (!storedGlobalSession || isGlobalLinkSessionLocallyExpired(storedGlobalSession) || !getStoredBriefingDocsSession()) {
             npfGlobalLinkEnabled = false;
             try { localStorage.setItem(NPF_GLOBAL_LINK_LAYER_ENABLED_KEY, '0'); } catch (_) {}
             updateGlobalLinkButton();

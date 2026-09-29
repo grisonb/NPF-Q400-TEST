@@ -1458,10 +1458,47 @@ function forceNearestCommuneHudVisible(display) {
     } catch (_) {}
 }
 
+/*
+ * v17.40 — commune survolée calculée une seule fois par position : les
+ * rappels (250 ms, contrôle 5 s, reprise) réutilisent le dernier résultat tant
+ * que la position et les données (polygones communes / départements, base
+ * communes) n'ont pas changé et que le bandeau affiche encore ce résultat.
+ */
+let npfNearestCommuneLastKey = '';
+let npfNearestCommuneLastHtml = '';
+let npfNearestCommuneLastClass = '';
+
+function getNpfNearestCommuneCacheKey(lat, lon) {
+    const listInfo = list => (Array.isArray(list) ? list.length : -1);
+    return [
+        lat, lon,
+        typeof hasLoadedCommunes !== 'undefined' ? hasLoadedCommunes : '',
+        typeof communesPolygonData !== 'undefined' ? listInfo(communesPolygonData) : '',
+        typeof departmentsPolygonData !== 'undefined' ? listInfo(departmentsPolygonData) : '',
+        typeof allCommunes !== 'undefined' ? listInfo(allCommunes) : '',
+        typeof communesByCodeInsee !== 'undefined' && communesByCodeInsee instanceof Map ? communesByCodeInsee.size : ''
+    ].join('|');
+}
+
 function updateNearestCommuneDisplay(lat, lon) {
     const nearestDisplay = getOrCreateNearestCommuneDisplay();
     if (!nearestDisplay) return;
     forceNearestCommuneHudVisible(nearestDisplay);
+
+    const cacheKey = getNpfNearestCommuneCacheKey(Number(lat), Number(lon));
+    if (
+        cacheKey === npfNearestCommuneLastKey
+        && nearestDisplay.innerHTML === npfNearestCommuneLastHtml
+        && nearestDisplay.className === npfNearestCommuneLastClass
+        && nearestDisplay.style.display === 'flex'
+    ) {
+        return;
+    }
+    const rememberDisplay = () => {
+        npfNearestCommuneLastKey = cacheKey;
+        npfNearestCommuneLastHtml = nearestDisplay.innerHTML;
+        npfNearestCommuneLastClass = nearestDisplay.className;
+    };
 
     const showDisplay = (html, extraClass = '') => {
         nearestDisplay.style.display = 'flex';
@@ -1492,6 +1529,7 @@ function updateNearestCommuneDisplay(lat, lon) {
     const containedCommune = findCommuneContainingPoint(numericLat, numericLon);
     if (containedCommune) {
         showDisplay(buildLabel(containedCommune, 'Survolée'));
+        rememberDisplay();
 
         /*
          * v16.75 — ne plus charger les géométries départementales uniquement
@@ -1538,6 +1576,7 @@ function updateNearestCommuneDisplay(lat, lon) {
     }
 
     showDisplay('📍 Survolée: <b>non déterminée</b>', 'unknown');
+    rememberDisplay();
 }
 
 function refreshNearestCommuneDisplayFromKnownGps() {

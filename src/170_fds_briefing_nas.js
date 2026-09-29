@@ -156,9 +156,11 @@ async function tryAuthorizeBriefingDocsFromBfgBridge(options = {}) {
     if (npfBfgBridgeAuthorizationPromise) return npfBfgBridgeAuthorizationPromise;
 
     /*
-     * v17.38 — une seule nouvelle tentative, et seulement si l'échec vient d'un
-     * délai dépassé ou d'une erreur réseau. Le délai de chaque requête reste
-     * 9 s. Un refus réel du NAS n'est jamais relancé.
+     * v17.38 — une seule nouvelle tentative ; délai de chaque requête : 9 s.
+     * v17.40 — nouvelle tentative seulement sur délai dépassé. Un « Load
+     * failed » rapide alors que le NAS répond (autre requête récente ou sonde)
+     * est un refus du pont (BFG TEST non connecté) : l'appelant demande alors le
+     * mot de passe de session, comme jusqu'en v16.62.
      */
     const runBridgeAttempt = async attempt => {
         const startedAt = performance.now();
@@ -210,10 +212,17 @@ async function tryAuthorizeBriefingDocsFromBfgBridge(options = {}) {
         } catch (error) {
             const timedOut = error?.name === 'AbortError';
             npfBfgBridgeLastError = String(error?.message || error || 'pont_indisponible');
-            npfBfgBridgeLastStatus = timedOut ? 'délai dépassé' : 'indisponible';
+            if (timedOut) {
+                npfBfgBridgeLastStatus = 'délai dépassé';
+                report(npfBfgBridgeLastStatus, 0, npfBfgBridgeLastError);
+                return { session: null, retry: true };
+            }
+            const nasReachable = await isNpfNasReachableForBridge();
+            npfBfgBridgeLastStatus = nasReachable ? 'refusé' : 'indisponible';
+            if (nasReachable) npfBfgBridgeLastError = `${npfBfgBridgeLastError} (NAS joignable : pont refusé)`;
             if (!silent) console.warn('[BFG -> NPF-Q400] Pont indisponible:', error);
-            report(npfBfgBridgeLastStatus, 0, npfBfgBridgeLastError);
-            return { session: null, retry: true };
+            report(nasReachable ? 'refusé (Load failed, NAS joignable)' : 'indisponible', 0, npfBfgBridgeLastError);
+            return { session: null, retry: false };
         }
     };
 
@@ -279,6 +288,26 @@ function formatBriefingDocsSize(bytes) {
     if (!Number.isFinite(value) || value <= 0) return '';
     if (value >= 1024 * 1024) return `${(value / (1024 * 1024)).toFixed(1)} Mo`;
     return `${Math.max(1, Math.round(value / 1024))} Ko`;
+}
+
+/* v17.40 — le NAS répond-il en ce moment ? Sonde courte (4 s au plus) sans
+ * en-tête : distingue un pont BFG refusé (« Load failed » rapide, NAS
+ * joignable) d'un NAS réellement injoignable. */
+async function isNpfNasReachableForBridge() {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 4000);
+    try {
+        await fetch(`${NPF_BRIEFING_DOCS_API_URL}?action=status&npf_probe=1&t=${Date.now()}`, {
+            mode: 'no-cors',
+            cache: 'no-store',
+            signal: controller.signal
+        });
+        return true;
+    } catch (_) {
+        return false;
+    } finally {
+        clearTimeout(timer);
+    }
 }
 
 async function fetchBriefingDocsNas(url, options = {}, timeoutMs = 15000) {
@@ -568,18 +597,18 @@ function closeBriefingDocsPasswordModal() {
 }
 
 function getBriefingDocsBfgAuthorizationUnavailableMessage() {
-    return 'BFG est associé à cet iPad mais l’autorisation FdS/GAAR n’est pas disponible. Ouvre ou actualise BFG puis réessaie. Aucun mot de passe NPF n’est demandé tant que BFG est associé.';
+    return 'BFG est associé à cet iPad mais l’autorisation FdS/GAAR n’est pas disponible. Ouvre BFG TEST, connecte-toi, puis réessaie.';
 }
 
-function openBriefingDocsPasswordModal(type) {
+function openBriefingDocsPasswordModal(type, options = {}) {
     const safeType = String(type || '').toLowerCase();
     // v17.29 — 'notams' : même fenêtre pour le bouton « Rafraîchir les NOTAM ».
     if (!NPF_BRIEFING_DOC_TYPES.includes(safeType) && safeType !== 'notams') return false;
 
-    /* v16.63 — un iPad associé à BFG ne doit jamais retomber sur le mot de
-     * passe NPF. Ce garde-fou couvre aussi un éventuel ancien appel résiduel. */
-    if (getStoredNpfBfgBridgeCredentials()) {
-        alert(getBriefingDocsBfgAuthorizationUnavailableMessage());
+    /* v16.63 — un iPad associé à BFG ne retombe pas sur le mot de passe…
+     * v17.40 — …sauf quand le pont BFG vient d'être refusé (allowWhenPaired). */
+    if (getStoredNpfBfgBridgeCredentials() && options.allowWhenPaired !== true) {
+        showNpfInfoBanner(getBriefingDocsBfgAuthorizationUnavailableMessage(), { kind: 'error' });
         return false;
     }
 
@@ -599,7 +628,9 @@ function openBriefingDocsPasswordModal(type) {
     npfBriefingDocsPendingType = safeType;
     const label = safeType === 'gaar' ? 'GAAR' : (safeType === 'notams' ? 'NOTAM' : 'FdS');
     if (title) title.textContent = `Accès ${label}`;
-    if (help) help.textContent = `Utilise le mot de passe NPF. Pour associer BFG à cet iPad, ferme cette fenêtre puis utilise le bouton BFG dédié.`;
+    if (help) help.textContent = options.reason === 'bfg-refused'
+        ? 'Pont BFG refusé : BFG TEST n’est pas connecté. Saisis le mot de passe de session NPF-Q400 pour télécharger le document.'
+        : `Utilise le mot de passe NPF-Q400. Pour associer BFG à cet iPad, ferme cette fenêtre puis utilise le bouton BFG dédié.`;
     if (input) { input.value = ''; input.style.display = ''; }
     if (authorizeButton) authorizeButton.style.display = '';
     if (separator) separator.style.display = 'none';
@@ -697,7 +728,7 @@ async function displayBriefingDocInViewer(type, record, options = {}) {
     const safeType = String(type || '').toLowerCase();
     if (!NPF_BRIEFING_DOC_TYPES.includes(safeType)) return false;
     if (!isBriefingDocRecordForToday(record)) {
-        alert(`Aucune ${getBriefingDocLabel(safeType)} du jour enregistrée sur cet appareil.`);
+        showNpfInfoBanner(`Aucune ${getBriefingDocLabel(safeType)} du jour enregistrée sur cet appareil.`);
         return false;
     }
 
@@ -742,7 +773,7 @@ async function openBriefingDoc(type) {
         const record = await getBriefingDocRecord(safeType);
         return await displayBriefingDocInViewer(safeType, record);
     } catch (error) {
-        alert(`Ouverture ${getBriefingDocLabel(safeType)} impossible : ${error.message || error}`);
+        showNpfInfoBanner(`Ouverture ${getBriefingDocLabel(safeType)} impossible : ${error.message || error}`, { kind: 'error' });
         return false;
     }
 }
@@ -916,13 +947,23 @@ async function ensureBriefingDocsInteractiveAuthorization(type, options = {}) {
     if (paired) {
         await tryAuthorizeBriefingDocsFromBfgBridge({ silent: true });
         if (getStoredBriefingDocsSession()) return true;
-        /* v17.38 — le message d'association n'apparaît que si le NAS refuse
-         * réellement ; délai dépassé, réseau ou NAS indisponible : message NAS. */
-        const message = npfBfgBridgeLastStatus === 'refusé'
-            ? getBriefingDocsBfgAuthorizationUnavailableMessage()
-            : 'NAS lent ou injoignable, réessaie dans un moment.';
+        /*
+         * v17.40 — règle utilisateur : pont refusé (BFG TEST non connecté, y
+         * compris « Load failed » rapide pendant que le NAS répond) -> mot de
+         * passe de session, puis téléchargement NAS, comme jusqu'en v16.62.
+         * NAS entier injoignable (délai dépassé, aucune réponse) -> bandeau
+         * « NAS lent ou injoignable », sans demande de mot de passe.
+         */
+        if (npfBfgBridgeLastStatus === 'refusé') {
+            if (options.viewer === true) {
+                setBriefingDocViewerStatus('Pont BFG refusé : saisis le mot de passe de session.', { error: true });
+            }
+            openBriefingDocsPasswordModal(type, { allowWhenPaired: true, reason: 'bfg-refused' });
+            return false;
+        }
+        const message = 'NAS lent ou injoignable, réessaie dans un moment.';
         if (options.viewer === true) setBriefingDocViewerStatus(message, { error: true });
-        else alert(message);
+        else showNpfInfoBanner(message, { kind: 'error' });
         return false;
     }
 
@@ -946,7 +987,7 @@ async function handleBriefingDocMapButtonClick(type) {
     }
 
     if (!navigator.onLine) {
-        alert(`${getBriefingDocLabel(safeType)} du jour non téléchargée. Une connexion Internet est nécessaire pour la récupérer.`);
+        showNpfInfoBanner(`${getBriefingDocLabel(safeType)} du jour non téléchargée. Une connexion Internet est nécessaire pour la récupérer.`);
         return false;
     }
 
@@ -955,12 +996,12 @@ async function handleBriefingDocMapButtonClick(type) {
     try {
         const result = await refreshSingleBriefingDocFromNas(safeType);
         if (!isBriefingDocRecordForToday(result.record)) {
-            alert(`Aucune ${getBriefingDocLabel(safeType)} du jour disponible sur le NAS.`);
+            showNpfInfoBanner(`Aucune ${getBriefingDocLabel(safeType)} du jour disponible sur le NAS.`);
             return false;
         }
         return await displayBriefingDocInViewer(safeType, result.record);
     } catch (error) {
-        alert(`${getBriefingDocLabel(safeType)} : ${error.message || error}`);
+        showNpfInfoBanner(`${getBriefingDocLabel(safeType)} : ${error.message || error}`, { kind: 'error' });
         await refreshBriefingDocMapButtons();
         return false;
     }
@@ -994,7 +1035,7 @@ function initializeBriefingDocsUi() {
         button.addEventListener('click', () => {
             closeBriefingDocSelectorModal();
             handleBriefingDocMapButtonClick(type).catch(error => {
-                alert(`${getBriefingDocLabel(type)} : ${error.message || error}`);
+                showNpfInfoBanner(`${getBriefingDocLabel(type)} : ${error.message || error}`, { kind: 'error' });
             });
         });
     };

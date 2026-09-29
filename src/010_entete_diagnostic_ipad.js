@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.39';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.40';
 
 
 /*
@@ -338,17 +338,55 @@ const NPF_STARTUP_DIAGNOSTIC = (() => {
         gpsSummary: state.gpsSummary,
         gpsSummarySim: state.gpsSummarySim,
         layerSummary: state.layerSummary,
-        interactions: state.siaInteractions.slice(-80),
-        stalls: state.stalls.slice(0, 20),
-        longTasks: state.longTasks.slice(0, 20),
+        /* v17.40 — enregistrement allégé : 30 derniers événements, détails
+         * limités aux 10 premières mesures (les instantanés de couches en
+         * comptaient ≈ 35). */
+        interactions: state.siaInteractions.slice(-30).map(entry => ({
+            t: entry.t,
+            at: entry.at,
+            kind: entry.kind,
+            detail: String(entry.detail || '').slice(0, 160),
+            metrics: entry.metrics && typeof entry.metrics === 'object'
+                ? Object.fromEntries(Object.entries(entry.metrics).slice(0, 10))
+                : null
+        })),
+        stalls: state.stalls.slice(0, 12),
+        longTasks: state.longTasks.slice(0, 12),
         /* v17.32 — extrait du DIAG détaillé, restitué dans l'export suivant. */
         detail: npfDiagDetailPersistSnapshot()
     });
 
+    /* v17.40 — aucune écriture pendant un geste manuel : report de 2 s. Les
+     * écritures au passage en arrière-plan restent immédiates. */
+    let persistDeferTimer = null;
+    const isMapGestureInProgress = () => {
+        try {
+            return (typeof npfMapManualGestureLockActive !== 'undefined' && !!npfMapManualGestureLockActive)
+                || (typeof centerGpsFollowUserGestureActive !== 'undefined' && !!centerGpsFollowUserGestureActive);
+        } catch (_) {
+            return false;
+        }
+    };
+    const persistWhenIdle = () => {
+        if (isMapGestureInProgress()) {
+            state.persistDeferred = (state.persistDeferred || 0) + 1;
+            if (!persistDeferTimer) {
+                persistDeferTimer = setTimeout(() => {
+                    persistDeferTimer = null;
+                    persistWhenIdle();
+                }, 2000);
+            }
+            return;
+        }
+        persist();
+    };
+
     const persist = () => {
         const started = now();
         try {
-            localStorage.setItem(DIAG_PERSIST_KEY, JSON.stringify(buildPersistedSnapshot()));
+            const serialized = JSON.stringify(buildPersistedSnapshot());
+            localStorage.setItem(DIAG_PERSIST_KEY, serialized);
+            state.persistChars = serialized.length;
             state.persistCount += 1;
             const duration = Math.max(0, now() - started);
             state.persistTotalMs += duration;
@@ -359,7 +397,7 @@ const NPF_STARTUP_DIAGNOSTIC = (() => {
     mark('script_eval', 'Script NPF-Q400 exécuté');
 
     try {
-        setInterval(persist, DIAG_PERSIST_INTERVAL_MS);
+        setInterval(persistWhenIdle, DIAG_PERSIST_INTERVAL_MS);
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'hidden') persist();
         }, { passive: true });
@@ -620,7 +658,11 @@ const NPF_DIAG_DETAIL = (() => {
         readMinutes: new Map(),
         lastHtCanvasUpdateAt: null,
         lastHtPaneToggleAt: null,
-        lastHtPaneVisible: null
+        lastHtPaneVisible: null,
+        /* v17.40 — sélections de feu et messages affichés en bandeau. */
+        fireSelections: [],
+        bannerCount: 0,
+        lastBanner: null
     };
 
     const safe = (callback, fallback = undefined) => {
@@ -1433,6 +1475,13 @@ const NPF_DIAG_DETAIL = (() => {
             state.gpsIgnoredDuringSimulation += 1;
             return;
         }
+        /* v17.40 — temps du traitement GPS et du calculateur, par minute. */
+        safe(() => {
+            const minute = readMinuteAt(info.t0);
+            minute.gpsMs += ms;
+            minute.gpsN += 1;
+            minute.calcMs += Number(cycle.parts.updateCalculatorData) || 0;
+        });
         const gps = cycle.sim ? state.gpsSim : state.gps;
         if (!cycle.sim) {
             const eco = ecoStat();
@@ -1518,6 +1567,21 @@ const NPF_DIAG_DETAIL = (() => {
         ht: !!safe(() => showHighVoltageLinesLayer, false),
         routes: !!safe(() => showRoadOverlayLayer, false)
     });
+    const readMinuteAt = t => {
+        const index = Math.floor(t / 60000);
+        let minute = state.readMinutes.get(index);
+        if (!minute) {
+            minute = {
+                index, at: wallAt(index * 60000), durations: [], n: 0, max: 0,
+                htOn: false, htOff: false, routesOn: false, routesOff: false,
+                gpsMs: 0, gpsN: 0, calcMs: 0
+            };
+            state.readMinutes.set(index, minute);
+            if (state.readMinutes.size > 60) state.readMinutes.delete(state.readMinutes.keys().next().value);
+        }
+        return minute;
+    };
+
     const notePackRead = (outcome, ms) => {
         if (outcome !== 'trouvée' && outcome !== 'absente' && outcome !== 'erreur-technique') return;
         const t = now();
@@ -1525,13 +1589,7 @@ const NPF_DIAG_DETAIL = (() => {
         if (state.firstPackReads.length < 20) {
             state.firstPackReads.push({ ms: round(ms), ht: layers.ht, routes: layers.routes });
         }
-        const index = Math.floor(t / 60000);
-        let minute = state.readMinutes.get(index);
-        if (!minute) {
-            minute = { index, at: wallAt(index * 60000), durations: [], n: 0, max: 0, htOn: false, htOff: false, routesOn: false, routesOff: false };
-            state.readMinutes.set(index, minute);
-            if (state.readMinutes.size > 60) state.readMinutes.delete(state.readMinutes.keys().next().value);
-        }
+        const minute = readMinuteAt(t);
         minute.n += 1;
         if (minute.durations.length < 600) minute.durations.push(round(ms));
         if (ms > minute.max) minute.max = round(ms);
@@ -2330,6 +2388,18 @@ const NPF_DIAG_DETAIL = (() => {
         economicRecenterChanged,
         economicRecenterSkipped,
         ecoMode,
+        fireSelected: (origin, item) => {
+            const name = String(item?.nom_standard || item?.name || 'feu').slice(0, 60);
+            pushCapped(state.fireSelections, { at: Date.now(), t: round(now()), origin: String(origin || '—'), name }, 20);
+            safe(() => npfDiagSiaInteraction('SÉLECTION FEU', `${origin} · ${name}`, null));
+        },
+        bannerShown: text => {
+            const clean = String(text || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+            state.bannerCount += 1;
+            state.lastBanner = { at: Date.now(), text: clean };
+            state.messages.push({ at: Date.now(), source: 'bandeau', text: clean });
+            if (state.messages.length > 30) state.messages.splice(0, state.messages.length - 30);
+        },
         bfgBridgeAttempt: entry => {
             state.bfgAttempts.push({
                 at: Date.now(),
@@ -2343,6 +2413,14 @@ const NPF_DIAG_DETAIL = (() => {
         }
     };
 })();
+
+/* v17.40 — sélection d'un feu (src/050) et bandeau d'information (src/050). */
+function npfDiagFireSelected(origin, item) {
+    try { NPF_DIAG_DETAIL.fireSelected(origin, item); } catch (_) {}
+}
+function npfDiagInfoBannerShown(text) {
+    try { NPF_DIAG_DETAIL.bannerShown(text); } catch (_) {}
+}
 
 /* v17.38 — tentative du pont BFG (appelé par src/170). */
 function npfDiagBfgBridgeAttempt(entry) {
@@ -2414,22 +2492,23 @@ function npfDiagDetailPersistSnapshot() {
                 routes: s.routesCount,
                 ht: s.htCount
             },
-            gestures: s.gestures.slice(-40),
-            firstBlocks: s.firstBlocks.slice(0, 15).filter(item => !s.blocks.slice(-30).includes(item)),
-            blocks: s.blocks.slice(-30),
-            restores: s.restores.slice(-20),
-            routes: s.routesRebuilds.slice(-15),
-            ht: s.htRebuilds.slice(-15),
-            markers: s.markers.slice(-40),
+            gestures: s.gestures.slice(-20),
+            firstBlocks: s.firstBlocks.slice(0, 8).filter(item => !s.blocks.slice(-15).includes(item)),
+            blocks: s.blocks.slice(-15),
+            restores: s.restores.slice(-12),
+            routes: s.routesRebuilds.slice(-8),
+            ht: s.htRebuilds.slice(-8),
+            markers: s.markers.slice(-20),
             simPeriods: s.simPeriods.slice(-10),
             ecoPeriods: s.ecoPeriods.slice(-10),
-            followChanges: s.followChanges.slice(-20),
-            nasRequests: s.nasRequests.slice(-30),
+            followChanges: s.followChanges.slice(-10),
+            nasRequests: s.nasRequests.slice(-15),
             felt: s.felt.slice(-20),
-            messages: s.messages.slice(-30),
-            bfgAttempts: s.bfgAttempts.slice(-20),
+            messages: s.messages.slice(-15),
+            bfgAttempts: s.bfgAttempts.slice(-10),
             readMinutes: Array.from(s.readMinutes.values()).slice(-15).map(npfDiagCompactReadMinute),
-            slowReadBatches: s.slowReadBatches.slice(-20),
+            slowReadBatches: s.slowReadBatches.slice(-10),
+            fireSelections: s.fireSelections.slice(-10),
             memoryPeak: s.memoryPeak,
             cellCache: { ...s.cellCache }
         };
@@ -2652,7 +2731,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.39 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.40 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -2868,14 +2947,24 @@ function npfDiagLayerMix(on, off) {
 function npfDiagCompactReadMinute(minute) {
     return {
         at: minute.at, n: minute.n, median: npfDiagMedian(minute.durations), max: minute.max,
-        ht: npfDiagLayerMix(minute.htOn, minute.htOff), routes: npfDiagLayerMix(minute.routesOn, minute.routesOff)
+        ht: minute.n ? npfDiagLayerMix(minute.htOn, minute.htOff) : '—',
+        routes: minute.n ? npfDiagLayerMix(minute.routesOn, minute.routesOff) : '—',
+        gpsMs: Math.round(Number(minute.gpsMs) || 0), gpsN: Number(minute.gpsN) || 0,
+        calcMs: Math.round(Number(minute.calcMs) || 0)
     };
 }
 
 function formatNpfDiagReadMinuteLine(item) {
     return '   ' + formatNpfDiagClock(item.at) + ' | ' + item.n + ' lectures | médiane '
         + (item.median === null ? '—' : item.median + ' ms') + ' | max ' + item.max + ' ms'
-        + ' | HT ' + item.ht + ' · Routes ' + item.routes;
+        + ' | HT ' + item.ht + ' · Routes ' + item.routes
+        + (item.gpsMs !== undefined
+            ? ' | traitement GPS ' + item.gpsMs + ' ms (' + item.gpsN + ' positions) · calculateur ' + item.calcMs + ' ms'
+            : '');
+}
+
+function formatNpfDiagFireSelectionLine(item) {
+    return '   ' + formatNpfDiagClock(item.at) + ' | ' + item.origin + ' | ' + item.name;
 }
 
 function formatNpfDiagSlowBatchLine(item) {
@@ -2920,6 +3009,9 @@ function appendNpfDiagPackReadSection(lines) {
     lines.push('Paquets de lectures lents (> 1 s) :');
     if (!s.slowReadBatches.length) lines.push('   Aucun.');
     s.slowReadBatches.forEach(item => lines.push(formatNpfDiagSlowBatchLine(item)));
+    lines.push('Sélections de feu (v17.40) :');
+    if (!s.fireSelections.length) lines.push('   Aucune.');
+    s.fireSelections.forEach(item => lines.push(formatNpfDiagFireSelectionLine(item)));
 }
 
 /* v17.38 — FdS / BFG / GLR : requêtes NAS, temps ressenti, messages, pont BFG. */
@@ -2976,6 +3068,15 @@ function appendNpfDiagNasSection(lines) {
     block('Requêtes NAS (30 dernières) :', s.nasRequests, formatNpfDiagNasRequestLine, 'Aucune requête.');
 }
 
+/* v17.40 — messages affichés en bandeau (à la place des anciennes alertes). */
+function safe_npfDiagBannerHeader(lines) {
+    try {
+        const s = NPF_DIAG_DETAIL.state;
+        lines.push('Messages affichés en bandeau (remplacent les alertes) : ' + s.bannerCount
+            + (s.lastBanner ? ' | dernier ' + formatNpfDiagClock(s.lastBanner.at) + ' « ' + s.lastBanner.text + ' »' : ''));
+    } catch (_) {}
+}
+
 /* v17.37 — journal des lancements et stockage local (mesure seule). */
 function formatNpfDiagChars(count) {
     const chars = Math.max(0, Math.round(Number(count) || 0));
@@ -3024,6 +3125,7 @@ function appendNpfDiagLaunchStorageHeader(lines) {
         + ' | 5 plus grosses clés (car.) : ' + formatNpfDiagStorageTop(summary.top)
     );
     lines.push('Écritures localStorage refusées (cette session) : ' + formatNpfDiagRefusedWrites(launchLog.refusedWrites()));
+    safe_npfDiagBannerHeader(lines);
     lines.push(
         'SafeSky (showTrafficLayer) relu au lancement : ' + JSON.stringify(current.safeSkyAtLaunch)
         + ' | valeur actuelle : ' + JSON.stringify(readRaw('showTrafficLayer'))
@@ -3234,6 +3336,7 @@ function appendNpfDiagDetailRestoredSections(lines, detail) {
         + (item.active ? 'ACTIVÉ' : 'DÉSACTIVÉ') + ' | ' + item.mode);
     section('Lectures du pack par minute :', detail.readMinutes, formatNpfDiagReadMinuteLine);
     section('Paquets de lectures lents (> 1 s) :', detail.slowReadBatches, formatNpfDiagSlowBatchLine);
+    section('Sélections de feu :', detail.fireSelections, formatNpfDiagFireSelectionLine);
     section('Pont BFG (tentatives) :', detail.bfgAttempts, formatNpfDiagBfgAttemptLine);
     section('Temps ressenti FdS / GLR :', detail.felt, formatNpfDiagFeltLine);
     section('Messages FdS / BFG / GLR affichés :', detail.messages, formatNpfDiagMessageLine);
@@ -3897,6 +4000,8 @@ function buildNpfStartupDiagnosticExportText() {
         + Math.round(runtime.diagPersistCount || 0) + ' écritures groupées | '
         + 'écriture max ' + Math.round(runtime.diagPersistMaxMs || 0) + ' ms | '
         + 'temps total ' + Math.round(runtime.diagPersistTotalMs || 0) + ' ms'
+        + ' | taille ' + Math.round(Number(NPF_STARTUP_DIAGNOSTIC.state.persistChars) || 0).toLocaleString('fr-FR') + ' car.'
+        + ' | reportées (geste) ' + Math.round(Number(NPF_STARTUP_DIAGNOSTIC.state.persistDeferred) || 0)
         + (() => {
             try {
                 const launchCost = window.NPF_LAUNCH_LOG?.cost?.();

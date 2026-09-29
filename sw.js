@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v17-39_ht_marge';
-const APP_VERSION = 'v17.39';
+const SW_VERSION = 'sw-v17-40_bandeaux_glr_fds';
+const APP_VERSION = 'v17.40';
 const SIA_DATA_REVISION = '15.69-radio1026-1-maplite1';
 const SIA_DATA_URL = './sia.js';
 /*

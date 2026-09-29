@@ -597,6 +597,8 @@ function buildActiveFireIcon(label = 'Feu') {
 }
 
 function selectFireFromHistoryMap(item) {
+    /* v17.40 — DIAG : sélection d'un feu depuis la carte. */
+    try { npfDiagFireSelected('carte', item); } catch (_) {}
     clearAirportDestination({ restoreFire: false, redraw: false });
     const normalized = normalizeHistoryCommune(item);
     if (!normalized) return;
@@ -791,6 +793,8 @@ function displayFireHistory() {
         });
 
         li.querySelector('.fire-history-select').addEventListener('click', () => {
+            /* v17.40 — DIAG : sélection d'un feu depuis la liste. */
+            try { npfDiagFireSelected('liste', item); } catch (_) {}
             clearAirportDestination({ restoreFire: false, redraw: false });
             currentCommune = item;
             localStorage.setItem('currentCommune', JSON.stringify(item));
@@ -996,3 +1000,51 @@ function computeConvexHull(latLngPoints) {
     return lower.concat(upper);
 }
 
+/*
+ * v17.40 — bandeau d'information non bloquant (remplace les alert() GLR,
+ * FdS, GAAR et BFG). Une alert() arrêtait tout le code tant qu'elle restait
+ * ouverte : carte, suivi GPS et minuteries figés. Le bandeau disparaît seul
+ * après 8 s, se ferme à la main, et ne garde que le dernier message.
+ */
+let npfInfoBannerTimer = null;
+
+function showNpfInfoBanner(message, options = {}) {
+    const text = String(message || '').trim();
+    if (!text) return;
+    try {
+        let banner = document.getElementById('npf-info-banner');
+        if (!banner) {
+            banner = document.createElement('div');
+            banner.id = 'npf-info-banner';
+            banner.className = 'npf-info-banner';
+            banner.setAttribute('role', 'status');
+            banner.setAttribute('aria-live', 'polite');
+            banner.innerHTML = '<span class="npf-info-banner-text"></span>'
+                + '<button type="button" class="npf-info-banner-close" aria-label="Fermer">×</button>';
+            banner.querySelector('.npf-info-banner-close').addEventListener('click', event => {
+                event.preventDefault();
+                event.stopPropagation();
+                hideNpfInfoBanner();
+            });
+            document.body.appendChild(banner);
+        }
+        banner.querySelector('.npf-info-banner-text').textContent = text;
+        banner.classList.toggle('npf-info-banner-error', options.kind === 'error');
+        banner.style.display = 'flex';
+        if (npfInfoBannerTimer) clearTimeout(npfInfoBannerTimer);
+        npfInfoBannerTimer = setTimeout(hideNpfInfoBanner, Number(options.durationMs) > 0 ? Number(options.durationMs) : 8000);
+    } catch (_) {}
+    try { npfDiagInfoBannerShown(text); } catch (_) {}
+    try { window.NPF_LAUNCH_LOG?.noteDisplayedMessage?.(text); } catch (_) {}
+}
+
+function hideNpfInfoBanner() {
+    if (npfInfoBannerTimer) {
+        clearTimeout(npfInfoBannerTimer);
+        npfInfoBannerTimer = null;
+    }
+    try {
+        const banner = document.getElementById('npf-info-banner');
+        if (banner) banner.style.display = 'none';
+    } catch (_) {}
+}

@@ -1,4 +1,4 @@
-/* NPF_STYLE_BUILD_VERSION: v17.39 */
+/* NPF_STYLE_BUILD_VERSION: v17.40 */
 /* v14.83 — nettoyage des références techniques et limitation des cartouches routiers. */
 /* v14.81 — recherche phonétique nationale élargie aux fragments sur deux lettres. */
 /* v14.80 — Brive conservé uniquement sous LFSL. */
@@ -18248,4 +18248,45 @@ body.npf-calculator-modal-open {
     #npf-startup-diag-marker { grid-column: 3; grid-row: 1; }
     #npf-startup-diag-export { grid-column: 4; grid-row: 1; }
     #npf-startup-diag-close { grid-column: 5; grid-row: 1; }
+}
+
+/* v17.40 — bandeau d'information non bloquant (GLR, FdS, GAAR, BFG). */
+.npf-info-banner {
+    position: fixed;
+    top: calc(env(safe-area-inset-top, 0px) + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 100001;
+    display: none;
+    align-items: center;
+    gap: 10px;
+    max-width: min(92vw, 720px);
+    padding: 10px 12px 10px 16px;
+    border-radius: 12px;
+    background: rgba(15, 23, 42, 0.92);
+    color: #ffffff;
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1.3;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+    pointer-events: auto;
+}
+.npf-info-banner.npf-info-banner-error {
+    background: rgba(153, 27, 27, 0.94);
+}
+.npf-info-banner-text {
+    flex: 1 1 auto;
+}
+.npf-info-banner-close {
+    flex: 0 0 auto;
+    width: 34px;
+    height: 34px;
+    border: none;
+    border-radius: 17px;
+    background: rgba(255, 255, 255, 0.18);
+    color: #ffffff;
+    font-size: 22px;
+    font-weight: 900;
+    line-height: 1;
+    cursor: pointer;
 }

@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
-Mise à jour : 28/09/2026
-Version de travail actuelle : TEST v17.39
+Mise à jour : 29/09/2026
+Version de travail actuelle : TEST v17.40
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,14 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.40 — plus aucune fenêtre bloquante GLR / FdS / GAAR / BFG (bandeau 8 s) ;
+  GLR : session expirée -> code directement, session valide jamais effacée sur
+  coupure réseau, 1 requête par rafraîchissement, 1 essai / min après 3
+  échecs ; FdS / GAAR : pont BFG refusé -> mot de passe de session puis
+  téléchargement NAS (chemin v16.62), NAS injoignable -> bandeau ; DIAG :
+  « SÉLECTION FEU », temps GPS / calculateur par minute, enregistrement allégé
+  (≈ 12-20 k car.) et reporté pendant un geste ; commune survolée calculée une
+  fois par position ;
 - v17.39 — HT n'attend plus les tuiles de marge : après un geste et après un
   déplacement hors geste, HT dessine dès que les tuiles VISIBLES sont peintes ;
   attente complète gardée si elles ne le sont pas, au démarrage et à
@@ -345,6 +353,15 @@ NON IMPLÉMENTÉ / OUVERT :
   (« ANALYSE DIAG v17.32 SOL + VOL ») : 5 défauts du DIAG lui-même relevés
   (D1 à D5) et 9 recommandations classées gain / risque (R1 à R9), aucune
   implémentée. Historique : À MESURER -> MESURÉ ;
+- v17.40 : À MESURER sur iPad, sans mode avion (GLR et FdS avec BFG TEST
+  déconnecté en premier) ;
+- Côté NAS (À VÉRIFIER, hors dépôt) : les réponses d'erreur de
+  npf-global-link-api.php (session expirée) et du pont BFG (refus) arrivent
+  probablement sans en-têtes CORS (Safari : « Load failed » en 65-880 ms) ;
+- Lectures du pack lentes et durables (29/09 07:18-07:30, aussi calques
+  éteints) : cause NON PROUVÉE, pas liée à la sélection d'un feu (aucun accès
+  IndexedDB / Cache dans ce chemin) ; À MESURER avec « SÉLECTION FEU » et une
+  fermeture complète de l'application ;
 - v17.39 : À MESURER sur iPad, sans mode avion, protocole alterné (calques
   éteints / HT / calques éteints / HT, application fermée et 5 min de pause
   entre essais) : sections « LECTURES DU PACK » et « DERNIERS LANCEMENTS » ;
@@ -379,38 +396,38 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.39
-Date : 28/09/2026
-Base : v17.38 (commitée bba76ef, À MESURER)
+Version : TEST v17.40
+Date : 29/09/2026
+Base : v17.39 (commitée 7a37a69, À MESURER)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.39.txt
-2_Index_v17.39.txt
-3_Manifest_v17.39.txt
-4_Script_v17.39.txt
-5_SIA_v17.39.txt
-6_Style_v17.39.txt
-7_Sw_v17.39.txt
+1_Modifications_v17.40.txt
+2_Index_v17.40.txt
+3_Manifest_v17.40.txt
+4_Script_v17.40.txt
+5_SIA_v17.40.txt
+6_Style_v17.40.txt
+7_Sw_v17.40.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.39
-- Manifest : start_url = ./index.html?appv=v17.39
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.39
-- Style : NPF_STYLE_BUILD_VERSION = v17.39
-- Service Worker : `sw-v17-39_ht_marge` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-39_ht_marge`, `npf-q400-test-app-data-v1`,
+- Index : APP_VERSION = v17.40
+- Manifest : start_url = ./index.html?appv=v17.40
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.40
+- Style : NPF_STYLE_BUILD_VERSION = v17.40
+- Service Worker : `sw-v17-40_bandeaux_glr_fds` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-40_bandeaux_glr_fds`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-15.69-radio1026-1-maplite1`
 - SIA_DATA_REVISION (SW / Index) : 15.69-radio1026-1-maplite1 (inchangée)
-- sia.js v17.39 : strictement identique à v17.38.
+- sia.js v17.40 : strictement identique à v17.39.
 
 STATUT DE VALIDATION :
-- validation statique v17.39 effectuée avant livraison : Script/SIA/SW OK, script
+- validation statique v17.40 effectuée avant livraison : Script/SIA/SW OK, script
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
-- `sia.js` et moteur tuiles (src/100) identiques à v17.38 ;
-- tests Chrome v17.38 / v17.39 : entrée v17.39 ;
+- `sia.js` et moteur tuiles (src/100) identiques à v17.39 ;
+- tests Chrome v17.39 / v17.40 : entrée v17.40 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
-  sur iPad ; v17.32 MESURÉE ; v17.29, v17.31, v17.33 à v17.39 À MESURER.
+  sur iPad ; v17.32 MESURÉE ; v17.29, v17.31, v17.33 à v17.40 À MESURER.
 
 
 2. PROTOCOLE DE TRAVAIL À RESPECTER
@@ -1932,6 +1949,128 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.40 — PLUS DE FENÊTRE BLOQUANTE ; GLR ; FdS / GAAR (RÈGLE
+BFG) ; DIAG ALLÉGÉ ; COMMUNE SURVOLÉE
+Date : 29/09/2026
+Base fonctionnelle : v17.39 (commit 7a37a69)
+DIAG de référence : NPF_DIAG_2026-09-29_07-30 (essai en voiture, 4G, v17.39).
+
+RÉGRESSIONS CORRIGÉES
+- v17.37 (GLR) : une session expirée à minuit était retentée auprès du NAS ;
+  le refus arrivait en « Load failed » (sans en-têtes CORS probablement) et le
+  code n'était jamais proposé ; 2 requêtes « positions » + 3 sondes toutes les
+  15 s ; alertes bloquantes. Corrigé (partie 2).
+- v17.38 (FdS / BFG) : un pont refusé (BFG TEST non connecté, « Load failed »
+  rapide) affichait « NAS lent ou injoignable ». Corrigé (partie 3).
+- Historique (point 3.1) : la demande du mot de passe après un pont BFG en
+  échec a existé jusqu'en v16.62 (handleBriefingDocMapButtonClick : pont, puis
+  openBriefingDocsPasswordModal). Elle a été retirée en v16.63 (09/09) pour les
+  iPad associés (« un iPad associé à BFG ne doit jamais retomber sur le mot de
+  passe NPF ») : message d'association seul, de v16.63 à v17.37. La v17.40
+  rétablit le chemin v16.62 pour le cas « pont refusé », selon la règle de
+  Bastien.
+- Alertes : les fenêtres alert() GLR / FdS figeaient carte, suivi GPS et
+  minuteries (blocages de 7 à 12 s dans le DIAG du 29/09). Corrigé (partie 1).
+
+NON-RÉGRESSION — COMPORTEMENTS AVANT MODIFICATION (v17.39)
+1. GLR sans session : code (src/180:1549, 384), connexion (439, 1728),
+   positions, bouton vert (982).
+2. GLR : OFF masque sans effacer la session (1534) ; ON sans code si session.
+3. GLR session expirée : NAS interrogé d'abord (1403-1520), code seulement sur
+   refus 401 clair.
+4. GLR réseau coupé : 2 requêtes par rafraîchissement (1429), session
+   conservée, alerte bloquante sur appui (1512).
+5. FdS, BFG connecté : pont (src/170:140) -> NAS (854) -> affichage (937).
+6. FdS, BFG non connecté (iPad associé) : alerte, jamais de mot de passe
+   (912-927, garde-fou 579-583).
+7. GAAR : même chemin.
+8. Aucune FdS du jour : alerte (958).
+9. SafeSky : état relu au lancement (src/030:682), enregistré (src/140:3781).
+10. Démarrage : communes après carte complète, PÉLIC après première tuile
+    (src/060:84, 191).
+11. Restitution tuiles -> VFR -> HT -> Routes (src/080:956, src/090:1027).
+12. Recentrage économe / suivi GPS (src/260:969).
+13. Sélection d'un feu (src/050:599, 793 ; src/150:32).
+14. alert() : src/170:582, 700, 745, 925, 949, 958, 963, 997 ;
+    src/180:1512, 1680.
+15. Export DIAG (src/010).
+
+MODIFICATIONS
+1. src/050 : showNpfInfoBanner / hideNpfInfoBanner — bandeau non bloquant en
+   haut de la carte, 8 s, fermeture ×, dernier message seulement ; noté par le
+   DIAG et par le journal des lancements. style.css : .npf-info-banner.
+2. src/170 (FdS / GAAR / BFG) :
+   - toutes les alert() -> bandeau ;
+   - pont BFG : nouvelle tentative seulement sur délai dépassé (9 s) ; un
+     « Load failed » rapide est classé « refusé » si une sonde courte du NAS
+     (no-cors, 4 s au plus) répond, « indisponible » sinon ; 4xx / erreur
+     explicite = refusé ; 5xx = indisponible ;
+   - ensureBriefingDocsInteractiveAuthorization : pont refusé -> fenêtre du
+     mot de passe de session (autorisée pour un iPad associé dans ce cas),
+     puis téléchargement NAS et affichage (inchangé) ; NAS injoignable ou délai
+     dépassé -> bandeau « NAS lent ou injoignable, réessaie dans un moment. »,
+     sans mot de passe ;
+   - textes : « NPF-Q400 » dans la fenêtre du mot de passe et le message
+     d'association (« Ouvre BFG TEST, connecte-toi, puis réessaie »).
+3. src/180 (GLR) :
+   - session expirée localement : code directement, aucune requête au NAS,
+     arrêt des requêtes automatiques ; au lancement, GLR repasse OFF (v17.36) ;
+   - session valide : jamais effacée sur coupure réseau / « Load failed » ;
+     bandeau discret au premier échec d'une série et sur appui ; code
+     seulement sur refus clair du NAS (401 global_session_invalid) ;
+   - 1 requête « positions » par rafraîchissement ; après 3 échecs de suite,
+     1 essai par minute ; sondes du NAS une seule fois par série ; retour à
+     15 s dès un succès ; essai immédiat au retour du réseau / premier plan ;
+   - OFF n'efface rien ; OFF -> ON avec session valide sans code.
+4. src/260 : commune survolée mémorisée (position + données chargées) : un
+   seul calcul par position, affichage identique.
+5. src/010 (DIAG) : événement « SÉLECTION FEU » (carte / liste) et liste dans
+   « LECTURES DU PACK » ; ligne par minute : temps du traitement GPS et du
+   calculateur ; en-tête : « Messages affichés en bandeau » ; enregistrement
+   allégé (30 derniers événements, 10 mesures chacun, listes raccourcies) et
+   reporté de 2 s pendant un geste ; « Charge DIAG » : taille et reports.
+6. src/050 : points d'accroche DIAG de la sélection d'un feu (carte, liste).
+7. index.html : journal des lancements informé des messages en bandeau.
+8. Versions v17.40 (sw `sw-v17-40_bandeaux_glr_fds` : constantes seulement).
+
+TESTS CHROME (NAS simulé dans la page, v17.39 / v17.40)
+| # | Comportement | v17.39 | v17.40 |
+| 1 | GLR 1re connexion : code, connexion, positions, bouton vert | OK | OK |
+| 2 | GLR OFF sans déconnexion, ON sans code | OK | OK |
+| 3 | GLR session expirée : code directement | KO (2 requêtes, alerte) | OK (0 requête) |
+| 4 | GLR réseau coupé : session conservée, bandeau, reprise | alerte, 2 req. / 15 s | OK (1 req., 1 / min après 3 échecs, reprise au retour réseau) |
+| 5 | FdS BFG connecté : sans demande | OK | OK |
+| 6 | FdS BFG non connecté : mot de passe -> NAS -> affichage | KO (alerte NAS) | OK |
+| 7 | GAAR cas 5 et 6 | OK / KO | OK / OK |
+| 8 | Aucune FdS du jour : bandeau | alerte | OK |
+| 9 | SafeSky gardé après relance (OFF et ON) | OK | OK |
+| 10 | Démarrage en ligne et hors ligne : carte, communes, PÉLIC | OK | OK |
+| 11 | Restitution HT + Routes (6 gestes) | référence | IDENTIQUE |
+| 12 | Recentrage économe ON / OFF, suivi (setView 4 / 15) | référence | IDENTIQUE |
+| 13 | Sélection d'un feu carte / liste | référence | IDENTIQUE |
+| 14 | Aucune alert() ; carte qui bouge pendant un bandeau | KO | OK |
+| 15 | Export complet, sans « NPF » seul, charge faible | « NPF » seul (textes d'alerte) | OK |
+- Complément : NAS entièrement injoignable et délai dépassé -> bandeau « NAS
+  lent ou injoignable », sans mot de passe (v17.40) ; refus 401 du pont ->
+  mot de passe puis affichage.
+- Commune survolée : 8 positions -> 10 calculs (18 en v17.39), textes
+  identiques.
+- Enregistrement DIAG : 12 à 20 k car. (75 k sur iPad le 29/09), écriture ≤ 1 ms
+  dans Chrome. Aucune exception, aucune erreur console.
+
+VALIDATION AVANT LIVRAISON
+- `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés.
+- Syntaxe Script / SIA / SW : OK. Script inline Index : OK. Manifest JSON : OK.
+- Identiques à v17.39 : sia.js, src/100 (moteur tuiles), src/120 (Routes),
+  src/090 et src/110 (attentes HT), src/140 (SafeSky), src/310 (calculateur).
+
+NON CODÉ (À DÉCIDER)
+- Côté NAS : en-têtes CORS sur toutes les réponses d'erreur (GLR, pont BFG).
+- SafeSky (928 rafraîchissements, blocages ≤ 184 ms) : espacement en 4G.
+- Calculateur recalculé à chaque position GPS après sélection d'un feu.
+
+--------------------------------------------------------------------------------
 
 VERSION TEST v17.39 — HT N'ATTEND PLUS LES TUILES DE MARGE ; MESURES DES
 LECTURES DU PACK

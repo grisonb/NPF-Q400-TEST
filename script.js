@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.39';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.40';
 
 
 /*
@@ -338,17 +338,55 @@ const NPF_STARTUP_DIAGNOSTIC = (() => {
         gpsSummary: state.gpsSummary,
         gpsSummarySim: state.gpsSummarySim,
         layerSummary: state.layerSummary,
-        interactions: state.siaInteractions.slice(-80),
-        stalls: state.stalls.slice(0, 20),
-        longTasks: state.longTasks.slice(0, 20),
+        /* v17.40 — enregistrement allégé : 30 derniers événements, détails
+         * limités aux 10 premières mesures (les instantanés de couches en
+         * comptaient ≈ 35). */
+        interactions: state.siaInteractions.slice(-30).map(entry => ({
+            t: entry.t,
+            at: entry.at,
+            kind: entry.kind,
+            detail: String(entry.detail || '').slice(0, 160),
+            metrics: entry.metrics && typeof entry.metrics === 'object'
+                ? Object.fromEntries(Object.entries(entry.metrics).slice(0, 10))
+                : null
+        })),
+        stalls: state.stalls.slice(0, 12),
+        longTasks: state.longTasks.slice(0, 12),
         /* v17.32 — extrait du DIAG détaillé, restitué dans l'export suivant. */
         detail: npfDiagDetailPersistSnapshot()
     });
 
+    /* v17.40 — aucune écriture pendant un geste manuel : report de 2 s. Les
+     * écritures au passage en arrière-plan restent immédiates. */
+    let persistDeferTimer = null;
+    const isMapGestureInProgress = () => {
+        try {
+            return (typeof npfMapManualGestureLockActive !== 'undefined' && !!npfMapManualGestureLockActive)
+                || (typeof centerGpsFollowUserGestureActive !== 'undefined' && !!centerGpsFollowUserGestureActive);
+        } catch (_) {
+            return false;
+        }
+    };
+    const persistWhenIdle = () => {
+        if (isMapGestureInProgress()) {
+            state.persistDeferred = (state.persistDeferred || 0) + 1;
+            if (!persistDeferTimer) {
+                persistDeferTimer = setTimeout(() => {
+                    persistDeferTimer = null;
+                    persistWhenIdle();
+                }, 2000);
+            }
+            return;
+        }
+        persist();
+    };
+
     const persist = () => {
         const started = now();
         try {
-            localStorage.setItem(DIAG_PERSIST_KEY, JSON.stringify(buildPersistedSnapshot()));
+            const serialized = JSON.stringify(buildPersistedSnapshot());
+            localStorage.setItem(DIAG_PERSIST_KEY, serialized);
+            state.persistChars = serialized.length;
             state.persistCount += 1;
             const duration = Math.max(0, now() - started);
             state.persistTotalMs += duration;
@@ -359,7 +397,7 @@ const NPF_STARTUP_DIAGNOSTIC = (() => {
     mark('script_eval', 'Script NPF-Q400 exécuté');
 
     try {
-        setInterval(persist, DIAG_PERSIST_INTERVAL_MS);
+        setInterval(persistWhenIdle, DIAG_PERSIST_INTERVAL_MS);
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'hidden') persist();
         }, { passive: true });
@@ -620,7 +658,11 @@ const NPF_DIAG_DETAIL = (() => {
         readMinutes: new Map(),
         lastHtCanvasUpdateAt: null,
         lastHtPaneToggleAt: null,
-        lastHtPaneVisible: null
+        lastHtPaneVisible: null,
+        /* v17.40 — sélections de feu et messages affichés en bandeau. */
+        fireSelections: [],
+        bannerCount: 0,
+        lastBanner: null
     };
 
     const safe = (callback, fallback = undefined) => {
@@ -1433,6 +1475,13 @@ const NPF_DIAG_DETAIL = (() => {
             state.gpsIgnoredDuringSimulation += 1;
             return;
         }
+        /* v17.40 — temps du traitement GPS et du calculateur, par minute. */
+        safe(() => {
+            const minute = readMinuteAt(info.t0);
+            minute.gpsMs += ms;
+            minute.gpsN += 1;
+            minute.calcMs += Number(cycle.parts.updateCalculatorData) || 0;
+        });
         const gps = cycle.sim ? state.gpsSim : state.gps;
         if (!cycle.sim) {
             const eco = ecoStat();
@@ -1518,6 +1567,21 @@ const NPF_DIAG_DETAIL = (() => {
         ht: !!safe(() => showHighVoltageLinesLayer, false),
         routes: !!safe(() => showRoadOverlayLayer, false)
     });
+    const readMinuteAt = t => {
+        const index = Math.floor(t / 60000);
+        let minute = state.readMinutes.get(index);
+        if (!minute) {
+            minute = {
+                index, at: wallAt(index * 60000), durations: [], n: 0, max: 0,
+                htOn: false, htOff: false, routesOn: false, routesOff: false,
+                gpsMs: 0, gpsN: 0, calcMs: 0
+            };
+            state.readMinutes.set(index, minute);
+            if (state.readMinutes.size > 60) state.readMinutes.delete(state.readMinutes.keys().next().value);
+        }
+        return minute;
+    };
+
     const notePackRead = (outcome, ms) => {
         if (outcome !== 'trouvée' && outcome !== 'absente' && outcome !== 'erreur-technique') return;
         const t = now();
@@ -1525,13 +1589,7 @@ const NPF_DIAG_DETAIL = (() => {
         if (state.firstPackReads.length < 20) {
             state.firstPackReads.push({ ms: round(ms), ht: layers.ht, routes: layers.routes });
         }
-        const index = Math.floor(t / 60000);
-        let minute = state.readMinutes.get(index);
-        if (!minute) {
-            minute = { index, at: wallAt(index * 60000), durations: [], n: 0, max: 0, htOn: false, htOff: false, routesOn: false, routesOff: false };
-            state.readMinutes.set(index, minute);
-            if (state.readMinutes.size > 60) state.readMinutes.delete(state.readMinutes.keys().next().value);
-        }
+        const minute = readMinuteAt(t);
         minute.n += 1;
         if (minute.durations.length < 600) minute.durations.push(round(ms));
         if (ms > minute.max) minute.max = round(ms);
@@ -2330,6 +2388,18 @@ const NPF_DIAG_DETAIL = (() => {
         economicRecenterChanged,
         economicRecenterSkipped,
         ecoMode,
+        fireSelected: (origin, item) => {
+            const name = String(item?.nom_standard || item?.name || 'feu').slice(0, 60);
+            pushCapped(state.fireSelections, { at: Date.now(), t: round(now()), origin: String(origin || '—'), name }, 20);
+            safe(() => npfDiagSiaInteraction('SÉLECTION FEU', `${origin} · ${name}`, null));
+        },
+        bannerShown: text => {
+            const clean = String(text || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+            state.bannerCount += 1;
+            state.lastBanner = { at: Date.now(), text: clean };
+            state.messages.push({ at: Date.now(), source: 'bandeau', text: clean });
+            if (state.messages.length > 30) state.messages.splice(0, state.messages.length - 30);
+        },
         bfgBridgeAttempt: entry => {
             state.bfgAttempts.push({
                 at: Date.now(),
@@ -2343,6 +2413,14 @@ const NPF_DIAG_DETAIL = (() => {
         }
     };
 })();
+
+/* v17.40 — sélection d'un feu (src/050) et bandeau d'information (src/050). */
+function npfDiagFireSelected(origin, item) {
+    try { NPF_DIAG_DETAIL.fireSelected(origin, item); } catch (_) {}
+}
+function npfDiagInfoBannerShown(text) {
+    try { NPF_DIAG_DETAIL.bannerShown(text); } catch (_) {}
+}
 
 /* v17.38 — tentative du pont BFG (appelé par src/170). */
 function npfDiagBfgBridgeAttempt(entry) {
@@ -2414,22 +2492,23 @@ function npfDiagDetailPersistSnapshot() {
                 routes: s.routesCount,
                 ht: s.htCount
             },
-            gestures: s.gestures.slice(-40),
-            firstBlocks: s.firstBlocks.slice(0, 15).filter(item => !s.blocks.slice(-30).includes(item)),
-            blocks: s.blocks.slice(-30),
-            restores: s.restores.slice(-20),
-            routes: s.routesRebuilds.slice(-15),
-            ht: s.htRebuilds.slice(-15),
-            markers: s.markers.slice(-40),
+            gestures: s.gestures.slice(-20),
+            firstBlocks: s.firstBlocks.slice(0, 8).filter(item => !s.blocks.slice(-15).includes(item)),
+            blocks: s.blocks.slice(-15),
+            restores: s.restores.slice(-12),
+            routes: s.routesRebuilds.slice(-8),
+            ht: s.htRebuilds.slice(-8),
+            markers: s.markers.slice(-20),
             simPeriods: s.simPeriods.slice(-10),
             ecoPeriods: s.ecoPeriods.slice(-10),
-            followChanges: s.followChanges.slice(-20),
-            nasRequests: s.nasRequests.slice(-30),
+            followChanges: s.followChanges.slice(-10),
+            nasRequests: s.nasRequests.slice(-15),
             felt: s.felt.slice(-20),
-            messages: s.messages.slice(-30),
-            bfgAttempts: s.bfgAttempts.slice(-20),
+            messages: s.messages.slice(-15),
+            bfgAttempts: s.bfgAttempts.slice(-10),
             readMinutes: Array.from(s.readMinutes.values()).slice(-15).map(npfDiagCompactReadMinute),
-            slowReadBatches: s.slowReadBatches.slice(-20),
+            slowReadBatches: s.slowReadBatches.slice(-10),
+            fireSelections: s.fireSelections.slice(-10),
             memoryPeak: s.memoryPeak,
             cellCache: { ...s.cellCache }
         };
@@ -2652,7 +2731,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.39 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.40 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -2868,14 +2947,24 @@ function npfDiagLayerMix(on, off) {
 function npfDiagCompactReadMinute(minute) {
     return {
         at: minute.at, n: minute.n, median: npfDiagMedian(minute.durations), max: minute.max,
-        ht: npfDiagLayerMix(minute.htOn, minute.htOff), routes: npfDiagLayerMix(minute.routesOn, minute.routesOff)
+        ht: minute.n ? npfDiagLayerMix(minute.htOn, minute.htOff) : '—',
+        routes: minute.n ? npfDiagLayerMix(minute.routesOn, minute.routesOff) : '—',
+        gpsMs: Math.round(Number(minute.gpsMs) || 0), gpsN: Number(minute.gpsN) || 0,
+        calcMs: Math.round(Number(minute.calcMs) || 0)
     };
 }
 
 function formatNpfDiagReadMinuteLine(item) {
     return '   ' + formatNpfDiagClock(item.at) + ' | ' + item.n + ' lectures | médiane '
         + (item.median === null ? '—' : item.median + ' ms') + ' | max ' + item.max + ' ms'
-        + ' | HT ' + item.ht + ' · Routes ' + item.routes;
+        + ' | HT ' + item.ht + ' · Routes ' + item.routes
+        + (item.gpsMs !== undefined
+            ? ' | traitement GPS ' + item.gpsMs + ' ms (' + item.gpsN + ' positions) · calculateur ' + item.calcMs + ' ms'
+            : '');
+}
+
+function formatNpfDiagFireSelectionLine(item) {
+    return '   ' + formatNpfDiagClock(item.at) + ' | ' + item.origin + ' | ' + item.name;
 }
 
 function formatNpfDiagSlowBatchLine(item) {
@@ -2920,6 +3009,9 @@ function appendNpfDiagPackReadSection(lines) {
     lines.push('Paquets de lectures lents (> 1 s) :');
     if (!s.slowReadBatches.length) lines.push('   Aucun.');
     s.slowReadBatches.forEach(item => lines.push(formatNpfDiagSlowBatchLine(item)));
+    lines.push('Sélections de feu (v17.40) :');
+    if (!s.fireSelections.length) lines.push('   Aucune.');
+    s.fireSelections.forEach(item => lines.push(formatNpfDiagFireSelectionLine(item)));
 }
 
 /* v17.38 — FdS / BFG / GLR : requêtes NAS, temps ressenti, messages, pont BFG. */
@@ -2976,6 +3068,15 @@ function appendNpfDiagNasSection(lines) {
     block('Requêtes NAS (30 dernières) :', s.nasRequests, formatNpfDiagNasRequestLine, 'Aucune requête.');
 }
 
+/* v17.40 — messages affichés en bandeau (à la place des anciennes alertes). */
+function safe_npfDiagBannerHeader(lines) {
+    try {
+        const s = NPF_DIAG_DETAIL.state;
+        lines.push('Messages affichés en bandeau (remplacent les alertes) : ' + s.bannerCount
+            + (s.lastBanner ? ' | dernier ' + formatNpfDiagClock(s.lastBanner.at) + ' « ' + s.lastBanner.text + ' »' : ''));
+    } catch (_) {}
+}
+
 /* v17.37 — journal des lancements et stockage local (mesure seule). */
 function formatNpfDiagChars(count) {
     const chars = Math.max(0, Math.round(Number(count) || 0));
@@ -3024,6 +3125,7 @@ function appendNpfDiagLaunchStorageHeader(lines) {
         + ' | 5 plus grosses clés (car.) : ' + formatNpfDiagStorageTop(summary.top)
     );
     lines.push('Écritures localStorage refusées (cette session) : ' + formatNpfDiagRefusedWrites(launchLog.refusedWrites()));
+    safe_npfDiagBannerHeader(lines);
     lines.push(
         'SafeSky (showTrafficLayer) relu au lancement : ' + JSON.stringify(current.safeSkyAtLaunch)
         + ' | valeur actuelle : ' + JSON.stringify(readRaw('showTrafficLayer'))
@@ -3234,6 +3336,7 @@ function appendNpfDiagDetailRestoredSections(lines, detail) {
         + (item.active ? 'ACTIVÉ' : 'DÉSACTIVÉ') + ' | ' + item.mode);
     section('Lectures du pack par minute :', detail.readMinutes, formatNpfDiagReadMinuteLine);
     section('Paquets de lectures lents (> 1 s) :', detail.slowReadBatches, formatNpfDiagSlowBatchLine);
+    section('Sélections de feu :', detail.fireSelections, formatNpfDiagFireSelectionLine);
     section('Pont BFG (tentatives) :', detail.bfgAttempts, formatNpfDiagBfgAttemptLine);
     section('Temps ressenti FdS / GLR :', detail.felt, formatNpfDiagFeltLine);
     section('Messages FdS / BFG / GLR affichés :', detail.messages, formatNpfDiagMessageLine);
@@ -3897,6 +4000,8 @@ function buildNpfStartupDiagnosticExportText() {
         + Math.round(runtime.diagPersistCount || 0) + ' écritures groupées | '
         + 'écriture max ' + Math.round(runtime.diagPersistMaxMs || 0) + ' ms | '
         + 'temps total ' + Math.round(runtime.diagPersistTotalMs || 0) + ' ms'
+        + ' | taille ' + Math.round(Number(NPF_STARTUP_DIAGNOSTIC.state.persistChars) || 0).toLocaleString('fr-FR') + ' car.'
+        + ' | reportées (geste) ' + Math.round(Number(NPF_STARTUP_DIAGNOSTIC.state.persistDeferred) || 0)
         + (() => {
             try {
                 const launchCost = window.NPF_LAUNCH_LOG?.cost?.();
@@ -7949,6 +8054,8 @@ function buildActiveFireIcon(label = 'Feu') {
 }
 
 function selectFireFromHistoryMap(item) {
+    /* v17.40 — DIAG : sélection d'un feu depuis la carte. */
+    try { npfDiagFireSelected('carte', item); } catch (_) {}
     clearAirportDestination({ restoreFire: false, redraw: false });
     const normalized = normalizeHistoryCommune(item);
     if (!normalized) return;
@@ -8143,6 +8250,8 @@ function displayFireHistory() {
         });
 
         li.querySelector('.fire-history-select').addEventListener('click', () => {
+            /* v17.40 — DIAG : sélection d'un feu depuis la liste. */
+            try { npfDiagFireSelected('liste', item); } catch (_) {}
             clearAirportDestination({ restoreFire: false, redraw: false });
             currentCommune = item;
             localStorage.setItem('currentCommune', JSON.stringify(item));
@@ -8348,6 +8457,54 @@ function computeConvexHull(latLngPoints) {
     return lower.concat(upper);
 }
 
+/*
+ * v17.40 — bandeau d'information non bloquant (remplace les alert() GLR,
+ * FdS, GAAR et BFG). Une alert() arrêtait tout le code tant qu'elle restait
+ * ouverte : carte, suivi GPS et minuteries figés. Le bandeau disparaît seul
+ * après 8 s, se ferme à la main, et ne garde que le dernier message.
+ */
+let npfInfoBannerTimer = null;
+
+function showNpfInfoBanner(message, options = {}) {
+    const text = String(message || '').trim();
+    if (!text) return;
+    try {
+        let banner = document.getElementById('npf-info-banner');
+        if (!banner) {
+            banner = document.createElement('div');
+            banner.id = 'npf-info-banner';
+            banner.className = 'npf-info-banner';
+            banner.setAttribute('role', 'status');
+            banner.setAttribute('aria-live', 'polite');
+            banner.innerHTML = '<span class="npf-info-banner-text"></span>'
+                + '<button type="button" class="npf-info-banner-close" aria-label="Fermer">×</button>';
+            banner.querySelector('.npf-info-banner-close').addEventListener('click', event => {
+                event.preventDefault();
+                event.stopPropagation();
+                hideNpfInfoBanner();
+            });
+            document.body.appendChild(banner);
+        }
+        banner.querySelector('.npf-info-banner-text').textContent = text;
+        banner.classList.toggle('npf-info-banner-error', options.kind === 'error');
+        banner.style.display = 'flex';
+        if (npfInfoBannerTimer) clearTimeout(npfInfoBannerTimer);
+        npfInfoBannerTimer = setTimeout(hideNpfInfoBanner, Number(options.durationMs) > 0 ? Number(options.durationMs) : 8000);
+    } catch (_) {}
+    try { npfDiagInfoBannerShown(text); } catch (_) {}
+    try { window.NPF_LAUNCH_LOG?.noteDisplayedMessage?.(text); } catch (_) {}
+}
+
+function hideNpfInfoBanner() {
+    if (npfInfoBannerTimer) {
+        clearTimeout(npfInfoBannerTimer);
+        npfInfoBannerTimer = null;
+    }
+    try {
+        const banner = document.getElementById('npf-info-banner');
+        if (banner) banner.style.display = 'none';
+    } catch (_) {}
+}
 // =========================================================================
 // LOGIQUE PRINCIPALE DE L'APPLICATION
 // =========================================================================
@@ -29695,9 +29852,11 @@ async function tryAuthorizeBriefingDocsFromBfgBridge(options = {}) {
     if (npfBfgBridgeAuthorizationPromise) return npfBfgBridgeAuthorizationPromise;
 
     /*
-     * v17.38 — une seule nouvelle tentative, et seulement si l'échec vient d'un
-     * délai dépassé ou d'une erreur réseau. Le délai de chaque requête reste
-     * 9 s. Un refus réel du NAS n'est jamais relancé.
+     * v17.38 — une seule nouvelle tentative ; délai de chaque requête : 9 s.
+     * v17.40 — nouvelle tentative seulement sur délai dépassé. Un « Load
+     * failed » rapide alors que le NAS répond (autre requête récente ou sonde)
+     * est un refus du pont (BFG TEST non connecté) : l'appelant demande alors le
+     * mot de passe de session, comme jusqu'en v16.62.
      */
     const runBridgeAttempt = async attempt => {
         const startedAt = performance.now();
@@ -29749,10 +29908,17 @@ async function tryAuthorizeBriefingDocsFromBfgBridge(options = {}) {
         } catch (error) {
             const timedOut = error?.name === 'AbortError';
             npfBfgBridgeLastError = String(error?.message || error || 'pont_indisponible');
-            npfBfgBridgeLastStatus = timedOut ? 'délai dépassé' : 'indisponible';
+            if (timedOut) {
+                npfBfgBridgeLastStatus = 'délai dépassé';
+                report(npfBfgBridgeLastStatus, 0, npfBfgBridgeLastError);
+                return { session: null, retry: true };
+            }
+            const nasReachable = await isNpfNasReachableForBridge();
+            npfBfgBridgeLastStatus = nasReachable ? 'refusé' : 'indisponible';
+            if (nasReachable) npfBfgBridgeLastError = `${npfBfgBridgeLastError} (NAS joignable : pont refusé)`;
             if (!silent) console.warn('[BFG -> NPF-Q400] Pont indisponible:', error);
-            report(npfBfgBridgeLastStatus, 0, npfBfgBridgeLastError);
-            return { session: null, retry: true };
+            report(nasReachable ? 'refusé (Load failed, NAS joignable)' : 'indisponible', 0, npfBfgBridgeLastError);
+            return { session: null, retry: false };
         }
     };
 
@@ -29818,6 +29984,26 @@ function formatBriefingDocsSize(bytes) {
     if (!Number.isFinite(value) || value <= 0) return '';
     if (value >= 1024 * 1024) return `${(value / (1024 * 1024)).toFixed(1)} Mo`;
     return `${Math.max(1, Math.round(value / 1024))} Ko`;
+}
+
+/* v17.40 — le NAS répond-il en ce moment ? Sonde courte (4 s au plus) sans
+ * en-tête : distingue un pont BFG refusé (« Load failed » rapide, NAS
+ * joignable) d'un NAS réellement injoignable. */
+async function isNpfNasReachableForBridge() {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 4000);
+    try {
+        await fetch(`${NPF_BRIEFING_DOCS_API_URL}?action=status&npf_probe=1&t=${Date.now()}`, {
+            mode: 'no-cors',
+            cache: 'no-store',
+            signal: controller.signal
+        });
+        return true;
+    } catch (_) {
+        return false;
+    } finally {
+        clearTimeout(timer);
+    }
 }
 
 async function fetchBriefingDocsNas(url, options = {}, timeoutMs = 15000) {
@@ -30107,18 +30293,18 @@ function closeBriefingDocsPasswordModal() {
 }
 
 function getBriefingDocsBfgAuthorizationUnavailableMessage() {
-    return 'BFG est associé à cet iPad mais l’autorisation FdS/GAAR n’est pas disponible. Ouvre ou actualise BFG puis réessaie. Aucun mot de passe NPF n’est demandé tant que BFG est associé.';
+    return 'BFG est associé à cet iPad mais l’autorisation FdS/GAAR n’est pas disponible. Ouvre BFG TEST, connecte-toi, puis réessaie.';
 }
 
-function openBriefingDocsPasswordModal(type) {
+function openBriefingDocsPasswordModal(type, options = {}) {
     const safeType = String(type || '').toLowerCase();
     // v17.29 — 'notams' : même fenêtre pour le bouton « Rafraîchir les NOTAM ».
     if (!NPF_BRIEFING_DOC_TYPES.includes(safeType) && safeType !== 'notams') return false;
 
-    /* v16.63 — un iPad associé à BFG ne doit jamais retomber sur le mot de
-     * passe NPF. Ce garde-fou couvre aussi un éventuel ancien appel résiduel. */
-    if (getStoredNpfBfgBridgeCredentials()) {
-        alert(getBriefingDocsBfgAuthorizationUnavailableMessage());
+    /* v16.63 — un iPad associé à BFG ne retombe pas sur le mot de passe…
+     * v17.40 — …sauf quand le pont BFG vient d'être refusé (allowWhenPaired). */
+    if (getStoredNpfBfgBridgeCredentials() && options.allowWhenPaired !== true) {
+        showNpfInfoBanner(getBriefingDocsBfgAuthorizationUnavailableMessage(), { kind: 'error' });
         return false;
     }
 
@@ -30138,7 +30324,9 @@ function openBriefingDocsPasswordModal(type) {
     npfBriefingDocsPendingType = safeType;
     const label = safeType === 'gaar' ? 'GAAR' : (safeType === 'notams' ? 'NOTAM' : 'FdS');
     if (title) title.textContent = `Accès ${label}`;
-    if (help) help.textContent = `Utilise le mot de passe NPF. Pour associer BFG à cet iPad, ferme cette fenêtre puis utilise le bouton BFG dédié.`;
+    if (help) help.textContent = options.reason === 'bfg-refused'
+        ? 'Pont BFG refusé : BFG TEST n’est pas connecté. Saisis le mot de passe de session NPF-Q400 pour télécharger le document.'
+        : `Utilise le mot de passe NPF-Q400. Pour associer BFG à cet iPad, ferme cette fenêtre puis utilise le bouton BFG dédié.`;
     if (input) { input.value = ''; input.style.display = ''; }
     if (authorizeButton) authorizeButton.style.display = '';
     if (separator) separator.style.display = 'none';
@@ -30236,7 +30424,7 @@ async function displayBriefingDocInViewer(type, record, options = {}) {
     const safeType = String(type || '').toLowerCase();
     if (!NPF_BRIEFING_DOC_TYPES.includes(safeType)) return false;
     if (!isBriefingDocRecordForToday(record)) {
-        alert(`Aucune ${getBriefingDocLabel(safeType)} du jour enregistrée sur cet appareil.`);
+        showNpfInfoBanner(`Aucune ${getBriefingDocLabel(safeType)} du jour enregistrée sur cet appareil.`);
         return false;
     }
 
@@ -30281,7 +30469,7 @@ async function openBriefingDoc(type) {
         const record = await getBriefingDocRecord(safeType);
         return await displayBriefingDocInViewer(safeType, record);
     } catch (error) {
-        alert(`Ouverture ${getBriefingDocLabel(safeType)} impossible : ${error.message || error}`);
+        showNpfInfoBanner(`Ouverture ${getBriefingDocLabel(safeType)} impossible : ${error.message || error}`, { kind: 'error' });
         return false;
     }
 }
@@ -30455,13 +30643,23 @@ async function ensureBriefingDocsInteractiveAuthorization(type, options = {}) {
     if (paired) {
         await tryAuthorizeBriefingDocsFromBfgBridge({ silent: true });
         if (getStoredBriefingDocsSession()) return true;
-        /* v17.38 — le message d'association n'apparaît que si le NAS refuse
-         * réellement ; délai dépassé, réseau ou NAS indisponible : message NAS. */
-        const message = npfBfgBridgeLastStatus === 'refusé'
-            ? getBriefingDocsBfgAuthorizationUnavailableMessage()
-            : 'NAS lent ou injoignable, réessaie dans un moment.';
+        /*
+         * v17.40 — règle utilisateur : pont refusé (BFG TEST non connecté, y
+         * compris « Load failed » rapide pendant que le NAS répond) -> mot de
+         * passe de session, puis téléchargement NAS, comme jusqu'en v16.62.
+         * NAS entier injoignable (délai dépassé, aucune réponse) -> bandeau
+         * « NAS lent ou injoignable », sans demande de mot de passe.
+         */
+        if (npfBfgBridgeLastStatus === 'refusé') {
+            if (options.viewer === true) {
+                setBriefingDocViewerStatus('Pont BFG refusé : saisis le mot de passe de session.', { error: true });
+            }
+            openBriefingDocsPasswordModal(type, { allowWhenPaired: true, reason: 'bfg-refused' });
+            return false;
+        }
+        const message = 'NAS lent ou injoignable, réessaie dans un moment.';
         if (options.viewer === true) setBriefingDocViewerStatus(message, { error: true });
-        else alert(message);
+        else showNpfInfoBanner(message, { kind: 'error' });
         return false;
     }
 
@@ -30485,7 +30683,7 @@ async function handleBriefingDocMapButtonClick(type) {
     }
 
     if (!navigator.onLine) {
-        alert(`${getBriefingDocLabel(safeType)} du jour non téléchargée. Une connexion Internet est nécessaire pour la récupérer.`);
+        showNpfInfoBanner(`${getBriefingDocLabel(safeType)} du jour non téléchargée. Une connexion Internet est nécessaire pour la récupérer.`);
         return false;
     }
 
@@ -30494,12 +30692,12 @@ async function handleBriefingDocMapButtonClick(type) {
     try {
         const result = await refreshSingleBriefingDocFromNas(safeType);
         if (!isBriefingDocRecordForToday(result.record)) {
-            alert(`Aucune ${getBriefingDocLabel(safeType)} du jour disponible sur le NAS.`);
+            showNpfInfoBanner(`Aucune ${getBriefingDocLabel(safeType)} du jour disponible sur le NAS.`);
             return false;
         }
         return await displayBriefingDocInViewer(safeType, result.record);
     } catch (error) {
-        alert(`${getBriefingDocLabel(safeType)} : ${error.message || error}`);
+        showNpfInfoBanner(`${getBriefingDocLabel(safeType)} : ${error.message || error}`, { kind: 'error' });
         await refreshBriefingDocMapButtons();
         return false;
     }
@@ -30533,7 +30731,7 @@ function initializeBriefingDocsUi() {
         button.addEventListener('click', () => {
             closeBriefingDocSelectorModal();
             handleBriefingDocMapButtonClick(type).catch(error => {
-                alert(`${getBriefingDocLabel(type)} : ${error.message || error}`);
+                showNpfInfoBanner(`${getBriefingDocLabel(type)} : ${error.message || error}`, { kind: 'error' });
             });
         });
     };
@@ -32183,6 +32381,22 @@ function renderGlobalLinkPositions(positions) {
     updateGlobalLinkButton();
 }
 
+/*
+ * v17.40 — POSITIONS : une seule requête par rafraîchissement (plus de doublon
+ * immédiat) ; après 3 échecs de suite, un essai par minute seulement ; tests du
+ * NAS une seule fois par série d'échecs ; retour au rythme normal (15 s) dès
+ * qu'une réponse réussit. Une session expirée localement arrête les requêtes.
+ */
+const NPF_GLOBAL_LINK_BACKOFF_AFTER_FAILURES = 3;
+const NPF_GLOBAL_LINK_BACKOFF_INTERVAL_MS = 60000;
+let npfGlobalLinkConsecutiveFailures = 0;
+let npfGlobalLinkLastAttemptAt = 0;
+let npfGlobalLinkSeriesDiagnosticMessage = '';
+
+function isGlobalLinkSessionLocallyExpired(session) {
+    return !!session && !(Number(session.exp) > Date.now());
+}
+
 async function refreshGlobalLinkPositions(options = {}) {
     if (!npfGlobalLinkEnabled || npfGlobalLinkFetchInProgress) return false;
     if (!navigator.onLine) {
@@ -32190,62 +32404,53 @@ async function refreshGlobalLinkPositions(options = {}) {
         return false;
     }
     const docsSession = getStoredBriefingDocsSession();
-    /* v17.37 — réessayer avec la session existante, même après l'échéance locale. */
     const globalSession = readStoredGlobalLinkSessionForNas();
-    if (!docsSession || !globalSession) {
+    /* v17.40 — session expirée localement (échéance minuit) : aucune requête
+     * au NAS ; le code est demandé directement (comportement v17.36). */
+    const locallyExpired = isGlobalLinkSessionLocallyExpired(globalSession);
+    if (!docsSession || !globalSession || locallyExpired) {
         if (!docsSession) clearBriefingDocsSession();
+        if (locallyExpired) {
+            stopGlobalLinkRefreshTimer();
+            npfGlobalLinkLastAuthState = 'session-expirée-locale';
+        }
         updateGlobalLinkButton();
         if (!options.silent) await loadGlobalLinkCaptcha();
         return false;
     }
+    if (
+        options.silent
+        && npfGlobalLinkConsecutiveFailures >= NPF_GLOBAL_LINK_BACKOFF_AFTER_FAILURES
+        && Date.now() - npfGlobalLinkLastAttemptAt < NPF_GLOBAL_LINK_BACKOFF_INTERVAL_MS
+    ) {
+        return false;
+    }
+    npfGlobalLinkLastAttemptAt = Date.now();
     npfGlobalLinkFetchInProgress = true;
     updateGlobalLinkButton({ loading: true });
     let globalLinkSessionRefusedByNas = false;
     try {
-        let response = null;
-        let payload = null;
         let lastMessage = '';
-
-        /* v16.60 — Safari peut échouer AVANT toute réponse HTTP avec
-         * TypeError('Load failed'). Cette exception doit entrer elle aussi dans
-         * l'unique relance POSITIONS ; elle ne doit jamais invalider la session. */
-        for (let attemptIndex = 0; attemptIndex < 2; attemptIndex += 1) {
-            try {
-                response = await fetchGlobalLinkNas('positions', {
-                    method: 'GET',
-                    headers: globalLinkAuthHeaders(docsSession, globalSession)
-                }, 20000);
-                payload = await response.json().catch(() => null);
-                lastMessage = payload?.message || payload?.error || (!response.ok ? `Positions Global Link indisponibles (${response.status})` : '');
-                rememberGlobalLinkRequestState('positions', response, lastMessage);
-
-                if (response.ok && payload && payload.ok === true) break;
-
-                const temporaryLoadFail = isGlobalLinkTemporaryLoadFail(lastMessage);
-                if (temporaryLoadFail && attemptIndex === 0) {
-                    npfGlobalLinkLastAuthState = 'positions-load-fail-retry';
-                    await new Promise(resolve => setTimeout(resolve, 650));
-                    continue;
-                }
-                break;
-            } catch (requestError) {
-                lastMessage = String(requestError?.message || requestError || '');
-                rememberGlobalLinkRequestState('positions', { status: 0 }, lastMessage);
-                if (isGlobalLinkTemporaryNetworkError(requestError)) {
-                    npfGlobalLinkLastAuthState = attemptIndex === 0
-                        ? 'positions-network-retry'
-                        : 'positions-network-fail-temporaire';
-                    if (attemptIndex === 0) {
-                        await new Promise(resolve => setTimeout(resolve, 650));
-                        continue;
-                    }
-                }
-                throw requestError;
+        let response = null;
+        try {
+            response = await fetchGlobalLinkNas('positions', {
+                method: 'GET',
+                headers: globalLinkAuthHeaders(docsSession, globalSession)
+            }, 20000);
+        } catch (requestError) {
+            lastMessage = String(requestError?.message || requestError || '');
+            rememberGlobalLinkRequestState('positions', { status: 0 }, lastMessage);
+            if (isGlobalLinkTemporaryNetworkError(requestError)) {
+                npfGlobalLinkLastAuthState = 'positions-network-fail-temporaire';
             }
+            throw requestError;
         }
+        const payload = await response.json().catch(() => null);
+        lastMessage = payload?.message || payload?.error || (!response.ok ? `Positions Global Link indisponibles (${response.status})` : '');
+        rememberGlobalLinkRequestState('positions', response, lastMessage);
 
-        if (!response?.ok || !payload || payload.ok !== true) {
-            if (response?.status === 401) {
+        if (!response.ok || !payload || payload.ok !== true) {
+            if (response.status === 401) {
                 if (payload?.error === 'npf_authorization_required') clearBriefingDocsSession();
                 if (payload?.error === 'global_session_invalid') {
                     clearStoredGlobalLinkSession();
@@ -32257,28 +32462,38 @@ async function refreshGlobalLinkPositions(options = {}) {
             if (isGlobalLinkTemporaryLoadFail(lastMessage)) {
                 npfGlobalLinkLastAuthState = 'positions-load-fail-temporaire';
             }
-            throw new Error(lastMessage || `Positions Global Link indisponibles (${response?.status || 0})`);
+            throw new Error(lastMessage || `Positions Global Link indisponibles (${response.status || 0})`);
         }
 
         rememberGlobalLinkRequestState('positions', response, '');
         npfGlobalLinkLastAuthState = 'positions-ok';
         npfGlobalLinkNasConfirmedToken = globalSession.token;
         npfGlobalLinkNasConfirmedAt = Date.now();
+        npfGlobalLinkConsecutiveFailures = 0;
+        npfGlobalLinkSeriesDiagnosticMessage = '';
         renderGlobalLinkPositions(payload.positions || []);
         return true;
     } catch (error) {
+        npfGlobalLinkConsecutiveFailures += 1;
+        const firstFailureOfSeries = npfGlobalLinkConsecutiveFailures === 1;
+        const temporaryNetworkError = isGlobalLinkTemporaryNetworkError(error);
         let userMessage = String(error?.message || error || 'Erreur Global Link');
-        if (isGlobalLinkTemporaryNetworkError(error)) {
-            const diagnostic = await diagnoseGlobalLinkLoadFailure();
-            npfGlobalLinkLastAuthState = diagnostic.state;
-            if (diagnostic.state === 'positions-cors-fail') {
-                userMessage = 'Load failed — relais GLR joignable sans CORS : blocage CORS probable sur npf-global-link-api.php.';
-            } else if (diagnostic.state === 'positions-endpoint-glr-fail') {
-                userMessage = 'Load failed — NAS joignable via FDS/GAAR, mais endpoint npf-global-link-api.php inaccessible.';
-            } else if (diagnostic.state === 'positions-nas-reseau-fail') {
-                userMessage = 'Load failed — NAS non joignable depuis Safari, y compris via le relais FDS/GAAR.';
+        if (temporaryNetworkError) {
+            if (firstFailureOfSeries || !npfGlobalLinkSeriesDiagnosticMessage) {
+                const diagnostic = await diagnoseGlobalLinkLoadFailure();
+                npfGlobalLinkLastAuthState = diagnostic.state;
+                if (diagnostic.state === 'positions-cors-fail') {
+                    userMessage = 'Load failed — relais GLR joignable sans CORS : blocage CORS probable sur npf-global-link-api.php.';
+                } else if (diagnostic.state === 'positions-endpoint-glr-fail') {
+                    userMessage = 'Load failed — NAS joignable via FDS/GAAR, mais endpoint npf-global-link-api.php inaccessible.';
+                } else if (diagnostic.state === 'positions-nas-reseau-fail') {
+                    userMessage = 'Load failed — NAS non joignable depuis Safari, y compris via le relais FDS/GAAR.';
+                } else {
+                    userMessage = `Load failed — relais GLR joignable en CORS (HTTP ${diagnostic.glrCors?.status || 'réponse'}), requête authentifiée/en-têtes à contrôler.`;
+                }
+                npfGlobalLinkSeriesDiagnosticMessage = userMessage;
             } else {
-                userMessage = `Load failed — relais GLR joignable en CORS (HTTP ${diagnostic.glrCors?.status || 'réponse'}), requête authentifiée/en-têtes à contrôler.`;
+                userMessage = npfGlobalLinkSeriesDiagnosticMessage;
             }
         }
         rememberGlobalLinkRequestState(
@@ -32291,8 +32506,12 @@ async function refreshGlobalLinkPositions(options = {}) {
         if (!options.silent && globalLinkSessionRefusedByNas) {
             /* v17.37 — session réellement refusée par le NAS : nouveau code. */
             await loadGlobalLinkCaptcha();
-        } else if (!options.silent && !isGlobalLinkAbortError(error)) {
-            alert(`Global Link : ${userMessage}`);
+        } else if (!isGlobalLinkAbortError(error) && (!options.silent || firstFailureOfSeries)) {
+            /* v17.40 — bandeau discret, jamais de fenêtre bloquante ; la
+             * session valide est conservée. */
+            showNpfInfoBanner(temporaryNetworkError
+                ? 'GLR : positions indisponibles (réseau). Session conservée, nouvel essai automatique.'
+                : `Global Link : ${userMessage}`, { kind: temporaryNetworkError ? 'info' : 'error' });
         }
         return false;
     } finally {
@@ -32324,6 +32543,9 @@ function setGlobalLinkEnabled(enabled, options = {}) {
         updateGlobalLinkButton();
         return;
     }
+    /* v17.40 — nouvel allumage : rythme normal. */
+    npfGlobalLinkConsecutiveFailures = 0;
+    npfGlobalLinkLastAttemptAt = 0;
     startGlobalLinkRefreshTimer();
     updateGlobalLinkButton();
     if (options.refresh !== false) refreshGlobalLinkPositions({ silent: !!options.silent });
@@ -32342,10 +32564,10 @@ async function handleGlobalLinkButtonClick() {
         return;
     }
     const docsSession = await ensureGlobalLinkNpfAuthorization();
-    /* v17.37 — OFF -> ON : pas de nouveau code tant qu'une session existe ;
-     * le NAS dira si elle est encore valide. */
+    /* v17.37 — OFF -> ON : pas de nouveau code tant que la session est valide.
+     * v17.40 — session expirée localement : code directement (v17.36). */
     let globalSession = readStoredGlobalLinkSessionForNas();
-    if (!globalSession) {
+    if (!globalSession || isGlobalLinkSessionLocallyExpired(globalSession)) {
         await loadGlobalLinkCaptcha();
         return;
     }
@@ -32460,7 +32682,7 @@ function installGlobalLinkButtonInteractions(button) {
                 && error.message !== 'Autorisation annulée.'
                 && !isGlobalLinkAbortError(error)
             ) {
-                alert(`Global Link : ${error.message}`);
+                showNpfInfoBanner(`Global Link : ${error.message}`, { kind: 'error' });
             }
             updateGlobalLinkButton();
         });
@@ -32536,11 +32758,17 @@ function initializeGlobalLinkUi() {
     }
     if (!window.__npfGlobalLinkLifecycleBound) {
         window.__npfGlobalLinkLifecycleBound = true;
+        /* v17.40 — retour du réseau / premier plan : essai immédiat, même
+         * pendant l'espacement à un essai par minute. */
         window.addEventListener('online', () => {
-            if (npfGlobalLinkEnabled && window.__npfStartupCoreReady !== false) refreshGlobalLinkPositions({ silent: true });
+            if (npfGlobalLinkEnabled && window.__npfStartupCoreReady !== false) {
+                npfGlobalLinkLastAttemptAt = 0;
+                refreshGlobalLinkPositions({ silent: true });
+            }
         });
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible' && npfGlobalLinkEnabled && window.__npfStartupCoreReady !== false) {
+                npfGlobalLinkLastAttemptAt = 0;
                 refreshGlobalLinkPositions({ silent: true });
             }
         });
@@ -32556,7 +32784,8 @@ function initializeGlobalLinkUi() {
         if (!getStoredBriefingDocsSession()) {
             await tryAuthorizeBriefingDocsFromBfgBridge({ silent: true });
         }
-        if (!readStoredGlobalLinkSessionForNas() || !getStoredBriefingDocsSession()) {
+        const storedGlobalSession = readStoredGlobalLinkSessionForNas();
+        if (!storedGlobalSession || isGlobalLinkSessionLocallyExpired(storedGlobalSession) || !getStoredBriefingDocsSession()) {
             npfGlobalLinkEnabled = false;
             try { localStorage.setItem(NPF_GLOBAL_LINK_LAYER_ENABLED_KEY, '0'); } catch (_) {}
             updateGlobalLinkButton();
@@ -39657,10 +39886,47 @@ function forceNearestCommuneHudVisible(display) {
     } catch (_) {}
 }
 
+/*
+ * v17.40 — commune survolée calculée une seule fois par position : les
+ * rappels (250 ms, contrôle 5 s, reprise) réutilisent le dernier résultat tant
+ * que la position et les données (polygones communes / départements, base
+ * communes) n'ont pas changé et que le bandeau affiche encore ce résultat.
+ */
+let npfNearestCommuneLastKey = '';
+let npfNearestCommuneLastHtml = '';
+let npfNearestCommuneLastClass = '';
+
+function getNpfNearestCommuneCacheKey(lat, lon) {
+    const listInfo = list => (Array.isArray(list) ? list.length : -1);
+    return [
+        lat, lon,
+        typeof hasLoadedCommunes !== 'undefined' ? hasLoadedCommunes : '',
+        typeof communesPolygonData !== 'undefined' ? listInfo(communesPolygonData) : '',
+        typeof departmentsPolygonData !== 'undefined' ? listInfo(departmentsPolygonData) : '',
+        typeof allCommunes !== 'undefined' ? listInfo(allCommunes) : '',
+        typeof communesByCodeInsee !== 'undefined' && communesByCodeInsee instanceof Map ? communesByCodeInsee.size : ''
+    ].join('|');
+}
+
 function updateNearestCommuneDisplay(lat, lon) {
     const nearestDisplay = getOrCreateNearestCommuneDisplay();
     if (!nearestDisplay) return;
     forceNearestCommuneHudVisible(nearestDisplay);
+
+    const cacheKey = getNpfNearestCommuneCacheKey(Number(lat), Number(lon));
+    if (
+        cacheKey === npfNearestCommuneLastKey
+        && nearestDisplay.innerHTML === npfNearestCommuneLastHtml
+        && nearestDisplay.className === npfNearestCommuneLastClass
+        && nearestDisplay.style.display === 'flex'
+    ) {
+        return;
+    }
+    const rememberDisplay = () => {
+        npfNearestCommuneLastKey = cacheKey;
+        npfNearestCommuneLastHtml = nearestDisplay.innerHTML;
+        npfNearestCommuneLastClass = nearestDisplay.className;
+    };
 
     const showDisplay = (html, extraClass = '') => {
         nearestDisplay.style.display = 'flex';
@@ -39691,6 +39957,7 @@ function updateNearestCommuneDisplay(lat, lon) {
     const containedCommune = findCommuneContainingPoint(numericLat, numericLon);
     if (containedCommune) {
         showDisplay(buildLabel(containedCommune, 'Survolée'));
+        rememberDisplay();
 
         /*
          * v16.75 — ne plus charger les géométries départementales uniquement
@@ -39737,6 +40004,7 @@ function updateNearestCommuneDisplay(lat, lon) {
     }
 
     showDisplay('📍 Survolée: <b>non déterminée</b>', 'unknown');
+    rememberDisplay();
 }
 
 function refreshNearestCommuneDisplayFromKnownGps() {
