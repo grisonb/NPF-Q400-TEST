@@ -154,42 +154,13 @@ async function loadCommunesAliases() {
         return aliases;
     };
 
-    const storeAliases = async (payload) => {
-        const aliases = await parseAliasPayload(payload);
-        try {
-            /* v16.66 — stocker le payload compact d'origine, pas les objets
-             * alias déjà enrichis avec toute la commune cible. L'ancien cache
-             * expansé pouvait devenir très volumineux et bloquer Safari lors
-             * du JSON.stringify/localStorage. */
-            localStorage.setItem(COMMUNES_ALIASES_CACHE_KEY, JSON.stringify(payload));
-        } catch (_) {}
-        return aliases;
-    };
-
-    /* v16.58 — cache d'abord : les 6 000+ alias ne doivent plus bloquer
-     * l'affichage des PÉLIC pendant une requête réseau. Une copie locale valide
-     * est rendue immédiatement puis rafraîchie silencieusement en arrière-plan. */
-    try {
-        const cachedData = localStorage.getItem(COMMUNES_ALIASES_CACHE_KEY);
-        if (cachedData) {
-            const aliases = await parseAliasPayload(JSON.parse(cachedData));
-            if (aliases.length) {
-                communeAliasesLoadSource = 'cache-local';
-                setTimeout(async () => {
-                    try {
-                        const response = await fetchWithTimeout('./communes_aliases.json', { cache: 'no-cache' }, 5000);
-                        if (!response.ok) return;
-                        const updatedAliases = await storeAliases(await response.json());
-                        if (updatedAliases.length) {
-                            communeAliases = updatedAliases;
-                            communeAliasesLoadSource = 'fichier-reseau-maj';
-                        }
-                    } catch (_) {}
-                }, 1800);
-                return aliases;
-            }
-        }
-    } catch (_) {}
+    /*
+     * v17.47 — plus de copie des anciens noms dans le stockage local (1,5 M
+     * caractères, la moitié du quota Safari). Le fichier communes_aliases.json
+     * est gardé hors ligne par le service worker TEST : il est simplement relu
+     * à chaque lancement, après le démarrage principal.
+     */
+    const storeAliases = async (payload) => parseAliasPayload(payload);
 
     try {
         const response = await fetchWithTimeout('./communes_aliases.json', { cache: 'no-cache' }, 5000);

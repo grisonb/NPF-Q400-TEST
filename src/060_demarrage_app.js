@@ -317,6 +317,13 @@ async function initializeApp() {
      * carte (non bloquant). */
     try { processPendingOfflineDatabaseDeletions(); } catch (_) {}
 
+    /* v17.47 — anciennes copies communes du stockage local (≈ 2 M caractères),
+     * remplacées par les fichiers gardés hors ligne par le service worker. */
+    try {
+        localStorage.removeItem('communesAliasesCacheV3');
+        localStorage.removeItem('npfCommunesPopulationV1');
+    } catch (_) {}
+
     npfStartupDiagMark('map_init_start', 'Création carte — début');
     initMap();
     npfStartupDiagMark('map_init_ready', 'Carte Leaflet créée');
@@ -441,6 +448,9 @@ async function initializeApp() {
                     ])
                     .filter(([code]) => code)
             );
+
+            /* v17.47 — population du calque communes prise dans cette base. */
+            try { applyCommunesPopulationFromCommunes(); } catch (_) {}
 
             /* v16.66 — les alias ne bloquent plus le démarrage principal.
              * Le DIAG v16.65 a montré un blocage JavaScript d'environ 2,7 s au

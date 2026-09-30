@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.46';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.47';
 
 
 /*
@@ -3224,7 +3224,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.46 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.47 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -9516,6 +9516,13 @@ async function initializeApp() {
      * carte (non bloquant). */
     try { processPendingOfflineDatabaseDeletions(); } catch (_) {}
 
+    /* v17.47 — anciennes copies communes du stockage local (≈ 2 M caractères),
+     * remplacées par les fichiers gardés hors ligne par le service worker. */
+    try {
+        localStorage.removeItem('communesAliasesCacheV3');
+        localStorage.removeItem('npfCommunesPopulationV1');
+    } catch (_) {}
+
     npfStartupDiagMark('map_init_start', 'Création carte — début');
     initMap();
     npfStartupDiagMark('map_init_ready', 'Carte Leaflet créée');
@@ -9640,6 +9647,9 @@ async function initializeApp() {
                     ])
                     .filter(([code]) => code)
             );
+
+            /* v17.47 — population du calque communes prise dans cette base. */
+            try { applyCommunesPopulationFromCommunes(); } catch (_) {}
 
             /* v16.66 — les alias ne bloquent plus le démarrage principal.
              * Le DIAG v16.65 a montré un blocage JavaScript d'environ 2,7 s au
@@ -10201,42 +10211,13 @@ async function loadCommunesAliases() {
         return aliases;
     };
 
-    const storeAliases = async (payload) => {
-        const aliases = await parseAliasPayload(payload);
-        try {
-            /* v16.66 — stocker le payload compact d'origine, pas les objets
-             * alias déjà enrichis avec toute la commune cible. L'ancien cache
-             * expansé pouvait devenir très volumineux et bloquer Safari lors
-             * du JSON.stringify/localStorage. */
-            localStorage.setItem(COMMUNES_ALIASES_CACHE_KEY, JSON.stringify(payload));
-        } catch (_) {}
-        return aliases;
-    };
-
-    /* v16.58 — cache d'abord : les 6 000+ alias ne doivent plus bloquer
-     * l'affichage des PÉLIC pendant une requête réseau. Une copie locale valide
-     * est rendue immédiatement puis rafraîchie silencieusement en arrière-plan. */
-    try {
-        const cachedData = localStorage.getItem(COMMUNES_ALIASES_CACHE_KEY);
-        if (cachedData) {
-            const aliases = await parseAliasPayload(JSON.parse(cachedData));
-            if (aliases.length) {
-                communeAliasesLoadSource = 'cache-local';
-                setTimeout(async () => {
-                    try {
-                        const response = await fetchWithTimeout('./communes_aliases.json', { cache: 'no-cache' }, 5000);
-                        if (!response.ok) return;
-                        const updatedAliases = await storeAliases(await response.json());
-                        if (updatedAliases.length) {
-                            communeAliases = updatedAliases;
-                            communeAliasesLoadSource = 'fichier-reseau-maj';
-                        }
-                    } catch (_) {}
-                }, 1800);
-                return aliases;
-            }
-        }
-    } catch (_) {}
+    /*
+     * v17.47 — plus de copie des anciens noms dans le stockage local (1,5 M
+     * caractères, la moitié du quota Safari). Le fichier communes_aliases.json
+     * est gardé hors ligne par le service worker TEST : il est simplement relu
+     * à chaque lancement, après le démarrage principal.
+     */
+    const storeAliases = async (payload) => parseAliasPayload(payload);
 
     try {
         const response = await fetchWithTimeout('./communes_aliases.json', { cache: 'no-cache' }, 5000);
@@ -38849,23 +38830,6 @@ function hydrateCommunesPopulationMap(entries) {
     return communesPopulationByInsee;
 }
 
-function readCachedCommunesPopulation() {
-    try {
-        const raw = localStorage.getItem(COMMUNES_POPULATION_CACHE_KEY);
-        if (!raw) return false;
-
-        const cached = JSON.parse(raw);
-        const savedAt = Number(cached?.savedAt || 0);
-        const entries = Array.isArray(cached?.entries) ? cached.entries : [];
-
-        hydrateCommunesPopulationMap(entries);
-        return communesPopulationByInsee.size > 0
-            && savedAt > 0
-            && (Date.now() - savedAt) <= COMMUNES_POPULATION_CACHE_MAX_AGE_MS;
-    } catch (_) {
-        return false;
-    }
-}
 
 function applyPopulationToCommuneLabels() {
     for (const item of communesLabelData) {
@@ -38883,54 +38847,43 @@ function applyPopulationToCommuneLabels() {
 async function loadCommunesPopulationIndex() {
     if (communesPopulationLoadPromise) return communesPopulationLoadPromise;
 
-    const cacheIsFresh = readCachedCommunesPopulation();
-
+    /*
+     * v17.47 — la population vient de communes.json (déjà chargé pour la
+     * recherche, gardé hors ligne). Plus de téléchargement depuis Internet ni
+     * de copie dans le stockage local (0,5 M caractères). Fonctionne en vol.
+     */
     communesPopulationLoadPromise = (async () => {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 6500);
-
-        try {
-            const response = await fetch(COMMUNES_POPULATION_API_URL, {
-                cache: cacheIsFresh ? 'force-cache' : 'default',
-                signal: controller.signal
-            });
-
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-            const data = await response.json();
-            const entries = [];
-
-            for (const commune of Array.isArray(data) ? data : []) {
-                const code = String(commune?.code || '').trim();
-                const population = Number(commune?.population);
-                if (!code || !Number.isFinite(population) || population < 0) continue;
-                entries.push([code, population]);
-            }
-
-            hydrateCommunesPopulationMap(entries);
-
-            try {
-                localStorage.setItem(COMMUNES_POPULATION_CACHE_KEY, JSON.stringify({
-                    savedAt: Date.now(),
-                    entries
-                }));
-            } catch (_) {}
-        } catch (error) {
-            console.warn('[Communes] Population indisponible, classement de secours conservé :', error);
-        } finally {
-            clearTimeout(timeoutId);
-        }
-
-        applyPopulationToCommuneLabels();
-
-        if (areCommunesVisible && hasLoadedCommunes) {
-            renderVisibleCommuneLabels();
-        }
-
+        try { await npfStartupCommunesReadyPromise; } catch (_) {}
+        applyCommunesPopulationFromCommunes();
         return communesPopulationByInsee;
     })();
 
     return communesPopulationLoadPromise;
+}
+
+/* v17.47 — population lue dans les communes chargées (communes.json).
+ * Appelée aussi dès que la base communes est prête (src/060). */
+function applyCommunesPopulationFromCommunes() {
+    try {
+        const entries = [];
+        for (const commune of Array.isArray(allCommunes) ? allCommunes : []) {
+            const code = String(commune?.code_insee || '').trim();
+            const population = Number(commune?.population);
+            if (!code || !Number.isFinite(population) || population < 0) continue;
+            entries.push([code, population]);
+        }
+        if (entries.length) hydrateCommunesPopulationMap(entries);
+    } catch (error) {
+        console.warn('[Communes] Population indisponible, classement de secours conservé :', error);
+    }
+
+    applyPopulationToCommuneLabels();
+
+    if (areCommunesVisible && hasLoadedCommunes) {
+        renderVisibleCommuneLabels();
+    }
+
+    return communesPopulationByInsee.size;
 }
 
 function isCurrentCommuneLabel(item) {

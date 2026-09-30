@@ -348,23 +348,6 @@ function hydrateCommunesPopulationMap(entries) {
     return communesPopulationByInsee;
 }
 
-function readCachedCommunesPopulation() {
-    try {
-        const raw = localStorage.getItem(COMMUNES_POPULATION_CACHE_KEY);
-        if (!raw) return false;
-
-        const cached = JSON.parse(raw);
-        const savedAt = Number(cached?.savedAt || 0);
-        const entries = Array.isArray(cached?.entries) ? cached.entries : [];
-
-        hydrateCommunesPopulationMap(entries);
-        return communesPopulationByInsee.size > 0
-            && savedAt > 0
-            && (Date.now() - savedAt) <= COMMUNES_POPULATION_CACHE_MAX_AGE_MS;
-    } catch (_) {
-        return false;
-    }
-}
 
 function applyPopulationToCommuneLabels() {
     for (const item of communesLabelData) {
@@ -382,54 +365,43 @@ function applyPopulationToCommuneLabels() {
 async function loadCommunesPopulationIndex() {
     if (communesPopulationLoadPromise) return communesPopulationLoadPromise;
 
-    const cacheIsFresh = readCachedCommunesPopulation();
-
+    /*
+     * v17.47 — la population vient de communes.json (déjà chargé pour la
+     * recherche, gardé hors ligne). Plus de téléchargement depuis Internet ni
+     * de copie dans le stockage local (0,5 M caractères). Fonctionne en vol.
+     */
     communesPopulationLoadPromise = (async () => {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 6500);
-
-        try {
-            const response = await fetch(COMMUNES_POPULATION_API_URL, {
-                cache: cacheIsFresh ? 'force-cache' : 'default',
-                signal: controller.signal
-            });
-
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-            const data = await response.json();
-            const entries = [];
-
-            for (const commune of Array.isArray(data) ? data : []) {
-                const code = String(commune?.code || '').trim();
-                const population = Number(commune?.population);
-                if (!code || !Number.isFinite(population) || population < 0) continue;
-                entries.push([code, population]);
-            }
-
-            hydrateCommunesPopulationMap(entries);
-
-            try {
-                localStorage.setItem(COMMUNES_POPULATION_CACHE_KEY, JSON.stringify({
-                    savedAt: Date.now(),
-                    entries
-                }));
-            } catch (_) {}
-        } catch (error) {
-            console.warn('[Communes] Population indisponible, classement de secours conservé :', error);
-        } finally {
-            clearTimeout(timeoutId);
-        }
-
-        applyPopulationToCommuneLabels();
-
-        if (areCommunesVisible && hasLoadedCommunes) {
-            renderVisibleCommuneLabels();
-        }
-
+        try { await npfStartupCommunesReadyPromise; } catch (_) {}
+        applyCommunesPopulationFromCommunes();
         return communesPopulationByInsee;
     })();
 
     return communesPopulationLoadPromise;
+}
+
+/* v17.47 — population lue dans les communes chargées (communes.json).
+ * Appelée aussi dès que la base communes est prête (src/060). */
+function applyCommunesPopulationFromCommunes() {
+    try {
+        const entries = [];
+        for (const commune of Array.isArray(allCommunes) ? allCommunes : []) {
+            const code = String(commune?.code_insee || '').trim();
+            const population = Number(commune?.population);
+            if (!code || !Number.isFinite(population) || population < 0) continue;
+            entries.push([code, population]);
+        }
+        if (entries.length) hydrateCommunesPopulationMap(entries);
+    } catch (error) {
+        console.warn('[Communes] Population indisponible, classement de secours conservé :', error);
+    }
+
+    applyPopulationToCommuneLabels();
+
+    if (areCommunesVisible && hasLoadedCommunes) {
+        renderVisibleCommuneLabels();
+    }
+
+    return communesPopulationByInsee.size;
 }
 
 function isCurrentCommuneLabel(item) {

@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 30/09/2026
-Version de travail actuelle : TEST v17.46
+Version de travail actuelle : TEST v17.47
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,12 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.47 — stockage local libéré (≈ 2 millions de caractères) : alias et
+  population des communes plus copiés dans le stockage local (relus depuis
+  communes_aliases.json et communes.json, gardés hors ligne par le SW) ;
+  communes.json, communes_aliases.json et communes-500m.geojson retéléchargés
+  seulement à une nouvelle version du SW ou s'ils manquent ; image de
+  lancement sombre « NPF-Q400 » pour iPad 9 ;
 - v17.46 — cartes hors ligne en données brutes (ArrayBuffer) pour tout import
   normal ; base encore en Blob -> proposition de la supprimer en entier avant
   import ; suppression d'une carte en une seule opération ; reprise d'un
@@ -389,6 +395,14 @@ NON IMPLÉMENTÉ / OUVERT :
   (« ANALYSE DIAG v17.32 SOL + VOL ») : 5 défauts du DIAG lui-même relevés
   (D1 à D5) et 9 recommandations classées gain / risque (R1 à R9), aucune
   implémentée. Historique : À MESURER -> MESURÉ ;
+- v17.47 : À MESURER sur iPad (ligne « Stockage local » du DIAG ≈ 0,05 Mo,
+  recherche par nom et ancien nom, noms des communes, image de lancement).
+  Image de lancement sans réinstallation de l'app : INCERTAIN (iOS la prend
+  en général à l'ajout sur l'écran d'accueil). Noms des communes : règle
+  existante, visibles à partir de 2 NM seulement (rien à 20 NM ni à 5 NM),
+  À DÉCIDER si le pilote veut les grandes villes à 20 NM. Autres gros
+  fichiers encore retéléchargés à chaque lancement (HT 8,7 Mo, localités
+  5,9 Mo, communes-1000m 10 Mo si utilisé, icônes) : NON IMPLÉMENTÉ, À DÉCIDER ;
 - v17.46 : À MESURER sur iPad (écran de démarrage, libellés du sélecteur,
   HT / Routes sur la Carte NPF-Q400, historique des feux, export DIAG).
   Ancienne carte NPF-Q400 en Blob conservée en secours jusqu'au vol de
@@ -462,40 +476,42 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.46
+Version : TEST v17.47
 Date : 30/09/2026
-Base : v17.45 (commitée dfe6ed4, À MESURER)
+Base : v17.46 (commitée e03080c, À MESURER)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.46.txt
-2_Index_v17.46.txt
-3_Manifest_v17.46.txt
-4_Script_v17.46.txt
-5_SIA_v17.46.txt
-6_Style_v17.46.txt
-7_Sw_v17.46.txt
+1_Modifications_v17.47.txt
+2_Index_v17.47.txt
+3_Manifest_v17.47.txt
+4_Script_v17.47.txt
+5_SIA_v17.47.txt
+6_Style_v17.47.txt
+7_Sw_v17.47.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.46 (et texte « TEST v17.46 » de l'écran de
+- Index : APP_VERSION = v17.47 (et texte « TEST v17.47 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.46
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.46
-- Style : NPF_STYLE_BUILD_VERSION = v17.46
-- Service Worker : `sw-v17-46_cartes_donnees_brutes` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-46_cartes_donnees_brutes`, `npf-q400-test-app-data-v1`,
+- Manifest : start_url = ./index.html?appv=v17.47
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.47
+- Style : NPF_STYLE_BUILD_VERSION = v17.47
+- Service Worker : `sw-v17-47_communes_stockage_lancement` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-47_communes_stockage_lancement`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-15.69-radio1026-1-maplite1`
 - SIA_DATA_REVISION (SW / Index) : 15.69-radio1026-1-maplite1 (inchangée)
-- sia.js v17.46 : strictement identique à v17.45.
+- sia.js v17.47 : strictement identique à v17.46.
+- Images de lancement : icons/startup-ipad9-portrait.png (1620 × 2160) et
+  icons/startup-ipad9-landscape.png (2160 × 1620).
 
 STATUT DE VALIDATION :
-- validation statique v17.46 effectuée avant livraison : Script/SIA/SW OK, script
+- validation statique v17.47 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
-- `sia.js` et moteur tuiles (src/100) identiques à v17.45 ;
-- tests Chrome v17.45 / v17.46 : entrée v17.46 ;
+- `sia.js` et moteur tuiles (src/100) identiques à v17.46 ;
+- tests Chrome v17.46 / v17.47 : entrée v17.47 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44 VALIDÉE ; v17.29, v17.31, v17.33 à v17.43 et
-  v17.45 et v17.46 À MESURER.
+  v17.45 à v17.47 À MESURER.
 
 
 2. PROTOCOLE DE TRAVAIL À RESPECTER
@@ -2017,6 +2033,108 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.47 — STOCKAGE LOCAL LIBÉRÉ (COMMUNES) ; FICHIERS DES
+COMMUNES GARDÉS HORS LIGNE ; IMAGE DE LANCEMENT SOMBRE
+Date : 30/09/2026
+Base fonctionnelle : v17.46 (commit e03080c)
+
+ÉTAT AVANT
+- Le stockage local contenait ≈ 2 millions de caractères (≈ 4 Mo) dont
+  presque tout pour 2 copies des communes : alias (communesAliasesCacheV3,
+  ≈ 1,53 million) et population (npfCommunesPopulationV1, ≈ 0,50 million,
+  téléchargée sur Internet). Un stockage local presque plein fait échouer
+  d'autres écritures (ex. historique des feux, corrigé en v17.46).
+- Le service worker retéléchargeait communes.json (et les alias) à chaque
+  lancement, en arrière-plan, même sans changement.
+
+MODIFICATIONS
+- src/070 : les alias ne sont plus écrits ni lus dans le stockage local ;
+  toujours relus depuis communes_aliases.json (servi par le cache du SW, donc
+  hors ligne).
+- src/250 : la population vient de communes.json (champ population, déjà
+  chargé), plus aucun téléchargement Internet ni copie locale.
+- src/060 : au lancement, suppression des 2 anciennes clés
+  (communesAliasesCacheV3, npfCommunesPopulationV1) ; population appliquée
+  dès que les communes sont chargées.
+- sw.js : communes.json, communes_aliases.json et communes-500m.geojson
+  servis depuis le cache TEST sans retéléchargement à chaque lancement ;
+  retéléchargés une fois par nouvelle version du SW (repère interne
+  `__npf-data-refresh/` dans le cache npf-q400-test-app-data-v1) ou s'ils
+  manquent. Les 2 images de lancement mises en cache à l'activation (4 s au
+  plus).
+- index.html : 2 liens apple-touch-startup-image iPad 9 (810 × 1080 points,
+  ×2, portrait et paysage) ; images sombres « NPF-Q400 » (≈ 27 ko et 26 ko).
+- manifest.json : background_color #0b1220 (sombre).
+- Autres gros fichiers encore retéléchargés en arrière-plan à chaque
+  lancement (NON MODIFIÉ, liste seulement) : lignes_ht_rte_simplifiees.geojson
+  8,7 Mo, localites-france-v14.56.zip 5,9 Mo, communes-1000m.geojson 10 Mo
+  (si utilisé), départements et communes 50 m / 100 m en ligne (etalab),
+  icônes (calculatrice 2,1 Mo, recherche 1,9 Mo, centrage GPS 1,3 Mo...).
+  Statut : À DÉCIDER.
+- Image de lancement sans réinstallation : INCERTAIN (iOS la prend en
+  général au moment de l'ajout sur l'écran d'accueil). Aucune réinstallation
+  demandée : l'écran de démarrage sombre v17.46 reste affiché de toute façon.
+
+TESTS CHROME (1080 × 810, v17.46 contre v17.47)
+- Stockage local, installation neuve : v17.46 ≈ 2 048 000 car. ; v17.47
+  ≈ 16 000 à 27 000 car.
+- Passage v17.46 -> v17.47 sur le même stockage : 2 048 562 -> 21 777 car.
+  (DIAG « Stockage local : total 21 777 car. (≈ 0,04 Mo) ») ; 2 clés
+  supprimées ; historique des feux conservé ; 6 616 alias et 34 935
+  populations disponibles.
+- Requêtes serveur sur 3 lancements : v17.46 communes.json 6 fois, alias 4 ;
+  v17.47 communes.json pendant le 1er lancement seulement, alias 1 fois,
+  communes-500m.geojson 1 fois, puis plus rien.
+- Recherche en ligne et hors ligne identique : « Aubagne », ancien nom
+  « Amareins » -> Francheleins, « Saint-Martin 13 » (13 résultats), commune
+  la plus proche « Lyon (69) », commune survolée « Lyon (69) ».
+- Noms des communes (règle existante COMMUNES_DISPLAY_MIN_ZOOM = 10,5) :
+  aucun nom à 20 NM ni 5 NM dans les 2 versions ; 80 noms à 2 NM (ordre
+  légèrement différent pour quelques villes proches en population : source
+  communes.json au lieu de l'API geo) ; 32 noms identiques à 1 NM.
+- Caches : npf-q400-test-* seulement ; installation neuve : communes et
+  images en cache ; hors ligne : 20/20 tuiles, 868 PÉLIC, 34 935 communes.
+
+NON-RÉGRESSION v17.47 CONTRE v17.46 (Chrome)
+- FdS / GAAR (BFG, mot de passe + NAS, NAS en panne, NAS lent) : OK.
+- GLR (code, OFF / ON, session expirée, réseau coupé) : OK.
+- SafeSky mémorisé : OK.
+- HT et Routes seulement sur la Carte NPF-Q400 (grisés sur OACI et IGN) : OK.
+- Points VFR sur OACI à 2 NM : OK.
+- Cartes : import, libellés « Carte NPF-Q400 », sélection sans relance,
+  suppression en une opération : OK (résultats identiques).
+- Recherche d'un feu par nom et ancien nom, avec et sans réseau : OK.
+- Historique des feux (écriture refusée : 2 feux lus) : OK.
+- Noms des communes selon l'échelle, commune survolée : OK (écart d'ordre
+  ci-dessus attendu).
+- findClosestCommune (src/260) et filtre département (src/100) : OK.
+- Fenêtre des terrains (v17.44 / v17.45, glissement, fermeture) : OK — 1re
+  série du test de glissement perturbée en paysage (aucune fenêtre ouverte,
+  tests lancés en parallèle), 2 reprises ensuite identiques à v17.46.
+- Écran de démarrage (relance comprise) : OK.
+- DIAG « Stockage local » ≈ 2 millions de car. en moins : OK.
+- Service worker, caches, installation neuve : OK.
+Aucune exception JavaScript dans les deux versions.
+
+RETOUR ARRIÈRE
+- Revenir au commit e03080c (v17.46) : au lancement suivant avec réseau, les
+  alias et la population sont retéléchargés et recopiés dans le stockage
+  local (≈ 2 millions de car.) ; le cache des communes redevient rafraîchi à
+  chaque lancement. Les images de lancement restent sans effet.
+
+FICHIERS MODIFIÉS
+src/070, src/250, src/060, src/010 (version), donc script.js ; sw.js,
+index.html, manifest.json, style.css (version) ; nouvelles images
+icons/startup-ipad9-portrait.png et icons/startup-ipad9-landscape.png.
+sia.js, src/100, src/210, src/260, src/280, src/050 : identiques à v17.46.
+
+VERSION
+- App : v17.47
+- Service Worker : `sw-v17-47_communes_stockage_lancement`
+
+STATUT : À MESURER sur iPad.
+
 
 VERSION TEST v17.46 — CARTES HORS LIGNE EN DONNÉES BRUTES ; ÉCRAN DE
 DÉMARRAGE ; DURÉES DU DÉMARRAGE ; HISTORIQUE DES FEUX

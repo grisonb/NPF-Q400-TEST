@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v17-46_cartes_donnees_brutes';
-const APP_VERSION = 'v17.46';
+const SW_VERSION = 'sw-v17-47_communes_stockage_lancement';
+const APP_VERSION = 'v17.47';
 const SIA_DATA_REVISION = '15.69-radio1026-1-maplite1';
 const SIA_DATA_URL = './sia.js';
 /*
@@ -373,6 +373,11 @@ self.addEventListener('activate', event => {
         await Promise.race([
             refreshOfflineSettingsFromDB({ force: true }).catch(() => null),
             swDelay(1500, null)
+        ]);
+        /* v17.47 — images de lancement iOS (légères) mises en cache TEST. */
+        await Promise.race([
+            warmNpfStartupImages().catch(() => null),
+            swDelay(4000, null)
         ]);
         await self.clients.claim();
 
@@ -924,9 +929,60 @@ async function handleSiaDataRequest(request) {
     });
 }
 
+/*
+ * v17.47 — gros fichiers communes : plus de retéléchargement à chaque
+ * lancement. Servis depuis le cache TEST ; un seul rafraîchissement par
+ * nouvelle version du service worker (repère `__npf-data-refresh/<fichier>`
+ * dans le cache TEST contenant SW_VERSION), ou téléchargement s'ils manquent.
+ */
+const NPF_DATA_FILES_REFRESHED_ONCE_PER_VERSION = new Set([
+    'communes.json',
+    'communes_aliases.json',
+    'communes-500m.geojson'
+]);
+const NPF_DATA_REFRESH_MARK_PREFIX = './__npf-data-refresh/';
+
+function getNpfDataRefreshOnceFilename(request) {
+    try {
+        const parsed = new URL(request.url);
+        if (parsed.origin !== self.location.origin) return '';
+        const filename = parsed.pathname.split('/').pop() || '';
+        return NPF_DATA_FILES_REFRESHED_ONCE_PER_VERSION.has(filename) ? filename : '';
+    } catch (_) {
+        return '';
+    }
+}
+
+async function markNpfDataRefreshed(dataCache, filename) {
+    try {
+        await dataCache.put(
+            NPF_DATA_REFRESH_MARK_PREFIX + filename,
+            new Response(SW_VERSION, { headers: { 'Content-Type': 'text/plain' } })
+        );
+    } catch (_) {}
+}
+
+/* v17.47 — images de lancement iOS gardées hors ligne dès l'activation. */
+const NPF_STARTUP_IMAGE_URLS = [
+    './icons/startup-ipad9-portrait.png',
+    './icons/startup-ipad9-landscape.png'
+];
+
+async function warmNpfStartupImages() {
+    const dataCache = await caches.open(APP_DATA_CACHE);
+    for (const url of NPF_STARTUP_IMAGE_URLS) {
+        try {
+            if (await dataCache.match(url, { ignoreSearch: true })) continue;
+            const response = await swFetchWithTimeout(new Request(url, { cache: 'reload' }), {}, 8000);
+            if (response && response.ok) await dataCache.put(url, response.clone());
+        } catch (_) {}
+    }
+}
+
 async function handleAppDataRequest(request) {
     const dataCache = await caches.open(APP_DATA_CACHE);
     const isCommunePolygonGeojson = isCommunesGeojsonRequest(request.url);
+    const refreshOnceFilename = getNpfDataRefreshOnceFilename(request);
 
     /*
      * v14.96 — PWA iPad / commune survolée :
@@ -944,6 +1000,16 @@ async function handleAppDataRequest(request) {
             }
         } catch (_) {}
 
+        /* v17.47 — fichiers communes : un seul rafraîchissement par version. */
+        if (refreshOnceFilename) {
+            let markVersion = '';
+            try {
+                const mark = await dataCache.match(NPF_DATA_REFRESH_MARK_PREFIX + refreshOnceFilename);
+                markVersion = mark ? await mark.text() : '';
+            } catch (_) {}
+            if (markVersion === SW_VERSION) return cached;
+        }
+
         (async () => {
             try {
                 const refreshRequest = new Request(request, { cache: 'no-cache' });
@@ -954,6 +1020,7 @@ async function handleAppDataRequest(request) {
                 );
                 if (fresh && (fresh.ok || fresh.type === 'opaque')) {
                     await dataCache.put(request, fresh.clone());
+                    if (refreshOnceFilename) await markNpfDataRefreshed(dataCache, refreshOnceFilename);
                 }
             } catch (_) {
                 /* La dernière copie locale valide reste utilisée. */
@@ -971,6 +1038,7 @@ async function handleAppDataRequest(request) {
         );
         if (fresh && (fresh.ok || fresh.type === 'opaque')) {
             await dataCache.put(request, fresh.clone());
+            if (refreshOnceFilename) await markNpfDataRefreshed(dataCache, refreshOnceFilename);
         }
         return fresh;
     } catch (_) {
