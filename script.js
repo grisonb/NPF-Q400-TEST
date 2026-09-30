@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.44';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.45';
 
 
 /*
@@ -3162,7 +3162,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.44 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.45 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -13092,7 +13092,8 @@ function initMap() {
     applyPelicanVisualScale();
     map.on('zoomend', applyPelicanVisualScale);
 
-    /* PÉLIC : après rendu complet de la fiche, la garder dans la zone visible. */
+    /* Terrains (v17.45) : après rendu complet de la fenêtre, la carte glisse
+     * si nécessaire pour qu'elle soit entièrement visible. */
     map.on('popupopen', event => {
         scheduleNpfPelicPopupReposition(event?.popup);
     });
@@ -35931,9 +35932,134 @@ function repositionNpfPelicPopupIfNeeded(popup) {
     container.dataset.npfPelicPopupShift = String(shiftDown);
 }
 
+/*
+ * v17.45 — fenêtre d'un terrain (grande fenêtre PÉLIC et petite fenêtre des
+ * autres terrains) : si elle ne tient pas entièrement dans la zone libre de
+ * l'écran, la carte glisse juste ce qu'il faut. La fenêtre reste au-dessus du
+ * terrain ; elle n'est plus descendue comme en v16.24. Un seul calcul, à
+ * l'ouverture. Le glissement est traité par le Suivi GPS comme un déplacement
+ * à la main (même pause, même retour automatique).
+ */
+const NPF_AIRPORT_POPUP_SAFE_MARGIN_PX = 8;
+
+function isNpfAirportPopup(popup) {
+    try {
+        const container = typeof popup?.getElement === 'function'
+            ? popup.getElement()
+            : popup?._container;
+        return !!(container && container.querySelector('.airport-popup'));
+    } catch (_) {
+        return false;
+    }
+}
+
+/* Zone libre : carte moins les éléments fixes réellement affichés. */
+function getNpfAirportPopupSafeRect(mapRect) {
+    const safe = {
+        left: mapRect.left,
+        top: mapRect.top,
+        right: mapRect.right,
+        bottom: mapRect.bottom
+    };
+    const visibleRectOf = element => {
+        if (!element) return null;
+        const style = window.getComputedStyle(element);
+        if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return null;
+        const rect = element.getBoundingClientRect();
+        if (!(rect.width > 0 && rect.height > 0)) return null;
+        if (rect.bottom <= mapRect.top || rect.top >= mapRect.bottom) return null;
+        if (rect.right <= mapRect.left || rect.left >= mapRect.right) return null;
+        return rect;
+    };
+    const middleY = mapRect.top + mapRect.height / 2;
+    const bottomStripY = mapRect.top + mapRect.height * 0.9;
+
+    /* Haut : barre de recherche et bandeaux. */
+    document.querySelectorAll(
+        '#ui-overlay, #search-section, #offline-status, #bingo-map-display, #commune-info-display, #npf-waypoint-route-banner'
+    ).forEach(element => {
+        const rect = visibleRectOf(element);
+        if (rect && rect.top < middleY) safe.top = Math.max(safe.top, rect.bottom);
+    });
+
+    /* Colonnes de boutons à gauche et à droite, rangée de boutons du bas. */
+    document.querySelectorAll(
+        '.left-map-action-button, #quick-sia-vrp-toggle, #quick-sia-zones-toggle, '
+        + '#toggle-search-button, #main-action-buttons, #yul-trace-button, #sia-profile-swipe-handle'
+    ).forEach(element => {
+        const rect = visibleRectOf(element);
+        if (!rect) return;
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        if (centerY > bottomStripY) {
+            safe.bottom = Math.min(safe.bottom, rect.top);
+        } else if (centerX < mapRect.left + mapRect.width * 0.3) {
+            safe.left = Math.max(safe.left, rect.right);
+        } else if (centerX > mapRect.left + mapRect.width * 0.7) {
+            safe.right = Math.min(safe.right, rect.left);
+        }
+    });
+
+    safe.left += NPF_AIRPORT_POPUP_SAFE_MARGIN_PX;
+    safe.top += NPF_AIRPORT_POPUP_SAFE_MARGIN_PX;
+    safe.right -= NPF_AIRPORT_POPUP_SAFE_MARGIN_PX;
+    safe.bottom -= NPF_AIRPORT_POPUP_SAFE_MARGIN_PX;
+    return safe;
+}
+
+function panMapToShowNpfAirportPopup(popup) {
+    if (!popup || !map || map._popup !== popup || !isNpfAirportPopup(popup)) return false;
+
+    const container = typeof popup.getElement === 'function' ? popup.getElement() : popup._container;
+    const mapContainer = typeof map.getContainer === 'function' ? map.getContainer() : null;
+    if (!container || !mapContainer) return false;
+
+    const popupRect = container.getBoundingClientRect();
+    const mapRect = mapContainer.getBoundingClientRect();
+    if (!(popupRect.width > 0 && popupRect.height > 0)) return false;
+    const safe = getNpfAirportPopupSafeRect(mapRect);
+
+    /* Déplacement à l'écran nécessaire pour que la fenêtre soit entière. */
+    let shiftX = 0;
+    let shiftY = 0;
+    if (popupRect.width > safe.right - safe.left) {
+        shiftX = (safe.left + safe.right) / 2 - (popupRect.left + popupRect.right) / 2;
+    } else if (popupRect.left < safe.left) {
+        shiftX = safe.left - popupRect.left;
+    } else if (popupRect.right > safe.right) {
+        shiftX = safe.right - popupRect.right;
+    }
+    if (popupRect.top < safe.top || popupRect.height > safe.bottom - safe.top) {
+        shiftY = safe.top - popupRect.top;
+    } else if (popupRect.bottom > safe.bottom) {
+        shiftY = safe.bottom - popupRect.bottom;
+    }
+
+    shiftX = Math.round(shiftX);
+    shiftY = Math.round(shiftY);
+    if (!shiftX && !shiftY) return false;
+
+    /*
+     * Même traitement qu'un déplacement à la main : le Suivi se met en pause
+     * et le compte du retour automatique part de ce glissement.
+     */
+    try {
+        if (typeof isCenterGpsFollowEffective === 'function' && isCenterGpsFollowEffective()) {
+            centerGpsFollowLastUserGestureAt = Date.now();
+            scheduleCenterGpsFollowRecentering();
+        }
+    } catch (_) {}
+
+    /* panBy déplace la vue : la fenêtre se déplace de l'opposé à l'écran. */
+    map.panBy([-shiftX, -shiftY], { animate: true, duration: 0.25 });
+    return true;
+}
+
 function scheduleNpfPelicPopupReposition(popup) {
     window.requestAnimationFrame(() => {
-        window.requestAnimationFrame(() => repositionNpfPelicPopupIfNeeded(popup));
+        window.requestAnimationFrame(() => {
+            try { panMapToShowNpfAirportPopup(popup); } catch (_) {}
+        });
     });
 }
 
@@ -35969,7 +36095,10 @@ function addAirportTouchHitbox(airport, popupHtml) {
     });
 
     const pelicPopup = typeof isSelectablePelicanAirport === 'function' && isSelectablePelicanAirport(airport.oaci);
-    hitbox.bindPopup(popupHtml, pelicPopup ? getNpfPelicPopupOptions({ maxWidth: 390 }) : { maxWidth: 300 });
+    /* v17.45 — petite fenêtre des autres terrains : même glissement que la
+     * fenêtre PÉLIC (panMapToShowNpfAirportPopup), à la place du glissement
+     * standard de Leaflet qui ne connaît que les bords de la carte. */
+    hitbox.bindPopup(popupHtml, pelicPopup ? getNpfPelicPopupOptions({ maxWidth: 390 }) : { maxWidth: 300, autoPan: false });
     hitbox.on('click', event => {
         try {
             if (event?.originalEvent) {
@@ -40291,6 +40420,20 @@ function recenterMapOnKnownGpsPosition(reason = 'manual') {
     return true;
 }
 
+/*
+ * v17.45 — au retour automatique sur l'avion, une fenêtre de terrain encore
+ * ouverte se ferme. Les autres fenêtres (feux, zones, points, SafeSky) ne
+ * sont pas concernées.
+ */
+function closeNpfAirportPopupForFollowReturn() {
+    try {
+        const popup = map?._popup || null;
+        if (popup && typeof isNpfAirportPopup === 'function' && isNpfAirportPopup(popup)) {
+            map.closePopup(popup);
+        }
+    } catch (_) {}
+}
+
 function scheduleCenterGpsFollowRecentering() {
     if (!isCenterGpsFollowEffective()) return;
 
@@ -40305,6 +40448,7 @@ function scheduleCenterGpsFollowRecentering() {
         centerGpsFollowPauseTimer = null;
         centerGpsFollowPausedUntil = 0;
         if (isCenterGpsFollowEffective()) {
+            closeNpfAirportPopupForFollowReturn();
             recenterMapOnKnownGpsPosition('manual-delay');
         }
     }, recenterDelayMs);
@@ -40364,6 +40508,24 @@ function installCenterGpsFollowHandlers() {
 
         ['pointerup', 'pointercancel', 'touchend', 'touchcancel', 'mouseup'].forEach((eventName) => {
             container.addEventListener(eventName, endUserMapGesture, { passive: true, capture: true });
+        });
+
+        /*
+         * v17.45 — tout toucher dans la fenêtre d'un terrain (bouton ou fenêtre
+         * elle-même) relance le compte du retour automatique, pour qu'elle ne
+         * se ferme pas pendant son utilisation. Les autres fenêtres restent
+         * ignorées par le Suivi, comme avant.
+         */
+        const restartFollowDelayForAirportPopupTouch = (event) => {
+            if (!isCenterGpsFollowEffective()) return;
+            try {
+                const popupElement = event?.target?.closest?.('.leaflet-popup');
+                if (!popupElement || !popupElement.querySelector('.airport-popup')) return;
+                scheduleCenterGpsFollowRecentering();
+            } catch (_) {}
+        };
+        ['pointerdown', 'touchstart', 'mousedown'].forEach((eventName) => {
+            container.addEventListener(eventName, restartFollowDelayForAirportPopupTouch, { passive: true, capture: true });
         });
     }
 

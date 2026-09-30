@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 30/09/2026
-Version de travail actuelle : TEST v17.44
+Version de travail actuelle : TEST v17.45
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,13 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.45 — fenêtre d'un terrain : la carte glisse juste ce qu'il faut pour
+  qu'elle soit entière et visible (zone libre = carte moins barre de
+  recherche, bandeaux, colonnes de boutons et rangée du bas) ; elle reste
+  au-dessus du terrain (remplace le « descendre la fenêtre » de la v16.24) ;
+  Suivi GPS : le glissement vaut un déplacement à la main (pause existante de
+  10 s), un toucher dans la fenêtre relance le compte, et la fenêtre de
+  terrain se ferme au retour automatique sur l'avion ;
 - v17.44 — fenêtre terrain (PÉLIC) : largeur 390 -> 294 px (élargie seule
   jusqu'à 320 px si une ligne de petits boutons en a besoin), petits boutons en
   police 15 px sur une seule ligne, hauteur inchangée, espace agrandi après la
@@ -375,7 +382,9 @@ NON IMPLÉMENTÉ / OUVERT :
   (« ANALYSE DIAG v17.32 SOL + VOL ») : 5 défauts du DIAG lui-même relevés
   (D1 à D5) et 9 recommandations classées gain / risque (R1 à R9), aucune
   implémentée. Historique : À MESURER -> MESURÉ ;
-- v17.44 : À MESURER sur iPad (fenêtre terrain en paysage et en portrait) ;
+- v17.45 : À MESURER sur iPad (glissement de la carte à l'ouverture d'une
+  fenêtre de terrain, retour du Suivi et fermeture de la fenêtre) ;
+- v17.44 : fenêtre terrain VALIDÉE sur iPad par Bastien (30/09/2026) ;
 - v17.43 : essai « données brutes » MESURÉ sur iPad le 30/09/2026 au sol (DIAG
   16-51, 17-02, 17-06) : 34 paquets lents, tous sur NPF_France en Blob, aucun
   sur NPF_France_B ; médiane 14-16 ms contre 65-71 ms. À CONFIRMER en vol.
@@ -439,39 +448,39 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.44
+Version : TEST v17.45
 Date : 30/09/2026
-Base : v17.43 (commitée f59240f, MESURÉE au sol)
+Base : v17.44 (commitée c39d698, VALIDÉE sur iPad)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.44.txt
-2_Index_v17.44.txt
-3_Manifest_v17.44.txt
-4_Script_v17.44.txt
-5_SIA_v17.44.txt
-6_Style_v17.44.txt
-7_Sw_v17.44.txt
+1_Modifications_v17.45.txt
+2_Index_v17.45.txt
+3_Manifest_v17.45.txt
+4_Script_v17.45.txt
+5_SIA_v17.45.txt
+6_Style_v17.45.txt
+7_Sw_v17.45.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.44
-- Manifest : start_url = ./index.html?appv=v17.44
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.44
-- Style : NPF_STYLE_BUILD_VERSION = v17.44
-- Service Worker : `sw-v17-44_fenetre_terrain` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-44_fenetre_terrain`, `npf-q400-test-app-data-v1`,
+- Index : APP_VERSION = v17.45
+- Manifest : start_url = ./index.html?appv=v17.45
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.45
+- Style : NPF_STYLE_BUILD_VERSION = v17.45
+- Service Worker : `sw-v17-45_fenetre_terrain_glissement` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-45_fenetre_terrain_glissement`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-15.69-radio1026-1-maplite1`
 - SIA_DATA_REVISION (SW / Index) : 15.69-radio1026-1-maplite1 (inchangée)
-- sia.js v17.44 : strictement identique à v17.43.
+- sia.js v17.45 : strictement identique à v17.44.
 
 STATUT DE VALIDATION :
-- validation statique v17.44 effectuée avant livraison : Script/SIA/SW OK, script
+- validation statique v17.45 effectuée avant livraison : Script/SIA/SW OK, script
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
-- `sia.js`, moteur tuiles (src/100) et tous les fichiers src/ identiques à
-  v17.43 (seul le numéro de version change dans src/010) ;
-- tests Chrome v17.43 / v17.44 : entrée v17.44 ;
+- `sia.js` et moteur tuiles (src/100) identiques à v17.44 ;
+- tests Chrome v17.44 / v17.45 : entrée v17.45 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
-  sur iPad ; v17.32 MESURÉE ; v17.29, v17.31, v17.33 à v17.44 À MESURER.
+  sur iPad ; v17.32 MESURÉE ; v17.44 VALIDÉE ; v17.29, v17.31, v17.33 à v17.43 et
+  v17.45 À MESURER.
 
 
 2. PROTOCOLE DE TRAVAIL À RESPECTER
@@ -1993,6 +2002,122 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.45 — FENÊTRE D'UN TERRAIN : LA CARTE GLISSE POUR LA MONTRER
+ENTIÈRE ; SUIVI GPS : PAUSE, RETOUR SUR L'AVION ET FERMETURE DE LA FENÊTRE
+Date : 30/09/2026
+Base fonctionnelle : v17.44 (commit c39d698, VALIDÉE sur iPad)
+Demande : quand un terrain est près du haut de l'écran, le haut de sa fenêtre
+(nom, ligne EAU / Désactiver / BASE) est caché hors de l'écran ou sous la barre
+de recherche (défaut déjà présent en v17.43).
+
+ANALYSE AVANT CODE
+- Suivi GPS, déplacement à la main (src/260 `installCenterGpsFollowHandlers`,
+  `scheduleCenterGpsFollowRecentering`) : pause puis retour automatique sur
+  l'avion au bout de 10 s (CENTER_GPS_FOLLOW_RECENTER_DELAY_MS, src/030) ;
+  5 s en simulation avec avion en mouvement (SIMULATION_FOLLOW_RECENTER_DELAY_MS,
+  inchangé). Un simple toucher sur la carte arme déjà la pause ; un toucher
+  dans une fenêtre ou sur un bouton ne l'arme pas. Ce retour ne fermait aucune
+  fenêtre.
+- Sélection d'un feu (src/050 `selectFireFromHistoryMap`) : la carte glisse
+  vers le feu et la fenêtre du feu se ferme ; pas de pause propre.
+- Pourquoi la carte ne glissait pas : choix de la v16.24 (01/09/2026). Avant,
+  la fiche PÉLIC utilisait le glissement standard de Leaflet, qui ne connaît
+  que les bords de la carte : la fiche restait coupée en haut. La v16.24 a
+  supprimé ce glissement pour les PÉLIC et descendait la fiche elle-même sous
+  les bandeaux BINGO / Feu / Route, quitte à la détacher du terrain ; la barre
+  de recherche n'était pas prise en compte. Aucun autre défaut lié au
+  glissement n'est consigné. Le problème traité en v16.24 (fiche coupée en
+  haut) est précisément celui que la v17.45 corrige ; il ne peut pas revenir.
+
+MODIFICATIONS v17.45
+1. GLISSEMENT (src/210 `panMapToShowNpfAirportPopup`, appelé par l'événement
+   `popupopen` existant, src/090)
+- Fenêtres concernées : celles qui contiennent `.airport-popup` (grande
+  fenêtre PÉLIC, PÉLIC + WP, petite fenêtre des autres terrains). Les autres
+  fenêtres de la carte ne changent pas.
+- Un seul calcul, à l'ouverture (après deux images, comme avant) : zone libre =
+  carte moins les éléments fixes réellement affichés — en haut #ui-overlay,
+  #search-section, #offline-status et bandeaux BINGO / Feu / Route ; à gauche
+  et à droite les colonnes de boutons ; en bas la rangée de petits boutons ;
+  marge de 8 px. Si la fenêtre dépasse, la carte glisse juste ce qu'il faut
+  (`panBy`, animation 0,25 s) ; la fenêtre reste au-dessus du terrain. Si elle
+  tient, la carte ne bouge pas.
+- La fiche PÉLIC n'est plus descendue (fonction v16.24 conservée, plus appelée
+  pour les terrains). Petite fenêtre des autres terrains : glissement standard
+  Leaflet désactivé (`autoPan: false`) au profit du même calcul.
+2. SUIVI GPS (src/260, mécanisme existant réutilisé)
+- Le glissement arme la même pause que le déplacement à la main
+  (`scheduleCenterGpsFollowRecentering`) : le compte de 10 s part du glissement.
+- Au retour automatique sur l'avion (après un glissement ou un déplacement à
+  la main, et aussi après un simple toucher — décision de Bastien), une fenêtre
+  de terrain ouverte se ferme (`closeNpfAirportPopupForFollowReturn`). Les
+  autres fenêtres ne sont pas fermées.
+- Tout toucher dans la fenêtre d'un terrain (bouton ou fenêtre) relance le
+  compte de 10 s (décision de Bastien), pour qu'elle ne se ferme pas pendant
+  son utilisation.
+
+TESTS CHROME v17.44 / v17.45 (1080 × 810 et 810 × 1080, clics réels)
+- Terrain PÉLIC juste sous la barre de recherche (250 px du haut) : v17.44
+  fenêtre 10 -> 376 px, 3 à 4 boutons sur 10 accessibles, nom caché ; v17.45
+  glissement de 354 px (paysage) / 350 px (portrait), fenêtre 225 -> 591 px,
+  10 boutons sur 10, nom visible, 4 coins libres.
+- Terrain au milieu : aucun glissement, fenêtre identique dans les deux
+  versions.
+- Terrain près du bord gauche / droit : v17.44 nom ou 2 boutons cachés ;
+  v17.45 glissement de 76 px / 66 px, tout visible.
+- Petite fenêtre (LFAB) sous la barre de recherche : v17.44 0 à 2 boutons sur
+  4 ; v17.45 glissement de 197 / 193 px, 4 sur 4.
+- Cas v16.24 (feu Aubagne sélectionné, bandeau Feu affiché, PÉLIC 40 px sous
+  le bandeau) : v17.44 fiche descendue sous le bandeau mais détachée du
+  terrain (terrain sous la fiche) ; v17.45 glissement de 347 px, fiche sous le
+  bandeau et au-dessus du terrain, 10 boutons sur 10.
+- Suivi actif (GPS injecté) : glissement, fenêtre ouverte à +1 s et +6 s,
+  fermée à +13 s, carte revenue sur l'avion, Suivi toujours actif et qui suit
+  la position suivante ; v17.44 fenêtre toujours ouverte.
+- Suivi actif, déplacement à la main fenêtre ouverte : fermée au retour
+  (+12 s) ; v17.44 restait ouverte.
+- Suivi actif, aucun geste : fermée au retour (+12 s).
+- Suivi actif, toucher dans la fenêtre à +6 s : encore ouverte à +12 s, fermée
+  à +18 s.
+- Suivi actif, NOTAMS touché avant 10 s : action faite (fenêtre NOTAMS).
+- Suivi inactif : glissement, pas de retour, fenêtre toujours ouverte à +12 s.
+- Autres fenêtres ouvertes réellement (feu, point VFR, zone SIA, SafeSky
+  simulé) : même taille, même position, carte immobile, dans les deux
+  versions ; fenêtre de feu non fermée au retour du Suivi.
+
+NON-RÉGRESSION v17.45 CONTRE v17.44 (Chrome)
+- Boutons de la fenêtre terrain (EAU, RETARDANT, Désactiver, Activer, BASE,
+  BASE ✓, PDF Pélic, Doc PDF Réduite, VAC, NOTAMS, Go To, Ajout WP, ×) : mêmes
+  appels ; mise en page v17.44 identique (largeurs, hauteurs, polices,
+  espaces) ; seule la position change quand la carte glisse : OK.
+- Suivi GPS (bouton, recentrage, Recentrage économe ON / OFF), sélection d'un
+  feu (liste et carte) : OK.
+- Autres fenêtres (feux, zones, points, SafeSky) : OK.
+- Connexion / mot de passe, FdS / GAAR (BFG connecté, refusé, NAS en panne,
+  NAS lent), GLR, bandeau : OK.
+- Carte, sélecteur de fonds (« NPF_France », « NPF_France_B — essai rapide »,
+  « OACI 1-500 000 », passages sans relance), échelle 20 / 10 / 5 / 2 / 1 NM :
+  OK.
+- NOTAM, VAC, SafeSky mémorisé, DIAG : OK.
+- Hors ligne (service worker) et mise à jour de version, rejoué après la
+  dernière retouche : OK.
+- Caches : npf-q400-test-* seulement, aucun cache de la pérenne supprimé : OK.
+- Textes : aucun texte affiché ajouté : OK.
+Aucune exception JavaScript dans les deux versions.
+
+FICHIERS MODIFIÉS
+src/210, src/260, src/090 (commentaire), src/010 (version), donc script.js ;
+index.html, manifest.json, sw.js, style.css : numéros de version seulement.
+sia.js, src/100, src/080, src/110, src/120, src/280, src/340 : identiques à
+v17.44.
+
+VERSION
+- App : v17.45
+- Service Worker : `sw-v17-45_fenetre_terrain_glissement`
+
+STATUT : À MESURER sur iPad.
+
 
 VERSION TEST v17.44 — FENÊTRE TERRAIN (PÉLIC) PLUS ÉTROITE, PETITS BOUTONS
 PLUS LISIBLES

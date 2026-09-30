@@ -1077,6 +1077,20 @@ function recenterMapOnKnownGpsPosition(reason = 'manual') {
     return true;
 }
 
+/*
+ * v17.45 — au retour automatique sur l'avion, une fenêtre de terrain encore
+ * ouverte se ferme. Les autres fenêtres (feux, zones, points, SafeSky) ne
+ * sont pas concernées.
+ */
+function closeNpfAirportPopupForFollowReturn() {
+    try {
+        const popup = map?._popup || null;
+        if (popup && typeof isNpfAirportPopup === 'function' && isNpfAirportPopup(popup)) {
+            map.closePopup(popup);
+        }
+    } catch (_) {}
+}
+
 function scheduleCenterGpsFollowRecentering() {
     if (!isCenterGpsFollowEffective()) return;
 
@@ -1091,6 +1105,7 @@ function scheduleCenterGpsFollowRecentering() {
         centerGpsFollowPauseTimer = null;
         centerGpsFollowPausedUntil = 0;
         if (isCenterGpsFollowEffective()) {
+            closeNpfAirportPopupForFollowReturn();
             recenterMapOnKnownGpsPosition('manual-delay');
         }
     }, recenterDelayMs);
@@ -1150,6 +1165,24 @@ function installCenterGpsFollowHandlers() {
 
         ['pointerup', 'pointercancel', 'touchend', 'touchcancel', 'mouseup'].forEach((eventName) => {
             container.addEventListener(eventName, endUserMapGesture, { passive: true, capture: true });
+        });
+
+        /*
+         * v17.45 — tout toucher dans la fenêtre d'un terrain (bouton ou fenêtre
+         * elle-même) relance le compte du retour automatique, pour qu'elle ne
+         * se ferme pas pendant son utilisation. Les autres fenêtres restent
+         * ignorées par le Suivi, comme avant.
+         */
+        const restartFollowDelayForAirportPopupTouch = (event) => {
+            if (!isCenterGpsFollowEffective()) return;
+            try {
+                const popupElement = event?.target?.closest?.('.leaflet-popup');
+                if (!popupElement || !popupElement.querySelector('.airport-popup')) return;
+                scheduleCenterGpsFollowRecentering();
+            } catch (_) {}
+        };
+        ['pointerdown', 'touchstart', 'mousedown'].forEach((eventName) => {
+            container.addEventListener(eventName, restartFollowDelayForAirportPopupTouch, { passive: true, capture: true });
         });
     }
 

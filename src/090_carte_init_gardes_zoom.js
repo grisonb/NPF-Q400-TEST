@@ -410,7 +410,8 @@ function initMap() {
     applyPelicanVisualScale();
     map.on('zoomend', applyPelicanVisualScale);
 
-    /* PÉLIC : après rendu complet de la fiche, la garder dans la zone visible. */
+    /* Terrains (v17.45) : après rendu complet de la fenêtre, la carte glisse
+     * si nécessaire pour qu'elle soit entièrement visible. */
     map.on('popupopen', event => {
         scheduleNpfPelicPopupReposition(event?.popup);
     });

@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v17-44_fenetre_terrain';
-const APP_VERSION = 'v17.44';
+const SW_VERSION = 'sw-v17-45_fenetre_terrain_glissement';
+const APP_VERSION = 'v17.45';
 const SIA_DATA_REVISION = '15.69-radio1026-1-maplite1';
 const SIA_DATA_URL = './sia.js';
 /*
