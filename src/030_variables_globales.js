@@ -629,12 +629,25 @@ let npfMapManualGestureLockActive = false;
 const NPF_MAP_MANUAL_GESTURE_SETTLE_MS = 500;
 
 /*
- * Aucun timeout forcé pour passer de Tuiles -> VFR :
+ * Passage de Tuiles -> VFR (v17.03, durée maximale ajoutée en v17.41) :
  * on attend soit toutes les tuiles visibles, soit l'arrêt réel du scheduler
  * tuiles (file=0 + lectures actives=0) stabilisé sur plusieurs passes.
  */
 const NPF_MAP_OVERLAY_PRIORITY_TILE_POLL_MS = 60;
 const NPF_MAP_OVERLAY_PRIORITY_TILE_STABLE_PASSES = 3;
+/*
+ * v17.41 — durée maximale de l'attente Tuiles -> VFR (elle n'en avait plus
+ * depuis la v17.03). Deux limites, comptées en temps d'attente réel (une
+ * suspension de l'app ne compte pas) :
+ * - 2 s pendant lesquelles le lecteur de tuiles est au repos (file=0 +
+ *   lectures actives=0) sans que l'état « prêt » soit atteint : cette limite
+ *   ne peut pas se déclencher pendant un chargement de tuiles, ce qui évite
+ *   le défaut du timeout fixe de 6 s de la v17.02 ;
+ * - 30 s au total, plafond de sécurité (même valeur que la priorité fond de
+ *   carte du démarrage).
+ */
+const NPF_MAP_OVERLAY_PRIORITY_TILE_IDLE_MAX_WAIT_MS = 2000;
+const NPF_MAP_OVERLAY_PRIORITY_TILE_MAX_WAIT_MS = 30000;
 const NPF_MAP_OVERLAY_PRIORITY_SIA_POLL_MS = 35;
 
 const NPF_HEAVY_OVERLAY_ZOOM_SETTLE_MS = 360;

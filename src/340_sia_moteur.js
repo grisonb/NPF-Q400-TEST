@@ -1970,9 +1970,26 @@ function getVisibleBaseTileLoadStateForSia() {
 
         const layerZoom = Number(baseTileLayer._tileZoom);
         const mapZoom = Number(map.getZoom?.());
+        /*
+         * v17.41 — le zoom des tuiles est comparé au zoom que le fond peut
+         * réellement fournir : zoom de la carte plafonné au zoom natif du fond.
+         * Un fond qui agrandit ses tuiles (OACI 1/500 000 : tuiles jusqu'au
+         * zoom 10, affichage jusqu'au 11) garde ses tuiles au zoom 10 ; la
+         * comparaison au zoom de la carte ne devenait alors jamais vraie.
+         * Sans agrandissement (NPF-Q400 et autres fonds), rien ne change.
+         */
+        const nativeMaxZoom = Number(baseTileLayer.options?.maxNativeZoom);
+        const nativeMinZoom = Number(baseTileLayer.options?.minNativeZoom);
+        let expectedTileZoom = mapZoom;
+        if (Number.isFinite(nativeMaxZoom) && expectedTileZoom > nativeMaxZoom) {
+            expectedTileZoom = nativeMaxZoom;
+        }
+        if (Number.isFinite(nativeMinZoom) && expectedTileZoom < nativeMinZoom) {
+            expectedTileZoom = nativeMinZoom;
+        }
         const tileZoomReady = !Number.isFinite(layerZoom)
             || !Number.isFinite(mapZoom)
-            || Math.abs(layerZoom - mapZoom) < 0.001;
+            || Math.abs(layerZoom - expectedTileZoom) < 0.001;
 
         return { total, loaded, tileZoomReady };
     } catch (_) {

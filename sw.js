@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v17-40_bandeaux_glr_fds';
-const APP_VERSION = 'v17.40';
+const SW_VERSION = 'sw-v17-41_vfr_oaci_restitution';
+const APP_VERSION = 'v17.41';
 const SIA_DATA_REVISION = '15.69-radio1026-1-maplite1';
 const SIA_DATA_URL = './sia.js';
 /*

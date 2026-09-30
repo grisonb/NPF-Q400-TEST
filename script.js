@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.40';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.41';
 
 
 /*
@@ -662,7 +662,19 @@ const NPF_DIAG_DETAIL = (() => {
         /* v17.40 — sélections de feu et messages affichés en bandeau. */
         fireSelections: [],
         bannerCount: 0,
-        lastBanner: null
+        lastBanner: null,
+        /* v17.41 — premier plan / arrière-plan, récupérations automatiques du
+         * lecteur de tuiles, lectures ayant dépassé leur délai et encore en
+         * cours, délais de restitution dépassés, « référence iPad ».
+         * Mémoire seule : écrits avec l'enregistrement DIAG existant. */
+        visibilityEvents: [],
+        readerRecoveries: [],
+        pendingPackReads: new Map(),
+        pendingPackReadSeq: 0,
+        lateReads: { total: 0, maxSimultaneous: 0 },
+        restoreTimeouts: [],
+        refDurations: [],
+        refStats: { n: 0, totalMs: 0, maxMs: 0, skipped: 0 }
     };
 
     const safe = (callback, fallback = undefined) => {
@@ -1574,7 +1586,8 @@ const NPF_DIAG_DETAIL = (() => {
             minute = {
                 index, at: wallAt(index * 60000), durations: [], n: 0, max: 0,
                 htOn: false, htOff: false, routesOn: false, routesOff: false,
-                gpsMs: 0, gpsN: 0, calcMs: 0
+                gpsMs: 0, gpsN: 0, calcMs: 0,
+                lateN: 0, lateMax: 0, refMs: null
             };
             state.readMinutes.set(index, minute);
             if (state.readMinutes.size > 60) state.readMinutes.delete(state.readMinutes.keys().next().value);
@@ -1610,6 +1623,88 @@ const NPF_DIAG_DETAIL = (() => {
                 }, 30);
             }
         }
+    };
+
+    /* v17.41 — lectures ayant dépassé leur délai (5,2 s fond NPF-Q400, 1,8 s
+     * autres fonds) et qui continuent en arrière-plan. Mesure seule, sans
+     * minuterie : le décompte est fait au début et à la fin de chaque lecture. */
+    const noteLatePackReads = t => {
+        let late = 0;
+        state.pendingPackReads.forEach(entry => {
+            if (t - entry.t0 > entry.limit) late += 1;
+        });
+        if (!late) return;
+        const minute = readMinuteAt(t);
+        if (late > minute.lateMax) minute.lateMax = late;
+        if (late > state.lateReads.maxSimultaneous) state.lateReads.maxSimultaneous = late;
+    };
+    const packReadStart = () => {
+        const t = now();
+        const id = ++state.pendingPackReadSeq;
+        if (state.pendingPackReads.size >= 200) {
+            state.pendingPackReads.delete(state.pendingPackReads.keys().next().value);
+        }
+        state.pendingPackReads.set(id, {
+            t0: t,
+            limit: safe(() => isNpfOfflinePackSelection(), false) ? 5200 : 1800
+        });
+        noteLatePackReads(t);
+        return id;
+    };
+    const packReadEnd = id => {
+        const entry = state.pendingPackReads.get(id);
+        if (!entry) return;
+        const t = now();
+        noteLatePackReads(t);
+        state.pendingPackReads.delete(id);
+        if (t - entry.t0 > entry.limit) {
+            state.lateReads.total += 1;
+            readMinuteAt(t).lateN += 1;
+        }
+    };
+
+    /* v17.41 — « référence iPad » : petit calcul toujours identique (entiers,
+     * sans DOM, sans stockage, sans allocation), chronométré une fois par
+     * minute hors geste et après le démarrage principal. Sa durée sert de
+     * thermomètre indirect : elle augmente quand l'iPad bride son processeur. */
+    const REFERENCE_ITERATIONS = 500000;
+    let referenceCoreReady = false;
+    const runReferenceComputation = () => {
+        let x = 0x2545F491;
+        let acc = 0;
+        for (let i = 0; i < REFERENCE_ITERATIONS; i += 1) {
+            x ^= x << 13;
+            x ^= x >>> 17;
+            x ^= x << 5;
+            acc = (acc + (x & 0xffff)) | 0;
+        }
+        return acc;
+    };
+    const sampleReference = () => {
+        if (document.visibilityState === 'hidden') return;
+        if (!referenceCoreReady) {
+            referenceCoreReady = NPF_STARTUP_DIAGNOSTIC.state.marks.some(entry => entry.key === 'core_ready');
+            if (!referenceCoreReady) return;
+        }
+        if (
+            safe(() => !!npfMapManualGestureLockActive, false)
+            || safe(() => !!centerGpsFollowUserGestureActive, false)
+        ) {
+            state.refStats.skipped += 1;
+            return;
+        }
+        /* Une mesure par ligne « par minute » : rien si la minute en a déjà une. */
+        const minute = readMinuteAt(now());
+        if (minute.refMs !== null) return;
+        const t0 = now();
+        runReferenceComputation();
+        const ms = Math.round((now() - t0) * 10) / 10;
+        minute.refMs = ms;
+        const stats = state.refStats;
+        stats.n += 1;
+        stats.totalMs += ms;
+        if (ms > stats.maxMs) stats.maxMs = ms;
+        pushCapped(state.refDurations, ms, 600);
     };
 
     const tileLookupEnd = (lookup, outcome, dbName) => {
@@ -2179,6 +2274,34 @@ const NPF_DIAG_DETAIL = (() => {
 
         wrapGlobal('initMap', { after: () => installMapHooks() });
 
+        /* v17.41 — lectures du pack encore en cours après leur délai, et
+         * récupérations automatiques du lecteur. Mesure seule : les fonctions
+         * du moteur de tuiles (src/100) sont observées, pas modifiées. */
+        wrapGlobal('readDirectOfflineTileRecord', {
+            noStartup: true,
+            noActivity: true,
+            before: () => packReadStart(),
+            after: info => packReadEnd(info.before)
+        });
+        wrapGlobal('recoverDirectOfflineTileReader', {
+            noStartup: true,
+            before: args => ({
+                count: safe(() => Number(directOfflineRecoveryCount) || 0, 0),
+                reason: String(args?.[0] || 'read-error').slice(0, 80)
+            }),
+            after: info => {
+                const count = safe(() => Number(directOfflineRecoveryCount) || 0, 0);
+                /* Appel refusé (récupération déjà en cours, délai de 12 s) : non compté. */
+                if (!info.before || count <= info.before.count) return;
+                pushCapped(state.readerRecoveries, {
+                    at: wallAt(info.t0),
+                    reason: info.before.reason,
+                    ms: round(info.tEnd - info.t0),
+                    ok: info.value === true
+                }, 30);
+            }
+        });
+
         const waitWrapper = (name, labelOf, layerWaitName = null) => wrapGlobal(name, {
             noStartup: true,
             before: args => ({
@@ -2355,6 +2478,17 @@ const NPF_DIAG_DETAIL = (() => {
     };
 
     try { installWrappers(); } catch (error) { console.warn('[NPF DIAG] Enveloppes v17.32 :', error); }
+    /* v17.41 — premier plan / arrière-plan, et « référence iPad » (essai toutes
+     * les 10 s, une mesure par minute au plus). */
+    try {
+        document.addEventListener('visibilitychange', () => {
+            pushCapped(state.visibilityEvents, {
+                at: Date.now(),
+                hidden: document.visibilityState === 'hidden'
+            }, 60);
+        }, { passive: true });
+        setInterval(() => safe(sampleReference), 10000);
+    } catch (_) {}
     try { startBlockMonitor(); } catch (_) {}
     try { startTileTimeline(); } catch (_) {}
     try { watchPackChanges(); } catch (_) {}
@@ -2393,6 +2527,16 @@ const NPF_DIAG_DETAIL = (() => {
             pushCapped(state.fireSelections, { at: Date.now(), t: round(now()), origin: String(origin || '—'), name }, 20);
             safe(() => npfDiagSiaInteraction('SÉLECTION FEU', `${origin} · ${name}`, null));
         },
+        restoreTimeout: (kind, waitedMs, tiles) => {
+            pushCapped(state.restoreTimeouts, {
+                at: Date.now(),
+                kind: String(kind || '—'),
+                ms: round(waitedMs),
+                zoom: safe(() => Number(map.getZoom()), null),
+                fond: String(getPackKey()).slice(0, 60),
+                tiles: tiles ? (Number(tiles.loaded) || 0) + '/' + (Number(tiles.total) || 0) : '—'
+            }, 20);
+        },
         bannerShown: text => {
             const clean = String(text || '').replace(/\s+/g, ' ').trim().slice(0, 300);
             state.bannerCount += 1;
@@ -2413,6 +2557,11 @@ const NPF_DIAG_DETAIL = (() => {
         }
     };
 })();
+
+/* v17.41 — délai de restitution dépassé (appelé par le séquenceur, src/080). */
+function npfDiagRestoreWaitTimeout(kind, waitedMs, tiles) {
+    try { NPF_DIAG_DETAIL.restoreTimeout(kind, waitedMs, tiles); } catch (_) {}
+}
 
 /* v17.40 — sélection d'un feu (src/050) et bandeau d'information (src/050). */
 function npfDiagFireSelected(origin, item) {
@@ -2509,6 +2658,12 @@ function npfDiagDetailPersistSnapshot() {
             readMinutes: Array.from(s.readMinutes.values()).slice(-15).map(npfDiagCompactReadMinute),
             slowReadBatches: s.slowReadBatches.slice(-10),
             fireSelections: s.fireSelections.slice(-10),
+            /* v17.41 — formes courtes pour garder un enregistrement léger. */
+            visibility: s.visibilityEvents.slice(-20).map(item => [item.at, item.hidden ? 1 : 0]),
+            readerRecoveries: s.readerRecoveries.slice(-10),
+            restoreTimeouts: s.restoreTimeouts.slice(-10),
+            lateReads: { ...s.lateReads },
+            reference: npfDiagReferenceSummary(),
             memoryPeak: s.memoryPeak,
             cellCache: { ...s.cellCache }
         };
@@ -2731,7 +2886,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.40 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.41 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -2950,8 +3105,64 @@ function npfDiagCompactReadMinute(minute) {
         ht: minute.n ? npfDiagLayerMix(minute.htOn, minute.htOff) : '—',
         routes: minute.n ? npfDiagLayerMix(minute.routesOn, minute.routesOff) : '—',
         gpsMs: Math.round(Number(minute.gpsMs) || 0), gpsN: Number(minute.gpsN) || 0,
-        calcMs: Math.round(Number(minute.calcMs) || 0)
+        calcMs: Math.round(Number(minute.calcMs) || 0),
+        lateN: Number(minute.lateN) || 0, lateMax: Number(minute.lateMax) || 0,
+        refMs: Number.isFinite(minute.refMs) ? minute.refMs : null
     };
+}
+
+/* v17.41 — synthèse de la « référence iPad » (médiane au dixième de ms). */
+function npfDiagReferenceSummary() {
+    try {
+        const s = NPF_DIAG_DETAIL.state;
+        const sorted = s.refDurations.slice().sort((a, b) => a - b);
+        return {
+            n: s.refStats.n,
+            median: sorted.length ? sorted[Math.floor(sorted.length / 2)] : null,
+            max: s.refStats.maxMs,
+            totalMs: Math.round(s.refStats.totalMs),
+            skipped: s.refStats.skipped
+        };
+    } catch (_) {
+        return null;
+    }
+}
+
+function formatNpfDiagReferenceMs(value) {
+    return String(value).replace('.', ',') + ' ms';
+}
+
+function formatNpfDiagReferenceSummaryLine(item) {
+    return 'Référence iPad (petit calcul identique, une fois par minute) : '
+        + (item && item.n
+            ? item.n + ' mesure(s) · médiane ' + formatNpfDiagReferenceMs(item.median)
+                + ' · max ' + formatNpfDiagReferenceMs(item.max)
+            : 'aucune mesure')
+        + (item && item.skipped ? ' · ' + item.skipped + ' essai(s) reporté(s) pendant un geste' : '');
+}
+
+function formatNpfDiagLateReadsLine(item, pending) {
+    return 'Lectures ayant dépassé leur délai et poursuivies en arrière-plan : '
+        + (Number(item?.total) || 0) + ' terminée(s) en retard · maximum simultané '
+        + (Number(item?.maxSimultaneous) || 0)
+        + (pending === null || pending === undefined ? '' : ' · encore en cours ' + pending);
+}
+
+function formatNpfDiagVisibilityLine(item) {
+    const at = Array.isArray(item) ? item[0] : item.at;
+    const hidden = Array.isArray(item) ? !!item[1] : !!item.hidden;
+    return '   ' + formatNpfDiagClock(at) + ' | ' + (hidden ? 'passage en arrière-plan' : 'retour au premier plan');
+}
+
+function formatNpfDiagReaderRecoveryLine(item) {
+    return '   ' + formatNpfDiagClock(item.at) + ' | motif : ' + item.reason + ' | ' + item.ms + ' ms | '
+        + (item.ok ? 'carte reconstruite' : 'secours (carte non reconstruite)');
+}
+
+function formatNpfDiagRestoreTimeoutLine(item) {
+    return '   ' + formatNpfDiagClock(item.at) + ' | délai de restitution dépassé (' + item.kind + ', attente '
+        + item.ms + ' ms) | zoom ' + (item.zoom === null ? '—' : item.zoom) + ' | fond ' + item.fond
+        + ' | tuiles ' + item.tiles;
 }
 
 function formatNpfDiagReadMinuteLine(item) {
@@ -2960,6 +3171,10 @@ function formatNpfDiagReadMinuteLine(item) {
         + ' | HT ' + item.ht + ' · Routes ' + item.routes
         + (item.gpsMs !== undefined
             ? ' | traitement GPS ' + item.gpsMs + ' ms (' + item.gpsN + ' positions) · calculateur ' + item.calcMs + ' ms'
+            : '')
+        + (item.refMs !== undefined
+            ? ' | référence iPad ' + (item.refMs === null ? '—' : formatNpfDiagReferenceMs(item.refMs))
+                + ' | lectures hors délai ' + item.lateN + ' (max simultané ' + item.lateMax + ')'
             : '');
 }
 
@@ -3012,6 +3227,24 @@ function appendNpfDiagPackReadSection(lines) {
     lines.push('Sélections de feu (v17.40) :');
     if (!s.fireSelections.length) lines.push('   Aucune.');
     s.fireSelections.forEach(item => lines.push(formatNpfDiagFireSelectionLine(item)));
+    /* v17.41 — référence iPad, lectures hors délai, récupérations, premier
+     * plan / arrière-plan, délais de restitution dépassés. */
+    lines.push(formatNpfDiagReferenceSummaryLine(npfDiagReferenceSummary()));
+    let pendingLate = 0;
+    try {
+        const t = NPF_STARTUP_DIAGNOSTIC.now();
+        s.pendingPackReads.forEach(entry => { if (t - entry.t0 > entry.limit) pendingLate += 1; });
+    } catch (_) {}
+    lines.push(formatNpfDiagLateReadsLine(s.lateReads, pendingLate));
+    lines.push('Récupérations automatiques du lecteur de tuiles (v17.41) :');
+    if (!s.readerRecoveries.length) lines.push('   Aucune.');
+    s.readerRecoveries.forEach(item => lines.push(formatNpfDiagReaderRecoveryLine(item)));
+    lines.push('Délais de restitution dépassés (v17.41) :');
+    if (!s.restoreTimeouts.length) lines.push('   Aucun.');
+    s.restoreTimeouts.forEach(item => lines.push(formatNpfDiagRestoreTimeoutLine(item)));
+    lines.push('Premier plan / arrière-plan (v17.41) :');
+    if (!s.visibilityEvents.length) lines.push('   Aucun changement.');
+    s.visibilityEvents.forEach(item => lines.push(formatNpfDiagVisibilityLine(item)));
 }
 
 /* v17.38 — FdS / BFG / GLR : requêtes NAS, temps ressenti, messages, pont BFG. */
@@ -3337,6 +3570,11 @@ function appendNpfDiagDetailRestoredSections(lines, detail) {
     section('Lectures du pack par minute :', detail.readMinutes, formatNpfDiagReadMinuteLine);
     section('Paquets de lectures lents (> 1 s) :', detail.slowReadBatches, formatNpfDiagSlowBatchLine);
     section('Sélections de feu :', detail.fireSelections, formatNpfDiagFireSelectionLine);
+    if (detail.reference) lines.push(formatNpfDiagReferenceSummaryLine(detail.reference));
+    if (detail.lateReads) lines.push(formatNpfDiagLateReadsLine(detail.lateReads, null));
+    section('Récupérations automatiques du lecteur de tuiles :', detail.readerRecoveries, formatNpfDiagReaderRecoveryLine);
+    section('Délais de restitution dépassés :', detail.restoreTimeouts, formatNpfDiagRestoreTimeoutLine);
+    section('Premier plan / arrière-plan :', detail.visibility, formatNpfDiagVisibilityLine);
     section('Pont BFG (tentatives) :', detail.bfgAttempts, formatNpfDiagBfgAttemptLine);
     section('Temps ressenti FdS / GLR :', detail.felt, formatNpfDiagFeltLine);
     section('Messages FdS / BFG / GLR affichés :', detail.messages, formatNpfDiagMessageLine);
@@ -4002,6 +4240,18 @@ function buildNpfStartupDiagnosticExportText() {
         + 'temps total ' + Math.round(runtime.diagPersistTotalMs || 0) + ' ms'
         + ' | taille ' + Math.round(Number(NPF_STARTUP_DIAGNOSTIC.state.persistChars) || 0).toLocaleString('fr-FR') + ' car.'
         + ' | reportées (geste) ' + Math.round(Number(NPF_STARTUP_DIAGNOSTIC.state.persistDeferred) || 0)
+        + (() => {
+            /* v17.41 — coût de la « référence iPad ». */
+            try {
+                const reference = npfDiagReferenceSummary();
+                if (!reference) return '';
+                const elapsedMs = Math.max(1, NPF_STARTUP_DIAGNOSTIC.now());
+                return ' | référence iPad : ' + reference.n + ' mesure(s), total ' + reference.totalMs + ' ms ('
+                    + ((reference.totalMs / elapsedMs) * 100).toFixed(3).replace('.', ',') + ' % du temps)';
+            } catch (_) {
+                return '';
+            }
+        })()
         + (() => {
             try {
                 const launchCost = window.NPF_LAUNCH_LOG?.cost?.();
@@ -5774,12 +6024,25 @@ let npfMapManualGestureLockActive = false;
 const NPF_MAP_MANUAL_GESTURE_SETTLE_MS = 500;
 
 /*
- * Aucun timeout forcé pour passer de Tuiles -> VFR :
+ * Passage de Tuiles -> VFR (v17.03, durée maximale ajoutée en v17.41) :
  * on attend soit toutes les tuiles visibles, soit l'arrêt réel du scheduler
  * tuiles (file=0 + lectures actives=0) stabilisé sur plusieurs passes.
  */
 const NPF_MAP_OVERLAY_PRIORITY_TILE_POLL_MS = 60;
 const NPF_MAP_OVERLAY_PRIORITY_TILE_STABLE_PASSES = 3;
+/*
+ * v17.41 — durée maximale de l'attente Tuiles -> VFR (elle n'en avait plus
+ * depuis la v17.03). Deux limites, comptées en temps d'attente réel (une
+ * suspension de l'app ne compte pas) :
+ * - 2 s pendant lesquelles le lecteur de tuiles est au repos (file=0 +
+ *   lectures actives=0) sans que l'état « prêt » soit atteint : cette limite
+ *   ne peut pas se déclencher pendant un chargement de tuiles, ce qui évite
+ *   le défaut du timeout fixe de 6 s de la v17.02 ;
+ * - 30 s au total, plafond de sécurité (même valeur que la priorité fond de
+ *   carte du démarrage).
+ */
+const NPF_MAP_OVERLAY_PRIORITY_TILE_IDLE_MAX_WAIT_MS = 2000;
+const NPF_MAP_OVERLAY_PRIORITY_TILE_MAX_WAIT_MS = 30000;
 const NPF_MAP_OVERLAY_PRIORITY_SIA_POLL_MS = 35;
 
 const NPF_HEAVY_OVERLAY_ZOOM_SETTLE_MS = 360;
@@ -11470,6 +11733,15 @@ function beginNpfMapOverlayPrioritySequence(reason = 'map-start') {
  */
 async function waitForNpfMapOverlayPriorityTilesSettled(token) {
     let stablePasses = 0;
+    /* v17.41 — durée maximale : temps d'attente réel cumulé passe par passe. */
+    const nowMs = () => (
+        (typeof performance !== 'undefined' && performance.now)
+            ? performance.now()
+            : Date.now()
+    );
+    let lastPassAt = nowMs();
+    let waitedMs = 0;
+    let readerIdleMs = 0;
 
     while (
         token === npfMapOverlayPriorityToken
@@ -11530,6 +11802,41 @@ async function waitForNpfMapOverlayPriorityTilesSettled(token) {
             }
         } else {
             stablePasses = 0;
+        }
+
+        /*
+         * v17.41 — durée maximale. Chaque passe compte au plus 250 ms : le
+         * temps passé en arrière-plan (app suspendue) n'est pas compté.
+         * Au-delà, la restitution continue dans l'ordre habituel
+         * (VFR -> HT -> Routes) avec ce qui est disponible.
+         */
+        const passAt = nowMs();
+        const passMs = Math.max(0, Math.min(250, passAt - lastPassAt));
+        lastPassAt = passAt;
+        waitedMs += passMs;
+        readerIdleMs = (queued === 0 && activeReads === 0)
+            ? readerIdleMs + passMs
+            : 0;
+
+        const idleLimitReached = (
+            readerIdleMs >= NPF_MAP_OVERLAY_PRIORITY_TILE_IDLE_MAX_WAIT_MS
+        );
+        if (
+            idleLimitReached
+            || waitedMs >= NPF_MAP_OVERLAY_PRIORITY_TILE_MAX_WAIT_MS
+        ) {
+            try {
+                npfDiagRestoreWaitTimeout(
+                    idleLimitReached ? 'repos 2 s' : 'plafond 30 s',
+                    waitedMs,
+                    state
+                );
+            } catch (_) {}
+
+            return (
+                token === npfMapOverlayPriorityToken
+                && npfMapOverlayPriorityActive
+            );
         }
 
         await new Promise(resolve => setTimeout(
@@ -53823,9 +54130,26 @@ function getVisibleBaseTileLoadStateForSia() {
 
         const layerZoom = Number(baseTileLayer._tileZoom);
         const mapZoom = Number(map.getZoom?.());
+        /*
+         * v17.41 — le zoom des tuiles est comparé au zoom que le fond peut
+         * réellement fournir : zoom de la carte plafonné au zoom natif du fond.
+         * Un fond qui agrandit ses tuiles (OACI 1/500 000 : tuiles jusqu'au
+         * zoom 10, affichage jusqu'au 11) garde ses tuiles au zoom 10 ; la
+         * comparaison au zoom de la carte ne devenait alors jamais vraie.
+         * Sans agrandissement (NPF-Q400 et autres fonds), rien ne change.
+         */
+        const nativeMaxZoom = Number(baseTileLayer.options?.maxNativeZoom);
+        const nativeMinZoom = Number(baseTileLayer.options?.minNativeZoom);
+        let expectedTileZoom = mapZoom;
+        if (Number.isFinite(nativeMaxZoom) && expectedTileZoom > nativeMaxZoom) {
+            expectedTileZoom = nativeMaxZoom;
+        }
+        if (Number.isFinite(nativeMinZoom) && expectedTileZoom < nativeMinZoom) {
+            expectedTileZoom = nativeMinZoom;
+        }
         const tileZoomReady = !Number.isFinite(layerZoom)
             || !Number.isFinite(mapZoom)
-            || Math.abs(layerZoom - mapZoom) < 0.001;
+            || Math.abs(layerZoom - expectedTileZoom) < 0.001;
 
         return { total, loaded, tileZoomReady };
     } catch (_) {

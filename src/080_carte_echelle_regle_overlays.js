@@ -861,6 +861,15 @@ function beginNpfMapOverlayPrioritySequence(reason = 'map-start') {
  */
 async function waitForNpfMapOverlayPriorityTilesSettled(token) {
     let stablePasses = 0;
+    /* v17.41 — durée maximale : temps d'attente réel cumulé passe par passe. */
+    const nowMs = () => (
+        (typeof performance !== 'undefined' && performance.now)
+            ? performance.now()
+            : Date.now()
+    );
+    let lastPassAt = nowMs();
+    let waitedMs = 0;
+    let readerIdleMs = 0;
 
     while (
         token === npfMapOverlayPriorityToken
@@ -921,6 +930,41 @@ async function waitForNpfMapOverlayPriorityTilesSettled(token) {
             }
         } else {
             stablePasses = 0;
+        }
+
+        /*
+         * v17.41 — durée maximale. Chaque passe compte au plus 250 ms : le
+         * temps passé en arrière-plan (app suspendue) n'est pas compté.
+         * Au-delà, la restitution continue dans l'ordre habituel
+         * (VFR -> HT -> Routes) avec ce qui est disponible.
+         */
+        const passAt = nowMs();
+        const passMs = Math.max(0, Math.min(250, passAt - lastPassAt));
+        lastPassAt = passAt;
+        waitedMs += passMs;
+        readerIdleMs = (queued === 0 && activeReads === 0)
+            ? readerIdleMs + passMs
+            : 0;
+
+        const idleLimitReached = (
+            readerIdleMs >= NPF_MAP_OVERLAY_PRIORITY_TILE_IDLE_MAX_WAIT_MS
+        );
+        if (
+            idleLimitReached
+            || waitedMs >= NPF_MAP_OVERLAY_PRIORITY_TILE_MAX_WAIT_MS
+        ) {
+            try {
+                npfDiagRestoreWaitTimeout(
+                    idleLimitReached ? 'repos 2 s' : 'plafond 30 s',
+                    waitedMs,
+                    state
+                );
+            } catch (_) {}
+
+            return (
+                token === npfMapOverlayPriorityToken
+                && npfMapOverlayPriorityActive
+            );
         }
 
         await new Promise(resolve => setTimeout(

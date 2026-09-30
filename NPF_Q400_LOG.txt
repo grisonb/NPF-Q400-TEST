@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
-Mise à jour : 29/09/2026
-Version de travail actuelle : TEST v17.40
+Mise à jour : 30/09/2026
+Version de travail actuelle : TEST v17.41
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,12 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.41 — points VFR (et HT / Routes) de nouveau restitués sur la carte OACI
+  1/500 000 au zoom 11 (régression v17.03) : « tuiles prêtes » compare le zoom
+  des tuiles au zoom natif que le fond peut fournir ; durée maximale rendue à
+  l'attente du séquenceur (2 s de repos du lecteur, plafond 30 s) ; DIAG :
+  premier plan / arrière-plan, récupérations automatiques du lecteur, lectures
+  hors délai, « référence iPad » une fois par minute ;
 - v17.40 — plus aucune fenêtre bloquante GLR / FdS / GAAR / BFG (bandeau 8 s) ;
   GLR : session expirée -> code directement, session valide jamais effacée sur
   coupure réseau, 1 requête par rafraîchissement, 1 essai / min après 3
@@ -353,6 +359,11 @@ NON IMPLÉMENTÉ / OUVERT :
   (« ANALYSE DIAG v17.32 SOL + VOL ») : 5 défauts du DIAG lui-même relevés
   (D1 à D5) et 9 recommandations classées gain / risque (R1 à R9), aucune
   implémentée. Historique : À MESURER -> MESURÉ ;
+- v17.41 : À MESURER sur iPad (OACI zoom 10 -> 11 : points VFR, HT, Routes ;
+  lecture de la « référence iPad » en vol) ;
+- Lenteur durable des lectures du pack NPF-Q400 sur iPad : cause NON PROUVÉE
+  (analyse du 30/09/2026 dans l'entrée v17.41). Remise à zéro douce des
+  connexions : NON IMPLÉMENTÉ, À DÉCIDER après mesure v17.41 ;
 - v17.40 : À MESURER sur iPad, sans mode avion (GLR et FdS avec BFG TEST
   déconnecté en premier) ;
 - Côté NAS (À VÉRIFIER, hors dépôt) : les réponses d'erreur de
@@ -396,38 +407,38 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.40
-Date : 29/09/2026
-Base : v17.39 (commitée 7a37a69, À MESURER)
+Version : TEST v17.41
+Date : 30/09/2026
+Base : v17.40 (commitée 9e1354f, À MESURER)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.40.txt
-2_Index_v17.40.txt
-3_Manifest_v17.40.txt
-4_Script_v17.40.txt
-5_SIA_v17.40.txt
-6_Style_v17.40.txt
-7_Sw_v17.40.txt
+1_Modifications_v17.41.txt
+2_Index_v17.41.txt
+3_Manifest_v17.41.txt
+4_Script_v17.41.txt
+5_SIA_v17.41.txt
+6_Style_v17.41.txt
+7_Sw_v17.41.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.40
-- Manifest : start_url = ./index.html?appv=v17.40
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.40
-- Style : NPF_STYLE_BUILD_VERSION = v17.40
-- Service Worker : `sw-v17-40_bandeaux_glr_fds` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-40_bandeaux_glr_fds`, `npf-q400-test-app-data-v1`,
+- Index : APP_VERSION = v17.41
+- Manifest : start_url = ./index.html?appv=v17.41
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.41
+- Style : NPF_STYLE_BUILD_VERSION = v17.41
+- Service Worker : `sw-v17-41_vfr_oaci_restitution` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-41_vfr_oaci_restitution`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-15.69-radio1026-1-maplite1`
 - SIA_DATA_REVISION (SW / Index) : 15.69-radio1026-1-maplite1 (inchangée)
-- sia.js v17.40 : strictement identique à v17.39.
+- sia.js v17.41 : strictement identique à v17.40.
 
 STATUT DE VALIDATION :
-- validation statique v17.40 effectuée avant livraison : Script/SIA/SW OK, script
+- validation statique v17.41 effectuée avant livraison : Script/SIA/SW OK, script
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
-- `sia.js` et moteur tuiles (src/100) identiques à v17.39 ;
-- tests Chrome v17.39 / v17.40 : entrée v17.40 ;
+- `sia.js` et moteur tuiles (src/100) identiques à v17.40 ;
+- tests Chrome v17.40 / v17.41 : entrée v17.41 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
-  sur iPad ; v17.32 MESURÉE ; v17.29, v17.31, v17.33 à v17.40 À MESURER.
+  sur iPad ; v17.32 MESURÉE ; v17.29, v17.31, v17.33 à v17.41 À MESURER.
 
 
 2. PROTOCOLE DE TRAVAIL À RESPECTER
@@ -1949,6 +1960,186 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.41 — POINTS VFR SUR OACI 1/500 000 AU ZOOM 11 ; DURÉE
+MAXIMALE DE RESTITUTION ; COMPTEURS DIAG ; « RÉFÉRENCE iPad »
+Date : 30/09/2026
+Base fonctionnelle : v17.40 (commit 9e1354f)
+DIAG de référence : NPF_DIAG_2026-09-29_16-10 (points VFR absents sur OACI),
+NPF_DIAG_2026-09-29_17-50 et 18-24 (vol, lectures lentes, réouverture).
+
+ANALYSE EN LECTURE SEULE DU 30/09/2026 (avant code)
+A. Points VFR sur OACI 1/500 000 — SÛR.
+- La carte OACI n'a pas de tuiles au zoom 11 : l'app agrandit celles du zoom 10
+  (src/030 : OACI_OFFLINE_MAX_NATIVE_ZOOM = 10, MAX_DISPLAY_ZOOM = 11). C'est
+  le seul fond qui agrandit ses tuiles.
+- `getVisibleBaseTileLoadStateForSia` (src/340) exigeait « zoom des tuiles =
+  zoom de la carte » : 10 contre 11, jamais vrai sur OACI au zoom 11.
+- `waitForNpfMapOverlayPriorityTilesSettled` (src/080) attend cet état sans
+  durée maximale : les points VFR (et HT / Routes) restaient masqués tant
+  qu'on restait au zoom 11. DIAG iPad : restitutions « annulée ou délai
+  dépassé » après 6 s, 9 s et 154 s avec tuiles 9/9 et file vide.
+- Régression introduite en v17.03 (commit 16c586f, 18/09). En v17.02
+  l'attente avait un délai de 6 s et ne s'appliquait qu'au fond NPF-Q400
+  (`waitForNpfVisibleBaseTilesReady` sortait tout de suite sur les autres
+  fonds). Vérifié dans Chrome : calque des points visible en v17.01 et v17.02,
+  masqué en v17.03 et v17.40.
+- Reproduction Chrome v17.40 (Lyon, filtre VRP allumé), attendus / affichés :
+  OACI zoom 10 : 43 / 43 ; OACI zoom 11 : 19 / 0 (toujours 0 après 30 s et
+  après un déplacement) ; NPF-Q400 zoom 10 : 43 / 43, zoom 11 : 19 / 19,
+  zoom 12 : 7 / 7. Zooms 8 et 9 : 0 attendu sur les deux fonds (règle 5 NM).
+B. « Réouverture » (vol du 29/09, v17.40) — cause de la lenteur NON PROUVÉE.
+- Lectures du pack NPF-Q400 : 0,4-0,6 s de 17:11 à 17:41 (HT et Routes OFF),
+  3,2 s à 17:44 (toujours OFF, allumés à 17:47:58), 3,6-5,0 s à 17:48-17:49.
+  Réouverture à 17:51:40 : les 20 premières lectures ont une médiane de 4,4 s
+  (max 21 s), première tuile à 13,6 s ; rapide à 17:56 (0,3 s) et 18:01
+  (0,08 s) ; de nouveau lent dès 18:02 (1,3 s), paquets de 5 lectures à
+  5-6,5 s à 18:06-18:08 ; rapide à 18:11-18:15 ; 3,0 s à 18:18.
+- La réouverture n'a donc pas rendu les lectures rapides tout de suite, et la
+  lenteur va et vient sans facteur unique (ni HT / Routes, ni zoom, ni mémoire
+  des calques). Fil principal libre pendant les paquets lents.
+- Pack OACI dans la même session : 48 ms en moyenne, 0 délai dépassé ; pack
+  NPF-Q400 : 935 ms, 20 délais dépassés (pas au même moment : piste seulement).
+- Code : connexions au pack ouvertes une fois et gardées (src/100:1597) ; une
+  lecture qui dépasse 5,2 s n'est pas annulée et continue en arrière-plan
+  (src/050 withTimeout) ; la récupération automatique
+  (`recoverDirectOfflineTileReader`, src/100:2045) ne se déclenche qu'après 4
+  erreurs de suite, jamais sur des lectures lentes réussies ; elle vide les
+  mémoires de tuiles. Elle s'est PROBABLEMENT déclenchée vers 17:50 et 18:08
+  (déduit de compteurs remis à zéro ; non enregistré par le DIAG v17.40).
+- Remise à zéro douce des connexions sans fermer l'app : NON IMPLÉMENTÉ,
+  À DÉCIDER. Essai possible sans code : retoucher la carte déjà active dans le
+  sélecteur rapide (src/280 `forceQuickOfflineMapGroupReload`).
+
+NON-RÉGRESSION — COMPORTEMENTS AVANT MODIFICATION (v17.40)
+1. Fond NPF-Q400 : points VFR aux zooms 10 à 13, règle 5 NM (src/350:1678),
+   filtres VRP (src/350:3075-3083).
+2. Ordre tuiles -> VFR -> HT -> Routes (src/080 `runNpfMapOverlayPriorityRestore`).
+3. Points masqués pendant le geste (src/080 `applyNpfMapOverlayPriorityVisibility`,
+   `beginNpfMapOverlayPrioritySequence`).
+4. OACI : plafond zoom 11, tuiles natives jusqu'à 10 (src/030, src/100).
+5. Attentes HT v17.39 (src/090 `waitForNpfHeavyOverlayTileWindow`, src/110).
+6. Démarrage : première tuile, PÉLIC, communes après carte complète ou 15 s
+   (src/060).
+7. Suivi GPS et Recentrage économe (src/260, src/080
+   `cancelNpfMapOverlayPriorityForGpsResume`).
+8. Sélection d'un feu, liste et carte (src/050).
+9. GLR (src/180). 10. FdS / GAAR règle BFG (src/170). 11. Bandeau (src/050).
+12. SafeSky mémorisé (src/140). 13. Service worker, caches npf-q400-test-*.
+14. Charge DIAG (src/010).
+
+MODIFICATIONS v17.41
+
+1. CAUSE DES POINTS VFR (src/340)
+- `getVisibleBaseTileLoadStateForSia` : le zoom des tuiles est comparé au zoom
+  de la carte plafonné au zoom natif du fond (`maxNativeZoom` / `minNativeZoom`
+  de la couche). OACI au zoom 11 : attendu 10 = zoom des tuiles -> prêt.
+- Aucun changement pour les fonds sans agrandissement (NPF-Q400 et autres).
+- Cette fonction sert au séquenceur (src/080), aux attentes HT / Routes
+  (src/090) et au rafraîchissement SIA (src/340) : tous en bénéficient.
+
+2. DURÉE MAXIMALE DE L'ATTENTE DU SÉQUENCEUR (src/080, src/030)
+- Pourquoi la v17.03 avait supprimé la limite : le délai fixe de 6 s de la
+  v17.02 pouvait rendre VFR / HT / Routes alors que les tuiles continuaient à
+  charger.
+- Valeur retenue (choix de Bastien, 30/09) :
+  * 2 s pendant lesquelles le lecteur de tuiles est au repos (file = 0 et
+    lectures actives = 0) sans que l'état « prêt » soit atteint : ne peut pas
+    se déclencher pendant un chargement de tuiles ;
+  * 30 s au total, plafond de sécurité (valeur de la priorité fond de carte du
+    démarrage).
+  Temps compté passe par passe (250 ms au plus par passe) : une suspension de
+  l'app en arrière-plan ne compte pas.
+- Délai dépassé : la restitution continue dans l'ordre habituel (VFR -> HT ->
+  Routes) ; le DIAG note « délai de restitution dépassé » (heure, motif, zoom,
+  fond, tuiles).
+- Constantes : NPF_MAP_OVERLAY_PRIORITY_TILE_IDLE_MAX_WAIT_MS = 2000,
+  NPF_MAP_OVERLAY_PRIORITY_TILE_MAX_WAIT_MS = 30000.
+
+3. COMPTEURS DIAG LÉGERS (src/010, mesure seule)
+- Premier plan / arrière-plan : heure de chaque changement (60 en mémoire, 20
+  enregistrés).
+- Récupérations automatiques du lecteur de tuiles : heure, motif, durée,
+  résultat. Les appels refusés (déjà en cours, délai de 12 s) ne sont pas
+  comptés.
+- Lectures ayant dépassé leur délai (5,2 s fond NPF-Q400, 1,8 s autres fonds)
+  et poursuivies en arrière-plan : total, maximum simultané, et par minute.
+  Sans minuterie : décompte au début et à la fin de chaque lecture.
+- Le moteur de tuiles (src/100) n'est pas modifié : ses fonctions
+  `readDirectOfflineTileRecord` et `recoverDirectOfflineTileReader` sont
+  observées par l'enveloppe DIAG existante (`wrapGlobal`), comme les autres
+  fonctions suivies.
+- Tout est en mémoire et écrit par l'enregistrement groupé existant (jamais
+  pendant un geste).
+
+4. « RÉFÉRENCE iPad » (src/010)
+- Une fois par minute, hors geste, app au premier plan et après « Démarrage
+  principal prêt » : petit calcul toujours identique (500 000 tours d'un
+  calcul sur entiers, sans DOM, sans stockage, sans allocation), chronométré.
+- Affiché dans chaque ligne par minute de « LECTURES DU PACK » (« référence
+  iPad X ms »), avec médiane et maximum en synthèse ; coût dans « Charge
+  DIAG ».
+- Limite connue : Safari arrondit le chronomètre à 1 ms ; la mesure se lit donc
+  à 1 ms près sur iPad.
+
+FICHIERS MODIFIÉS
+src/010, src/030, src/080, src/340 (donc script.js), index.html, manifest.json,
+style.css et sw.js (numéros de version seulement). sia.js, src/100, src/090,
+src/110, src/120, src/260 : strictement identiques à v17.40.
+
+TESTS CHROME v17.40 / v17.41 (30/09/2026, packs synthétiques, NAS simulé)
+- OACI zoom 10 -> 11 : v17.40 19 attendus / 0 affiché, restitution bloquée ;
+  v17.41 19 / 19 en 0,95 s. Après déplacement : 20 / 20 en 1,5 s. Allers-retours
+  10 <-> 11 (2 fois) : 45 / 45 puis 20 / 20 à chaque fois, 0,94 à 1,05 s.
+- OACI zoom 11 avec HT + Routes : v17.40 HT et Routes masqués ; v17.41 les
+  trois calques visibles (HT 379 tronçons, Routes 1 partie), fin en 1,06 s ;
+  après déplacement 1,44 s.
+- NPF-Q400 zooms 10 / 11 / 12 / 13 : 43 / 19 / 7 / 2 points dans les deux
+  versions ; restitution 1,05 / 0,97 / 0,96 / 0,96 s en v17.41 contre 1,07 /
+  1,02 / 0,96 / 0,96 s en v17.40.
+- Tuiles jamais prêtes (simulation) : v17.40 bloquée ; v17.41 restitution à
+  3,4 s (« repos 2 s », attente 2008 ms) ; lecteur maintenu occupé : 31,4 s
+  (« plafond 30 s », attente 30012 ms) ; deux lignes DIAG présentes ; geste
+  suivant normal (1,46 s).
+- DIAG : 3 lectures hors délai simulées -> « 3 terminée(s) en retard, maximum
+  simultané 3 » ; récupération provoquée -> 1 ligne (motif, 191 ms, carte
+  reconstruite), appel refusé non compté ; arrière-plan / premier plan -> 2
+  lignes ; référence iPad 4 à 11 ms dans Chrome (jusqu'à 15 ms quand deux
+  Chrome de test tournent ensemble), 0,010 à 0,038 % du temps.
+- Charge DIAG : taille 12 486 / 15 830 / 20 675 car. selon le scénario (v17.40 :
+  12 169 / 15 585 / 20 523), écriture max 1-2 ms, 0 écriture pendant un geste.
+
+NON-RÉGRESSION v17.41 CONTRE v17.40 (Chrome)
+1. NPF-Q400 points VFR zooms 10 à 13, règle 5 NM, filtres : OK.
+2. Ordre tuiles -> VFR -> HT -> Routes : OK (restitutions identiques).
+3. Points masqués pendant le geste : OK.
+4. OACI plafond zoom 11, tuiles du zoom 10 : OK.
+5. Attentes HT v17.39 : OK (6 gestes HT + Routes, mêmes durées).
+6. Démarrage (première tuile, PÉLIC 868, communes 34 935, hors ligne) : OK.
+7. Suivi GPS et Recentrage économe ON / OFF : OK (mêmes nombres de recentrages).
+8. Sélection d'un feu (liste et carte) : OK.
+9. GLR (première connexion, OFF / ON, session expirée, réseau coupé) : OK.
+10. FdS / GAAR (BFG connecté, refusé, NAS en panne, NAS lent) : OK.
+11. Bandeau non bloquant, 0 alerte : OK.
+12. SafeSky mémorisé OFF puis ON : OK.
+13. Service worker : caches npf-q400-test-* seulement : OK.
+14. Charge DIAG : OK.
+Aucune exception JavaScript, aucune fenêtre bloquante dans les deux versions.
+
+VERSION
+- App : v17.41
+- Service Worker : `sw-v17-41_vfr_oaci_restitution`
+
+STATUT : À MESURER sur iPad.
+À VÉRIFIER SUR iPad
+- OACI zoom 10 -> 11 : points VFR en 1 à 2 s, conservés après déplacement.
+- OACI zoom 11, HT + Routes allumés : les trois calques reviennent.
+- NPF-Q400 zooms 10 à 13 : aucun changement.
+- Export DIAG : « référence iPad » dans chaque ligne par minute ; lignes
+  « Premier plan / arrière-plan », « Récupérations automatiques », « Lectures
+  ayant dépassé leur délai » ; aucune ligne « délai de restitution dépassé »
+  en usage normal.
+
 
 VERSION TEST v17.40 — PLUS DE FENÊTRE BLOQUANTE ; GLR ; FdS / GAAR (RÈGLE
 BFG) ; DIAG ALLÉGÉ ; COMMUNE SURVOLÉE
