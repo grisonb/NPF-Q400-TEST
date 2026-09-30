@@ -1,4 +1,4 @@
-/* NPF_STYLE_BUILD_VERSION: v17.41 */
+/* NPF_STYLE_BUILD_VERSION: v17.42 */
 /* v14.83 — nettoyage des références techniques et limitation des cartouches routiers. */
 /* v14.81 — recherche phonétique nationale élargie aux fragments sur deux lettres. */
 /* v14.80 — Brive conservé uniquement sous LFSL. */
@@ -5149,6 +5149,14 @@ body {
 #high-voltage-lines-button.loading {
     opacity: 0.68;
     cursor: wait;
+}
+
+/* v17.42 — HT / Routes grisés sur une carte hors ligne autre que le fond NPF-Q400. */
+#high-voltage-lines-button.base-map-unavailable,
+#road-overlay-button.base-map-unavailable {
+    opacity: 0.35;
+    filter: grayscale(1);
+    cursor: not-allowed;
 }
 
 .leaflet-pane.highVoltageLinesPane,

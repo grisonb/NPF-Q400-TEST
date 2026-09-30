@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 30/09/2026
-Version de travail actuelle : TEST v17.41
+Version de travail actuelle : TEST v17.42
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,12 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.42 — règle de Bastien (30/09) : lignes HT et Routes seulement sur le fond
+  NPF-Q400 (et la carte en ligne) ; sur une carte hors ligne autre que NPF-Q400
+  (OACI 1/500 000 et les autres) : ni dessinées ni chargées, boutons grisés,
+  réglages ON / OFF conservés, retour automatique sur le fond NPF-Q400 ; DIAG :
+  activité de stockage (ouvertures, fermetures, écritures IndexedDB, fichiers
+  en cache, localStorage) et sonde après un paquet de lectures lent ;
 - v17.41 — points VFR (et HT / Routes) de nouveau restitués sur la carte OACI
   1/500 000 au zoom 11 (régression v17.03) : « tuiles prêtes » compare le zoom
   des tuiles au zoom natif que le fond peut fournir ; durée maximale rendue à
@@ -359,11 +365,16 @@ NON IMPLÉMENTÉ / OUVERT :
   (« ANALYSE DIAG v17.32 SOL + VOL ») : 5 défauts du DIAG lui-même relevés
   (D1 à D5) et 9 recommandations classées gain / risque (R1 à R9), aucune
   implémentée. Historique : À MESURER -> MESURÉ ;
-- v17.41 : À MESURER sur iPad (OACI zoom 10 -> 11 : points VFR, HT, Routes ;
-  lecture de la « référence iPad » en vol) ;
+- v17.42 : À MESURER sur iPad (HT / Routes absents sur OACI, de retour sur
+  NPF-Q400 ; lignes « Sondes après un paquet de lectures lent ») ;
+- v17.41 : points VFR sur OACI MESURÉS sur iPad le 30/09/2026 (DIAG 11:30) ;
+  « référence iPad » À MESURER en vol ;
 - Lenteur durable des lectures du pack NPF-Q400 sur iPad : cause NON PROUVÉE
-  (analyse du 30/09/2026 dans l'entrée v17.41). Remise à zéro douce des
-  connexions : NON IMPLÉMENTÉ, À DÉCIDER après mesure v17.41 ;
+  (analyses du 30/09/2026 dans les entrées v17.41 et v17.42). Hypothèse
+  principale : taille de la base unique du pack NPF-Q400 (≈ 20 fois plus
+  d'enregistrements que OACI). Correctif (une base par fichier ou images
+  enregistrées autrement à l'import) : NON IMPLÉMENTÉ, À DÉCIDER après mesure
+  de la sonde v17.42. Remise à zéro douce des connexions : NON IMPLÉMENTÉ ;
 - v17.40 : À MESURER sur iPad, sans mode avion (GLR et FdS avec BFG TEST
   déconnecté en premier) ;
 - Côté NAS (À VÉRIFIER, hors dépôt) : les réponses d'erreur de
@@ -407,38 +418,38 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.41
+Version : TEST v17.42
 Date : 30/09/2026
-Base : v17.40 (commitée 9e1354f, À MESURER)
+Base : v17.41 (commitée d0c4fc3, À MESURER)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.41.txt
-2_Index_v17.41.txt
-3_Manifest_v17.41.txt
-4_Script_v17.41.txt
-5_SIA_v17.41.txt
-6_Style_v17.41.txt
-7_Sw_v17.41.txt
+1_Modifications_v17.42.txt
+2_Index_v17.42.txt
+3_Manifest_v17.42.txt
+4_Script_v17.42.txt
+5_SIA_v17.42.txt
+6_Style_v17.42.txt
+7_Sw_v17.42.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.41
-- Manifest : start_url = ./index.html?appv=v17.41
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.41
-- Style : NPF_STYLE_BUILD_VERSION = v17.41
-- Service Worker : `sw-v17-41_vfr_oaci_restitution` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-41_vfr_oaci_restitution`, `npf-q400-test-app-data-v1`,
+- Index : APP_VERSION = v17.42
+- Manifest : start_url = ./index.html?appv=v17.42
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.42
+- Style : NPF_STYLE_BUILD_VERSION = v17.42
+- Service Worker : `sw-v17-42_ht_routes_fond_npf` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-42_ht_routes_fond_npf`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-15.69-radio1026-1-maplite1`
 - SIA_DATA_REVISION (SW / Index) : 15.69-radio1026-1-maplite1 (inchangée)
-- sia.js v17.41 : strictement identique à v17.40.
+- sia.js v17.42 : strictement identique à v17.41.
 
 STATUT DE VALIDATION :
-- validation statique v17.41 effectuée avant livraison : Script/SIA/SW OK, script
+- validation statique v17.42 effectuée avant livraison : Script/SIA/SW OK, script
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
-- `sia.js` et moteur tuiles (src/100) identiques à v17.40 ;
-- tests Chrome v17.40 / v17.41 : entrée v17.41 ;
+- `sia.js` et moteur tuiles (src/100) identiques à v17.41 ;
+- tests Chrome v17.41 / v17.42 : entrée v17.42 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
-  sur iPad ; v17.32 MESURÉE ; v17.29, v17.31, v17.33 à v17.41 À MESURER.
+  sur iPad ; v17.32 MESURÉE ; v17.29, v17.31, v17.33 à v17.42 À MESURER.
 
 
 2. PROTOCOLE DE TRAVAIL À RESPECTER
@@ -1960,6 +1971,191 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.42 — HT ET ROUTES SEULEMENT SUR LE FOND NPF-Q400 ; MESURES
+DE STOCKAGE ET SONDE DES LECTURES LENTES
+Date : 30/09/2026
+Base fonctionnelle : v17.41 (commit d0c4fc3)
+DIAG de référence : NPF_DIAG_2026-09-30_11-30 (v17.41, au sol).
+
+RÈGLE DE BASTIEN (30/09/2026)
+Les lignes HT et les Routes ne s'affichent que sur le fond NPF-Q400. Jamais sur
+le fond OACI 1/500 000 ni sur une autre carte hors ligne. Précision de Bastien
+le même jour : sur la carte en ligne, HT et Routes restent affichés.
+
+ÉTAPE A — ORIGINE DU DÉFAUT (analyse avant code)
+- La règle n'a jamais existé dans le code — SÛR : les 983 versions de script.js
+  de l'historique git ont été parcourues ; aucune des fonctions HT / Routes
+  (toggle, refresh, schedule, « utile à cette échelle », niveau Routes) n'a
+  jamais regardé le fond de carte.
+- v17.02 — SÛR (Chrome) : sur OACI, HT affiché à 5 NM (758 tronçons) et à 2 NM
+  (379), Routes à 2 NM.
+- v17.40 — SÛR (Chrome) : sur OACI, HT affiché à 5 NM ; à 2 NM, HT et Routes
+  étaient masqués seulement par le blocage du séquenceur (régression v17.03).
+- v17.41 : le blocage corrigé, HT et Routes sont redevenus visibles à 2 NM sur
+  OACI. Aucun commit n'a « cassé » la règle : elle manquait depuis le début.
+- Tout ce qui peut afficher HT ou Routes : boutons (src/110:121, 128), état
+  mémorisé (src/030), démarrage (src/100 `scheduleStartupAuxiliaryLayers`),
+  restitution après geste (src/080), fin de déplacement / zoom (src/090), zoom
+  arrière en série (src/110), nouveaux essais après attente (src/110, src/120),
+  import d'un pack Routes (src/120). Tous passent par
+  `isHighVoltageLayerEffectiveAtCurrentScale` (src/110) et
+  `getRoadOverlayZoomTier` (src/120).
+
+NON-RÉGRESSION — COMPORTEMENTS AVANT MODIFICATION (v17.41)
+1. Fond NPF-Q400 : HT et Routes (bouton, restitution après geste, démarrage
+   avec calques mémorisés ON) — src/110, src/120, src/100.
+2. Fond NPF-Q400 : attentes HT v17.39 (src/090) et ordre tuiles -> VFR -> HT ->
+   Routes (src/080).
+3. Fond OACI : points VFR à 5 NM et plus serré (src/340, src/350).
+4. Changement de fond NPF-Q400 -> OACI -> NPF-Q400 (src/280).
+5. Démarrage sur OACI avec HT et Routes mémorisés ON (src/100).
+6. Démarrage, suivi GPS, Recentrage économe, sélection d'un feu.
+7. GLR ; FdS / GAAR ; bandeau ; SafeSky mémorisé.
+8. Service worker : caches npf-q400-test-* seulement.
+9. Charge DIAG et compteurs v17.41.
+
+MODIFICATIONS v17.42
+
+1. HT / ROUTES SEULEMENT SUR LE FOND NPF-Q400 (src/110, src/120, src/090)
+- `isNpfHeavyOverlayBaseMapAllowed()` (src/110) : vrai sur la carte en ligne et
+  sur le fond NPF-Q400 hors ligne ; faux sur toute autre carte hors ligne.
+- Le test est ajouté dans `isHighVoltageLayerEffectiveAtCurrentScale` (HT) et
+  `getRoadOverlayZoomTier` (Routes, niveau 0). Sur un fond non autorisé, HT et
+  Routes suivent donc les chemins existants « échelle 50 NM » et « niveau 0
+  inerte » : rien n'est dessiné, chargé ni attendu. `refreshRoadOverlayVisibleParts`
+  sort avant toute attente.
+- Moteur de tuiles (src/100) non modifié : son démarrage des calques passe déjà
+  par ces deux tests. Limite connue : le repère de démarrage affiche alors
+  « Lignes HT — différées · échelle 50 NM ou plus » (libellé de src/100, non
+  modifié).
+- Changement de fond : `syncNpfHeavyOverlaysWithBaseMap` est appelé à chaque
+  reconstruction du fond (événement Leaflet `layeradd`, src/090). Passage à un
+  fond non autorisé : HT effacé et son dessin retiré de la carte à l'image
+  suivante, Routes libérées. Retour à un fond autorisé : HT et Routes relancés
+  selon les réglages, sans relancer l'app.
+- Réglages ON / OFF jamais modifiés par la règle.
+- Boutons : grisés (`base-map-unavailable`, style.css) et désactivés sur un fond
+  non autorisé ; un appui ne change pas le réglage.
+- Support de dessin : celui de HT est retiré (comme sur OFF) ; ceux des Routes
+  restent en place, vides, comme aujourd'hui quand Routes est sur OFF.
+
+2. MESURES DIAG (src/010, mesure seule ; src/100 non modifié)
+- Activité de stockage : heure et durée de chaque ouverture de base, fermeture,
+  connexion perdue, changement de version ; heure et durée de chaque écriture
+  IndexedDB de l'app ; par minute : écritures IndexedDB, autres lectures
+  IndexedDB (hors pack), accès aux fichiers en cache (Routes / HT), écritures
+  localStorage. 80 événements en mémoire, 15 enregistrés.
+- Sonde après un paquet de lectures lent (lecture > 1 s) : hors geste, lecteur
+  au repos, au plus une par minute et 12 par session. Sur une tuile voisine
+  (12 tuiles plus à l'est) : durée « index seul » (`index.getKey`), durée
+  « image » (`store.get`), puis méthode actuelle (curseur) sur une autre tuile
+  et sur la même tuile relue. 3 transactions en lecture seule, hors de la file
+  du moteur.
+- Service worker : aucune mesure ajoutée. D'après le code, il ne lit aucune
+  base de tuiles en mode hors ligne (il ne sert que les requêtes
+  *.tile.openstreetmap.org ; la carte hors ligne utilise des images blob).
+
+ÉTAPE C — LECTURES LENTES DU PACK NPF-Q400 (analyse, rien de codé hors mesures)
+- DIAG 30/09 11:30 — SÛR : après OACI -> NPF-Q400 à 11:28:40, lectures NPF-Q400
+  rapides pendant une minute (médiane 67 ms) ; lenteur brutale à 11:29:42 au
+  passage de 2 NM à 5 NM : 30 lectures de suite à ≈ 3 s, 1 lecture par tuile,
+  0 délai dépassé, 0 récupération, référence iPad normale, aucun passage en
+  arrière-plan. Le changement de pack n'est pas la cause (rien n'est programmé
+  une minute après ; ouverture de connexion écartée pour ce cas).
+- Structure — SÛR : une base IndexedDB par carte (`OfflineMap_<groupe>`),
+  magasin `tiles`, clé `url` = tileUrl::packName, index `tileUrl` et `packName`
+  non uniques, image enregistrée en Blob pour NPF-Q400 comme pour OACI ; même
+  recherche (curseur sur l'index `tileUrl`), 1 transaction par tuile trouvée.
+- Seule différence — PROBABLE (d'après les commentaires d'import) : la taille.
+  Les 10 fichiers NPF_France vont dans une seule base d'environ 200 000 à
+  250 000 tuiles, contre environ 10 000 pour OACI (rapport ≈ 20, comme le
+  rapport des durées 935 ms / 48 ms du vol du 29/09).
+- Hors import, rien n'écrit dans la base d'un pack ; aucun comptage ni parcours
+  en tâche de fond ; le service worker n'y accède pas hors ligne — SÛR pour le
+  code lu.
+- Changement de pack : fermeture des connexions, caches vidés, 5 écritures de
+  réglages, 3 reconstructions du fond et 3 redessins (250 / 900 / 1800 ms).
+- Causes possibles : (1) taille de la base NPF-Q400 — HYPOTHÈSE la plus
+  plausible ; (2) attente d'ouverture de connexion — écartée pour le 30/09 ;
+  (3) concurrence avec d'autres stockages (SIA, fichiers Routes / HT,
+  enregistrement DIAG) — HYPOTHÈSE.
+- Correctif proposé, NON IMPLÉMENTÉ : si la sonde montre que la lenteur vient de
+  l'index ou de la lecture de l'image dans la grosse base, découper le pack
+  NPF-Q400 en une base par fichier (NPF_France_01 à _10), ou enregistrer les
+  images sous une autre forme à l'import. Les deux demandent de réimporter la
+  carte. À DÉCIDER après mesure.
+- Défauts du DIAG relevés (non corrigés) : la durée I8 inclut l'attente
+  d'ouverture ; « accès base » compte des boucles, pas des ouvertures réelles.
+
+FICHIERS MODIFIÉS
+src/010, src/090 (écoute `layeradd` seulement), src/110, src/120 (donc
+script.js), style.css, index.html, manifest.json et sw.js (numéros de version
+seulement). sia.js, src/100, src/080, src/280, src/340, src/350, src/260 :
+strictement identiques à v17.41.
+
+TESTS CHROME v17.41 / v17.42 (30/09/2026, packs synthétiques, NAS simulé)
+- Fond NPF-Q400, HT + Routes ON, échelle 2 NM : HT 379 tronçons, Routes 1 partie
+  dans les deux versions ; restitution après geste 1,7 s (v17.41 : 1,8 s).
+- Passage NPF-Q400 -> OACI sans relance : v17.41 HT 387 tronçons et Routes
+  toujours affichés ; v17.42 HT 0, Routes 0, dessin HT retiré, boutons grisés et
+  désactivés, réglages toujours ON / ON. Appui sur chaque bouton puis appel
+  direct : réglages inchangés. Gestes sur OACI (déplacement, 5 NM, 2 NM) :
+  points VFR 21 / 21, 46 / 46, 21 / 21 en 0,95 à 1,5 s, HT 0, Routes 0.
+- Retour OACI -> NPF-Q400 sans relance : HT 393 tronçons et Routes 1 partie
+  reviennent seuls ; geste suivant normal ; bouton HT OFF puis ON : normal.
+- Démarrage directement sur OACI, HT et Routes mémorisés ON : HT 0, Routes 0,
+  données HT non chargées, aucun dessin HT, aucune attente HT / Routes
+  enregistrée ; points VFR 43 / 43 à 5 NM et 19 / 19 à 2 NM ; passage au fond
+  NPF-Q400 : HT 380 tronçons et Routes reviennent.
+- Carte en ligne : HT et Routes affichés, boutons actifs (inchangé).
+- OACI sans HT / Routes (points VFR v17.41) : 43 / 43 à 5 NM, 19 / 19 à 2 NM,
+  allers-retours identiques, 0,95 à 1,06 s dans les deux versions.
+- NPF-Q400 5 / 2 / 1 / 0,5 NM : 43 / 19 / 7 / 2 points dans les deux versions,
+  0,96 à 1,06 s.
+- Tuiles jamais prêtes (simulation) : 3,4 s (« repos 2 s ») et 31,7 s (« plafond
+  30 s ») ; lignes DIAG présentes ; identique à v17.41.
+- Sonde : lecture lente simulée (1,6 s) -> 1 sonde 8 s plus tard : index seul
+  0,7 ms, image 0,5 ms (2 ko), méthode actuelle 0,7 ms, même tuile relue 0,9 ms.
+- Activité de stockage : ouvertures, fermetures et écritures listées au
+  changement de pack ; ligne par minute complétée (« stockage : … »).
+- Charge DIAG : 12 278 / 17 089 / 22 526 car. selon le scénario (v17.41 :
+  11 253 / 16 124 / 21 256), écriture max 1-2 ms, 0 écriture pendant un geste ;
+  référence iPad 3,5 à 9 ms dans Chrome, 0,01 à 0,03 % du temps.
+- Défaut trouvé et corrigé pendant les tests : au passage NPF-Q400 -> OACI, le
+  dessin HT était retiré une image trop tôt (erreur JavaScript « save ») ;
+  retrait reporté à l'image suivante, plus aucune erreur.
+
+NON-RÉGRESSION v17.42 CONTRE v17.41 (Chrome)
+1. Fond NPF-Q400 : HT et Routes (bouton, restitution après geste, démarrage
+   avec calques mémorisés ON) : OK.
+2. Fond NPF-Q400 : attentes HT v17.39, ordre tuiles -> VFR -> HT -> Routes : OK
+   (6 gestes HT + Routes, mêmes résultats).
+3. Fond OACI : points VFR à 5 NM et 2 NM : OK.
+4. NPF-Q400 -> OACI -> NPF-Q400 avec HT et Routes ON, sans relance : OK.
+5. Démarrage sur OACI avec HT et Routes mémorisés ON : OK.
+6. Démarrage (première tuile, PÉLIC 868, communes 34 935, hors ligne), suivi
+   GPS, Recentrage économe, sélection d'un feu : OK.
+7. GLR ; FdS / GAAR ; bandeau ; SafeSky mémorisé : OK.
+8. Service worker : caches npf-q400-test-* seulement : OK.
+9. Charge DIAG et compteurs v17.41 : OK.
+Aucune exception JavaScript, aucune fenêtre bloquante dans les deux versions.
+
+À VÉRIFIER SUR iPad
+- Fond OACI, HT et Routes ON : rien ne s'affiche, boutons grisés.
+- Appui sur un bouton grisé : aucun effet ; au retour sur NPF-Q400, le réglage
+  est celui d'avant.
+- Retour sur le fond NPF-Q400 : HT et Routes reviennent seuls.
+- Points VFR sur OACI à 5 NM et 2 NM : comme en v17.41.
+- Export DIAG après une phase lente : lignes « Sondes après un paquet de
+  lectures lent » et « Activité de stockage ».
+
+VERSION
+- App : v17.42
+- Service Worker : `sw-v17-42_ht_routes_fond_npf`
+
+STATUT : À MESURER sur iPad.
+
 
 VERSION TEST v17.41 — POINTS VFR SUR OACI 1/500 000 AU ZOOM 11 ; DURÉE
 MAXIMALE DE RESTITUTION ; COMPTEURS DIAG ; « RÉFÉRENCE iPad »

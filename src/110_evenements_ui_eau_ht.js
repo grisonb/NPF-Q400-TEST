@@ -1501,8 +1501,90 @@ function getHighVoltageLineStyle(feature) {
     };
 }
 
+/*
+ * v17.42 — règle utilisateur (30/09/2026) : sur une carte hors ligne autre que
+ * le fond NPF-Q400 (OACI 1/500 000 et les autres), les lignes HT et les Routes
+ * ne sont ni dessinées ni chargées. Carte en ligne et fond NPF-Q400 : inchangé.
+ * Les réglages ON / OFF de l'utilisateur ne sont jamais modifiés par la règle.
+ */
+function isNpfHeavyOverlayBaseMapAllowed() {
+    if (!offlineTilesMode) return true;
+    return isNpfOfflinePackSelection();
+}
+
+let npfHeavyOverlayBaseMapAllowedLast = null;
+let npfHeavyOverlayBaseMapSyncTimer = null;
+
+/*
+ * Appelé au démarrage puis à chaque reconstruction du fond de carte. Au
+ * premier passage, seul l'état est mémorisé : le démarrage applique déjà la
+ * règle. Ensuite, rien n'est fait tant que « fond autorisé » ne change pas.
+ */
+function syncNpfHeavyOverlaysWithBaseMap(source = 'fond-de-carte') {
+    const allowed = isNpfHeavyOverlayBaseMapAllowed();
+    const previous = npfHeavyOverlayBaseMapAllowedLast;
+    npfHeavyOverlayBaseMapAllowedLast = allowed;
+
+    try { refreshHighVoltageLinesButtonState(); } catch (_) {}
+    try { refreshRoadOverlayButtonState(); } catch (_) {}
+
+    if (previous === null || previous === allowed || !map) return;
+
+    if (!allowed) {
+        if (showHighVoltageLinesLayer) {
+            highVoltageLinesRetryToken += 1;
+            suppressHighVoltageLinesForWideScale(source);
+            /*
+             * Comme au passage OFF (v17.33) : le dessin HT quitte la carte.
+             * Retrait à l'image suivante : Leaflet a pu programmer un dernier
+             * effacement du dessin, qui doit passer avant son retrait.
+             */
+            const removeHighVoltageRenderer = () => {
+                try {
+                    if (
+                        !isNpfHeavyOverlayBaseMapAllowed()
+                        && highVoltageLinesRenderer
+                        && map.hasLayer(highVoltageLinesRenderer)
+                        && !(highVoltageLinesLayer && map.hasLayer(highVoltageLinesLayer))
+                    ) {
+                        map.removeLayer(highVoltageLinesRenderer);
+                    }
+                } catch (_) {}
+            };
+            if (typeof requestAnimationFrame === 'function') {
+                requestAnimationFrame(removeHighVoltageRenderer);
+            } else {
+                setTimeout(removeHighVoltageRenderer, 50);
+            }
+        }
+        if (showRoadOverlayLayer) {
+            /* Niveau 0 (« tier0-inerte ») : géométries libérées, aucune attente. */
+            toggleRoadOverlayLayer(true, { silent: true, source }).catch(() => {});
+        }
+        return;
+    }
+
+    /* Retour sur un fond autorisé : les calques reviennent selon les réglages. */
+    if (showHighVoltageLinesLayer) {
+        toggleHighVoltageLinesLayer(true, { silent: true, retry: true, source }).catch(() => {});
+    }
+    if (showRoadOverlayLayer) {
+        toggleRoadOverlayLayer(true, { silent: true, source }).catch(() => {});
+    }
+}
+
+function scheduleNpfHeavyOverlayBaseMapSync(source = 'fond-de-carte') {
+    clearTimeout(npfHeavyOverlayBaseMapSyncTimer);
+    npfHeavyOverlayBaseMapSyncTimer = setTimeout(() => {
+        npfHeavyOverlayBaseMapSyncTimer = null;
+        try { syncNpfHeavyOverlaysWithBaseMap(source); } catch (_) {}
+    }, 60);
+}
+
 function isHighVoltageLayerEffectiveAtCurrentScale() {
     if (!map) return false;
+    /* v17.42 — fond hors ligne autre que NPF-Q400 : HT jamais actif. */
+    if (!isNpfHeavyOverlayBaseMapAllowed()) return false;
     const scaleNm = getCurrentNpfScaleNm();
     if (!Number.isFinite(scaleNm)) return true;
     return scaleNm < HIGH_VOLTAGE_LINES_HIDE_SCALE_NM - 0.000001;
@@ -1526,7 +1608,11 @@ function suppressHighVoltageLinesForWideScale(source = 'scale-50nm') {
     } catch (_) {}
     refreshHighVoltageLinesButtonState();
     if (hadVisual) {
-        recordNpfStartupDiagnosticOverlaySnapshot(`lignes-ht masquées 50 NM · ${source}`);
+        recordNpfStartupDiagnosticOverlaySnapshot(
+            isNpfHeavyOverlayBaseMapAllowed()
+                ? `lignes-ht masquées 50 NM · ${source}`
+                : `lignes-ht masquées · fond autre que NPF-Q400 · ${source}`
+        );
     }
     return true;
 }
@@ -1535,13 +1621,18 @@ function refreshHighVoltageLinesButtonState() {
     const button = document.getElementById('high-voltage-lines-button');
     if (!button) return;
 
+    /* v17.42 — fond hors ligne autre que NPF-Q400 : bouton grisé, appui sans effet. */
+    const baseMapBlocked = !isNpfHeavyOverlayBaseMapAllowed();
     const scaleSuppressed = showHighVoltageLinesLayer
         && !isHighVoltageLayerEffectiveAtCurrentScale();
     button.classList.toggle('active', showHighVoltageLinesLayer);
     button.classList.toggle('loading', isHighVoltageLinesLoading);
-    button.disabled = isHighVoltageLinesLoading;
+    button.classList.toggle('base-map-unavailable', baseMapBlocked);
+    button.disabled = isHighVoltageLinesLoading || baseMapBlocked;
     button.title = isHighVoltageLinesLoading
         ? 'Chargement des lignes haute tension RTE…'
+        : baseMapBlocked
+            ? 'Lignes HT — disponibles seulement sur le fond NPF-Q400'
         : scaleSuppressed
             ? 'Lignes HT activées — masquées à l’échelle 50 NM ou plus'
             : 'Afficher/Masquer les lignes haute tension RTE';
@@ -2143,6 +2234,12 @@ function scheduleHighVoltageLinesRetry(source = 'retry') {
 }
 
 async function toggleHighVoltageLinesLayer(forceState = null, options = {}) {
+    /* v17.42 — appui sur le bouton sur un fond autre que NPF-Q400 : réglage inchangé. */
+    if (forceState === null && !isNpfHeavyOverlayBaseMapAllowed()) {
+        refreshHighVoltageLinesButtonState();
+        return;
+    }
+
     const shouldShow = forceState === null ? !showHighVoltageLinesLayer : Boolean(forceState);
     const silent = !!options.silent;
     const allowRetry = options.retry !== false;

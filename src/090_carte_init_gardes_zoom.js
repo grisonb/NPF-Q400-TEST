@@ -532,6 +532,18 @@ function initMap() {
         }
     });
 
+    /*
+     * v17.42 — HT / Routes seulement sur le fond NPF-Q400 (et la carte en
+     * ligne) : à chaque reconstruction du fond de carte, la règle est
+     * réappliquée si « fond autorisé » a changé. État initial mémorisé ici.
+     */
+    map.on('layeradd', event => {
+        if (event?.layer instanceof L.GridLayer) {
+            scheduleNpfHeavyOverlayBaseMapSync('changement-de-fond');
+        }
+    });
+    try { syncNpfHeavyOverlaysWithBaseMap('init'); } catch (_) {}
+
     map.on('click', handleGaarMapClick);
 
     map.on('contextmenu', async (e) => {

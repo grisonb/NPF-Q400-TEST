@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.41';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.42';
 
 
 /*
@@ -674,7 +674,15 @@ const NPF_DIAG_DETAIL = (() => {
         lateReads: { total: 0, maxSimultaneous: 0 },
         restoreTimeouts: [],
         refDurations: [],
-        refStats: { n: 0, totalMs: 0, maxMs: 0, skipped: 0 }
+        refStats: { n: 0, totalMs: 0, maxMs: 0, skipped: 0 },
+        /* v17.42 — activité de stockage (ouvertures / fermetures de base,
+         * écritures IndexedDB de l'app, autres lectures, fichiers en cache,
+         * localStorage) et sondes lancées après un paquet de lectures lent. */
+        storageEvents: [],
+        packProbes: [],
+        probePending: null,
+        probeLastAt: null,
+        probeDropped: 0
     };
 
     const safe = (callback, fallback = undefined) => {
@@ -1587,7 +1595,8 @@ const NPF_DIAG_DETAIL = (() => {
                 index, at: wallAt(index * 60000), durations: [], n: 0, max: 0,
                 htOn: false, htOff: false, routesOn: false, routesOff: false,
                 gpsMs: 0, gpsN: 0, calcMs: 0,
-                lateN: 0, lateMax: 0, refMs: null
+                lateN: 0, lateMax: 0, refMs: null,
+                stW: 0, stWMax: 0, stR: 0, stRMax: 0, stC: 0, stCMax: 0, stLs: 0, stLsMs: 0
             };
             state.readMinutes.set(index, minute);
             if (state.readMinutes.size > 60) state.readMinutes.delete(state.readMinutes.keys().next().value);
@@ -1638,7 +1647,7 @@ const NPF_DIAG_DETAIL = (() => {
         if (late > minute.lateMax) minute.lateMax = late;
         if (late > state.lateReads.maxSimultaneous) state.lateReads.maxSimultaneous = late;
     };
-    const packReadStart = () => {
+    const packReadStart = args => {
         const t = now();
         const id = ++state.pendingPackReadSeq;
         if (state.pendingPackReads.size >= 200) {
@@ -1646,7 +1655,9 @@ const NPF_DIAG_DETAIL = (() => {
         }
         state.pendingPackReads.set(id, {
             t0: t,
-            limit: safe(() => isNpfOfflinePackSelection(), false) ? 5200 : 1800
+            limit: safe(() => isNpfOfflinePackSelection(), false) ? 5200 : 1800,
+            db: args?.[0] || null,
+            tileUrl: String(args?.[1] || '')
         });
         noteLatePackReads(t);
         return id;
@@ -1660,6 +1671,230 @@ const NPF_DIAG_DETAIL = (() => {
         if (t - entry.t0 > entry.limit) {
             state.lateReads.total += 1;
             readMinuteAt(t).lateN += 1;
+        }
+        /* v17.42 — lecture de plus de 1 s : une sonde est demandée. */
+        if (t - entry.t0 > 1000) requestPackProbe(entry.db, entry.tileUrl, t - entry.t0);
+    };
+
+    /* v17.42 — sonde après un paquet lent : sur une tuile voisine (12 tuiles
+     * plus à l'est, donc pas encore lue), chronométrer séparément la recherche
+     * dans l'index, la lecture de l'image, puis la méthode actuelle sur une
+     * autre tuile et sur la même tuile relue. Lancée seulement hors geste,
+     * lecteur au repos, au plus une par minute et 12 par session. Elle utilise
+     * sa propre transaction en lecture seule : la file et les 5 lectures du
+     * moteur ne sont pas touchées. */
+    const PACK_PROBE_LIMIT = 12;
+    const PACK_PROBE_MIN_GAP_MS = 60000;
+    const round1 = value => Math.round((Number(value) || 0) * 10) / 10;
+    const requestPackProbe = (db, tileUrl, slowMs) => {
+        if (!db || !tileUrl || state.probePending) return;
+        if (state.packProbes.length >= PACK_PROBE_LIMIT) return;
+        if (state.probeLastAt !== null && now() - state.probeLastAt < PACK_PROBE_MIN_GAP_MS) return;
+        state.probePending = { db, tileUrl, slowMs: round(slowMs), tries: 0 };
+        setTimeout(tryPackProbe, 2500);
+    };
+    const tryPackProbe = () => {
+        const pending = state.probePending;
+        if (!pending) return;
+        const busy = document.visibilityState === 'hidden'
+            || safe(() => !!npfMapManualGestureLockActive, false)
+            || safe(() => !!centerGpsFollowUserGestureActive, false)
+            || safe(() => Number(directOfflineNpfActiveReads) > 0, false)
+            || safe(() => directOfflineNpfReadQueue.length > 0, false)
+            || state.pendingPackReads.size > 0;
+        if (busy) {
+            pending.tries += 1;
+            if (pending.tries > 8) {
+                state.probePending = null;
+                state.probeDropped += 1;
+                return;
+            }
+            setTimeout(tryPackProbe, 2500);
+            return;
+        }
+        state.probePending = null;
+        state.probeLastAt = now();
+        safe(() => runPackProbe(pending));
+    };
+    const runPackProbe = pending => {
+        const match = /^(.*\/)(\d+)\/(\d+)\/(\d+)(\.\w+)$/.exec(pending.tileUrl);
+        if (!match) return;
+        const z = Number(match[2]);
+        const x = Number(match[3]) + 12;
+        const y = Number(match[4]);
+        const urlA = match[1] + z + '/' + x + '/' + y + match[5];
+        const urlB = match[1] + z + '/' + x + '/' + (y + 1) + match[5];
+        const entry = {
+            at: Date.now(), slowMs: pending.slowMs, z,
+            indexMs: null, valueMs: null, size: null, found: null,
+            cursorMs: null, cursorFound: null, warmMs: null, error: null
+        };
+        let finished = false;
+        const finish = error => {
+            if (finished) return;
+            finished = true;
+            clearTimeout(guard);
+            if (error) entry.error = String(error?.message || error || 'erreur').slice(0, 60);
+            pushCapped(state.packProbes, entry, PACK_PROBE_LIMIT);
+        };
+        const guard = setTimeout(() => finish('sans réponse après 20 s'), 20000);
+        const cursorRead = (url, done) => {
+            const t0 = now();
+            const request = pending.db.transaction('tiles', 'readonly')
+                .objectStore('tiles').index('tileUrl').openCursor(IDBKeyRange.only(url));
+            request.onsuccess = () => done(round1(now() - t0), !!request.result);
+            request.onerror = () => finish(request.error);
+        };
+        try {
+            const store = pending.db.transaction('tiles', 'readonly').objectStore('tiles');
+            const t0 = now();
+            const keyRequest = store.index('tileUrl').getKey(urlA);
+            keyRequest.onerror = () => finish(keyRequest.error);
+            keyRequest.onsuccess = () => {
+                entry.indexMs = round1(now() - t0);
+                const primaryKey = keyRequest.result;
+                entry.found = primaryKey !== undefined;
+                const next = () => safe(() => cursorRead(urlB, (ms, found) => {
+                    entry.cursorMs = ms;
+                    entry.cursorFound = found;
+                    safe(() => cursorRead(urlA, warmMs => {
+                        entry.warmMs = warmMs;
+                        finish();
+                    }));
+                }));
+                if (primaryKey === undefined) {
+                    next();
+                    return;
+                }
+                const t1 = now();
+                const valueRequest = store.get(primaryKey);
+                valueRequest.onerror = () => finish(valueRequest.error);
+                valueRequest.onsuccess = () => {
+                    entry.valueMs = round1(now() - t1);
+                    const tile = valueRequest.result?.tile;
+                    entry.size = tile ? Number(tile.size ?? tile.byteLength ?? 0) || null : null;
+                    next();
+                };
+            };
+        } catch (error) {
+            finish(error);
+        }
+    };
+
+    /* v17.42 — activité de stockage. Les lectures du pack (déjà mesurées) ne
+     * sont pas comptées ici. Écritures consécutives sur la même base en moins
+     * de 1 s : une seule ligne avec leur nombre. */
+    const noteStorageEvent = (kind, name, ms) => {
+        const label = String(name || '—').slice(0, 60);
+        const last = state.storageEvents[state.storageEvents.length - 1];
+        const at = Date.now();
+        if (last && last.kind === kind && last.name === label && at - last.at < 1000) {
+            last.n += 1;
+            if (ms !== null && ms > (last.ms || 0)) last.ms = round(ms);
+            return;
+        }
+        pushCapped(state.storageEvents, { at, kind, name: label, ms: ms === null ? null : round(ms), n: 1 }, 80);
+    };
+    const installStorageProbes = () => {
+        if (typeof IDBFactory !== 'undefined' && !IDBFactory.prototype.__npfDiagStorage) {
+            const originalOpen = IDBFactory.prototype.open;
+            IDBFactory.prototype.open = function (name) {
+                const request = originalOpen.apply(this, arguments);
+                safe(() => {
+                    const t0 = now();
+                    request.addEventListener('success', () => {
+                        noteStorageEvent('ouverture', name, now() - t0);
+                        safe(() => {
+                            const opened = request.result;
+                            opened.addEventListener('versionchange', () => noteStorageEvent('changement de version', name, null));
+                            opened.addEventListener('close', () => noteStorageEvent('connexion perdue', name, null));
+                        });
+                    });
+                    request.addEventListener('error', () => noteStorageEvent('ouverture en erreur', name, now() - t0));
+                    request.addEventListener('blocked', () => noteStorageEvent('ouverture bloquée', name, now() - t0));
+                    request.addEventListener('upgradeneeded', () => noteStorageEvent('mise à niveau', name, now() - t0));
+                });
+                return request;
+            };
+            IDBFactory.prototype.__npfDiagStorage = true;
+
+            const originalClose = IDBDatabase.prototype.close;
+            IDBDatabase.prototype.close = function () {
+                safe(() => noteStorageEvent('fermeture', this.name, null));
+                return originalClose.apply(this, arguments);
+            };
+
+            const originalTransaction = IDBDatabase.prototype.transaction;
+            IDBDatabase.prototype.transaction = function (storeNames, mode) {
+                const transaction = originalTransaction.apply(this, arguments);
+                safe(() => {
+                    const write = mode === 'readwrite';
+                    const name = String(this.name || '');
+                    if (!write && name.indexOf('OfflineMap_') === 0) return;
+                    const t0 = now();
+                    let done = false;
+                    const end = () => {
+                        if (done) return;
+                        done = true;
+                        const ms = now() - t0;
+                        const minute = readMinuteAt(t0);
+                        if (write) {
+                            minute.stW += 1;
+                            if (ms > minute.stWMax) minute.stWMax = round(ms);
+                            noteStorageEvent('écriture', name + ' / ' + [].concat(storeNames).join(','), ms);
+                        } else {
+                            minute.stR += 1;
+                            if (ms > minute.stRMax) minute.stRMax = round(ms);
+                        }
+                    };
+                    transaction.addEventListener('complete', end);
+                    transaction.addEventListener('abort', end);
+                });
+                return transaction;
+            };
+        }
+
+        const timePromise = (target, method) => {
+            const original = target && target[method];
+            if (typeof original !== 'function') return;
+            target[method] = function () {
+                const result = original.apply(this, arguments);
+                safe(() => {
+                    const t0 = now();
+                    const end = () => {
+                        const ms = now() - t0;
+                        const minute = readMinuteAt(t0);
+                        minute.stC += 1;
+                        if (ms > minute.stCMax) minute.stCMax = round(ms);
+                    };
+                    result.then(end, end);
+                });
+                return result;
+            };
+        };
+        if (typeof CacheStorage !== 'undefined' && !CacheStorage.prototype.__npfDiagStorage) {
+            timePromise(CacheStorage.prototype, 'match');
+            timePromise(CacheStorage.prototype, 'open');
+            if (typeof Cache !== 'undefined') timePromise(Cache.prototype, 'match');
+            CacheStorage.prototype.__npfDiagStorage = true;
+        }
+
+        if (typeof Storage !== 'undefined' && !Storage.prototype.__npfDiagStorage) {
+            const originalSetItem = Storage.prototype.setItem;
+            Storage.prototype.setItem = function () {
+                const t0 = now();
+                try {
+                    return originalSetItem.apply(this, arguments);
+                } finally {
+                    safe(() => {
+                        if (this !== window.localStorage) return;
+                        const minute = readMinuteAt(t0);
+                        minute.stLs += 1;
+                        minute.stLsMs += now() - t0;
+                    });
+                }
+            };
+            Storage.prototype.__npfDiagStorage = true;
         }
     };
 
@@ -2280,7 +2515,7 @@ const NPF_DIAG_DETAIL = (() => {
         wrapGlobal('readDirectOfflineTileRecord', {
             noStartup: true,
             noActivity: true,
-            before: () => packReadStart(),
+            before: args => packReadStart(args),
             after: info => packReadEnd(info.before)
         });
         wrapGlobal('recoverDirectOfflineTileReader', {
@@ -2478,6 +2713,7 @@ const NPF_DIAG_DETAIL = (() => {
     };
 
     try { installWrappers(); } catch (error) { console.warn('[NPF DIAG] Enveloppes v17.32 :', error); }
+    try { installStorageProbes(); } catch (error) { console.warn('[NPF DIAG] Mesures de stockage v17.42 :', error); }
     /* v17.41 — premier plan / arrière-plan, et « référence iPad » (essai toutes
      * les 10 s, une mesure par minute au plus). */
     try {
@@ -2664,6 +2900,9 @@ function npfDiagDetailPersistSnapshot() {
             restoreTimeouts: s.restoreTimeouts.slice(-10),
             lateReads: { ...s.lateReads },
             reference: npfDiagReferenceSummary(),
+            /* v17.42 */
+            storage: s.storageEvents.slice(-15).map(item => [item.at, item.kind, item.name, item.ms, item.n]),
+            packProbes: s.packProbes.slice(-PACK_PROBE_PERSIST_LIMIT),
             memoryPeak: s.memoryPeak,
             cellCache: { ...s.cellCache }
         };
@@ -2886,7 +3125,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.41 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.42 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -3107,8 +3346,40 @@ function npfDiagCompactReadMinute(minute) {
         gpsMs: Math.round(Number(minute.gpsMs) || 0), gpsN: Number(minute.gpsN) || 0,
         calcMs: Math.round(Number(minute.calcMs) || 0),
         lateN: Number(minute.lateN) || 0, lateMax: Number(minute.lateMax) || 0,
-        refMs: Number.isFinite(minute.refMs) ? minute.refMs : null
+        refMs: Number.isFinite(minute.refMs) ? minute.refMs : null,
+        /* v17.42 — stockage : écritures IDB, autres lectures IDB, fichiers en
+         * cache (nombre, max ms) et localStorage (nombre, total ms). */
+        st: [
+            Number(minute.stW) || 0, Number(minute.stWMax) || 0,
+            Number(minute.stR) || 0, Number(minute.stRMax) || 0,
+            Number(minute.stC) || 0, Number(minute.stCMax) || 0,
+            Number(minute.stLs) || 0, Math.round(Number(minute.stLsMs) || 0)
+        ]
     };
+}
+
+const PACK_PROBE_PERSIST_LIMIT = 12;
+
+/* v17.42 — activité de stockage et sondes après paquet lent. */
+function formatNpfDiagStorageEventLine(item) {
+    const entry = Array.isArray(item)
+        ? { at: item[0], kind: item[1], name: item[2], ms: item[3], n: item[4] }
+        : item;
+    return '   ' + formatNpfDiagClock(entry.at) + ' | ' + entry.kind + ' | ' + entry.name
+        + (entry.ms === null || entry.ms === undefined ? '' : ' | ' + entry.ms + ' ms')
+        + (Number(entry.n) > 1 ? ' | ' + entry.n + ' fois' : '');
+}
+
+function formatNpfDiagPackProbeLine(item) {
+    const ms = value => (value === null || value === undefined ? '—' : String(value).replace('.', ',') + ' ms');
+    return '   ' + formatNpfDiagClock(item.at) + ' | après une lecture de ' + item.slowMs + ' ms | zoom ' + item.z
+        + ' | tuile voisine : index seul ' + ms(item.indexMs)
+        + ' · image ' + (item.found === false ? 'tuile absente' : ms(item.valueMs))
+        + (item.size ? ' (' + Math.round(item.size / 1024) + ' ko)' : '')
+        + ' | méthode actuelle, autre tuile ' + ms(item.cursorMs)
+        + (item.cursorFound === false ? ' (absente)' : '')
+        + ' | même tuile relue ' + ms(item.warmMs)
+        + (item.error ? ' | ' + item.error : '');
 }
 
 /* v17.41 — synthèse de la « référence iPad » (médiane au dixième de ms). */
@@ -3175,6 +3446,12 @@ function formatNpfDiagReadMinuteLine(item) {
         + (item.refMs !== undefined
             ? ' | référence iPad ' + (item.refMs === null ? '—' : formatNpfDiagReferenceMs(item.refMs))
                 + ' | lectures hors délai ' + item.lateN + ' (max simultané ' + item.lateMax + ')'
+            : '')
+        + (Array.isArray(item.st)
+            ? ' | stockage : écritures IDB ' + item.st[0] + ' (max ' + item.st[1] + ' ms)'
+                + ' · autres lectures IDB ' + item.st[2] + ' (max ' + item.st[3] + ' ms)'
+                + ' · fichiers cache ' + item.st[4] + ' (max ' + item.st[5] + ' ms)'
+                + ' · localStorage ' + item.st[6] + ' (' + item.st[7] + ' ms)'
             : '');
 }
 
@@ -3245,6 +3522,13 @@ function appendNpfDiagPackReadSection(lines) {
     lines.push('Premier plan / arrière-plan (v17.41) :');
     if (!s.visibilityEvents.length) lines.push('   Aucun changement.');
     s.visibilityEvents.forEach(item => lines.push(formatNpfDiagVisibilityLine(item)));
+    /* v17.42 — sondes et activité de stockage. */
+    lines.push('Sondes après un paquet de lectures lent (v17.42, tuile voisine pas encore lue) :');
+    if (!s.packProbes.length) lines.push('   Aucune.' + (s.probeDropped ? ' ' + s.probeDropped + ' abandonnée(s) (carte occupée).' : ''));
+    s.packProbes.forEach(item => lines.push(formatNpfDiagPackProbeLine(item)));
+    lines.push('Activité de stockage (v17.42 : ouvertures, fermetures, écritures IndexedDB de l’app — 80 dernières) :');
+    if (!s.storageEvents.length) lines.push('   Aucune.');
+    s.storageEvents.forEach(item => lines.push(formatNpfDiagStorageEventLine(item)));
 }
 
 /* v17.38 — FdS / BFG / GLR : requêtes NAS, temps ressenti, messages, pont BFG. */
@@ -3575,6 +3859,8 @@ function appendNpfDiagDetailRestoredSections(lines, detail) {
     section('Récupérations automatiques du lecteur de tuiles :', detail.readerRecoveries, formatNpfDiagReaderRecoveryLine);
     section('Délais de restitution dépassés :', detail.restoreTimeouts, formatNpfDiagRestoreTimeoutLine);
     section('Premier plan / arrière-plan :', detail.visibility, formatNpfDiagVisibilityLine);
+    section('Sondes après un paquet de lectures lent :', detail.packProbes, formatNpfDiagPackProbeLine);
+    section('Activité de stockage :', detail.storage, formatNpfDiagStorageEventLine);
     section('Pont BFG (tentatives) :', detail.bfgAttempts, formatNpfDiagBfgAttemptLine);
     section('Temps ressenti FdS / GLR :', detail.felt, formatNpfDiagFeltLine);
     section('Messages FdS / BFG / GLR affichés :', detail.messages, formatNpfDiagMessageLine);
@@ -12871,6 +13157,18 @@ function initMap() {
         }
     });
 
+    /*
+     * v17.42 — HT / Routes seulement sur le fond NPF-Q400 (et la carte en
+     * ligne) : à chaque reconstruction du fond de carte, la règle est
+     * réappliquée si « fond autorisé » a changé. État initial mémorisé ici.
+     */
+    map.on('layeradd', event => {
+        if (event?.layer instanceof L.GridLayer) {
+            scheduleNpfHeavyOverlayBaseMapSync('changement-de-fond');
+        }
+    });
+    try { syncNpfHeavyOverlaysWithBaseMap('init'); } catch (_) {}
+
     map.on('click', handleGaarMapClick);
 
     map.on('contextmenu', async (e) => {
@@ -17977,8 +18275,90 @@ function getHighVoltageLineStyle(feature) {
     };
 }
 
+/*
+ * v17.42 — règle utilisateur (30/09/2026) : sur une carte hors ligne autre que
+ * le fond NPF-Q400 (OACI 1/500 000 et les autres), les lignes HT et les Routes
+ * ne sont ni dessinées ni chargées. Carte en ligne et fond NPF-Q400 : inchangé.
+ * Les réglages ON / OFF de l'utilisateur ne sont jamais modifiés par la règle.
+ */
+function isNpfHeavyOverlayBaseMapAllowed() {
+    if (!offlineTilesMode) return true;
+    return isNpfOfflinePackSelection();
+}
+
+let npfHeavyOverlayBaseMapAllowedLast = null;
+let npfHeavyOverlayBaseMapSyncTimer = null;
+
+/*
+ * Appelé au démarrage puis à chaque reconstruction du fond de carte. Au
+ * premier passage, seul l'état est mémorisé : le démarrage applique déjà la
+ * règle. Ensuite, rien n'est fait tant que « fond autorisé » ne change pas.
+ */
+function syncNpfHeavyOverlaysWithBaseMap(source = 'fond-de-carte') {
+    const allowed = isNpfHeavyOverlayBaseMapAllowed();
+    const previous = npfHeavyOverlayBaseMapAllowedLast;
+    npfHeavyOverlayBaseMapAllowedLast = allowed;
+
+    try { refreshHighVoltageLinesButtonState(); } catch (_) {}
+    try { refreshRoadOverlayButtonState(); } catch (_) {}
+
+    if (previous === null || previous === allowed || !map) return;
+
+    if (!allowed) {
+        if (showHighVoltageLinesLayer) {
+            highVoltageLinesRetryToken += 1;
+            suppressHighVoltageLinesForWideScale(source);
+            /*
+             * Comme au passage OFF (v17.33) : le dessin HT quitte la carte.
+             * Retrait à l'image suivante : Leaflet a pu programmer un dernier
+             * effacement du dessin, qui doit passer avant son retrait.
+             */
+            const removeHighVoltageRenderer = () => {
+                try {
+                    if (
+                        !isNpfHeavyOverlayBaseMapAllowed()
+                        && highVoltageLinesRenderer
+                        && map.hasLayer(highVoltageLinesRenderer)
+                        && !(highVoltageLinesLayer && map.hasLayer(highVoltageLinesLayer))
+                    ) {
+                        map.removeLayer(highVoltageLinesRenderer);
+                    }
+                } catch (_) {}
+            };
+            if (typeof requestAnimationFrame === 'function') {
+                requestAnimationFrame(removeHighVoltageRenderer);
+            } else {
+                setTimeout(removeHighVoltageRenderer, 50);
+            }
+        }
+        if (showRoadOverlayLayer) {
+            /* Niveau 0 (« tier0-inerte ») : géométries libérées, aucune attente. */
+            toggleRoadOverlayLayer(true, { silent: true, source }).catch(() => {});
+        }
+        return;
+    }
+
+    /* Retour sur un fond autorisé : les calques reviennent selon les réglages. */
+    if (showHighVoltageLinesLayer) {
+        toggleHighVoltageLinesLayer(true, { silent: true, retry: true, source }).catch(() => {});
+    }
+    if (showRoadOverlayLayer) {
+        toggleRoadOverlayLayer(true, { silent: true, source }).catch(() => {});
+    }
+}
+
+function scheduleNpfHeavyOverlayBaseMapSync(source = 'fond-de-carte') {
+    clearTimeout(npfHeavyOverlayBaseMapSyncTimer);
+    npfHeavyOverlayBaseMapSyncTimer = setTimeout(() => {
+        npfHeavyOverlayBaseMapSyncTimer = null;
+        try { syncNpfHeavyOverlaysWithBaseMap(source); } catch (_) {}
+    }, 60);
+}
+
 function isHighVoltageLayerEffectiveAtCurrentScale() {
     if (!map) return false;
+    /* v17.42 — fond hors ligne autre que NPF-Q400 : HT jamais actif. */
+    if (!isNpfHeavyOverlayBaseMapAllowed()) return false;
     const scaleNm = getCurrentNpfScaleNm();
     if (!Number.isFinite(scaleNm)) return true;
     return scaleNm < HIGH_VOLTAGE_LINES_HIDE_SCALE_NM - 0.000001;
@@ -18002,7 +18382,11 @@ function suppressHighVoltageLinesForWideScale(source = 'scale-50nm') {
     } catch (_) {}
     refreshHighVoltageLinesButtonState();
     if (hadVisual) {
-        recordNpfStartupDiagnosticOverlaySnapshot(`lignes-ht masquées 50 NM · ${source}`);
+        recordNpfStartupDiagnosticOverlaySnapshot(
+            isNpfHeavyOverlayBaseMapAllowed()
+                ? `lignes-ht masquées 50 NM · ${source}`
+                : `lignes-ht masquées · fond autre que NPF-Q400 · ${source}`
+        );
     }
     return true;
 }
@@ -18011,13 +18395,18 @@ function refreshHighVoltageLinesButtonState() {
     const button = document.getElementById('high-voltage-lines-button');
     if (!button) return;
 
+    /* v17.42 — fond hors ligne autre que NPF-Q400 : bouton grisé, appui sans effet. */
+    const baseMapBlocked = !isNpfHeavyOverlayBaseMapAllowed();
     const scaleSuppressed = showHighVoltageLinesLayer
         && !isHighVoltageLayerEffectiveAtCurrentScale();
     button.classList.toggle('active', showHighVoltageLinesLayer);
     button.classList.toggle('loading', isHighVoltageLinesLoading);
-    button.disabled = isHighVoltageLinesLoading;
+    button.classList.toggle('base-map-unavailable', baseMapBlocked);
+    button.disabled = isHighVoltageLinesLoading || baseMapBlocked;
     button.title = isHighVoltageLinesLoading
         ? 'Chargement des lignes haute tension RTE…'
+        : baseMapBlocked
+            ? 'Lignes HT — disponibles seulement sur le fond NPF-Q400'
         : scaleSuppressed
             ? 'Lignes HT activées — masquées à l’échelle 50 NM ou plus'
             : 'Afficher/Masquer les lignes haute tension RTE';
@@ -18619,6 +19008,12 @@ function scheduleHighVoltageLinesRetry(source = 'retry') {
 }
 
 async function toggleHighVoltageLinesLayer(forceState = null, options = {}) {
+    /* v17.42 — appui sur le bouton sur un fond autre que NPF-Q400 : réglage inchangé. */
+    if (forceState === null && !isNpfHeavyOverlayBaseMapAllowed()) {
+        refreshHighVoltageLinesButtonState();
+        return;
+    }
+
     const shouldShow = forceState === null ? !showHighVoltageLinesLayer : Boolean(forceState);
     const silent = !!options.silent;
     const allowRetry = options.retry !== false;
@@ -19255,7 +19650,10 @@ function refreshRoadOverlayButtonState() {
     button.classList.toggle('active', showRoadOverlayLayer && hasData);
     button.classList.toggle('loading', isRoadOverlayLoading);
     button.classList.toggle('missing-data', !hasData);
-    button.disabled = isRoadOverlayLoading;
+    /* v17.42 — fond hors ligne autre que NPF-Q400 : bouton grisé, appui sans effet. */
+    const baseMapBlocked = !isNpfHeavyOverlayBaseMapAllowed();
+    button.classList.toggle('base-map-unavailable', baseMapBlocked);
+    button.disabled = isRoadOverlayLoading || baseMapBlocked;
 
     if (status) {
         status.textContent = hasData ? 'A/N/D/M/T' : '!';
@@ -19263,6 +19661,8 @@ function refreshRoadOverlayButtonState() {
 
     button.title = isRoadOverlayLoading
         ? 'Chargement du calque routier…'
+        : baseMapBlocked
+            ? 'Routes — disponibles seulement sur le fond NPF-Q400'
         : (
             hasData
                 ? 'Afficher/Masquer le calque routier A / N / D / M / T'
@@ -19899,6 +20299,9 @@ function roadOverlayBboxIntersectsBounds(bbox, bounds) {
 }
 
 function getRoadOverlayZoomTier() {
+    /* v17.42 — fond hors ligne autre que NPF-Q400 : Routes jamais actif (niveau 0). */
+    if (!isNpfHeavyOverlayBaseMapAllowed()) return 0;
+
     const zoom = map?.getZoom?.() ?? 0;
 
     /*
@@ -21061,6 +21464,8 @@ function rebuildRoadOverlayLabels() {
 
 async function refreshRoadOverlayVisibleParts(source = 'refresh') {
     if (!showRoadOverlayLayer || !map || !roadOverlayLayer) return;
+    /* v17.42 — fond hors ligne autre que NPF-Q400 : aucune attente, aucune lecture. */
+    if (!isNpfHeavyOverlayBaseMapAllowed()) return;
 
     const manifest = getRoadOverlayManifest();
     if (!manifest.parts.length) {
@@ -21357,6 +21762,12 @@ function scheduleRoadOverlayRefresh(source = 'scheduled') {
 }
 
 async function toggleRoadOverlayLayer(forceState = null, options = {}) {
+    /* v17.42 — appui sur le bouton sur un fond autre que NPF-Q400 : réglage inchangé. */
+    if (forceState === null && !isNpfHeavyOverlayBaseMapAllowed()) {
+        refreshRoadOverlayButtonState();
+        return;
+    }
+
     const shouldShow = forceState === null
         ? !showRoadOverlayLayer
         : Boolean(forceState);

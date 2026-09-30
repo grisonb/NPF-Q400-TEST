@@ -547,7 +547,10 @@ function refreshRoadOverlayButtonState() {
     button.classList.toggle('active', showRoadOverlayLayer && hasData);
     button.classList.toggle('loading', isRoadOverlayLoading);
     button.classList.toggle('missing-data', !hasData);
-    button.disabled = isRoadOverlayLoading;
+    /* v17.42 — fond hors ligne autre que NPF-Q400 : bouton grisé, appui sans effet. */
+    const baseMapBlocked = !isNpfHeavyOverlayBaseMapAllowed();
+    button.classList.toggle('base-map-unavailable', baseMapBlocked);
+    button.disabled = isRoadOverlayLoading || baseMapBlocked;
 
     if (status) {
         status.textContent = hasData ? 'A/N/D/M/T' : '!';
@@ -555,6 +558,8 @@ function refreshRoadOverlayButtonState() {
 
     button.title = isRoadOverlayLoading
         ? 'Chargement du calque routier…'
+        : baseMapBlocked
+            ? 'Routes — disponibles seulement sur le fond NPF-Q400'
         : (
             hasData
                 ? 'Afficher/Masquer le calque routier A / N / D / M / T'
@@ -1191,6 +1196,9 @@ function roadOverlayBboxIntersectsBounds(bbox, bounds) {
 }
 
 function getRoadOverlayZoomTier() {
+    /* v17.42 — fond hors ligne autre que NPF-Q400 : Routes jamais actif (niveau 0). */
+    if (!isNpfHeavyOverlayBaseMapAllowed()) return 0;
+
     const zoom = map?.getZoom?.() ?? 0;
 
     /*
@@ -2353,6 +2361,8 @@ function rebuildRoadOverlayLabels() {
 
 async function refreshRoadOverlayVisibleParts(source = 'refresh') {
     if (!showRoadOverlayLayer || !map || !roadOverlayLayer) return;
+    /* v17.42 — fond hors ligne autre que NPF-Q400 : aucune attente, aucune lecture. */
+    if (!isNpfHeavyOverlayBaseMapAllowed()) return;
 
     const manifest = getRoadOverlayManifest();
     if (!manifest.parts.length) {
@@ -2649,6 +2659,12 @@ function scheduleRoadOverlayRefresh(source = 'scheduled') {
 }
 
 async function toggleRoadOverlayLayer(forceState = null, options = {}) {
+    /* v17.42 — appui sur le bouton sur un fond autre que NPF-Q400 : réglage inchangé. */
+    if (forceState === null && !isNpfHeavyOverlayBaseMapAllowed()) {
+        refreshRoadOverlayButtonState();
+        return;
+    }
+
     const shouldShow = forceState === null
         ? !showRoadOverlayLayer
         : Boolean(forceState);
