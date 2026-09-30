@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 30/09/2026
-Version de travail actuelle : TEST v17.45
+Version de travail actuelle : TEST v17.46
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,13 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.46 — cartes hors ligne en données brutes (ArrayBuffer) pour tout import
+  normal ; base encore en Blob -> proposition de la supprimer en entier avant
+  import ; suppression d'une carte en une seule opération ; reprise d'un
+  import interrompu ; libellés « Carte NPF-Q400 » / « Carte NPF-Q400
+  (ancienne, lente) » ; bouton « essai rapide » retiré ; écran de démarrage
+  sombre (20 s au plus) ; durées du démarrage, historique des feux et imports
+  dans le DIAG ; historique des feux plus jamais lu vide sur écriture refusée ;
 - v17.45 — fenêtre d'un terrain : la carte glisse juste ce qu'il faut pour
   qu'elle soit entière et visible (zone libre = carte moins barre de
   recherche, bandeaux, colonnes de boutons et rangée du bas) ; elle reste
@@ -382,6 +389,13 @@ NON IMPLÉMENTÉ / OUVERT :
   (« ANALYSE DIAG v17.32 SOL + VOL ») : 5 défauts du DIAG lui-même relevés
   (D1 à D5) et 9 recommandations classées gain / risque (R1 à R9), aucune
   implémentée. Historique : À MESURER -> MESURÉ ;
+- v17.46 : À MESURER sur iPad (écran de démarrage, libellés du sélecteur,
+  HT / Routes sur la Carte NPF-Q400, historique des feux, export DIAG).
+  Ancienne carte NPF-Q400 en Blob conservée en secours jusqu'au vol de
+  confirmation (semaine du 05/10/2026) ;
+- Démarrage plus court (analyse v17.46) : propositions P1 à P5 de l'entrée
+  v17.46, NON IMPLÉMENTÉ, À DÉCIDER après lecture de la ligne « Durées du
+  démarrage » sur iPad ;
 - v17.45 : À MESURER sur iPad (glissement de la carte à l'ouverture d'une
   fenêtre de terrain, retour du Suivi et fermeture de la fenêtre) ;
 - v17.44 : fenêtre terrain VALIDÉE sur iPad par Bastien (30/09/2026) ;
@@ -448,39 +462,40 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.45
+Version : TEST v17.46
 Date : 30/09/2026
-Base : v17.44 (commitée c39d698, VALIDÉE sur iPad)
+Base : v17.45 (commitée dfe6ed4, À MESURER)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.45.txt
-2_Index_v17.45.txt
-3_Manifest_v17.45.txt
-4_Script_v17.45.txt
-5_SIA_v17.45.txt
-6_Style_v17.45.txt
-7_Sw_v17.45.txt
+1_Modifications_v17.46.txt
+2_Index_v17.46.txt
+3_Manifest_v17.46.txt
+4_Script_v17.46.txt
+5_SIA_v17.46.txt
+6_Style_v17.46.txt
+7_Sw_v17.46.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.45
-- Manifest : start_url = ./index.html?appv=v17.45
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.45
-- Style : NPF_STYLE_BUILD_VERSION = v17.45
-- Service Worker : `sw-v17-45_fenetre_terrain_glissement` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-45_fenetre_terrain_glissement`, `npf-q400-test-app-data-v1`,
+- Index : APP_VERSION = v17.46 (et texte « TEST v17.46 » de l'écran de
+  démarrage, à changer aussi à chaque version)
+- Manifest : start_url = ./index.html?appv=v17.46
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.46
+- Style : NPF_STYLE_BUILD_VERSION = v17.46
+- Service Worker : `sw-v17-46_cartes_donnees_brutes` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-46_cartes_donnees_brutes`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-15.69-radio1026-1-maplite1`
 - SIA_DATA_REVISION (SW / Index) : 15.69-radio1026-1-maplite1 (inchangée)
-- sia.js v17.45 : strictement identique à v17.44.
+- sia.js v17.46 : strictement identique à v17.45.
 
 STATUT DE VALIDATION :
-- validation statique v17.45 effectuée avant livraison : Script/SIA/SW OK, script
+- validation statique v17.46 effectuée avant livraison : Script/SIA/SW OK, script
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
-- `sia.js` et moteur tuiles (src/100) identiques à v17.44 ;
-- tests Chrome v17.44 / v17.45 : entrée v17.45 ;
+- `sia.js` et moteur tuiles (src/100) identiques à v17.45 ;
+- tests Chrome v17.45 / v17.46 : entrée v17.46 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44 VALIDÉE ; v17.29, v17.31, v17.33 à v17.43 et
-  v17.45 À MESURER.
+  v17.45 et v17.46 À MESURER.
 
 
 2. PROTOCOLE DE TRAVAIL À RESPECTER
@@ -2002,6 +2017,182 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.46 — CARTES HORS LIGNE EN DONNÉES BRUTES ; ÉCRAN DE
+DÉMARRAGE ; DURÉES DU DÉMARRAGE ; HISTORIQUE DES FEUX
+Date : 30/09/2026
+Base fonctionnelle : v17.45 (commit dfe6ed4)
+Décision : essai v17.43 sur iPad au sol (30/09) — Carte NPF-Q400 en données
+brutes 0 paquet lent contre 34 en Blob ; le pilote valide les données brutes
+comme forme normale. Stockage TEST et pérenne SÉPARÉS sur son iPad (vérifié :
+NPF_France_B absent du sélecteur de la pérenne). Ancienne carte en Blob gardée
+en secours jusqu'au vol de confirmation.
+
+ÉTAPE 0 — ÉTAT AVANT MODIFICATION (v17.45)
+- Import : forme Blob par défaut (src/280 `tileReadMode`), lots de 35 à 320
+  tuiles, fichier ZIP entier en mémoire, aucune reprise.
+- Suppression d'une carte : tuile par tuile (`deleteMapGroup` ->
+  `deleteMapPack`). La suppression d'une base entière avait été abandonnée en
+  v12.20 (Safari peut la bloquer si une connexion reste ouverte).
+- Écran de démarrage déjà présent (fond clair), masqué à la première tuile ou
+  12 s après le chargement ; z-index 99999, donc au-dessus des fenêtres GLR
+  (10070) et FdS (10060).
+- Historique des feux : clé `fireHistoryV1` (20 feux) ; une écriture refusée
+  était ignorée sans message.
+- Non-régression : src/170:140, 943, 978 ; src/180:1415, 1555, 1573 ;
+  src/030:695, src/140:3765 ; src/110:1521, 1534, 1631 ; src/100:1237 ;
+  src/120:539, 1198 ; src/340:1983 ; src/280 (sélecteur, rechercher
+  `displayQuickOfflineMapSelector`, `selectQuickOfflineMapGroup`) ; sw.js:25, 31.
+
+A. CARTES HORS LIGNE EN DONNÉES BRUTES (src/280, src/060, src/110, index.html,
+   style.css)
+1. Le bouton normal « Importer Cartes Offline » enregistre toutes les cartes
+   (NPF-Q400, OACI, IGN, OpenStreet…) en données brutes, sous leur nom normal.
+   Chaque fichier installé porte `tileFormat: 'arraybuffer'` et sa taille
+   (`sizeBytes`). La lecture accepte toujours les deux formes (src/100 non
+   modifié).
+2. Base cible contenant encore des images en Blob (première image lue ; à
+   défaut, fichiers installés sans `tileFormat`) : fenêtre de confirmation
+   (nom de la carte, taille estimée) proposant de supprimer l'ancienne carte en
+   entier puis d'importer. Refus : aucun import, rien n'est touché.
+3. Bouton « Carte NPF — essai rapide » retiré (index.html, écouteur src/110,
+   styles, fonction d'import d'essai). La base OfflineMap_NPF_France_B reste
+   utilisable telle quelle.
+4. Libellés (sélecteur rapide et liste « Gestion des Cartes ») : carte NPF-Q400
+   en données brutes -> « Carte NPF-Q400 » ; en ancien format -> « Carte
+   NPF-Q400 (ancienne, lente) » ; si deux cartes NPF-Q400 en données brutes
+   coexistent, celle en _B -> « Carte NPF-Q400 (B) ». Les noms internes des
+   groupes et des bases ne changent pas.
+5. Règle HT / Routes inchangée : `isNpfOfflinePackSelection` reconnaît
+   NPF_France et NPF_France_B.
+6. Suppression d'une carte à base séparée : confirmation (nom, fichiers,
+   taille estimée), bascule sans relance sur une autre carte si c'est la carte
+   affichée (de préférence une Carte NPF-Q400), fermeture des connexions de la
+   page et du service worker, puis suppression de la base entière en une
+   opération. Si Safari la refuse : carte retirée de la liste et base effacée
+   au lancement suivant, avant toute ouverture de carte
+   (`processPendingOfflineDatabaseDeletions`, clé
+   `npfOfflinePendingDbDeletionsV1`). Cartes de l'ancienne base commune (non
+   séparée) : ancien chemin inchangé.
+7. Import plus sûr : lots de 40 tuiles au plus, images libérées après chaque
+   lot, courte pause ; progression enregistrée tous les 10 lots (clé
+   `npfOfflineImportProgressV1`) ; en resélectionnant le même fichier (nom et
+   taille), l'import reprend à la dernière tuile écrite ; journal des 12
+   derniers imports (clé `npfOfflineImportLogV1` : fichier, tuiles écrites,
+   durée, lot le plus long, reprise, interruption) affiché dans le DIAG.
+
+B. ÉCRAN DE DÉMARRAGE (index.html, style.css)
+- « NPF-Q400 — démarrage… » sur fond sombre, dans la page avant tout script.
+- Disparaît à la première tuile (inchangé) et au plus tard 20 s après
+  l'ouverture de la page (nouveau minuteur), en plus du repli existant (12 s
+  après le chargement).
+- z-index 10050 : sous les fenêtres GLR / FdS et le bandeau de messages.
+
+C. DÉMARRAGE
+- Mesure : ligne DIAG « Durées du démarrage » (scripts de la page, première
+  lecture du stockage local, script.js reçu / début / évalué, DOM prêt, carte
+  créée, première tuile, démarrage principal, carte complète). Nouveau repère
+  « Script NPF-Q400 évalué » en fin de script.js.
+- DIAG iPad du 30/09 17:06 (v17.43) : script.js commence à 1,80 s ; DOM prêt
+  2,88 s ; carte créée 3,22 s ; ouverture de la base de réglages 3,31 -> 3,61 s
+  ; première tuile 3,65 s ; carte complète 4,48 s. Avant script.js : lecture et
+  analyse d'environ 5 Mo de scripts et de styles (leaflet 144 ko, jszip 95 ko,
+  sia.js 1,37 Mo, script.js 3,1 Mo, style.css 503 ko). Entre script.js et DOM
+  prêt : évaluation du haut de script.js, dont 580 ko de données départements
+  (src/240) et 126 ko de données SIA (src/330).
+- Gains appliqués : AUCUN. Aucun gain trouvé n'est à la fois sûr et simple :
+  tous touchent l'ordre de chargement des scripts, sia.js ou le moteur de
+  tuiles (règles CLAUDE.md).
+- Propositions, NON IMPLÉMENTÉ, À DÉCIDER :
+  P1 charger jszip.min.js seulement à l'import (≈ 0,02 à 0,05 s) ;
+  P2 charger sia.js après l'affichage de la carte (≈ 0,2 à 0,4 s estimés) ;
+  P3 sortir de script.js les 580 ko de données départements, chargées à la
+  demande (≈ 0,1 à 0,3 s estimés) ;
+  P4 déplacer communesAliasesCacheV3 (1,5 M car.) et npfCommunesPopulationV1
+  (0,5 M car.) du stockage local vers IndexedDB : première lecture du stockage
+  plus courte (à mesurer avec la nouvelle ligne) et moitié du quota libérée ;
+  P5 lancer les premières lectures de tuiles sans attendre l'ouverture de la
+  base de réglages (0,30 s mesurés) — moteur de tuiles, seulement avec DIAG.
+
+D. HISTORIQUE DES FEUX
+- Enregistré dans `fireHistoryV1` (src/050 `saveFireHistory`), relu par
+  `getFireHistory` (liste du panneau de recherche, marqueurs de la carte).
+- Cause trouvée — PROBABLE : `getFireHistory` renumérote au besoin deux feux
+  d'une même commune et réécrit la liste ; si cette écriture était refusée
+  (stockage local proche de la limite de Safari, ≈ 4 Mo utilisés), l'erreur
+  faisait renvoyer une liste VIDE, alors que les données étaient intactes.
+  Dès que l'écriture redevenait possible, l'historique « revenait seul ».
+  Reproduit dans Chrome : v17.45 lit 0 feu, v17.46 lit les 2 feux.
+- Correction : l'écriture est isolée ; un refus ne vide plus la liste lue.
+  Écritures refusées de l'historique comptées (`noteNpfFireHistoryWriteError`).
+- DIAG : « Historique des feux : N au lancement · N maintenant · écritures
+  refusées ».
+
+TESTS CHROME (1080 × 810, v17.45 puis v17.46 sur le même stockage)
+- Cartes créées en v17.45 : NPF_France 484 tuiles Blob, NPF_France_B 484
+  données brutes, OACI 324 Blob. En v17.46 : sélecteur « Carte NPF-Q400
+  (ancienne, lente) », « Carte NPF-Q400 », « OACI 1-500 000 » ; les trois cartes
+  lues 20/20 tuiles, sans réimport (images Blob pour l'ancienne, données
+  brutes pour NPF_France_B) ; HT / Routes autorisés sur les deux Cartes
+  NPF-Q400, pas sur OACI.
+- Import OACI en v17.46 : fenêtre « ancien format, environ 324 tuiles… » ;
+  refus -> base inchangée (324 Blob), aucun import ; acceptation -> base
+  supprimée puis 324 tuiles en données brutes, carte lue 20/20.
+- Import IGN : 98 tuiles en données brutes, carte lue 20/20.
+- Suppression de l'ancienne carte affichée : fenêtre « Supprimer la carte «
+  Carte NPF-Q400 (ancienne, lente) » ? 1 fichier(s) · environ 484 tuiles… Elle
+  est affichée : NPF-Q400 passera sur « Carte NPF-Q400 » » ; 0,5 s ; base
+  effacée ; bascule sans relance sur Carte NPF-Q400, 20/20 tuiles ; bandeau «
+  Carte … supprimée ».
+- Import interrompu (page rechargée à 400 / 1125 tuiles) puis même fichier
+  resélectionné : reprise à 400, 1125 tuiles au total, aucun doublon ; DIAG «
+  INTERROMPU à la tuile 400 » puis « reprise depuis 400 | terminé ».
+- Écran de démarrage : visible dès 50 ms, sombre, « NPF-Q400 — démarrage… »,
+  masqué à la première tuile (≈ 0,5 à 1 s dans Chrome), aussi à la relance ;
+  script.js cassé : masqué seul à 12,9 s ; fenêtre GLR affichée pendant
+  l'écran : au-dessus.
+- Historique des feux, écriture refusée : v17.45 0 feu lu, v17.46 2 feux lus,
+  1 écriture refusée notée dans le DIAG.
+
+NON-RÉGRESSION v17.46 CONTRE v17.45 (Chrome)
+- FdS / GAAR (BFG connecté sans question ; non connecté -> mot de passe puis
+  NAS ; NAS en panne ; NAS lent) : OK.
+- GLR (code, OFF / ON sans déconnexion, session expirée, réseau coupé) : OK.
+- SafeSky mémorisé : OK.
+- HT et Routes (règle A5, gestes, démarrage calques ON) : OK.
+- Points VFR sur OACI à 2 NM : OK.
+- Ancienne carte NPF-Q400 en Blob lisible ; NPF_France_B lue sans réimport ;
+  imports OACI / IGN au nouveau format lisibles : OK.
+- Sélection des cartes sans relance : OK.
+- Fenêtre des terrains (boutons, mise en page v17.44, glissement et fermeture
+  v17.45) : OK.
+- Recherche et sélection d'un feu, suivi GPS, Recentrage économe, bandeau,
+  export DIAG : OK.
+- Service worker : caches npf-q400-test-* seulement : OK.
+- Taille du DIAG enregistré : +268 et +507 car. selon le scénario (< 1 000) :
+  OK.
+Aucune exception JavaScript dans les deux versions.
+
+RETOUR ARRIÈRE
+- Revenir au commit dfe6ed4 (v17.45) : les cartes importées en v17.46 restent
+  lisibles (la lecture des données brutes existe depuis longtemps) ; seuls
+  leurs libellés redeviennent les noms internes.
+- Une carte supprimée en v17.46 ne peut pas être restaurée : il faut la
+  réimporter. L'ancienne carte NPF-Q400 n'est supprimée que sur confirmation
+  du pilote.
+
+FICHIERS MODIFIÉS
+src/280, src/060, src/110, src/050, src/010, src/350 (repère de fin), donc
+script.js ; index.html, style.css ; manifest.json et sw.js (numéros de version).
+sia.js, src/100, src/080, src/090, src/120, src/210, src/260, src/340 :
+identiques à v17.45.
+
+VERSION
+- App : v17.46
+- Service Worker : `sw-v17-46_cartes_donnees_brutes`
+
+STATUT : À MESURER sur iPad.
+
 
 VERSION TEST v17.45 — FENÊTRE D'UN TERRAIN : LA CARTE GLISSE POUR LA MONTRER
 ENTIÈRE ; SUIVI GPS : PAUSE, RETOUR SUR L'AVION ET FERMETURE DE LA FENÊTRE

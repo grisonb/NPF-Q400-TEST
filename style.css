@@ -1,4 +1,4 @@
-/* NPF_STYLE_BUILD_VERSION: v17.45 */
+/* NPF_STYLE_BUILD_VERSION: v17.46 */
 /* v14.83 — nettoyage des références techniques et limitation des cartouches routiers. */
 /* v14.81 — recherche phonétique nationale élargie aux fragments sur deux lettres. */
 /* v14.80 — Brive conservé uniquement sous LFSL. */
@@ -3617,15 +3617,16 @@ body {
     background: #dbeafe;
 }
 
+/* v17.46 — écran de démarrage sombre (mêmes règles que le style de index.html). */
 #app-boot-screen {
     position: fixed;
     inset: 0;
-    z-index: 99999;
+    z-index: 10050;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(180deg, #eaf4ff 0%, #cfe7ff 100%);
-    color: #0b2f6b;
+    background: #0b1220;
+    color: #e5eefc;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     font-weight: 800;
     text-align: center;
@@ -3634,15 +3635,15 @@ body {
 #app-boot-screen .boot-card {
     padding: 18px 22px;
     border-radius: 18px;
-    background: rgba(255,255,255,.86);
-    box-shadow: 0 8px 24px rgba(0,0,0,.18);
-    border: 1px solid rgba(255,255,255,.9);
+    background: rgba(255,255,255,.06);
+    border: 1px solid rgba(255,255,255,.14);
+    font-size: 20px;
 }
 
 #app-boot-screen .boot-version {
-    margin-top: 5px;
-    font-size: 12px;
-    opacity: .68;
+    margin-top: 6px;
+    font-size: 13px;
+    opacity: .7;
 }
 
 body.app-ready #app-boot-screen {
@@ -5151,17 +5152,6 @@ body {
     cursor: wait;
 }
 
-/* v17.43 — import « Carte NPF — essai rapide ». */
-#offline-map-modal .npf-raw-trial-import-row {
-    margin-top: 10px;
-}
-
-#offline-map-modal .npf-raw-trial-import-note {
-    margin: 6px 0 10px;
-    font-size: 0.85em;
-    opacity: 0.8;
-}
-
 /* v17.42 — HT / Routes grisés sur une carte hors ligne autre que le fond NPF-Q400. */
 #high-voltage-lines-button.base-map-unavailable,
 #road-overlay-button.base-map-unavailable {
@@ -6455,10 +6445,10 @@ body {
 }
 
 #app-boot-screen .boot-version {
-    font-size: 16px !important;
-    font-weight: 950 !important;
-    opacity: .95 !important;
-    color: #005a9c !important;
+    font-size: 13px !important;
+    font-weight: 800 !important;
+    opacity: .7 !important;
+    color: #9cc3ff !important;
 }
 
 #npf-resume-overlay .npf-resume-card::before {

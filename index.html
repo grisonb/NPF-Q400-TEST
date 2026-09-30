@@ -6,8 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>NPF-Q400</title>
     <link rel="stylesheet" href="leaflet.css">
-    <link rel="stylesheet" href="style.css?appv=v17.45">
-    <link rel="manifest" href="manifest.json?appv=v17.45">
+    <link rel="stylesheet" href="style.css?appv=v17.46">
+    <link rel="manifest" href="manifest.json?appv=v17.46">
     <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192x192.png?appv=v13.92">
     <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512x512.png?appv=v13.92">
     <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png?appv=v13.92">
@@ -17,19 +17,22 @@
     <meta name="apple-mobile-web-app-title" content="NPF-Q400">
 
     <style id="early-boot-style">
+        /* v17.46 — écran de démarrage sombre, affiché avant le chargement des scripts.
+         * Il reste sous les fenêtres GLR / FdS (z-index 10060-10070) et sous le
+         * bandeau de messages, pour ne jamais les masquer. */
         html, body {
             min-height: 100%;
-            background: #dbeafe;
+            background: #0b1220;
         }
         #app-boot-screen {
             position: fixed;
             inset: 0;
-            z-index: 99999;
+            z-index: 10050;
             display: flex;
             align-items: center;
             justify-content: center;
-            background: linear-gradient(180deg, #eaf4ff 0%, #cfe7ff 100%);
-            color: #0b2f6b;
+            background: #0b1220;
+            color: #e5eefc;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
             font-weight: 800;
             letter-spacing: .02em;
@@ -38,14 +41,14 @@
         #app-boot-screen .boot-card {
             padding: 18px 22px;
             border-radius: 18px;
-            background: rgba(255,255,255,.86);
-            box-shadow: 0 8px 24px rgba(0,0,0,.18);
-            border: 1px solid rgba(255,255,255,.9);
+            background: rgba(255,255,255,.06);
+            border: 1px solid rgba(255,255,255,.14);
+            font-size: 20px;
         }
         #app-boot-screen .boot-version {
-            margin-top: 5px;
-            font-size: 12px;
-            opacity: .68;
+            margin-top: 6px;
+            font-size: 13px;
+            opacity: .7;
         }
         body.app-ready #app-boot-screen {
             opacity: 0;
@@ -58,10 +61,21 @@
 
     <div id="app-boot-screen" aria-live="polite">
         <div class="boot-card">
-            <div>Chargement NPF-Q400…</div>
-            <div class="boot-version">Patience, je réfléchis ...</div>
+            <div>NPF-Q400 — démarrage…</div>
+            <div class="boot-version">TEST v17.46</div>
         </div>
     </div>
+    <script>
+        /* v17.46 — l'écran de démarrage disparaît dès que la carte est affichée
+         * (classe app-ready posée par l'app), et au plus tard 20 s après
+         * l'ouverture de la page, même en cas d'erreur. */
+        setTimeout(function () {
+            try {
+                document.body.classList.add('app-ready');
+                document.documentElement.classList.add('app-ready');
+            } catch (e) {}
+        }, 20000);
+    </script>
     <div id="map"></div>
     <div id="left-map-action-buttons">
         <button id="high-voltage-lines-button" class="left-map-action-button high-voltage-map-button" title="Afficher/Masquer les lignes haute tension RTE" aria-label="Afficher/Masquer les lignes haute tension RTE">
@@ -579,7 +593,30 @@
 
     <!-- v17.20 — le splash est parsé avant le gros contrôleur PWA afin de réduire le blanc initial Safari. -->
     <script>
-        const APP_VERSION = 'v17.45';
+        /* v17.46 — mesures du démarrage (DIAG) : début des scripts de la page,
+         * coût de la première lecture du stockage local (Safari charge alors
+         * tout le stockage), et historique des feux tel que lu au lancement. */
+        window.__npfBootTiming = { inlineAt: performance.now() };
+        try {
+            const storageReadStart = performance.now();
+            const rawFireHistory = localStorage.getItem('fireHistoryV1');
+            window.__npfBootTiming.localStorageFirstReadMs = performance.now() - storageReadStart;
+            let fireCount = 0;
+            let fireError = '';
+            try {
+                const parsedFireHistory = JSON.parse(rawFireHistory || '[]');
+                fireCount = Array.isArray(parsedFireHistory) ? parsedFireHistory.length : 0;
+            } catch (parseError) {
+                fireError = String(parseError && parseError.message || parseError).slice(0, 60);
+            }
+            window.__npfBootTiming.fireHistoryAtLaunch = {
+                n: fireCount,
+                chars: rawFireHistory ? rawFireHistory.length : 0,
+                error: fireError
+            };
+        } catch (_) {}
+
+        const APP_VERSION = 'v17.46';
         const SERVICE_WORKER_URL = `./sw.js?appv=${encodeURIComponent(APP_VERSION)}`;
         const APP_VERSION_STORAGE_KEY = 'appVersion';
         const SW_CONTROLLER_RELOAD_GUARD_KEY = 'swControllerReloadGuard';
@@ -1423,7 +1460,7 @@
     <script src="suncalc.js"></script>
     <script src="jszip.min.js"></script>
     <script src="sia.js?siav=15.69-radio1026-1-maplite1"></script>
-    <script src="script.js?appv=v17.45"></script>
+    <script src="script.js?appv=v17.46"></script>
     
     <div id="fuel-split-modal" class="fuel-split-modal" style="display: none;">
         <div class="fuel-split-modal-content">
@@ -1704,12 +1741,6 @@
                         <button type="button" class="import-help-button" data-import-help="offline-maps" aria-label="Aide Importer Cartes Offline" title="Aide">?</button>
                     </div>
                     <input type="file" id="zip-importer-input" accept=".zip" style="display: none;">
-                    <!-- v17.43 — essai côte à côte : carte NPF enregistrée en données brutes, sous un autre nom. -->
-                    <div class="import-help-row npf-raw-trial-import-row">
-                        <label for="npf-raw-trial-importer-input" class="import-button">Carte NPF — essai rapide</label>
-                    </div>
-                    <p class="npf-raw-trial-import-note">Importer un à un les 10 fichiers NPF_France : ils forment une seconde carte « NPF_France_B ». La carte NPF actuelle n’est pas modifiée.</p>
-                    <input type="file" id="npf-raw-trial-importer-input" accept=".zip" style="display: none;">
 
                     <ul id="installed-maps-list">
                         <!-- Les packs installés seront listés ici par le JavaScript -->

@@ -3238,3 +3238,5 @@ async function refreshSiaLayers(reason = 'manual') {
     }
 }
 
+/* v17.46 — DIAG : fin de l'évaluation de script.js (durées du démarrage). */
+try { npfStartupDiagMark('script_end', 'Script NPF-Q400 évalué'); } catch (_) {}

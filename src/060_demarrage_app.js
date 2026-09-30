@@ -312,6 +312,11 @@ async function initializeApp() {
     if (statusMessage) statusMessage.style.display = 'none';
     if (searchSection) searchSection.style.display = 'none';
 
+    /* v17.46 — bases de cartes supprimées mais refusées par Safari lors de la
+     * session précédente : effacement maintenant, avant toute ouverture de
+     * carte (non bloquant). */
+    try { processPendingOfflineDatabaseDeletions(); } catch (_) {}
+
     npfStartupDiagMark('map_init_start', 'Création carte — début');
     initMap();
     npfStartupDiagMark('map_init_ready', 'Carte Leaflet créée');

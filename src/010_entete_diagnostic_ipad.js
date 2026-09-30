@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.45';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.46';
 
 
 /*
@@ -2831,6 +2831,68 @@ const NPF_DIAG_DETAIL = (() => {
     };
 })();
 
+/*
+ * v17.46 — lignes courtes en tête du DIAG (export seulement, rien n'est
+ * enregistré en plus) : durées du démarrage, historique des feux, imports.
+ */
+function appendNpfDiagV1746HeaderLines(lines) {
+    const seconds = value => (Number.isFinite(value) ? (value / 1000).toFixed(2).replace('.', ',') : '—');
+    const marks = (NPF_STARTUP_DIAGNOSTIC.state.marks || []);
+    const markAt = key => {
+        const entry = marks.find(item => item && item.key === key);
+        return entry ? Number(entry.t) : NaN;
+    };
+    const boot = window.__npfBootTiming || {};
+    let scriptReceived = NaN;
+    try {
+        const entry = performance.getEntriesByType('resource')
+            .find(item => /\/script\.js(\?|$)/.test(item.name));
+        if (entry) scriptReceived = entry.responseEnd;
+    } catch (_) {}
+    lines.push(
+        'Durées du démarrage (s depuis l’ouverture) : scripts de la page ' + seconds(Number(boot.inlineAt))
+        + ' · stockage local, 1re lecture ' + (Number.isFinite(boot.localStorageFirstReadMs) ? Math.round(boot.localStorageFirstReadMs) + ' ms' : '—')
+        + ' · script.js reçu ' + seconds(scriptReceived)
+        + ' · début ' + seconds(markAt('script_eval'))
+        + ' · évalué ' + seconds(markAt('script_end'))
+        + ' · DOM prêt ' + seconds(markAt('dom_ready'))
+        + ' · carte créée ' + seconds(markAt('map_init_ready'))
+        + ' · 1re tuile ' + seconds(markAt('first_tile'))
+        + ' · démarrage principal ' + seconds(markAt('core_ready'))
+        + ' · carte complète ' + seconds(markAt('startup_visible_map_complete'))
+    );
+
+    const fireAtLaunch = boot.fireHistoryAtLaunch || null;
+    let fireNow = '—';
+    try { fireNow = String(getFireHistory().length); } catch (_) {}
+    const writeErrors = window.__npfFireHistoryWriteErrors || null;
+    lines.push(
+        'Historique des feux : ' + (fireAtLaunch ? fireAtLaunch.n + ' au lancement (' + fireAtLaunch.chars + ' car.)' : '—')
+        + (fireAtLaunch && fireAtLaunch.error ? ' · lecture illisible : ' + fireAtLaunch.error : '')
+        + ' · ' + fireNow + ' maintenant'
+        + ' · écritures refusées : ' + (writeErrors && writeErrors.n
+            ? writeErrors.n + ' (dernière ' + formatNpfDiagClock(writeErrors.last && writeErrors.last.at) + ' ' + (writeErrors.last && writeErrors.last.message || '') + ')'
+            : 'aucune')
+    );
+
+    let importLog = [];
+    try { importLog = JSON.parse(localStorage.getItem('npfOfflineImportLogV1') || '[]'); } catch (_) {}
+    if (Array.isArray(importLog) && importLog.length) {
+        const running = typeof isZipImportRunning !== 'undefined' && !!isZipImportRunning;
+        lines.push('Imports de cartes (derniers) :');
+        importLog.slice(-6).forEach(item => {
+            if (!item) return;
+            const interrupted = item.status === 'en cours' && !running;
+            lines.push('   ' + formatNpfDiagClock(item.at) + ' | ' + String(item.file || '—').slice(0, 40)
+                + ' | ' + (Number(item.written) || 0) + ' / ' + (Number(item.total) || 0) + ' tuiles'
+                + ' | ' + seconds(Number(item.ms)) + ' s | lot le plus long ' + (Number(item.maxBatchMs) || 0) + ' ms'
+                + (Number(item.resumedFrom) > 0 ? ' | reprise depuis ' + item.resumedFrom : '')
+                + ' | ' + (interrupted ? 'INTERROMPU à la tuile ' + (Number(item.written) || 0) : item.status)
+                + (item.error ? ' (' + item.error + ')' : ''));
+        });
+    }
+}
+
 /* v17.41 — délai de restitution dépassé (appelé par le séquenceur, src/080). */
 function npfDiagRestoreWaitTimeout(kind, waitedMs, tiles) {
     try { NPF_DIAG_DETAIL.restoreTimeout(kind, waitedMs, tiles); } catch (_) {}
@@ -3162,7 +3224,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.45 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.46 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -3699,6 +3761,7 @@ function appendNpfDiagLaunchStorageHeader(lines) {
         + ' | 5 plus grosses clés (car.) : ' + formatNpfDiagStorageTop(summary.top)
     );
     lines.push('Écritures localStorage refusées (cette session) : ' + formatNpfDiagRefusedWrites(launchLog.refusedWrites()));
+    try { appendNpfDiagV1746HeaderLines(lines); } catch (_) {}
     safe_npfDiagBannerHeader(lines);
     lines.push(
         'SafeSky (showTrafficLayer) relu au lancement : ' + JSON.stringify(current.safeSkyAtLaunch)

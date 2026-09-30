@@ -1116,81 +1116,285 @@ async function releaseOfflineDatabaseForHeavyOperation(reason = 'Opération offl
 }
 
 /*
- * v17.43 — essai côte à côte : carte NPF-Q400 enregistrée en données brutes
- * (ArrayBuffer) au lieu de Blob, sous un autre nom et dans une base séparée.
- * NPF_France_03 -> NPF_France_B_03 -> groupe NPF_France_B -> base
- * OfflineMap_NPF_France_B. La carte NPF-Q400 existante n'est pas touchée.
+ * v17.46 — cartes hors ligne en données brutes (ArrayBuffer).
+ * v17.43 avait ajouté un import d'essai « NPF_France_B » en données brutes : il
+ * a été mesuré nettement plus fluide sur iPad. Toutes les cartes importées par
+ * le bouton normal sont désormais enregistrées ainsi, sous leur nom normal. La
+ * lecture accepte toujours les deux formes (src/100). Une base qui contient
+ * encore des images en Blob n'est jamais complétée en données brutes : on
+ * propose d'abord de la supprimer en entier.
  */
-const NPF_RAW_TRIAL_GROUP_SUFFIX = '_B';
+const NPF_OFFLINE_TILE_FORMAT_RAW = 'arraybuffer';
+const NPF_OFFLINE_IMPORT_PROGRESS_KEY = 'npfOfflineImportProgressV1';
+const NPF_OFFLINE_IMPORT_LOG_KEY = 'npfOfflineImportLogV1';
+const NPF_OFFLINE_PENDING_DB_DELETIONS_KEY = 'npfOfflinePendingDbDeletionsV1';
+const NPF_OFFLINE_RAW_IMPORT_MAX_BATCH = 40;
 
-function buildNpfRawTrialPackName(packName) {
-    const name = String(packName || '').trim();
-    if (isNpfRawTrialGroupName(getOfflinePackGroupName(name))) return name;
-    const match = name.match(/^(.*?)[\s_-]*(\d{1,3})$/);
-    if (match && match[1].trim().length >= 2) {
-        return `${match[1].replace(/[\s_-]+$/g, '')}${NPF_RAW_TRIAL_GROUP_SUFFIX}_${match[2].padStart(2, '0')}`;
+function readNpfJsonStorage(key, fallback) {
+    try {
+        const raw = localStorage.getItem(key);
+        const parsed = raw ? JSON.parse(raw) : fallback;
+        return parsed === null || parsed === undefined ? fallback : parsed;
+    } catch (_) {
+        return fallback;
     }
-    return `${name}${NPF_RAW_TRIAL_GROUP_SUFFIX}`;
 }
 
-function isNpfRawTrialGroupName(groupName) {
+function writeNpfJsonStorage(key, value) {
+    try {
+        localStorage.setItem(key, JSON.stringify(value));
+        return true;
+    } catch (_) {
+        return false;
+    }
+}
+
+/* Forme des images d'un groupe installé : 'arraybuffer' si tous ses fichiers
+ * ont été importés en données brutes, sinon 'ancienne'. */
+function getOfflineGroupTileFormat(groupName) {
     const name = String(groupName || '');
-    return /_B$/.test(name) && isNpfOfflinePackSelection([name]);
+    const packs = getInstalledMapPacksSafe().filter(pack => pack && getOfflinePackGroupName(pack.name) === name);
+    if (!packs.length) return 'inconnue';
+    return packs.every(pack => pack.tileFormat === NPF_OFFLINE_TILE_FORMAT_RAW)
+        ? NPF_OFFLINE_TILE_FORMAT_RAW
+        : 'ancienne';
 }
 
-/* Nom affiché à l'utilisateur (sélecteur rapide) ; le nom réel du groupe ne change pas. */
+/* Nom affiché à l'utilisateur ; le nom réel du groupe (et de sa base) ne change pas. */
 function getOfflineMapGroupDisplayName(groupName) {
     const name = String(groupName || '');
-    return isNpfRawTrialGroupName(name) ? `${name} — essai rapide` : name;
+    if (!name || !isNpfOfflinePackSelection([name])) return name;
+    if (getOfflineGroupTileFormat(name) !== NPF_OFFLINE_TILE_FORMAT_RAW) {
+        return 'Carte NPF-Q400 (ancienne, lente)';
+    }
+    const rawNpfGroups = groupInstalledMapPacks(getInstalledMapPacksSafe())
+        .map(group => String(group.name))
+        .filter(groupNameItem => isNpfOfflinePackSelection([groupNameItem])
+            && getOfflineGroupTileFormat(groupNameItem) === NPF_OFFLINE_TILE_FORMAT_RAW);
+    if (rawNpfGroups.length > 1 && /_B$/.test(name)) return 'Carte NPF-Q400 (B)';
+    return 'Carte NPF-Q400';
 }
 
 function formatNpfStorageSizeForUser(bytes) {
     const value = Number(bytes);
-    if (!Number.isFinite(value) || value < 0) return 'inconnu';
+    if (!Number.isFinite(value) || value < 0) return 'inconnue';
     if (value >= 1024 * 1024 * 1024) return `${(value / (1024 * 1024 * 1024)).toFixed(1).replace('.', ',')} Go`;
-    return `${Math.round(value / (1024 * 1024))} Mo`;
+    return `${Math.max(1, Math.round(value / (1024 * 1024)))} Mo`;
 }
 
-async function handleNpfRawTrialZipImport(file) {
-    if (!file) return;
-    const sourceName = normalizeOfflinePackName(file.name.replace(/\.zip$/i, ''));
-    if (!isNpfOfflinePackSelection([sourceName])) {
-        alert('« Carte NPF — essai rapide » est réservé aux fichiers de la carte NPF (NPF_France_01 à NPF_France_10).');
-        return;
-    }
-
-    const targetName = buildNpfRawTrialPackName(sourceName);
-    /* Les images des tuiles sont déjà compressées : place ≈ taille du fichier + 15 %. */
-    const neededBytes = Math.round(Number(file.size || 0) * 1.15);
-    let availableText = 'inconnu (non fourni par cet iPad)';
-    let availableBytes = null;
+async function doesNpfIndexedDatabaseExist(dbName) {
     try {
-        if (navigator.storage && typeof navigator.storage.estimate === 'function') {
-            const estimate = await navigator.storage.estimate();
-            if (Number.isFinite(estimate?.quota) && Number.isFinite(estimate?.usage)) {
-                availableBytes = Math.max(0, estimate.quota - estimate.usage);
-                availableText = formatNpfStorageSizeForUser(availableBytes);
-            }
+        if (typeof indexedDB.databases === 'function') {
+            const list = await indexedDB.databases();
+            return list.some(item => item && item.name === dbName);
         }
     } catch (_) {}
+    return null;
+}
 
-    const lines = [
-        'Carte NPF — essai rapide',
-        '',
-        `Fichier : ${sourceName} (${formatNpfStorageSizeForUser(file.size)})`,
-        `Enregistré sous : ${targetName}, dans une carte séparée.`,
-        'La carte NPF actuelle n’est pas modifiée.',
-        '',
-        `Place nécessaire pour ce fichier : environ ${formatNpfStorageSizeForUser(neededBytes)}`,
-        `Place disponible pour NPF-Q400 : ${availableText}`
-    ];
-    if (availableBytes !== null && availableBytes < neededBytes) {
-        lines.push('', 'ATTENTION : la place disponible semble insuffisante.');
+/* Première image de la base : Blob ou données brutes. Ne crée jamais de base. */
+async function detectOfflineDatabaseTileForm(dbName, timeoutMs = 6000) {
+    const exists = await doesNpfIndexedDatabaseExist(dbName);
+    if (exists === false) return { exists: false, form: null };
+    return new Promise(resolve => {
+        let done = false;
+        let openedDb = null;
+        const finish = value => {
+            if (done) return;
+            done = true;
+            clearTimeout(timer);
+            try { if (openedDb) openedDb.close(); } catch (_) {}
+            resolve(value);
+        };
+        const timer = setTimeout(() => finish({ exists: exists !== false, form: 'inconnue' }), timeoutMs);
+        try {
+            const request = indexedDB.open(dbName);
+            request.onupgradeneeded = () => {
+                /* La base n'existait pas (navigateur sans indexedDB.databases) : on annule. */
+                try { request.transaction.abort(); } catch (_) {}
+                finish({ exists: false, form: null });
+            };
+            request.onerror = () => finish({ exists: exists !== false, form: 'inconnue' });
+            request.onsuccess = () => {
+                openedDb = request.result;
+                try {
+                    if (!openedDb.objectStoreNames.contains('tiles')) {
+                        finish({ exists: true, form: null });
+                        return;
+                    }
+                    const cursorRequest = openedDb.transaction('tiles', 'readonly').objectStore('tiles').openCursor();
+                    cursorRequest.onsuccess = () => {
+                        const cursor = cursorRequest.result;
+                        const tile = cursor ? cursor.value?.tile : null;
+                        finish({ exists: true, form: !tile ? null : (tile instanceof Blob ? 'Blob' : 'brut') });
+                    };
+                    cursorRequest.onerror = () => finish({ exists: true, form: 'inconnue' });
+                } catch (_) {
+                    finish({ exists: true, form: 'inconnue' });
+                }
+            };
+        } catch (_) {
+            finish({ exists: exists !== false, form: 'inconnue' });
+        }
+    });
+}
+
+async function countTilesInOfflineDatabase(dbName, timeoutMs = 5000) {
+    if (await doesNpfIndexedDatabaseExist(dbName) === false) return null;
+    return new Promise(resolve => {
+        let done = false;
+        let openedDb = null;
+        const finish = value => {
+            if (done) return;
+            done = true;
+            clearTimeout(timer);
+            try { if (openedDb) openedDb.close(); } catch (_) {}
+            resolve(value);
+        };
+        const timer = setTimeout(() => finish(null), timeoutMs);
+        try {
+            const request = indexedDB.open(dbName);
+            request.onupgradeneeded = () => { try { request.transaction.abort(); } catch (_) {} finish(null); };
+            request.onerror = () => finish(null);
+            request.onsuccess = () => {
+                openedDb = request.result;
+                try {
+                    const countRequest = openedDb.transaction('tiles', 'readonly').objectStore('tiles').count();
+                    countRequest.onsuccess = () => finish(Number(countRequest.result) || 0);
+                    countRequest.onerror = () => finish(null);
+                } catch (_) {
+                    finish(null);
+                }
+            };
+        } catch (_) {
+            finish(null);
+        }
+    });
+}
+
+/* Journal des imports (DIAG) : 12 derniers fichiers. */
+function updateNpfOfflineImportLog(entry) {
+    const log = readNpfJsonStorage(NPF_OFFLINE_IMPORT_LOG_KEY, []);
+    const list = Array.isArray(log) ? log : [];
+    const index = list.findIndex(item => item && item.id === entry.id);
+    if (index >= 0) list[index] = { ...list[index], ...entry };
+    else list.push(entry);
+    while (list.length > 12) list.shift();
+    writeNpfJsonStorage(NPF_OFFLINE_IMPORT_LOG_KEY, list);
+}
+
+/* Suppressions de base refusées par Safari (connexion encore ouverte) :
+ * réessayées au lancement suivant, avant toute ouverture de carte. */
+function addPendingOfflineDatabaseDeletion(dbName) {
+    const list = readNpfJsonStorage(NPF_OFFLINE_PENDING_DB_DELETIONS_KEY, []);
+    const next = Array.isArray(list) ? list : [];
+    if (!next.includes(dbName)) next.push(dbName);
+    writeNpfJsonStorage(NPF_OFFLINE_PENDING_DB_DELETIONS_KEY, next);
+}
+
+function processPendingOfflineDatabaseDeletions() {
+    const list = readNpfJsonStorage(NPF_OFFLINE_PENDING_DB_DELETIONS_KEY, []);
+    if (!Array.isArray(list) || !list.length) return;
+    const activeDatabases = new Set(getOfflineActivePackDatabasesForPacks(activeOfflinePacks || []));
+    list.forEach(dbName => {
+        if (!dbName || activeDatabases.has(dbName)) return;
+        deleteIndexedDatabaseWithTimeoutForNpf(dbName, 15000).then(result => {
+            if (result && result.status === 'deleted') {
+                const remaining = readNpfJsonStorage(NPF_OFFLINE_PENDING_DB_DELETIONS_KEY, []);
+                writeNpfJsonStorage(
+                    NPF_OFFLINE_PENDING_DB_DELETIONS_KEY,
+                    (Array.isArray(remaining) ? remaining : []).filter(name => name !== dbName)
+                );
+            }
+        }).catch(() => {});
+    });
+}
+
+/* Carte de remplacement quand la carte affichée est supprimée : de préférence
+ * une Carte NPF-Q400 en données brutes, sinon une autre carte hors ligne. */
+function pickFallbackOfflineMapGroup(excludedGroupName) {
+    const groups = groupInstalledMapPacks(getInstalledMapPacksSafe())
+        .map(group => String(group.name))
+        .filter(name => name && name !== excludedGroupName);
+    const score = name => {
+        const npf = isNpfOfflinePackSelection([name]);
+        const raw = getOfflineGroupTileFormat(name) === NPF_OFFLINE_TILE_FORMAT_RAW;
+        return (npf ? 2 : 0) + (raw ? 1 : 0);
+    };
+    groups.sort((a, b) => score(b) - score(a));
+    return groups[0] || null;
+}
+
+/*
+ * Suppression d'une carte à base séparée : la base entière en une seule
+ * opération. Les connexions de la page et du service worker sont fermées
+ * d'abord ; si Safari refuse quand même, la carte est retirée de la liste et
+ * sa base est effacée au lancement suivant.
+ */
+async function deleteOfflineMapGroupDatabase(groupName) {
+    const packNames = getInstalledPackNamesForGroup(groupName);
+    const dbName = getOfflineMapDatabaseNameForGroup(groupName);
+    const wasActive = mapSourceMode === 'offline'
+        && Array.isArray(activeOfflinePacks)
+        && activeOfflinePacks.some(name => packNames.includes(name));
+
+    if (wasActive) {
+        const fallback = pickFallbackOfflineMapGroup(groupName);
+        try {
+            if (fallback) {
+                await selectQuickOfflineMapGroup(fallback);
+            } else {
+                await setMapSourceMode('online');
+            }
+        } catch (error) {
+            console.warn('[Offline] Bascule avant suppression impossible:', error);
+        }
     }
-    lines.push('', 'Lancer l’import ?');
-    if (!confirm(lines.join('\n'))) return;
 
-    await handleZipImport(file, { npfRawTrial: true });
+    try {
+        resetPendingDirectOfflineNpfReads();
+        closeDirectOfflineDatabaseConnectionsForStartupRetry();
+        directOfflineTileBlobCache.clear();
+        clearDirectOfflineNpfZoomReturnCache();
+        directOfflineTileMissCache.clear();
+        directOfflineTileLookupHints.clear();
+        directOfflineNpfLastSuccessfulLookup = null;
+    } catch (_) {}
+    try {
+        await postServiceWorkerMessageWithAck({ type: 'OFFLINE_MASS_DELETE_START' }, 'OFFLINE_IMPORT_READY', 3000);
+    } catch (_) {}
+    await new Promise(resolve => setTimeout(resolve, 350));
+
+    const result = await deleteIndexedDatabaseWithTimeoutForNpf(dbName, 10000);
+
+    /* Le service worker a remis ses packs à zéro : on lui redonne l'état actuel. */
+    try {
+        notifyServiceWorkerActivePacks(activeOfflinePacks);
+        notifyServiceWorkerOfflineTilesPreference(offlineTilesMode);
+    } catch (_) {}
+
+    removeInstalledOfflinePacksLogically(packNames);
+    const progress = readNpfJsonStorage(NPF_OFFLINE_IMPORT_PROGRESS_KEY, null);
+    if (progress && progress.dbName === dbName) {
+        try { localStorage.removeItem(NPF_OFFLINE_IMPORT_PROGRESS_KEY); } catch (_) {}
+    }
+    if (!result || result.status !== 'deleted') addPendingOfflineDatabaseDeletion(dbName);
+
+    try { displayInstalledMaps(); } catch (_) {}
+    try { refreshQuickOfflineMapButtonState(); } catch (_) {}
+    return { ...(result || {}), dbName, packNames, wasActive };
+}
+
+async function describeOfflineMapGroupSize(groupName) {
+    const packs = getInstalledMapPacksSafe().filter(pack => pack && getOfflinePackGroupName(pack.name) === groupName);
+    if (packs.length && packs.every(pack => Number.isFinite(Number(pack.sizeBytes)) && Number(pack.sizeBytes) > 0)) {
+        const total = packs.reduce((sum, pack) => sum + Number(pack.sizeBytes), 0);
+        return `taille estimée ${formatNpfStorageSizeForUser(total * 1.15)}`;
+    }
+    const count = await countTilesInOfflineDatabase(getOfflineMapDatabaseNameForGroup(groupName));
+    return Number.isFinite(count) && count > 0
+        ? `environ ${count.toLocaleString('fr-FR')} tuiles (taille exacte inconnue)`
+        : 'taille inconnue';
 }
 
 async function handleZipImport(file, options = {}) {
@@ -1205,14 +1409,57 @@ async function handleZipImport(file, options = {}) {
     }
 
     const sourcePackName = file.name.replace(/\.zip$/i, '');
-    /* v17.43 — essai rapide : même fichier, autre nom, images en données brutes. */
-    const npfRawTrialImport = options.npfRawTrial === true;
-    const packName = npfRawTrialImport
-        ? buildNpfRawTrialPackName(normalizeOfflinePackName(sourcePackName))
-        : normalizeOfflinePackName(sourcePackName);
+    const packName = normalizeOfflinePackName(sourcePackName);
     const packGroupNameForImport = getOfflinePackGroupName(packName);
     const isolatedImportDbName = getOfflineMapDatabaseNameForGroup(packGroupNameForImport);
     let importTileDb = null;
+
+    /*
+     * v17.46 — reprise : même fichier (nom et taille) et même carte qu'un import
+     * interrompu -> on repart de la dernière tuile écrite.
+     */
+    const savedProgress = readNpfJsonStorage(NPF_OFFLINE_IMPORT_PROGRESS_KEY, null);
+    const resumeFromTile = savedProgress
+        && savedProgress.packName === packName
+        && savedProgress.fileName === file.name
+        && Number(savedProgress.fileSize) === Number(file.size)
+        && savedProgress.dbName === isolatedImportDbName
+        ? Math.max(0, Number(savedProgress.written) || 0)
+        : 0;
+
+    /*
+     * v17.46 — ne jamais mélanger les deux formes dans une même base : si la
+     * carte cible contient encore des images en Blob, on propose d'abord de la
+     * supprimer en entier. Refus = aucun import, rien n'est touché.
+     */
+    if (!resumeFromTile) {
+        const existingForm = await detectOfflineDatabaseTileForm(isolatedImportDbName);
+        const legacyPacksInGroup = getInstalledMapPacksSafe()
+            .some(pack => pack && getOfflinePackGroupName(pack.name) === packGroupNameForImport && pack.tileFormat !== NPF_OFFLINE_TILE_FORMAT_RAW);
+        const mustReplaceLegacy = existingForm.exists && (
+            existingForm.form === 'Blob'
+            || (existingForm.form === 'inconnue' && legacyPacksInGroup)
+        );
+        if (mustReplaceLegacy) {
+            const label = getOfflineMapGroupDisplayName(packGroupNameForImport) || packGroupNameForImport;
+            const sizeText = await describeOfflineMapGroupSize(packGroupNameForImport);
+            const confirmed = confirm([
+                `La carte « ${label} » est enregistrée dans l'ancien format.`,
+                `(${sizeText})`,
+                '',
+                `Pour importer « ${file.name} » dans le nouveau format, cette carte doit d'abord être supprimée en entier.`,
+                '',
+                'Supprimer maintenant l\'ancienne carte, puis importer ?',
+                'Annuler : aucun import, la carte actuelle reste inchangée.'
+            ].join('\n'));
+            if (!confirmed) return;
+            const deletion = await deleteOfflineMapGroupDatabase(packGroupNameForImport);
+            if (!deletion || deletion.status !== 'deleted') {
+                alert(`L'ancienne carte « ${label} » a été retirée de la liste, mais Safari n'a pas encore pu l'effacer.\nElle sera effacée au prochain lancement de NPF-Q400 ; relancez NPF-Q400 puis importez de nouveau « ${file.name} ».`);
+                return;
+            }
+        }
+    }
     const progressSection = document.getElementById('import-progress-section');
     const statusMessage = document.getElementById('import-status-message');
     const progressBar = document.getElementById('import-progress-bar');
@@ -1452,9 +1699,10 @@ async function handleZipImport(file, options = {}) {
          * le premier gros lot autour de 171/22387. On force donc un profil plus petit,
          * progressif et rouvert régulièrement pour ces ZIP.
          */
-        const batchSize = useConservativeLargeImport
+        /* v17.46 — données brutes : lots de 40 tuiles au plus (mémoire iPad). */
+        const batchSize = Math.min(NPF_OFFLINE_RAW_IMPORT_MAX_BATCH, useConservativeLargeImport
             ? 35
-            : (useSafeMultiZipImport ? 40 : (useSplitZipFastProfile ? 240 : (isIgnPack ? 320 : (isOaciPack ? 35 : (isLargeZip ? 160 : 180)))));
+            : (useSafeMultiZipImport ? 40 : (useSplitZipFastProfile ? 240 : (isIgnPack ? 320 : (isOaciPack ? 35 : (isLargeZip ? 160 : 180))))));
         const reopenEveryTiles = useConservativeLargeImport ? 700 : (useSafeMultiZipImport ? 400 : (isOaciPack ? 350 : 0));
         const splitZipReadConcurrency = useSplitZipFastProfile ? 48 : 1;
         const splitZipUiYieldEveryTiles = useSplitZipFastProfile ? 960 : 0;
@@ -1464,14 +1712,14 @@ async function handleZipImport(file, options = {}) {
          * Symptôme : blocage/crash vers Lecture tuiles 51/3347 quand OACI est la 3e carte.
          * Mesure : petits lots de 10, réouverture périodique IndexedDB, lecture blob.
          */
-        const tileReadMode = npfRawTrialImport
-            ? 'arraybuffer'
-            : (useSplitZipFastProfile ? 'arraybuffer' : (isIgnPack ? 'arraybuffer' : 'blob'));
+        /* v17.46 — toutes les cartes en données brutes (ArrayBuffer). */
+        const tileReadMode = NPF_OFFLINE_TILE_FORMAT_RAW;
         let skippedTiles = 0;
 
         const alreadyInstalledPacks = JSON.parse(localStorage.getItem('installedMapPacks') || '[]');
         const alreadyInstalled = alreadyInstalledPacks.some(p => p && p.name === packName);
-        if (alreadyInstalled || (isLargeZip && isOpenStreetPack)) {
+        /* v17.46 — en reprise, les tuiles déjà écrites sont conservées. */
+        if (!resumeFromTile && (alreadyInstalled || (isLargeZip && isOpenStreetPack))) {
             statusMessage.textContent = `Nettoyage préalable du pack ${packName}...`;
             progressBar.style.width = '2%';
             await idle(120);
@@ -1496,12 +1744,52 @@ async function handleZipImport(file, options = {}) {
         let processedFiles = 0;
         let lastUiUpdate = Date.now();
 
+        /* v17.46 — suivi de l'import (reprise + DIAG). */
+        const importLogId = `${Date.now()}-${packName}`;
+        const importStartedAt = Date.now();
+        let committedTiles = resumeFromTile;
+        let maxBatchMs = 0;
+        let flushCount = 0;
+        const saveImportProgress = () => {
+            writeNpfJsonStorage(NPF_OFFLINE_IMPORT_PROGRESS_KEY, {
+                packName,
+                fileName: file.name,
+                fileSize: file.size,
+                dbName: isolatedImportDbName,
+                written: committedTiles,
+                total: totalFiles,
+                updatedAt: Date.now()
+            });
+            updateNpfOfflineImportLog({
+                id: importLogId, file: file.name, pack: packName, at: importStartedAt,
+                status: 'en cours', written: committedTiles, total: totalFiles,
+                ms: Date.now() - importStartedAt, maxBatchMs: Math.round(maxBatchMs),
+                resumedFrom: resumeFromTile
+            });
+        };
+        saveImportProgress();
+        if (resumeFromTile > 0) {
+            processedFiles = resumeFromTile;
+            await updateImportProgress(`Reprise de ${packName} à la tuile ${resumeFromTile + 1} / ${totalFiles}...`, Math.round((resumeFromTile / totalFiles) * 100), true);
+            await idle(200);
+        }
+
         const flushBatch = async () => {
             if (!batch.length) return;
             const toWrite = batch;
             batch = [];
+            const batchStartedAt = Date.now();
             await putTileBatchResilient(toWrite);
             processedFiles += toWrite.length;
+            committedTiles = processedFiles;
+            maxBatchMs = Math.max(maxBatchMs, Date.now() - batchStartedAt);
+            flushCount += 1;
+            /* Libération explicite des images du lot écrit. */
+            for (const item of toWrite) {
+                if (item) item.tile = null;
+            }
+            toWrite.length = 0;
+            if (flushCount % 10 === 0) saveImportProgress();
 
             const percent = Math.min(100, Math.round((processedFiles / totalFiles) * 100));
             await updateImportProgress(
@@ -1519,7 +1807,7 @@ async function handleZipImport(file, options = {}) {
                 await reopenDbCleanly();
             }
 
-            await idle(useConservativeLargeImport ? 20 : 0);
+            await idle(useConservativeLargeImport ? 20 : 8);
         };
 
         await updateImportProgress(`Début lecture des tuiles ${packName}...`, 2, true);
@@ -1532,7 +1820,7 @@ async function handleZipImport(file, options = {}) {
              * de 240 tuiles : assez grandes pour accélérer l'import, assez courtes pour
              * éviter le palier bloquant observé à 1008 tuiles.
              */
-            for (let i = 0; i < tileFiles.length; i += splitZipReadConcurrency) {
+            for (let i = resumeFromTile; i < tileFiles.length; i += splitZipReadConcurrency) {
                 const slice = tileFiles.slice(i, i + splitZipReadConcurrency);
 
                 const readItems = await Promise.all(slice.map(async (tileFile, offset) => {
@@ -1578,7 +1866,7 @@ async function handleZipImport(file, options = {}) {
                 }
             }
         } else {
-            for (let i = 0; i < tileFiles.length; i += 1) {
+            for (let i = resumeFromTile; i < tileFiles.length; i += 1) {
                 const tileFile = tileFiles[i];
 
                 if (!useConservativeLargeImport && !useSplitZipFastProfile && (i === 0 || i % 10 === 0)) {
@@ -1633,6 +1921,13 @@ async function handleZipImport(file, options = {}) {
 
         await flushBatch();
 
+        /* v17.46 — import terminé : plus de reprise possible, journal à jour. */
+        try { localStorage.removeItem(NPF_OFFLINE_IMPORT_PROGRESS_KEY); } catch (_) {}
+        updateNpfOfflineImportLog({
+            id: importLogId, status: 'terminé', written: committedTiles, total: totalFiles,
+            ms: Date.now() - importStartedAt, maxBatchMs: Math.round(maxBatchMs), skipped: skippedTiles
+        });
+
         await updateImportProgress(skippedTiles > 0 ? `Importation de ${packName} terminée — ${skippedTiles} tuile(s) ignorée(s).` : `Importation de ${packName} terminée !`, 100, true);
 
         const installedPacks = JSON.parse(
@@ -1658,7 +1953,8 @@ async function handleZipImport(file, options = {}) {
             groupName: packGroupNameForImport,
             dbName: isolatedImportDbName,
             storageMode: 'isolated-v13.73',
-            ...(npfRawTrialImport ? { tileFormat: 'arraybuffer' } : {})
+            tileFormat: NPF_OFFLINE_TILE_FORMAT_RAW,
+            sizeBytes: Number(file.size) || null
         });
 
         localStorage.setItem(
@@ -1697,9 +1993,16 @@ async function handleZipImport(file, options = {}) {
 
     } catch (error) {
         const message = error && error.message ? error.message : String(error);
+        /* v17.46 — journal des imports : erreur ; la reprise reste possible. */
+        try {
+            const log = readNpfJsonStorage(NPF_OFFLINE_IMPORT_LOG_KEY, []);
+            const last = (Array.isArray(log) ? [...log] : []).reverse()
+                .find(item => item && item.pack === packName && item.status === 'en cours');
+            if (last) updateNpfOfflineImportLog({ id: last.id, status: 'erreur', error: message.slice(0, 80) });
+        } catch (_) {}
         statusMessage.textContent = `Erreur: ${message}`;
         if (/quota|storage|abort|transaction/i.test(message)) {
-            statusMessage.textContent += " — vérifiez l'espace iPad disponible, puis relancez après fermeture/réouverture de NPF.";
+            statusMessage.textContent += " — vérifiez l'espace iPad disponible, puis relancez après fermeture/réouverture de NPF-Q400.";
         }
         console.error("Erreur d'importation ZIP:", error);
 
@@ -2235,7 +2538,7 @@ function displayInstalledMaps() {
         li.innerHTML = `
             <span class="offline-map-name-line">
                 <input type="checkbox" class="offline-map-select-checkbox" ${isActive ? 'checked' : ''} data-partial="${partiallyActive ? 'true' : 'false'}" onchange="window.selectSimpleMapGroup('${group.name}', this.checked)">
-                <strong>${group.name}</strong> (${packLabel} — ${dateLabel} — ${storageLabel})${isActive ? ' — actif' : partiallyActive ? ` — partiel ${activeCount}/${packNames.length}` : ''}
+                <strong>${escapeHtml(getOfflineMapGroupDisplayName(group.name) || group.name)}</strong> (${packLabel} — ${dateLabel} — ${storageLabel})${isActive ? ' — actif' : partiallyActive ? ` — partiel ${activeCount}/${packNames.length}` : ''}
             </span>
             <div class="offline-map-actions">
                 <button class="delete-map-btn" onclick="window.deleteMapGroup('${group.name}')">Supprimer</button>
@@ -2641,6 +2944,52 @@ window.deleteMapGroup = async function(groupName) {
     if (!packNames.length) {
         alert(`Aucun pack trouvé pour ${groupName}.`);
         displayInstalledMaps();
+        return;
+    }
+
+    /*
+     * v17.46 — carte à base séparée : suppression de la base entière en une
+     * seule opération (et plus tuile par tuile), avec confirmation indiquant
+     * le nom et la taille estimée. Si c'est la carte affichée, NPF-Q400 passe
+     * d'abord sur une autre carte, sans relance.
+     */
+    const groupPacks = getInstalledMapPacksSafe().filter(pack => pack && getOfflinePackGroupName(pack.name) === groupName);
+    const isolatedGroup = groupPacks.length > 0
+        && groupPacks.every(pack => pack.dbName && String(pack.storageMode || '').startsWith('isolated'));
+    if (isolatedGroup) {
+        const label = getOfflineMapGroupDisplayName(groupName) || groupName;
+        const sizeText = await describeOfflineMapGroupSize(groupName);
+        const isActive = mapSourceMode === 'offline'
+            && Array.isArray(activeOfflinePacks)
+            && activeOfflinePacks.some(name => packNames.includes(name));
+        const fallback = isActive ? pickFallbackOfflineMapGroup(groupName) : null;
+        const lines = [
+            `Supprimer la carte « ${label} » ?`,
+            '',
+            `${packNames.length} fichier(s) · ${sizeText}`,
+            'Elle sera effacée en entier, en une seule opération.'
+        ];
+        if (isActive) {
+            lines.push('', fallback
+                ? `Elle est affichée : NPF-Q400 passera sur « ${getOfflineMapGroupDisplayName(fallback) || fallback} ».`
+                : 'Elle est affichée : NPF-Q400 passera sur la carte en ligne.');
+        }
+        if (!confirm(lines.join('\n'))) return;
+
+        const statusElement = document.getElementById('import-status-message') || document.getElementById('offline-status');
+        const progressElement = document.getElementById('import-progress-section');
+        if (progressElement) progressElement.style.display = 'block';
+        if (statusElement) statusElement.textContent = `Suppression de « ${label} »…`;
+
+        const result = await deleteOfflineMapGroupDatabase(groupName);
+        const message = result && result.status === 'deleted'
+            ? `Carte « ${label} » supprimée.`
+            : `Carte « ${label} » retirée de la liste. Safari l'effacera au prochain lancement de NPF-Q400.`;
+        if (statusElement) statusElement.textContent = message;
+        if (progressElement) setTimeout(() => { progressElement.style.display = 'none'; }, 5000);
+        try {
+            showNpfInfoBanner(message, { kind: result && result.status === 'deleted' ? 'info' : 'error' });
+        } catch (_) {}
         return;
     }
 

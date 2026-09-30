@@ -635,17 +635,7 @@ function setupEventListeners() {
         handleZipImport(file);
         event.target.value = '';
     });
-    /* v17.43 — « Carte NPF — essai rapide » : même fichier, images en données brutes. */
-    const npfRawTrialImporterInput = document.getElementById('npf-raw-trial-importer-input');
-    if (npfRawTrialImporterInput) {
-        npfRawTrialImporterInput.addEventListener('change', (event) => {
-            const file = event.target.files[0];
-            event.target.value = '';
-            handleNpfRawTrialZipImport(file).catch(error => {
-                console.error('Import essai rapide impossible:', error);
-            });
-        });
-    }
+
     if (airportPdfImporterInput) {
         airportPdfImporterInput.addEventListener('change', async (event) => {
             const files = Array.from(event.target.files || []);

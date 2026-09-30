@@ -432,12 +432,30 @@ function getFireHistory() {
             .slice(0, FIRE_HISTORY_MAX_ITEMS);
         const stabilized = stabilizeExistingFireHistoryNumbers(normalizedHistory);
         if (stabilized.changed) {
-            localStorage.setItem(FIRE_HISTORY_STORAGE_KEY, JSON.stringify(stabilized.items));
+            /*
+             * v17.46 — une écriture refusée (stockage local plein) ne doit plus
+             * vider l'historique affiché : avant, l'erreur remontait au catch
+             * ci-dessous et la liste lue était remplacée par une liste vide.
+             */
+            try {
+                localStorage.setItem(FIRE_HISTORY_STORAGE_KEY, JSON.stringify(stabilized.items));
+            } catch (writeError) {
+                noteNpfFireHistoryWriteError(writeError);
+            }
         }
         return stabilized.items;
     } catch (_) {
         return [];
     }
+}
+
+/* v17.46 — écritures refusées de l'historique des feux (DIAG). */
+function noteNpfFireHistoryWriteError(error) {
+    try {
+        const state = window.__npfFireHistoryWriteErrors || (window.__npfFireHistoryWriteErrors = { n: 0, last: null });
+        state.n += 1;
+        state.last = { at: Date.now(), message: String(error && (error.name || error.message) || error).slice(0, 60) };
+    } catch (_) {}
 }
 
 function getFireHistoryItemKey(item) {
@@ -456,7 +474,11 @@ function deleteFireHistoryItemByCommune(item) {
     if (!targetKey) return;
 
     const nextHistory = getFireHistory().filter(entry => getFireHistoryItemKey(entry) !== targetKey);
-    localStorage.setItem(FIRE_HISTORY_STORAGE_KEY, JSON.stringify(nextHistory));
+    try {
+        localStorage.setItem(FIRE_HISTORY_STORAGE_KEY, JSON.stringify(nextHistory));
+    } catch (writeError) {
+        noteNpfFireHistoryWriteError(writeError);
+    }
     displayFireHistory();
     drawFireHistoryMarkers();
 }
@@ -541,6 +563,7 @@ function saveFireHistory(commune) {
         drawFireHistoryMarkers();
     } catch (error) {
         console.warn('Impossible de mémoriser le feu:', error);
+        noteNpfFireHistoryWriteError(error);
     }
 }
 
