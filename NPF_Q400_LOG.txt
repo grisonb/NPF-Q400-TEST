@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 30/09/2026
-Version de travail actuelle : TEST v17.42
+Version de travail actuelle : TEST v17.43
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,12 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.43 — essai côte à côte : bouton « Carte NPF — essai rapide » (Gestion des
+  Cartes) qui importe les fichiers NPF_France en données brutes (ArrayBuffer)
+  sous le nom NPF_France_B_xx, dans la base séparée OfflineMap_NPF_France_B ;
+  carte NPF-Q400 actuelle et import actuel inchangés ; DIAG : carte lue et
+  forme des images par minute et par paquet lent, sonde réordonnée (méthode
+  normale en premier) ;
 - v17.42 — règle de Bastien (30/09) : lignes HT et Routes seulement sur le fond
   NPF-Q400 (et la carte en ligne) ; sur une carte hors ligne autre que NPF-Q400
   (OACI 1/500 000 et les autres) : ni dessinées ni chargées, boutons grisés,
@@ -365,16 +371,20 @@ NON IMPLÉMENTÉ / OUVERT :
   (« ANALYSE DIAG v17.32 SOL + VOL ») : 5 défauts du DIAG lui-même relevés
   (D1 à D5) et 9 recommandations classées gain / risque (R1 à R9), aucune
   implémentée. Historique : À MESURER -> MESURÉ ;
-- v17.42 : À MESURER sur iPad (HT / Routes absents sur OACI, de retour sur
-  NPF-Q400 ; lignes « Sondes après un paquet de lectures lent ») ;
+- v17.43 : À MESURER sur iPad (import des 10 fichiers « essai rapide », puis
+  comparaison carte NPF_France / NPF_France_B au même endroit à 5 NM et 2 NM) ;
+- v17.42 : sondes MESURÉES sur iPad le 30/09/2026 (DIAG 12:57) — analyse dans
+  l'entrée v17.43 ; HT / Routes sur OACI À MESURER ;
 - v17.41 : points VFR sur OACI MESURÉS sur iPad le 30/09/2026 (DIAG 11:30) ;
   « référence iPad » À MESURER en vol ;
 - Lenteur durable des lectures du pack NPF-Q400 sur iPad : cause NON PROUVÉE
   (analyses du 30/09/2026 dans les entrées v17.41 et v17.42). Hypothèse
   principale : taille de la base unique du pack NPF-Q400 (≈ 20 fois plus
-  d'enregistrements que OACI). Correctif (une base par fichier ou images
-  enregistrées autrement à l'import) : NON IMPLÉMENTÉ, À DÉCIDER après mesure
-  de la sonde v17.42. Remise à zéro douce des connexions : NON IMPLÉMENTÉ ;
+  d'enregistrements que OACI) et table interne de Safari sans index pour les
+  images enregistrées en Blob (entrée v17.43). Essai en données brutes : CODÉ
+  en v17.43 (carte séparée NPF_France_B), À MESURER. Généralisation à la carte
+  NPF-Q400 principale : NON IMPLÉMENTÉ, À DÉCIDER après l'essai. Remise à zéro
+  douce des connexions : NON IMPLÉMENTÉ ;
 - v17.40 : À MESURER sur iPad, sans mode avion (GLR et FdS avec BFG TEST
   déconnecté en premier) ;
 - Côté NAS (À VÉRIFIER, hors dépôt) : les réponses d'erreur de
@@ -418,38 +428,38 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.42
+Version : TEST v17.43
 Date : 30/09/2026
-Base : v17.41 (commitée d0c4fc3, À MESURER)
+Base : v17.42 (commitée a96dc78, À MESURER)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.42.txt
-2_Index_v17.42.txt
-3_Manifest_v17.42.txt
-4_Script_v17.42.txt
-5_SIA_v17.42.txt
-6_Style_v17.42.txt
-7_Sw_v17.42.txt
+1_Modifications_v17.43.txt
+2_Index_v17.43.txt
+3_Manifest_v17.43.txt
+4_Script_v17.43.txt
+5_SIA_v17.43.txt
+6_Style_v17.43.txt
+7_Sw_v17.43.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.42
-- Manifest : start_url = ./index.html?appv=v17.42
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.42
-- Style : NPF_STYLE_BUILD_VERSION = v17.42
-- Service Worker : `sw-v17-42_ht_routes_fond_npf` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-42_ht_routes_fond_npf`, `npf-q400-test-app-data-v1`,
+- Index : APP_VERSION = v17.43
+- Manifest : start_url = ./index.html?appv=v17.43
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.43
+- Style : NPF_STYLE_BUILD_VERSION = v17.43
+- Service Worker : `sw-v17-43_npf_essai_rapide` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-43_npf_essai_rapide`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-15.69-radio1026-1-maplite1`
 - SIA_DATA_REVISION (SW / Index) : 15.69-radio1026-1-maplite1 (inchangée)
-- sia.js v17.42 : strictement identique à v17.41.
+- sia.js v17.43 : strictement identique à v17.42.
 
 STATUT DE VALIDATION :
-- validation statique v17.42 effectuée avant livraison : Script/SIA/SW OK, script
+- validation statique v17.43 effectuée avant livraison : Script/SIA/SW OK, script
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
-- `sia.js` et moteur tuiles (src/100) identiques à v17.41 ;
-- tests Chrome v17.41 / v17.42 : entrée v17.42 ;
+- `sia.js` et moteur tuiles (src/100) identiques à v17.42 ;
+- tests Chrome v17.42 / v17.43 : entrée v17.43 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
-  sur iPad ; v17.32 MESURÉE ; v17.29, v17.31, v17.33 à v17.42 À MESURER.
+  sur iPad ; v17.32 MESURÉE ; v17.29, v17.31, v17.33 à v17.43 À MESURER.
 
 
 2. PROTOCOLE DE TRAVAIL À RESPECTER
@@ -1971,6 +1981,176 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.43 — ESSAI CÔTE À CÔTE : CARTE NPF-Q400 EN DONNÉES BRUTES
+(« CARTE NPF — ESSAI RAPIDE ») ; DIAG : CARTE ET FORME DES IMAGES, SONDE
+Date : 30/09/2026
+Base fonctionnelle : v17.42 (commit a96dc78)
+DIAG de référence : NPF_DIAG_2026-09-30_12-57 (v17.42, au sol).
+
+ANALYSE EN LECTURE SEULE DU 30/09/2026 (DIAG 12:57, avant code)
+- Sondes v17.42 : « index seul » 3 à 9 ms ; « image » 357 à 398 ms ; « méthode
+  actuelle, autre tuile » 10 à 12 ms ; « même tuile relue » 10 à 13 ms.
+- Correction d'interprétation : la ligne « image » de la sonde v17.42 lisait
+  la tuile par un accès direct (`store.get`) que l'app n'utilise jamais, et
+  c'était toujours la première lecture de la sonde. La ligne comparable à une
+  lecture normale était « méthode actuelle, autre tuile » (10 à 12 ms sur une
+  tuile jamais lue). Les sondes ne prouvent donc PAS que l'image est le
+  goulot. SÛR : l'index n'est pas en cause ; la lenteur arrive par bouffées.
+- Code source public de Safari (WebKit, SQLiteIDBBackingStore.cpp) — SÛR pour
+  le code actuel, PROBABLE pour la version de l'iPad : à chaque lecture d'un
+  enregistrement, Safari exécute « SELECT blobURL FROM BlobRecords WHERE
+  objectStoreRow = ? » sur une table sans index : il la parcourt en entier.
+  Cette table a une ligne par image enregistrée en Blob (≈ 200 000 à 250 000
+  pour NPF-Q400, ≈ 10 000 pour OACI : rapport ≈ 20, comme les durées). Si les
+  images sont enregistrées en données brutes (ArrayBuffer), la table reste
+  vide. Toutes les opérations de stockage passent par une seule file
+  (NetworkStorageManager) : les lectures attendent l'une derrière l'autre.
+- HYPOTHÈSE : quand cette table n'est plus en mémoire (réouverture de la base,
+  retour d'arrière-plan, mémoire sous pression), chaque parcours relit le
+  disque, d'où les bouffées de plusieurs secondes.
+- Forme d'enregistrement — SÛR pour le code : Blob pour NPF-Q400 et pour OACI
+  (src/280 `tileReadMode`). Correction d'une affirmation du 30/09 : un fichier
+  nommé « IGN_01 » est lui aussi enregistré en Blob (le test de nom IGN exige
+  « IGN » suivi d'un espace ou d'un tiret, pas d'un « _ ») — constaté dans
+  Chrome, inchangé.
+- Écritures « settings » à chaque changement de pack : 3 fonctions écrivent
+  séparément (`persistSimpleActiveOfflinePacks`, `setOfflineTilesEnabled`,
+  `setOfflineOnlineFallbackMode`). Les 4 240 ms mesurés sont PROBABLEMENT une
+  attente derrière les lectures lentes (62 ms juste avant, et les lectures des
+  autres bases ont attendu 4 219 ms dans la même minute). Regroupement : NON
+  IMPLÉMENTÉ (gain faible).
+- Pérenne : mêmes noms de base dans son code (`OfflineMap_…`,
+  `OfflineTilesDB_v13_70_clean`), lecture des deux formes d'image déjà prévue.
+  Stockages séparés sur iPad d'après l'essai de Bastien (PROBABLE).
+
+NON-RÉGRESSION — COMPORTEMENTS AVANT MODIFICATION (v17.42)
+1. Carte NPF-Q400 actuelle (Blob) : affichage, vitesse, sélection, HT / Routes.
+2. Import actuel des packs (src/280 `handleZipImport`, `tileReadMode`).
+3. Sélecteur rapide (src/280 `displayQuickOfflineMapSelector`).
+4. Règle HT / Routes v17.42 (src/110 `isNpfHeavyOverlayBaseMapAllowed`),
+   points VFR v17.41.
+5. Démarrage, suivi GPS, Recentrage économe, feu, GLR, FdS / GAAR, bandeau,
+   SafeSky, service worker, Charge DIAG et compteurs v17.41 / v17.42.
+6. Bases et clés aussi utilisées par la pérenne : `OfflineMap_NPF_France`,
+   `OfflineMap_OACI_1_500_000`, `OfflineTilesDB_v13_70_clean`, clé
+   `installedMapPacks`, clés de la carte active.
+
+MODIFICATIONS v17.43
+
+1. IMPORT « CARTE NPF — ESSAI RAPIDE » (index.html, src/110, src/280, style.css)
+- Second bouton dans « Gestion des Cartes », sous « Importer Cartes Offline ».
+- `handleNpfRawTrialZipImport` : refuse tout fichier qui n'est pas un fichier
+  de la carte NPF ; affiche la taille du fichier, la place estimée (taille +
+  15 %) et la place disponible (`navigator.storage.estimate` si disponible),
+  puis demande confirmation.
+- `handleZipImport(file, { npfRawTrial: true })` : même import qu'aujourd'hui
+  (même profil « petits lots », mêmes réouvertures), avec deux différences :
+  le nom (NPF_France_03 -> NPF_France_B_03, groupe NPF_France_B, base
+  `OfflineMap_NPF_France_B`, hôte logique `npffranceb`) et la forme des images
+  (`arraybuffer`). Sans l'option, le chemin est strictement celui de v17.42.
+- Un fichier à la fois, comme aujourd'hui : l'app se recharge après chaque
+  fichier (protection mémoire iPad, non modifiée).
+- Sélecteur rapide : la nouvelle carte s'affiche « NPF_France_B — essai
+  rapide ». Le passage d'une carte à l'autre ne relance pas l'app.
+- Import interrompu : comportement de l'import existant, non modifié — l'app
+  peut revenir sur la carte en ligne sans carte active ; il suffit de
+  resélectionner une carte dans le sélecteur rapide puis de réimporter le
+  fichier interrompu. L'ancienne carte n'est pas touchée.
+
+2. RÈGLE HT / ROUTES
+- Aucun code : le groupe NPF_France_B est reconnu comme fond NPF-Q400 par
+  `isNpfOfflinePackSelection` (src/100, non modifié). Vérifié dans Chrome.
+
+3. DIAG (src/010)
+- Lignes par minute de « LECTURES DU PACK » : « carte <nom> · images : N
+  données brutes / N Blob ». Paquets lents : carte et forme.
+- Sonde : 1) méthode normale de l'app sur une tuile voisine jamais lue
+  (COMPARABLE à une lecture normale), 2) index seul et 3) accès direct sur une
+  autre tuile (NON comparables), 4) première tuile relue. Carte et forme de
+  l'image notées. Les sondes enregistrées par la v17.42 restent lisibles.
+
+4. MOTEUR DE TUILES
+- src/100 non modifié : la lecture acceptait déjà les deux formes.
+
+FICHIERS MODIFIÉS
+src/010, src/110 (écoute du nouveau bouton), src/280 (donc script.js),
+index.html, style.css, manifest.json et sw.js (numéros de version seulement).
+sia.js, src/100, src/080, src/090, src/120, src/340, src/350, src/260, src/030 :
+strictement identiques à v17.42.
+
+TESTS CHROME v17.42 / v17.43 (30/09/2026, packs synthétiques, NAS simulé)
+- Import actuel, dans les deux versions : 10 fichiers NPF_France_01 à _10
+  (715 tuiles), OACI (715), IGN_01 (286) ; base `OfflineMap_NPF_France` : 715
+  tuiles, 10 fichiers, images Blob ; OACI : Blob ; IGN_01 : Blob. Identique.
+- Import « essai rapide » (v17.43) : fichier non NPF refusé (message, aucune
+  base créée) ; 10 fichiers -> base `OfflineMap_NPF_France_B`, 715 tuiles, 10
+  fichiers, images ArrayBuffer ; ancienne base inchangée (715 tuiles, Blob).
+  Réimport du fichier 03 : toujours 715 tuiles (pas de doublon).
+- Fenêtre avant import : fichier, nom d'enregistrement, « Place nécessaire
+  pour ce fichier : environ 3 Mo », « Place disponible pour NPF-Q400 :
+  10,0 Go », « Lancer l'import ? » ; refus -> aucun import, aucune base créée.
+- Import interrompu (page rechargée pendant l'import du fichier 04) : base
+  NPF_France_B à 330 tuiles (3 fichiers), ancienne base intacte (715, Blob) ;
+  l'app revient sur la carte en ligne sans carte active (comportement de
+  l'import existant) ; réimport du fichier 04 puis des suivants : 715 tuiles.
+- Affichage : empreinte de chaque tuile affichée comparée à 5 NM (30 tuiles),
+  2 NM (24) et 1 NM (20) : nouvelle carte identique à l'ancienne ; ancienne
+  carte identique entre v17.42 et v17.43 ; OACI identique.
+- Changements ancienne -> nouvelle -> OACI -> nouvelle -> ancienne sans
+  relance : HT 758 / 379 / 243 tronçons et Routes sur les deux cartes NPF-Q400
+  (mêmes nombres), HT 0 et Routes 0 sur OACI avec boutons grisés ; points VFR
+  43 / 19 / 7 partout ; restitutions 0,93 à 1,7 s dans les deux versions.
+- Sélecteur rapide : « NPF_France », « NPF_France_B — essai rapide (10
+  fichiers) », « OACI 1-500 000 », « IGN ».
+- Démarrage sur la nouvelle carte, calques ON : première tuile 0,31 s, PÉLIC
+  868, carte complète 20/20, communes 34 935 ; à 2 NM HT 379 tronçons et
+  Routes affichés ; geste suivant 1,6 s (ancienne carte en v17.42 : identique).
+- DIAG : lignes par minute « carte NPF_France_B (+ autre carte) · images : 152
+  données brutes / 122 Blob » ; sonde « carte NPF_France_B · images données
+  brutes | COMPARABLE … 1,4 ms (6 ko) · la même relue 0,9 ms | NON comparable
+  … index seul 1,1 ms · accès direct 0,7 ms ».
+- Charge DIAG : 12 799 / 17 205 / 21 824 car. selon le scénario (v17.42 :
+  12 722 / 17 089 / 21 785), écriture max 1 ms, 0 écriture pendant un geste.
+- Suites v17.41 et v17.42 rejouées sur v17.43 (points VFR sur OACI, délais de
+  restitution, compteurs, règle HT / Routes, carte en ligne) : identiques.
+
+NON-RÉGRESSION v17.43 CONTRE v17.42 (Chrome)
+1. Carte NPF-Q400 actuelle (Blob) : affichage, vitesse, sélection, HT et
+   Routes : OK.
+2. Import actuel (NPF Blob, OACI, IGN) : OK.
+3. Nouvelle carte : import de 10 fichiers, affichage identique à 5, 2 et
+   1 NM : OK.
+4. Ancienne NPF <-> nouvelle NPF <-> OACI sans relance, règle HT / Routes,
+   points VFR : OK.
+5. Démarrage sur la nouvelle carte, calques mémorisés ON : OK.
+6. Démarrage (première tuile, PÉLIC, communes, hors ligne), suivi GPS,
+   Recentrage économe, sélection d'un feu : OK.
+7. GLR ; FdS / GAAR ; bandeau ; SafeSky mémorisé : OK.
+8. Service worker : caches npf-q400-test-* seulement : OK.
+9. Charge DIAG et compteurs v17.41 / v17.42 : OK.
+10. Bases et clés aussi utilisées par la pérenne : OK — `OfflineMap_NPF_France`
+    (715 tuiles avant et après), `OfflineMap_OACI_1_500_000`, `OfflineMap_IGN`
+    non modifiées ; `OfflineTilesDB_v13_70_clean` écrite comme à tout import ;
+    `installedMapPacks` : 10 entrées NPF_France_B_xx ajoutées, aucune retirée ;
+    seule base créée : `OfflineMap_NPF_France_B`.
+Aucune exception JavaScript dans les deux versions.
+
+À VÉRIFIER SUR iPad
+- Import des 10 fichiers par « Carte NPF — essai rapide » : terminé, carte
+  « NPF_France_B — essai rapide » dans le sélecteur, ancienne carte présente.
+- Même endroit, mêmes gestes à 5 NM et 2 NM, en alternant les deux cartes :
+  comparer médiane et paquets lents dans « LECTURES DU PACK ».
+- HT et Routes : identiques sur les deux cartes NPF-Q400.
+
+VERSION
+- App : v17.43
+- Service Worker : `sw-v17-43_npf_essai_rapide`
+
+STATUT : À MESURER sur iPad.
+LIMITE : Chrome ne peut pas montrer le gain de vitesse (moteur de stockage
+différent de Safari). Seul l'essai côte à côte sur iPad peut le dire.
+
 
 VERSION TEST v17.42 — HT ET ROUTES SEULEMENT SUR LE FOND NPF-Q400 ; MESURES
 DE STOCKAGE ET SONDE DES LECTURES LENTES

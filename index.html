@@ -6,8 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>NPF-Q400</title>
     <link rel="stylesheet" href="leaflet.css">
-    <link rel="stylesheet" href="style.css?appv=v17.42">
-    <link rel="manifest" href="manifest.json?appv=v17.42">
+    <link rel="stylesheet" href="style.css?appv=v17.43">
+    <link rel="manifest" href="manifest.json?appv=v17.43">
     <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192x192.png?appv=v13.92">
     <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512x512.png?appv=v13.92">
     <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png?appv=v13.92">
@@ -579,7 +579,7 @@
 
     <!-- v17.20 — le splash est parsé avant le gros contrôleur PWA afin de réduire le blanc initial Safari. -->
     <script>
-        const APP_VERSION = 'v17.42';
+        const APP_VERSION = 'v17.43';
         const SERVICE_WORKER_URL = `./sw.js?appv=${encodeURIComponent(APP_VERSION)}`;
         const APP_VERSION_STORAGE_KEY = 'appVersion';
         const SW_CONTROLLER_RELOAD_GUARD_KEY = 'swControllerReloadGuard';
@@ -1423,7 +1423,7 @@
     <script src="suncalc.js"></script>
     <script src="jszip.min.js"></script>
     <script src="sia.js?siav=15.69-radio1026-1-maplite1"></script>
-    <script src="script.js?appv=v17.42"></script>
+    <script src="script.js?appv=v17.43"></script>
     
     <div id="fuel-split-modal" class="fuel-split-modal" style="display: none;">
         <div class="fuel-split-modal-content">
@@ -1704,6 +1704,12 @@
                         <button type="button" class="import-help-button" data-import-help="offline-maps" aria-label="Aide Importer Cartes Offline" title="Aide">?</button>
                     </div>
                     <input type="file" id="zip-importer-input" accept=".zip" style="display: none;">
+                    <!-- v17.43 — essai côte à côte : carte NPF enregistrée en données brutes, sous un autre nom. -->
+                    <div class="import-help-row npf-raw-trial-import-row">
+                        <label for="npf-raw-trial-importer-input" class="import-button">Carte NPF — essai rapide</label>
+                    </div>
+                    <p class="npf-raw-trial-import-note">Importer un à un les 10 fichiers NPF_France : ils forment une seconde carte « NPF_France_B ». La carte NPF actuelle n’est pas modifiée.</p>
+                    <input type="file" id="npf-raw-trial-importer-input" accept=".zip" style="display: none;">
 
                     <ul id="installed-maps-list">
                         <!-- Les packs installés seront listés ici par le JavaScript -->

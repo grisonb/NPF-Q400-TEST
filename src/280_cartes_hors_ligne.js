@@ -1115,7 +1115,85 @@ async function releaseOfflineDatabaseForHeavyOperation(reason = 'Opération offl
     await initDB();
 }
 
-async function handleZipImport(file) {
+/*
+ * v17.43 — essai côte à côte : carte NPF-Q400 enregistrée en données brutes
+ * (ArrayBuffer) au lieu de Blob, sous un autre nom et dans une base séparée.
+ * NPF_France_03 -> NPF_France_B_03 -> groupe NPF_France_B -> base
+ * OfflineMap_NPF_France_B. La carte NPF-Q400 existante n'est pas touchée.
+ */
+const NPF_RAW_TRIAL_GROUP_SUFFIX = '_B';
+
+function buildNpfRawTrialPackName(packName) {
+    const name = String(packName || '').trim();
+    if (isNpfRawTrialGroupName(getOfflinePackGroupName(name))) return name;
+    const match = name.match(/^(.*?)[\s_-]*(\d{1,3})$/);
+    if (match && match[1].trim().length >= 2) {
+        return `${match[1].replace(/[\s_-]+$/g, '')}${NPF_RAW_TRIAL_GROUP_SUFFIX}_${match[2].padStart(2, '0')}`;
+    }
+    return `${name}${NPF_RAW_TRIAL_GROUP_SUFFIX}`;
+}
+
+function isNpfRawTrialGroupName(groupName) {
+    const name = String(groupName || '');
+    return /_B$/.test(name) && isNpfOfflinePackSelection([name]);
+}
+
+/* Nom affiché à l'utilisateur (sélecteur rapide) ; le nom réel du groupe ne change pas. */
+function getOfflineMapGroupDisplayName(groupName) {
+    const name = String(groupName || '');
+    return isNpfRawTrialGroupName(name) ? `${name} — essai rapide` : name;
+}
+
+function formatNpfStorageSizeForUser(bytes) {
+    const value = Number(bytes);
+    if (!Number.isFinite(value) || value < 0) return 'inconnu';
+    if (value >= 1024 * 1024 * 1024) return `${(value / (1024 * 1024 * 1024)).toFixed(1).replace('.', ',')} Go`;
+    return `${Math.round(value / (1024 * 1024))} Mo`;
+}
+
+async function handleNpfRawTrialZipImport(file) {
+    if (!file) return;
+    const sourceName = normalizeOfflinePackName(file.name.replace(/\.zip$/i, ''));
+    if (!isNpfOfflinePackSelection([sourceName])) {
+        alert('« Carte NPF — essai rapide » est réservé aux fichiers de la carte NPF (NPF_France_01 à NPF_France_10).');
+        return;
+    }
+
+    const targetName = buildNpfRawTrialPackName(sourceName);
+    /* Les images des tuiles sont déjà compressées : place ≈ taille du fichier + 15 %. */
+    const neededBytes = Math.round(Number(file.size || 0) * 1.15);
+    let availableText = 'inconnu (non fourni par cet iPad)';
+    let availableBytes = null;
+    try {
+        if (navigator.storage && typeof navigator.storage.estimate === 'function') {
+            const estimate = await navigator.storage.estimate();
+            if (Number.isFinite(estimate?.quota) && Number.isFinite(estimate?.usage)) {
+                availableBytes = Math.max(0, estimate.quota - estimate.usage);
+                availableText = formatNpfStorageSizeForUser(availableBytes);
+            }
+        }
+    } catch (_) {}
+
+    const lines = [
+        'Carte NPF — essai rapide',
+        '',
+        `Fichier : ${sourceName} (${formatNpfStorageSizeForUser(file.size)})`,
+        `Enregistré sous : ${targetName}, dans une carte séparée.`,
+        'La carte NPF actuelle n’est pas modifiée.',
+        '',
+        `Place nécessaire pour ce fichier : environ ${formatNpfStorageSizeForUser(neededBytes)}`,
+        `Place disponible pour NPF-Q400 : ${availableText}`
+    ];
+    if (availableBytes !== null && availableBytes < neededBytes) {
+        lines.push('', 'ATTENTION : la place disponible semble insuffisante.');
+    }
+    lines.push('', 'Lancer l’import ?');
+    if (!confirm(lines.join('\n'))) return;
+
+    await handleZipImport(file, { npfRawTrial: true });
+}
+
+async function handleZipImport(file, options = {}) {
     if (!file) return;
     if (isZipImportRunning) {
         alert("Un import est déjà en cours. Veuillez attendre la fin avant d'importer un autre ZIP.");
@@ -1127,7 +1205,11 @@ async function handleZipImport(file) {
     }
 
     const sourcePackName = file.name.replace(/\.zip$/i, '');
-    const packName = normalizeOfflinePackName(sourcePackName);
+    /* v17.43 — essai rapide : même fichier, autre nom, images en données brutes. */
+    const npfRawTrialImport = options.npfRawTrial === true;
+    const packName = npfRawTrialImport
+        ? buildNpfRawTrialPackName(normalizeOfflinePackName(sourcePackName))
+        : normalizeOfflinePackName(sourcePackName);
     const packGroupNameForImport = getOfflinePackGroupName(packName);
     const isolatedImportDbName = getOfflineMapDatabaseNameForGroup(packGroupNameForImport);
     let importTileDb = null;
@@ -1382,7 +1464,9 @@ async function handleZipImport(file) {
          * Symptôme : blocage/crash vers Lecture tuiles 51/3347 quand OACI est la 3e carte.
          * Mesure : petits lots de 10, réouverture périodique IndexedDB, lecture blob.
          */
-        const tileReadMode = useSplitZipFastProfile ? 'arraybuffer' : (isIgnPack ? 'arraybuffer' : 'blob');
+        const tileReadMode = npfRawTrialImport
+            ? 'arraybuffer'
+            : (useSplitZipFastProfile ? 'arraybuffer' : (isIgnPack ? 'arraybuffer' : 'blob'));
         let skippedTiles = 0;
 
         const alreadyInstalledPacks = JSON.parse(localStorage.getItem('installedMapPacks') || '[]');
@@ -1573,7 +1657,8 @@ async function handleZipImport(file) {
             date: new Date().toLocaleDateString(),
             groupName: packGroupNameForImport,
             dbName: isolatedImportDbName,
-            storageMode: 'isolated-v13.73'
+            storageMode: 'isolated-v13.73',
+            ...(npfRawTrialImport ? { tileFormat: 'arraybuffer' } : {})
         });
 
         localStorage.setItem(
@@ -1972,7 +2057,7 @@ function displayQuickOfflineMapSelector() {
 
         const name = document.createElement('span');
         name.className = 'quick-offline-map-choice-name';
-        name.textContent = String(group.name);
+        name.textContent = getOfflineMapGroupDisplayName(group.name);
 
         const detail = document.createElement('span');
         detail.className = 'quick-offline-map-choice-detail';

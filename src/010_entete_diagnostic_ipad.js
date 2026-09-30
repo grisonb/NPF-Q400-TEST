@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.42';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.43';
 
 
 /*
@@ -682,7 +682,9 @@ const NPF_DIAG_DETAIL = (() => {
         packProbes: [],
         probePending: null,
         probeLastAt: null,
-        probeDropped: 0
+        probeDropped: 0,
+        /* v17.43 — forme de la dernière image lue (Blob / données brutes). */
+        lastReadForm: null
     };
 
     const safe = (callback, fallback = undefined) => {
@@ -1596,7 +1598,9 @@ const NPF_DIAG_DETAIL = (() => {
                 htOn: false, htOff: false, routesOn: false, routesOff: false,
                 gpsMs: 0, gpsN: 0, calcMs: 0,
                 lateN: 0, lateMax: 0, refMs: null,
-                stW: 0, stWMax: 0, stR: 0, stRMax: 0, stC: 0, stCMax: 0, stLs: 0, stLsMs: 0
+                stW: 0, stWMax: 0, stR: 0, stRMax: 0, stC: 0, stCMax: 0, stLs: 0, stLsMs: 0,
+                /* v17.43 — carte lue et forme des images. */
+                map: null, mapMixed: false, fmBlob: 0, fmRaw: 0
             };
             state.readMinutes.set(index, minute);
             if (state.readMinutes.size > 60) state.readMinutes.delete(state.readMinutes.keys().next().value);
@@ -1604,15 +1608,28 @@ const NPF_DIAG_DETAIL = (() => {
         return minute;
     };
 
+    /* v17.43 — nom court de la carte active (groupe du premier fichier). */
+    const currentMapShortName = () => safe(() => (
+        Array.isArray(activeOfflinePacks) && activeOfflinePacks.length
+            ? String(getOfflinePackGroupName(activeOfflinePacks[0])).slice(0, 40)
+            : (offlineTilesMode ? 'OFFLINE sans pack' : 'ONLINE')
+    ), '?');
+
     const notePackRead = (outcome, ms) => {
         if (outcome !== 'trouvée' && outcome !== 'absente' && outcome !== 'erreur-technique') return;
         const t = now();
         const layers = layerStateNow();
+        const mapName = currentMapShortName();
+        const form = outcome === 'trouvée' ? state.lastReadForm : null;
         if (state.firstPackReads.length < 20) {
             state.firstPackReads.push({ ms: round(ms), ht: layers.ht, routes: layers.routes });
         }
         const minute = readMinuteAt(t);
         minute.n += 1;
+        if (minute.map === null) minute.map = mapName;
+        else if (minute.map !== mapName) minute.mapMixed = true;
+        if (form === 'Blob') minute.fmBlob += 1;
+        else if (form === 'brut') minute.fmRaw += 1;
         if (minute.durations.length < 600) minute.durations.push(round(ms));
         if (ms > minute.max) minute.max = round(ms);
         if (layers.ht) minute.htOn = true; else minute.htOff = true;
@@ -1626,6 +1643,7 @@ const NPF_DIAG_DETAIL = (() => {
                 const since = at => (at === null ? null : round(t - at));
                 pushCapped(state.slowReadBatches, {
                     at: Date.now(), endT: t, n: 1, maxMs: round(ms), ht: layers.ht, routes: layers.routes,
+                    map: mapName, form,
                     sinceHtCanvasUpdate: since(state.lastHtCanvasUpdateAt),
                     sinceHtPaneToggle: since(state.lastHtPaneToggleAt),
                     htPaneVisible: state.lastHtPaneVisible
@@ -1662,7 +1680,10 @@ const NPF_DIAG_DETAIL = (() => {
         noteLatePackReads(t);
         return id;
     };
-    const packReadEnd = id => {
+    const packReadEnd = (id, info) => {
+        /* v17.43 — forme de l'image lue : Blob ou données brutes (ArrayBuffer). */
+        const tile = info && !info.error ? info.value?.tile : null;
+        state.lastReadForm = tile ? (tile instanceof Blob ? 'Blob' : 'brut') : null;
         const entry = state.pendingPackReads.get(id);
         if (!entry) return;
         const t = now();
@@ -1723,11 +1744,22 @@ const NPF_DIAG_DETAIL = (() => {
         const x = Number(match[3]) + 12;
         const y = Number(match[4]);
         const urlA = match[1] + z + '/' + x + '/' + y + match[5];
-        const urlB = match[1] + z + '/' + x + '/' + (y + 1) + match[5];
+        const urlB = match[1] + z + '/' + x + '/' + (y + 3) + match[5];
+        /*
+         * v17.43 — ordre des mesures :
+         * 1. normalMs : méthode normale de l'app (curseur sur l'index) sur la
+         *    tuile A, jamais lue — seule mesure comparable à une lecture normale ;
+         * 2. indexMs  : index seul (sans l'image) sur la tuile B ;
+         * 3. directMs : accès direct par la clé sur la tuile B — l'app ne lit
+         *    jamais ainsi, non comparable ;
+         * 4. warmMs   : méthode normale sur la tuile A relue.
+         */
         const entry = {
-            at: Date.now(), slowMs: pending.slowMs, z,
-            indexMs: null, valueMs: null, size: null, found: null,
-            cursorMs: null, cursorFound: null, warmMs: null, error: null
+            at: Date.now(), slowMs: pending.slowMs, z, v: 2,
+            map: currentMapShortName(), form: null,
+            normalMs: null, normalFound: null, size: null,
+            indexMs: null, directMs: null, found: null,
+            warmMs: null, error: null
         };
         let finished = false;
         const finish = error => {
@@ -1742,40 +1774,45 @@ const NPF_DIAG_DETAIL = (() => {
             const t0 = now();
             const request = pending.db.transaction('tiles', 'readonly')
                 .objectStore('tiles').index('tileUrl').openCursor(IDBKeyRange.only(url));
-            request.onsuccess = () => done(round1(now() - t0), !!request.result);
+            request.onsuccess = () => done(round1(now() - t0), request.result ? request.result.value : null);
             request.onerror = () => finish(request.error);
         };
-        try {
+        const indexThenDirect = done => {
             const store = pending.db.transaction('tiles', 'readonly').objectStore('tiles');
             const t0 = now();
-            const keyRequest = store.index('tileUrl').getKey(urlA);
+            const keyRequest = store.index('tileUrl').getKey(urlB);
             keyRequest.onerror = () => finish(keyRequest.error);
             keyRequest.onsuccess = () => {
                 entry.indexMs = round1(now() - t0);
                 const primaryKey = keyRequest.result;
                 entry.found = primaryKey !== undefined;
-                const next = () => safe(() => cursorRead(urlB, (ms, found) => {
-                    entry.cursorMs = ms;
-                    entry.cursorFound = found;
-                    safe(() => cursorRead(urlA, warmMs => {
-                        entry.warmMs = warmMs;
-                        finish();
-                    }));
-                }));
                 if (primaryKey === undefined) {
-                    next();
+                    done();
                     return;
                 }
                 const t1 = now();
                 const valueRequest = store.get(primaryKey);
                 valueRequest.onerror = () => finish(valueRequest.error);
                 valueRequest.onsuccess = () => {
-                    entry.valueMs = round1(now() - t1);
-                    const tile = valueRequest.result?.tile;
-                    entry.size = tile ? Number(tile.size ?? tile.byteLength ?? 0) || null : null;
-                    next();
+                    entry.directMs = round1(now() - t1);
+                    done();
                 };
             };
+        };
+        try {
+            cursorRead(urlA, (ms, record) => {
+                entry.normalMs = ms;
+                entry.normalFound = !!record;
+                const tile = record?.tile;
+                if (tile) {
+                    entry.form = tile instanceof Blob ? 'Blob' : 'brut';
+                    entry.size = Number(tile.size ?? tile.byteLength ?? 0) || null;
+                }
+                safe(() => indexThenDirect(() => safe(() => cursorRead(urlA, warmMs => {
+                    entry.warmMs = warmMs;
+                    finish();
+                }))));
+            });
         } catch (error) {
             finish(error);
         }
@@ -2516,7 +2553,7 @@ const NPF_DIAG_DETAIL = (() => {
             noStartup: true,
             noActivity: true,
             before: args => packReadStart(args),
-            after: info => packReadEnd(info.before)
+            after: info => packReadEnd(info.before, info)
         });
         wrapGlobal('recoverDirectOfflineTileReader', {
             noStartup: true,
@@ -3125,7 +3162,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.42 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.43 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -3349,6 +3386,9 @@ function npfDiagCompactReadMinute(minute) {
         refMs: Number.isFinite(minute.refMs) ? minute.refMs : null,
         /* v17.42 — stockage : écritures IDB, autres lectures IDB, fichiers en
          * cache (nombre, max ms) et localStorage (nombre, total ms). */
+        /* v17.43 — carte lue et forme des images (Blob, données brutes). */
+        map: minute.n ? (minute.map || '—') + (minute.mapMixed ? ' (+ autre carte)' : '') : null,
+        fm: [Number(minute.fmBlob) || 0, Number(minute.fmRaw) || 0],
         st: [
             Number(minute.stW) || 0, Number(minute.stWMax) || 0,
             Number(minute.stR) || 0, Number(minute.stRMax) || 0,
@@ -3370,15 +3410,28 @@ function formatNpfDiagStorageEventLine(item) {
         + (Number(entry.n) > 1 ? ' | ' + entry.n + ' fois' : '');
 }
 
+function formatNpfDiagImageForm(form) {
+    return form === 'Blob' ? 'Blob' : (form === 'brut' ? 'données brutes' : '—');
+}
+
 function formatNpfDiagPackProbeLine(item) {
     const ms = value => (value === null || value === undefined ? '—' : String(value).replace('.', ',') + ' ms');
-    return '   ' + formatNpfDiagClock(item.at) + ' | après une lecture de ' + item.slowMs + ' ms | zoom ' + item.z
-        + ' | tuile voisine : index seul ' + ms(item.indexMs)
-        + ' · image ' + (item.found === false ? 'tuile absente' : ms(item.valueMs))
+    const head = '   ' + formatNpfDiagClock(item.at) + ' | après une lecture de ' + item.slowMs + ' ms | zoom ' + item.z;
+    if (item.v !== 2) {
+        /* Sonde v17.42 (session précédente enregistrée par l'ancienne version). */
+        return head + ' | tuile voisine : index seul ' + ms(item.indexMs)
+            + ' · accès direct (non comparable) ' + (item.found === false ? 'tuile absente' : ms(item.valueMs))
+            + ' | méthode normale, autre tuile ' + ms(item.cursorMs)
+            + ' | même tuile relue ' + ms(item.warmMs)
+            + (item.error ? ' | ' + item.error : '');
+    }
+    return head + ' | carte ' + (item.map || '—') + ' · images ' + formatNpfDiagImageForm(item.form)
+        + ' | COMPARABLE à une lecture normale — tuile voisine jamais lue : '
+        + (item.normalFound === false ? 'tuile absente (' + ms(item.normalMs) + ')' : ms(item.normalMs))
         + (item.size ? ' (' + Math.round(item.size / 1024) + ' ko)' : '')
-        + ' | méthode actuelle, autre tuile ' + ms(item.cursorMs)
-        + (item.cursorFound === false ? ' (absente)' : '')
-        + ' | même tuile relue ' + ms(item.warmMs)
+        + ' · la même relue : ' + ms(item.warmMs)
+        + ' | NON comparable — autre tuile : index seul ' + ms(item.indexMs)
+        + ' · accès direct ' + (item.found === false ? 'tuile absente' : ms(item.directMs))
         + (item.error ? ' | ' + item.error : '');
 }
 
@@ -3440,6 +3493,9 @@ function formatNpfDiagReadMinuteLine(item) {
     return '   ' + formatNpfDiagClock(item.at) + ' | ' + item.n + ' lectures | médiane '
         + (item.median === null ? '—' : item.median + ' ms') + ' | max ' + item.max + ' ms'
         + ' | HT ' + item.ht + ' · Routes ' + item.routes
+        + (Array.isArray(item.fm) && item.map
+            ? ' | carte ' + item.map + ' · images : ' + item.fm[1] + ' données brutes / ' + item.fm[0] + ' Blob'
+            : '')
         + (item.gpsMs !== undefined
             ? ' | traitement GPS ' + item.gpsMs + ' ms (' + item.gpsN + ' positions) · calculateur ' + item.calcMs + ' ms'
             : '')
@@ -3463,6 +3519,7 @@ function formatNpfDiagSlowBatchLine(item) {
     const since = value => (value === null || value === undefined ? 'jamais' : (value / 1000).toFixed(1) + ' s');
     return '   ' + formatNpfDiagClock(item.at) + ' | paquet de ' + item.n + ' lecture(s) | max ' + item.maxMs + ' ms'
         + ' | HT ' + (item.ht ? 'ON' : 'OFF') + ' · Routes ' + (item.routes ? 'ON' : 'OFF')
+        + (item.map ? ' | carte ' + item.map + ' · images ' + formatNpfDiagImageForm(item.form) : '')
         + ' | dernier redimensionnement du dessin HT il y a ' + since(item.sinceHtCanvasUpdate)
         + ' | dernier masquage / réaffichage du calque HT il y a ' + since(item.sinceHtPaneToggle)
         + (item.htPaneVisible === null || item.htPaneVisible === undefined ? '' : ' (calque HT ' + (item.htPaneVisible ? 'affiché' : 'masqué') + ')');
@@ -3523,7 +3580,7 @@ function appendNpfDiagPackReadSection(lines) {
     if (!s.visibilityEvents.length) lines.push('   Aucun changement.');
     s.visibilityEvents.forEach(item => lines.push(formatNpfDiagVisibilityLine(item)));
     /* v17.42 — sondes et activité de stockage. */
-    lines.push('Sondes après un paquet de lectures lent (v17.42, tuile voisine pas encore lue) :');
+    lines.push('Sondes après un paquet de lectures lent (v17.43 : la méthode normale est mesurée en premier) :');
     if (!s.packProbes.length) lines.push('   Aucune.' + (s.probeDropped ? ' ' + s.probeDropped + ' abandonnée(s) (carte occupée).' : ''));
     s.packProbes.forEach(item => lines.push(formatNpfDiagPackProbeLine(item)));
     lines.push('Activité de stockage (v17.42 : ouvertures, fermetures, écritures IndexedDB de l’app — 80 dernières) :');
