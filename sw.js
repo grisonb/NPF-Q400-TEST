@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v17-43_npf_essai_rapide';
-const APP_VERSION = 'v17.43';
+const SW_VERSION = 'sw-v17-44_fenetre_terrain';
+const APP_VERSION = 'v17.44';
 const SIA_DATA_REVISION = '15.69-radio1026-1-maplite1';
 const SIA_DATA_URL = './sia.js';
 /*

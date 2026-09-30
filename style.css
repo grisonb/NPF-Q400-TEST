@@ -1,4 +1,4 @@
-/* NPF_STYLE_BUILD_VERSION: v17.43 */
+/* NPF_STYLE_BUILD_VERSION: v17.44 */
 /* v14.83 — nettoyage des références techniques et limitation des cartouches routiers. */
 /* v14.81 — recherche phonétique nationale élargie aux fragments sur deux lettres. */
 /* v14.80 — Brive conservé uniquement sous LFSL. */
@@ -18308,4 +18308,48 @@ body.npf-calculator-modal-open {
     font-weight: 900;
     line-height: 1;
     cursor: pointer;
+}
+
+/* ==========================================================================
+   v17.44 — FENÊTRE TERRAIN (PÉLIC) : PLUS ÉTROITE, PETITS BOUTONS PLUS LISIBLES
+   Affichage seulement : aucun bouton ne change de comportement.
+   - largeur 390 px -> 294 px (−25 %) ; elle s'élargit seule, jusqu'à 320 px
+     au plus, quand une ligne de petits boutons a besoin de plus de place
+     (ex. RETARDANT / Désactiver / BASE ✓) ; au-delà, la ligne passe sur deux
+     rangées plutôt que de couper un libellé ;
+   - petits boutons (EAU / RETARDANT, Activer / Désactiver, BASE, PÉLIC,
+     PDF Pélic, Doc PDF Réduite) : police 15 px comme les gros boutons, une
+     seule ligne par libellé, hauteur inchangée (31 px) ;
+   - espace agrandi après la ligne PDF et avant Go To.
+   ========================================================================== */
+.leaflet-popup.npf-pelic-leaflet-popup .leaflet-popup-content-wrapper {
+    width: max-content;
+    min-width: min(294px, calc(100vw - 32px));
+    max-width: min(320px, calc(100vw - 32px));
+}
+
+.leaflet-popup.npf-pelic-leaflet-popup .airport-popup .popup-buttons {
+    flex-wrap: wrap;
+}
+
+.airport-popup .water-btn,
+.airport-popup .enable-btn,
+.airport-popup .disable-btn,
+.airport-popup .base-btn,
+.airport-popup .pdf-btn {
+    box-sizing: border-box;
+    min-height: 31px;
+    padding: 7px 4px;
+    font-size: 15px;
+    line-height: 1.1;
+    white-space: nowrap;
+}
+
+.airport-popup .popup-pdf-buttons button {
+    min-width: auto;
+}
+
+.airport-popup .popup-pdf-buttons + div,
+.airport-popup .popup-notams-buttons + .popup-goto-buttons {
+    margin-top: 22px !important;
 }

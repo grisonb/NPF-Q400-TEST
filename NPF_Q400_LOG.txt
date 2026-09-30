@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 30/09/2026
-Version de travail actuelle : TEST v17.43
+Version de travail actuelle : TEST v17.44
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,10 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.44 — fenêtre terrain (PÉLIC) : largeur 390 -> 294 px (élargie seule
+  jusqu'à 320 px si une ligne de petits boutons en a besoin), petits boutons en
+  police 15 px sur une seule ligne, hauteur inchangée, espace agrandi après la
+  ligne PDF et avant Go To ; styles seulement ;
 - v17.43 — essai côte à côte : bouton « Carte NPF — essai rapide » (Gestion des
   Cartes) qui importe les fichiers NPF_France en données brutes (ArrayBuffer)
   sous le nom NPF_France_B_xx, dans la base séparée OfflineMap_NPF_France_B ;
@@ -371,7 +375,14 @@ NON IMPLÉMENTÉ / OUVERT :
   (« ANALYSE DIAG v17.32 SOL + VOL ») : 5 défauts du DIAG lui-même relevés
   (D1 à D5) et 9 recommandations classées gain / risque (R1 à R9), aucune
   implémentée. Historique : À MESURER -> MESURÉ ;
-- v17.43 : À MESURER sur iPad (import des 10 fichiers « essai rapide », puis
+- v17.44 : À MESURER sur iPad (fenêtre terrain en paysage et en portrait) ;
+- v17.43 : essai « données brutes » MESURÉ sur iPad le 30/09/2026 au sol (DIAG
+  16-51, 17-02, 17-06) : 34 paquets lents, tous sur NPF_France en Blob, aucun
+  sur NPF_France_B ; médiane 14-16 ms contre 65-71 ms. À CONFIRMER en vol.
+  Plantages de la PWA pendant l'import « essai rapide » : cause NON PROUVÉE
+  (hypothèse mémoire), À MESURER. Passage des imports normaux en données
+  brutes : NON IMPLÉMENTÉ, À DÉCIDER (analyse du 30/09/2026) ;
+- v17.43 (rappel du protocole) : import des 10 fichiers « essai rapide », puis
   comparaison carte NPF_France / NPF_France_B au même endroit à 5 NM et 2 NM) ;
 - v17.42 : sondes MESURÉES sur iPad le 30/09/2026 (DIAG 12:57) — analyse dans
   l'entrée v17.43 ; HT / Routes sur OACI À MESURER ;
@@ -428,38 +439,39 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.43
+Version : TEST v17.44
 Date : 30/09/2026
-Base : v17.42 (commitée a96dc78, À MESURER)
+Base : v17.43 (commitée f59240f, MESURÉE au sol)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.43.txt
-2_Index_v17.43.txt
-3_Manifest_v17.43.txt
-4_Script_v17.43.txt
-5_SIA_v17.43.txt
-6_Style_v17.43.txt
-7_Sw_v17.43.txt
+1_Modifications_v17.44.txt
+2_Index_v17.44.txt
+3_Manifest_v17.44.txt
+4_Script_v17.44.txt
+5_SIA_v17.44.txt
+6_Style_v17.44.txt
+7_Sw_v17.44.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.43
-- Manifest : start_url = ./index.html?appv=v17.43
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.43
-- Style : NPF_STYLE_BUILD_VERSION = v17.43
-- Service Worker : `sw-v17-43_npf_essai_rapide` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-43_npf_essai_rapide`, `npf-q400-test-app-data-v1`,
+- Index : APP_VERSION = v17.44
+- Manifest : start_url = ./index.html?appv=v17.44
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.44
+- Style : NPF_STYLE_BUILD_VERSION = v17.44
+- Service Worker : `sw-v17-44_fenetre_terrain` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-44_fenetre_terrain`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-15.69-radio1026-1-maplite1`
 - SIA_DATA_REVISION (SW / Index) : 15.69-radio1026-1-maplite1 (inchangée)
-- sia.js v17.43 : strictement identique à v17.42.
+- sia.js v17.44 : strictement identique à v17.43.
 
 STATUT DE VALIDATION :
-- validation statique v17.43 effectuée avant livraison : Script/SIA/SW OK, script
+- validation statique v17.44 effectuée avant livraison : Script/SIA/SW OK, script
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
-- `sia.js` et moteur tuiles (src/100) identiques à v17.42 ;
-- tests Chrome v17.42 / v17.43 : entrée v17.43 ;
+- `sia.js`, moteur tuiles (src/100) et tous les fichiers src/ identiques à
+  v17.43 (seul le numéro de version change dans src/010) ;
+- tests Chrome v17.43 / v17.44 : entrée v17.44 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
-  sur iPad ; v17.32 MESURÉE ; v17.29, v17.31, v17.33 à v17.43 À MESURER.
+  sur iPad ; v17.32 MESURÉE ; v17.29, v17.31, v17.33 à v17.44 À MESURER.
 
 
 2. PROTOCOLE DE TRAVAIL À RESPECTER
@@ -1981,6 +1993,103 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.44 — FENÊTRE TERRAIN (PÉLIC) PLUS ÉTROITE, PETITS BOUTONS
+PLUS LISIBLES
+Date : 30/09/2026
+Base fonctionnelle : v17.43 (commit f59240f)
+Demande : sur iPad en paysage, la fenêtre ouverte en touchant un terrain PÉLIC
+(ex. LFML) est trop large. Affichage seulement, aucun changement de
+comportement des boutons.
+
+ÉTAT AVANT MODIFICATION (mesuré dans Chrome à 1080 × 810 et 810 × 1080)
+- Fenêtre PÉLIC : 392 px de large (style.css, règle « PÉLIC / PÉLIC+WP »,
+  `width: min(390px, …)`), 336 px de haut pour LFML.
+- Petits boutons (EAU / RETARDANT, Activer / Désactiver, BASE, PÉLIC, PDF Pélic,
+  Doc PDF Réduite) : 31 px de haut, police 13,3 px.
+- Gros boutons (VAC, NOTAMS, Go To, Ajout WP) : 42 px de haut, police 15 px.
+- Espaces entre lignes de boutons : 6 à 7 px.
+- Les hauteurs de 31 px et 42 px sont inférieures aux 44 px cités dans la
+  demande ; décision de Bastien : hauteur inchangée.
+
+MODIFICATIONS v17.44 (un bloc ajouté en fin de style.css ; aucun fichier
+JavaScript de la fenêtre modifié)
+1. Largeur : 390 px -> 294 px (−25 %). La fenêtre s'élargit seule, jusqu'à
+   320 px au plus, quand une ligne de petits boutons a besoin de plus de place
+   (`width: max-content`, `min-width` 294 px, `max-width` 320 px) ; au-delà, la
+   ligne passe sur deux rangées (`flex-wrap`) plutôt que de couper un libellé.
+   Décision de Bastien du 30/09 : élargir plutôt que réduire la police.
+2. Petits boutons : police 15 px (égale aux gros boutons, choix de Bastien :
+   +12,5 % et non +20 à 25 %, qui aurait dépassé les gros boutons), une seule
+   ligne par libellé, marges latérales internes 8 -> 4 px, hauteur 31 px.
+3. Espaces : 7 -> 22 px après la ligne PDF (avant VAC) et entre NOTAMS et
+   Go To. Les autres espaces ne changent pas.
+4. Portée : largeur, retour à la ligne et espaces seulement dans la fenêtre
+   PÉLIC (`.npf-pelic-leaflet-popup`, `.popup-pdf-buttons`). La police 15 px
+   s'applique aussi aux boutons BASE et PÉLIC de la petite fenêtre des terrains
+   non PÉLIC (même famille `.airport-popup`).
+
+RÉSULTATS MESURÉS (Chrome, paysage 1080 × 810 et portrait 810 × 1080, identiques)
+- LFML (EAU / Désactiver / BASE) : 296 px de large, 366 px de haut (+30 px dus
+  aux deux espaces), tous les libellés sur une ligne, aucun coupé.
+- « Activer » à la place de « Désactiver » : 296 px, rien de coupé.
+- RETARDANT / Désactiver / BASE ✓ : la fenêtre s'élargit à 297 px, rien de coupé.
+- Terrain PÉLIC ajouté à la main (4 boutons EAU / Désactiver / BASE / PÉLIC ✓) :
+  296 px, rien de coupé, sans marge de réserve.
+- Pire cas, 4 boutons RETARDANT / Désactiver / BASE ✓ / PÉLIC ✓ : ne tient pas
+  sur une ligne même à 320 px ; la fenêtre passe à 322 px et « PÉLIC ✓ » passe
+  sur une seconde rangée (402 px de haut). Aucun libellé coupé.
+- PÉLIC aussi WP (GoTo / Modifier / Déplacer / Supp. WP / Supp. Route) : 296 px,
+  rien de coupé.
+- Terrain sans boutons PDF (LFAB : VAC, Ajout WP) : inchangé (179 px).
+- Terrain non PÉLIC sélectionnable (LFBC : BASE, PÉLIC, VAC, Go To, Ajout WP) :
+  154 px au lieu de 160 px, mêmes espaces, même hauteur (250 px).
+- Fenêtre entièrement dans l'écran dans tous les cas, sans défilement.
+- LIMITE : la police des boutons dépend de l'appareil (police système de
+  l'iPad, différente de celle de Chrome sous Windows). Les largeurs de libellé
+  peuvent différer de quelques pixels ; la fenêtre s'adapte seule jusqu'à
+  320 px. À VÉRIFIER sur iPad.
+- REMARQUE (comportement existant) : quand le terrain touché est dans la
+  partie haute de l'écran, le haut de la fenêtre passe sous la barre de
+  recherche, en v17.43 comme en v17.44 ; la fenêtre étant plus haute de 30 px,
+  cela arrive 30 px plus tôt. Non corrigé (hors demande). À REVOIR si gênant.
+
+NON-RÉGRESSION v17.44 CONTRE v17.43 (Chrome)
+- Boutons de la fenêtre terrain, clic réel sur chacun, mêmes appels et même
+  résultat dans les deux versions : EAU (`toggleWater`), Désactiver / Activer
+  (`toggleAirport`), BASE (`setBaseAirport`), PDF Pélic (`openAirportPdf`),
+  Doc PDF Réduite (`openFdfReducedPdf`), VAC (`openVacPdf`), NOTAMS
+  (`openPelicNotams`), Go To (`goToAirportDestinationByOaci`), Ajout WP
+  (`addNpfWaypointFromAirportByOaci`), fermeture × : OK.
+- Autres fenêtres de la carte (points VFR, zones, feux, SafeSky) : OK — tous
+  les nouveaux sélecteurs commencent par `.airport-popup` ou
+  `.leaflet-popup.npf-pelic-leaflet-popup` ; aucune autre règle de style.css
+  n'est modifiée.
+- Connexion / mot de passe, FdS, GAAR, GLR : OK (suite NAS simulé identique).
+- Carte, sélecteur de fonds (dont « NPF_France_B — essai rapide »), suivi GPS,
+  Recentrage économe, échelle : OK (suites carte identiques).
+- NOTAM, VAC, SafeSky mémorisé, DIAG : OK.
+- Hors ligne (service worker) et mise à jour de version : OK — page servie et
+  contrôlée hors ligne en v17.44.
+- Caches : seuls des caches npf-q400-test-* ; aucun cache de la pérenne
+  supprimé : OK.
+- Textes : aucun texte ajouté en v17.44. RAPPEL : les libellés de la v17.43
+  « Carte NPF — essai rapide », « La carte NPF actuelle n'est pas modifiée » et
+  « réservé aux fichiers de la carte NPF » contiennent « NPF » seul (libellé
+  repris de la demande du 30/09) — NON MODIFIÉ ici, À DÉCIDER.
+Aucune exception JavaScript dans les deux versions.
+
+FICHIERS MODIFIÉS
+style.css (bloc v17.44) ; index.html, manifest.json, sw.js, src/010 (donc
+script.js) : numéros de version seulement. sia.js et tous les autres fichiers
+src/ : strictement identiques à v17.43.
+
+VERSION
+- App : v17.44
+- Service Worker : `sw-v17-44_fenetre_terrain`
+
+STATUT : À MESURER sur iPad.
+
 
 VERSION TEST v17.43 — ESSAI CÔTE À CÔTE : CARTE NPF-Q400 EN DONNÉES BRUTES
 (« CARTE NPF — ESSAI RAPIDE ») ; DIAG : CARTE ET FORME DES IMAGES, SONDE
