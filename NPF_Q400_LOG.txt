@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
-Mise à jour : 30/09/2026
-Version de travail actuelle : TEST v17.47
+Mise à jour : 01/10/2026
+Version de travail actuelle : TEST v17.48
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,11 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.48 — fichiers statiques (lignes HT, localités, contours locaux et
+  etalab, communes, icônes et images) : plus aucune vérification ni
+  retéléchargement à chaque lancement ; une seule fois par nouvelle version
+  du service worker, ou s'ils manquent. Icônes Calculatrice, Recherche,
+  Centrage GPS et BLOC / FUEL réduites à 256 × 256 (5,6 Mo -> 0,46 Mo) ;
 - v17.47 — stockage local libéré (≈ 2 millions de caractères) : alias et
   population des communes plus copiés dans le stockage local (relus depuis
   communes_aliases.json et communes.json, gardés hors ligne par le SW) ;
@@ -395,14 +400,21 @@ NON IMPLÉMENTÉ / OUVERT :
   (« ANALYSE DIAG v17.32 SOL + VOL ») : 5 défauts du DIAG lui-même relevés
   (D1 à D5) et 9 recommandations classées gain / risque (R1 à R9), aucune
   implémentée. Historique : À MESURER -> MESURÉ ;
-- v17.47 : À MESURER sur iPad (ligne « Stockage local » du DIAG ≈ 0,05 Mo,
-  recherche par nom et ancien nom, noms des communes, image de lancement).
+- v17.48 : À MESURER sur iPad (boutons nets, HT à 2 NM sur la Carte
+  NPF-Q400, export DIAG). Fichiers de l'app (script.js 3,2 Mo, style.css
+  0,5 Mo, leaflet...) toujours retéléchargés à chaque lancement avec réseau
+  (≈ 4 Mo, mises à jour de l'app) : NON MODIFIÉ, À DÉCIDER ;
+- v17.47 : VALIDÉE sur iPad le 30/09/2026 (stockage local 0,13 Mo, communes
+  plus retéléchargées). Recherche par nom et ancien nom, noms des communes,
+  image de lancement.
   Image de lancement sans réinstallation de l'app : INCERTAIN (iOS la prend
   en général à l'ajout sur l'écran d'accueil). Noms des communes : règle
   existante, visibles à partir de 2 NM seulement (rien à 20 NM ni à 5 NM),
   À DÉCIDER si le pilote veut les grandes villes à 20 NM. Autres gros
   fichiers encore retéléchargés à chaque lancement (HT 8,7 Mo, localités
-  5,9 Mo, communes-1000m 10 Mo si utilisé, icônes) : NON IMPLÉMENTÉ, À DÉCIDER ;
+  5,9 Mo, communes-1000m 10 Mo si utilisé, icônes) : traité en v17.48 (voir
+  l'entrée v17.48 : en réalité, seuls les icônes et les localités étaient
+  revérifiés à chaque lancement) ;
 - v17.46 : À MESURER sur iPad (écran de démarrage, libellés du sélecteur,
   HT / Routes sur la Carte NPF-Q400, historique des feux, export DIAG).
   Ancienne carte NPF-Q400 en Blob conservée en secours jusqu'au vol de
@@ -476,42 +488,44 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.47
-Date : 30/09/2026
-Base : v17.46 (commitée e03080c, À MESURER)
+Version : TEST v17.48
+Date : 01/10/2026
+Base : v17.47 (commitée eb2744f, VALIDÉE sur iPad le 30/09/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.47.txt
-2_Index_v17.47.txt
-3_Manifest_v17.47.txt
-4_Script_v17.47.txt
-5_SIA_v17.47.txt
-6_Style_v17.47.txt
-7_Sw_v17.47.txt
+1_Modifications_v17.48.txt
+2_Index_v17.48.txt
+3_Manifest_v17.48.txt
+4_Script_v17.48.txt
+5_SIA_v17.48.txt
+6_Style_v17.48.txt
+7_Sw_v17.48.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.47 (et texte « TEST v17.47 » de l'écran de
+- Index : APP_VERSION = v17.48 (et texte « TEST v17.48 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.47
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.47
-- Style : NPF_STYLE_BUILD_VERSION = v17.47
-- Service Worker : `sw-v17-47_communes_stockage_lancement` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-47_communes_stockage_lancement`, `npf-q400-test-app-data-v1`,
+- Manifest : start_url = ./index.html?appv=v17.48
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.48
+- Style : NPF_STYLE_BUILD_VERSION = v17.48
+- Service Worker : `sw-v17-48_fichiers_statiques_icones` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-48_fichiers_statiques_icones`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-15.69-radio1026-1-maplite1`
 - SIA_DATA_REVISION (SW / Index) : 15.69-radio1026-1-maplite1 (inchangée)
-- sia.js v17.47 : strictement identique à v17.46.
+- sia.js v17.48 : strictement identique à v17.47.
 - Images de lancement : icons/startup-ipad9-portrait.png (1620 × 2160) et
   icons/startup-ipad9-landscape.png (2160 × 1620).
+- Icônes des boutons (v17.48) : calculator-fms-icon, search-commune-icon,
+  center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.47 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.48 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
-- `sia.js` et moteur tuiles (src/100) identiques à v17.46 ;
-- tests Chrome v17.46 / v17.47 : entrée v17.47 ;
+- `sia.js` et moteur tuiles (src/100) identiques à v17.47 ;
+- tests Chrome v17.47 / v17.48 : entrée v17.48 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
-  sur iPad ; v17.32 MESURÉE ; v17.44 VALIDÉE ; v17.29, v17.31, v17.33 à v17.43 et
-  v17.45 à v17.47 À MESURER.
+  sur iPad ; v17.32 MESURÉE ; v17.44 et v17.47 VALIDÉES ; v17.29, v17.31, v17.33
+  à v17.43, v17.45, v17.46 et v17.48 À MESURER.
 
 
 2. PROTOCOLE DE TRAVAIL À RESPECTER
@@ -2033,6 +2047,107 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.48 — FICHIERS STATIQUES GARDÉS HORS LIGNE (PLUS DE
+VÉRIFICATION À CHAQUE LANCEMENT) ; ICÔNES ALLÉGÉES
+Date : 01/10/2026
+Base fonctionnelle : v17.47 (commit eb2744f, VALIDÉE sur iPad le 30/09/2026 :
+stockage local 0,13 Mo, communes plus retéléchargées)
+
+ÉTAT AVANT (mesuré dans Chrome, Chrome fermé puis relancé entre 2 lancements,
+iPad simulé, réseau disponible)
+- Fichiers statiques (APP_DATA_CACHE) servis depuis le cache TEST, mais le
+  SW relançait une vérification réseau en arrière-plan à chaque usage :
+  6 icônes (calculatrice, recherche, centrage GPS, BLOC / FUEL, icon-192,
+  SafeSky) et la base des localités (5,9 Mo). Le serveur répondait « pas
+  modifié » (0 Mo dans Chrome) ; sur iPad, si Safari a vidé son propre
+  cache, ces vérifications deviennent de vrais téléchargements (jusqu'à
+  ≈ 12 Mo).
+- Lignes HT : lues directement dans le cache par la page, jamais redemandées
+  (le rapport v17.47 les citait à tort). Contours des départements : géométrie
+  embarquée dans le script. communes-1000m.geojson local : présent dans le
+  dépôt mais utilisé par aucun code de l'app.
+- Localités : base nationale de 179 402 villages, hameaux et lieux-dits
+  (archive ZIP), utilisée par la recherche de la barre « commune » pour
+  trouver un lieu-dit hors ligne.
+- Vraiment retéléchargé à chaque lancement : fichiers de l'app (script.js
+  3,2 Mo, style.css 0,5 Mo, leaflet, suncalc, jszip, manifest) ≈ 4,0 Mo ;
+  manifeste VAC (33 ko) et fichier FranceVacEtUlm.cup (< 1 ko).
+- Icônes : calculatrice 1254 × 1254 (2,13 Mo), recherche 1254 × 1254
+  (1,92 Mo), centrage GPS 1254 × 1254 (1,26 Mo), BLOC / FUEL 512 × 512
+  (0,27 Mo), affichées en 78 à 88 points.
+
+MODIFICATIONS
+- sw.js : la règle v17.47 (un seul rafraîchissement par nouvelle version du
+  SW, repère `__npf-data-refresh/` dans npf-q400-test-app-data-v1) s'applique
+  à TOUS les fichiers statiques de APP_DATA_CACHE : communes, alias,
+  contours (locaux et etalab), lignes HT, localités, icônes et images. Le
+  repère porte maintenant le chemin complet (ou l'hôte + chemin pour etalab).
+  Téléchargement normal si un fichier manque.
+- Icônes calculatrice, recherche, centrage GPS et BLOC / FUEL réduites à
+  256 × 256 dans Chrome (réduction par moitiés, qualité haute, transparence
+  gardée), même nom de fichier.
+- Laissés tels quels, car ces données évoluent réellement : NOTAM, SIA
+  (sia.js, cache SIA à part), VAC (dépôt NPF-Q400-VAC, réseau pur), FdS et
+  GAAR (NAS), GLR (NAS), SafeSky et trafic (réseau pur), tuiles en ligne,
+  fichiers de l'app (index, script, style, leaflet, manifest, sw.js : mises
+  à jour de l'app).
+- Icônes icon-512 (0,48 Mo) et maskable-512 (0,35 Mo) gardées : icônes de
+  l'écran d'accueil, 512 × 512 est la taille demandée par iOS / le manifest.
+- Code de la page (src/) : seulement les numéros de version.
+
+TESTS CHROME (iPad simulé 1080 × 810, ×2)
+- Téléchargé à chaque relance avec réseau : v17.47 ≈ 4,0 Mo + 12 vérifications
+  de fichiers statiques ; v17.48 ≈ 4,0 Mo (fichiers de l'app seulement), 0
+  vérification de fichier statique (3 lancements).
+- Passage v17.47 -> v17.48 : au 1er lancement, chaque fichier statique est
+  vérifié une fois (les 4 icônes modifiées retéléchargées, 0,46 Mo) ; aux
+  lancements suivants, plus rien.
+- Première installation sur cache vide : HT, localités, communes, alias,
+  communes-500m, icônes et images de lancement en cache TEST.
+- Boutons : captures identiques à v17.47 (écart moyen 1 sur 255, 0,13 % des
+  points au-delà de 40 : lissage des bords), nets ; calculatrice, recherche
+  et centrage GPS fonctionnent.
+- HT (4 tracés, signature identique), départements (101), communes (35 014
+  contours, 76 noms à 2 NM), commune survolée « Marseille (13) », localité
+  « Le Brusc », feu « Amareins » : identiques à v17.47, avec et sans réseau.
+
+NON-RÉGRESSION v17.48 CONTRE v17.47 (Chrome)
+- FdS / GAAR (src/170:140, 943, 978) : OK.
+- GLR (src/180:1415, 1555, 1573) : OK.
+- SafeSky mémorisé (src/030:695, src/140:3765), trafic rafraîchi : OK.
+- HT et Routes (Cartes NPF-Q400 et carte en ligne seulement ; grisés sur
+  OACI / IGN), tracé HT identique avec et sans réseau : OK.
+- Localités, contours, commune survolée, avec et sans réseau : OK.
+- Points VFR sur OACI à 2 NM (src/340:1983) : OK.
+- NOTAM, SIA, VAC : chemins réseau inchangés (manifeste VAC demandé à chaque
+  lancement) : OK.
+- Cartes (import, libellés, sélection, suppression) : OK.
+- Recherche d'un feu par nom et ancien nom, historique des feux : OK.
+- Boutons calculatrice, recherche, centrage GPS : OK.
+- Fenêtre des terrains, écran de démarrage, export DIAG : OK.
+- Service worker : caches npf-q400-test-* seulement ; première installation ;
+  téléchargements comptés sur 3 lancements : OK.
+Aucune exception JavaScript dans les deux versions.
+
+RETOUR ARRIÈRE
+- Revenir au commit eb2744f (v17.47) : au lancement suivant avec réseau, les
+  anciennes icônes (5,6 Mo) sont retéléchargées une fois ; les fichiers
+  statiques sont de nouveau vérifiés à chaque lancement (sauf communes).
+  Aucune donnée du pilote n'est touchée.
+
+FICHIERS MODIFIÉS
+sw.js ; icons/calculator-fms-icon.png, icons/search-commune-icon.png,
+icons/center-gps-icon.png, icons/bloc-fuel-shortcut-icon.png ; index.html,
+manifest.json, style.css, src/010 et script.js (numéros de version).
+sia.js et tout le reste de src/ : identiques à v17.47.
+
+VERSION
+- App : v17.48
+- Service Worker : `sw-v17-48_fichiers_statiques_icones`
+
+STATUT : À MESURER sur iPad.
+
 
 VERSION TEST v17.47 — STOCKAGE LOCAL LIBÉRÉ (COMMUNES) ; FICHIERS DES
 COMMUNES GARDÉS HORS LIGNE ; IMAGE DE LANCEMENT SOMBRE

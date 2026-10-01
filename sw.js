@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v17-47_communes_stockage_lancement';
-const APP_VERSION = 'v17.47';
+const SW_VERSION = 'sw-v17-48_fichiers_statiques_icones';
+const APP_VERSION = 'v17.48';
 const SIA_DATA_REVISION = '15.69-radio1026-1-maplite1';
 const SIA_DATA_URL = './sia.js';
 /*
@@ -934,20 +934,22 @@ async function handleSiaDataRequest(request) {
  * lancement. Servis depuis le cache TEST ; un seul rafraîchissement par
  * nouvelle version du service worker (repère `__npf-data-refresh/<fichier>`
  * dans le cache TEST contenant SW_VERSION), ou téléchargement s'ils manquent.
+ *
+ * v17.48 — même règle pour TOUS les fichiers statiques de APP_DATA_CACHE
+ * (isAppDataRequest) : communes, alias, contours (locaux et etalab), lignes HT,
+ * localités, icônes et images de l'app. Le repère porte l'hôte + le chemin
+ * du fichier (sans paramètres). NOTAM, SIA, VAC, FdS, GAAR, GLR, SafeSky,
+ * tuiles et fichiers de l'app (index, script, style...) : inchangés.
  */
-const NPF_DATA_FILES_REFRESHED_ONCE_PER_VERSION = new Set([
-    'communes.json',
-    'communes_aliases.json',
-    'communes-500m.geojson'
-]);
 const NPF_DATA_REFRESH_MARK_PREFIX = './__npf-data-refresh/';
 
 function getNpfDataRefreshOnceFilename(request) {
     try {
         const parsed = new URL(request.url);
-        if (parsed.origin !== self.location.origin) return '';
-        const filename = parsed.pathname.split('/').pop() || '';
-        return NPF_DATA_FILES_REFRESHED_ONCE_PER_VERSION.has(filename) ? filename : '';
+        const key = parsed.origin === self.location.origin
+            ? parsed.pathname
+            : parsed.hostname + parsed.pathname;
+        return key ? encodeURIComponent(key) : '';
     } catch (_) {
         return '';
     }
@@ -1000,7 +1002,7 @@ async function handleAppDataRequest(request) {
             }
         } catch (_) {}
 
-        /* v17.47 — fichiers communes : un seul rafraîchissement par version. */
+        /* v17.47 / v17.48 — fichiers statiques : un seul rafraîchissement par version. */
         if (refreshOnceFilename) {
             let markVersion = '';
             try {
