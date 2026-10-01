@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 01/10/2026
-Version de travail actuelle : TEST v17.49
+Version de travail actuelle : TEST v17.50
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,11 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.50 — reprise après geste étalée (une tâche par image, arrêtée si un
+  doigt se pose) ; pose des PÉLIC et terrains proches de la vue étalée (40
+  par image, jamais doigt posé) ; DIAG : reprise et pose suivies, ligne
+  « VRP sur la carte ». C4 (VRP proches de la vue) mesuré sans gain net :
+  NON IMPLÉMENTÉ ;
 - v17.49 — gestes plus fluides : seuls les PÉLIC et terrains proches de la
   vue (vue + demi-vue) sont posés sur la carte (PÉLIC sélectionné, BASE et
   terrain à fenêtre ouverte toujours posés) ; pendant un geste et 0,8 s après,
@@ -406,7 +411,13 @@ NON IMPLÉMENTÉ / OUVERT :
   (« ANALYSE DIAG v17.32 SOL + VOL ») : 5 défauts du DIAG lui-même relevés
   (D1 à D5) et 9 recommandations classées gain / risque (R1 à R9), aucune
   implémentée. Historique : À MESURER -> MESURÉ ;
-- v17.49 : À MESURER sur iPad (saccades et retard pendant les gestes, lignes
+- v17.50 : À MESURER sur iPad (glisser courts rapprochés qui ne démarraient
+  pas ; pincer ; même scénario avec et sans VRP). Si pas d'amélioration :
+  retour possible en v17.48 (2043673), À DÉCIDER ;
+- v17.49 : retour pilote 01/10 après-midi : glisser à reprendre 2-3 fois,
+  pincer « moyen » ; analyse : blocages de l'iPad au moment du doigt (reprise
+  P2 groupée prouvée à 17:51:23, pose des marqueurs P1 probable) -> v17.50.
+  Ancien statut : À MESURER sur iPad (saccades et retard pendant les gestes, lignes
   DIAG « Marqueurs PÉLIC et terrains » et « Images par seconde pendant les
   gestes »). P3 (index SIA) et P4 (marge des canvas) : NON IMPLÉMENTÉ, à
   décider après mesure de v17.49 ;
@@ -498,44 +509,44 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.49
+Version : TEST v17.50
 Date : 01/10/2026
-Base : v17.48 (commitée 2043673, À MESURER)
+Base : v17.49 (commitée 334a5a8, À MESURER)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.49.txt
-2_Index_v17.49.txt
-3_Manifest_v17.49.txt
-4_Script_v17.49.txt
-5_SIA_v17.49.txt
-6_Style_v17.49.txt
-7_Sw_v17.49.txt
+1_Modifications_v17.50.txt
+2_Index_v17.50.txt
+3_Manifest_v17.50.txt
+4_Script_v17.50.txt
+5_SIA_v17.50.txt
+6_Style_v17.50.txt
+7_Sw_v17.50.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.49 (et texte « TEST v17.49 » de l'écran de
+- Index : APP_VERSION = v17.50 (et texte « TEST v17.50 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.49
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.49
-- Style : NPF_STYLE_BUILD_VERSION = v17.49
-- Service Worker : `sw-v17-49_gestes_pelic_vue_pause` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-49_gestes_pelic_vue_pause`, `npf-q400-test-app-data-v1`,
+- Manifest : start_url = ./index.html?appv=v17.50
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.50
+- Style : NPF_STYLE_BUILD_VERSION = v17.50
+- Service Worker : `sw-v17-50_reprise_etalee_marqueurs` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-50_reprise_etalee_marqueurs`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-15.69-radio1026-1-maplite1`
 - SIA_DATA_REVISION (SW / Index) : 15.69-radio1026-1-maplite1 (inchangée)
-- sia.js v17.49 : strictement identique à v17.48.
+- sia.js v17.50 : strictement identique à v17.49.
 - Images de lancement : icons/startup-ipad9-portrait.png (1620 × 2160) et
   icons/startup-ipad9-landscape.png (2160 × 1620).
 - Icônes des boutons (v17.48) : calculator-fms-icon, search-commune-icon,
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.49 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.50 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
-- `sia.js` et moteur tuiles (src/100) identiques à v17.48 ;
-- tests Chrome v17.48 / v17.49 : entrée v17.49 ;
+- `sia.js` et moteur tuiles (src/100) identiques à v17.49 ;
+- tests Chrome v17.49 / v17.50 : entrée v17.50 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44 et v17.47 VALIDÉES ; v17.29, v17.31, v17.33
-  à v17.43, v17.45, v17.46, v17.48 et v17.49 À MESURER.
+  à v17.43, v17.45, v17.46, v17.48, v17.49 et v17.50 À MESURER.
 
 
 2. PROTOCOLE DE TRAVAIL À RESPECTER
@@ -2057,6 +2068,149 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.50 — REPRISE APRÈS GESTE ÉTALÉE (C1) ; POSE DES MARQUEURS
+ÉTALÉE (C2) ; DIAG (C3) ; VRP PROCHES DE LA VUE (C4) NON RETENU
+Date : 01/10/2026
+Base fonctionnelle : v17.49 (commit 334a5a8)
+Décision pilote : C1 + C2 + C3 + C4 validés ; C4 mesuré sans gain net, donc
+non intégré (consigne : « si C4 n'apporte rien de net, ne l'inclus pas »).
+
+ÉTAT AVANT (DIAG iPad 01/10 17:52, v17.49)
+- Glisser à reprendre 2 ou 3 fois (17:51:07-09, 17:51:15, 17:51:43-45,
+  17:51:49) : chaque fois pendant un blocage de 0,4 à 1,3 s.
+- Prouvé à 17:51:23 : la reprise P2 groupée (0,8 s après le lever du doigt)
+  lance vecteur avion 469 ms + SafeSky 77 ms d'un coup, avec la restitution :
+  984 ms ; le pilote recommence à glisser en plein dedans.
+- Probable : pose des marqueurs P1 d'un bloc dans moveend / zoomend (non
+  suivie par le DIAG, d'où « en cours : — »), lourde surtout au dézoom.
+- Écouteurs tactiles v17.49 passifs, sans preventDefault : ne bloquent pas
+  la carte (code). Chrome : 0 glisser raté sur 320, toutes versions.
+
+RÉFÉRENCE AVANT CODAGE (comportements à conserver)
+- FdS / GAAR : src/170:140, 943, 978. GLR : src/180:1415, 1555.
+- SafeSky : src/030:695, src/140:3775. HT / Routes : src/110:1511.
+- Points VFR OACI 2 NM : src/340:1985 ; VRP : src/340:91 (réglage),
+  src/350:98 (zones de toucher).
+- Cartes : src/280:1400, 2474, 2942. Feux : src/100:2861, src/050:424.
+- Fenêtre des terrains : src/210:253, src/260:1085.
+- PÉLIC : src/220 drawPermanentAirportMarkers, src/210:309, src/260:154.
+- Calculateur : src/270:1316 (formules inchangées). Suivi : src/260:767.
+- Restitution : src/080:1207 (attend le lever du doigt depuis v17.49).
+
+MODIFICATIONS
+- C1 (src/260) : reprise après le geste + 0,8 s, une tâche par image (vecteur
+  avion, commune survolée, calculateur, SIA, SafeSky). Si un doigt se pose
+  pendant la reprise, le reste attend la fin du geste suivant. Une demande
+  plus récente du même type remplace l'ancienne : toujours la dernière
+  position, jamais de rafale. Aucune formule du calculateur touchée.
+- C2 (src/220) : gestionnaire « marqueurs proches de la vue » ; la pose des
+  PÉLIC et terrains n'est plus faite dans moveend / zoomend mais étalée par
+  paquets de 40 par image, jamais pendant qu'un doigt est posé ; d'abord ceux
+  dans la vue, puis les retraits, puis la marge. Toujours posés : PÉLIC
+  sélectionné, BASE, terrain dont la fenêtre est ouverte.
+- C3 (src/010, src/260, src/350) : reprise (runNpfMapGestureResumeStep) et
+  pose des marqueurs (processNpfAirportMarkerViewChunk) suivies par le DIAG ;
+  ligne d'en-tête « VRP sur la carte : N maintenant · maximum M ».
+- Sécurités ajoutées pendant les essais (src/260, src/220) :
+  1) doigt « resté posé » : un lever de doigt peut se perdre (PDF ouvert dans
+  un autre cadre, alerte, appli en arrière-plan). Sans événement tactile
+  depuis 3 s, ou si l'appli perd le premier plan, le doigt est considéré
+  levé ; sinon pose des marqueurs, reprise et restitution HT / Routes
+  attendraient sans fin (risque déjà présent en v17.49 pour la restitution) ;
+  2) image suivante ou 150 ms au plus : quand l'app est en arrière-plan (ex.
+  VAC ouverte dans un autre onglet), le navigateur suspend les images ; une
+  minuterie prend le relais pour la pose des marqueurs et la reprise.
+  Trouvé par la non-régression (fenêtre LFML : NOTAMS / Go To / Ajout WP
+  introuvables après le bouton VAC), corrigé et revérifié.
+- DIAG : l'étape « PÉLIC affichés » compte désormais 434 calques au lieu de
+  868 (les marqueurs sont posés quelques images après cette étape).
+- C4 : codé puis retiré. Avec zones SIA + HT + Routes, le SIA ne prépare déjà
+  que 4 % autour de la vue (25 % sinon) : les ~100 VRP sont réellement à
+  l'écran, la marge d'une demi-vue n'en retire aucun (128 = 128). Mesures sur
+  3 passages ×4 et ×6 : écarts dans le bruit. Statut : NON IMPLÉMENTÉ,
+  ABANDONNÉ sauf nouvelle preuve DIAG.
+
+MESURES CHROME (iPad simulé, simulation 300 kt + suivi, HT + Routes +
+SafeSky ON, SIA zones + VRP, 128 VRP à l'écran à 5 NM ; 16 glisser de 0,5 s
+espacés de 0,8 s, 6 pincer, 2 dézooms à 50 NM et retour ; médiane de 3
+passages pour v17.50, 1 passage pour v17.49)
+                                    images/s  saccades  pire       pire blocage
+                                              > 50 ms   blocage    après lever
+CPU ×4 glisser   v17.49              99        15        108 ms     108 ms
+                 v17.50 (C1+C2+C3)  101        15        140 ms      99 ms
+                 avec C4              98        17        164 ms     164 ms
+CPU ×4 pincer    v17.49              78        15        465 ms     465 ms
+                 v17.50             100         9         89 ms      63 ms
+                 avec C4             108         7         72 ms      50 ms
+CPU ×4 dézoom    v17.49              13        49        319 ms       0
+                 v17.50              11        57        304 ms       0
+                 avec C4              10        53        290 ms       0
+CPU ×6 glisser   v17.49              66        57        385 ms     385 ms
+                 v17.50             102        16        221 ms     221 ms
+                 avec C4              98        15        152 ms     104 ms
+CPU ×6 pincer    v17.49              56        55        307 ms     307 ms
+                 v17.50             104         7         79 ms      73 ms
+                 avec C4              93        10        108 ms      94 ms
+CPU ×6 dézoom    v17.49               6        50       1884 ms       0
+                 v17.50              11        57        502 ms       0
+                 avec C4              10        54        510 ms       0
+Glisser courts rapprochés (20 par cas, ×4 et ×6) : 0 raté en v17.50.
+
+CONTRÔLES FONCTIONNELS (Chrome, contre v17.49)
+- PÉLIC : 66 marqueurs à 10 NM, 7 à 1 NM, 434 sur la France ; terrain hors
+  marge posé après un long glisser ; PÉLIC sélectionné et BASE posés au loin ;
+  fenêtre ouverte gardée hors marge ; toucher, EAU/RETARDANT, Désactiver OK.
+- Doigt posé : 0 mise à jour ; 1,2 s après le lever : 1 seule par type, avec
+  la dernière position. Calculateur identique à v17.49.
+- Restitution : attend le lever du doigt puis se termine (HT affichées).
+- VRP : mêmes VRP dans la vue à 20, 10, 5, 2, 1 et 0,5 NM que v17.49 ; VRP
+  qui entre dans la vue après un long glisser ; toucher : même fenêtre.
+
+Mesure de contrôle sur la version finale (avec les 2 sécurités) : ×4
+glisser 103 images/s · 8 saccades · pire 109 ms · après lever 0 ; pincer
+110 · 4 · 0 · 0 ; ×6 glisser 105 · 11 · 113 · 113 ; pincer 112 · 4 · 104 ·
+104.
+
+NON-RÉGRESSION v17.50 CONTRE v17.49 (Chrome, NAS simulé)
+- FdS / GAAR (BFG sans question ; sinon mot de passe puis NAS) : OK.
+- GLR (code du jour, expiration minuit, OFF masque seulement) : OK.
+- SafeSky ON/OFF mémorisé, trafic rafraîchi : OK.
+- HT et Routes seulement sur les Cartes NPF-Q400 et la carte en ligne : OK.
+- Points VFR OACI à 2 NM ; VRP : mêmes VRP à chaque échelle, VRP qui entre
+  dans la vue après un long glisser, toucher (même fenêtre) : OK.
+- Cartes : import, sélection, suppression : OK.
+- Feux : recherche (nom, ancien nom) et historique : OK.
+- Fenêtre des terrains : boutons (dont VAC puis NOTAMS / Go To / Ajout WP),
+  glissement, fermeture au retour sur l'avion (10 s) : OK.
+- PÉLIC : affichage, toucher, PÉLIC sélectionné, BASE, EAU/RETARDANT,
+  Désactiver, terrain qui entre dans la vue : OK.
+- Calculateur : identique pour une même position : OK.
+- Suivi avion et recentrage (délai inchangé) : OK.
+- Restitution HT / Routes après le lever du doigt : OK.
+- Glisser courts rapprochés (20 par cas, ×4 et ×6) : 0 raté : OK.
+- Écran de démarrage, export DIAG (lignes Marqueurs, Images par seconde,
+  VRP) : OK.
+- Service worker : caches npf-q400-test-* seulement : OK.
+Aucune exception JavaScript, aucune erreur console.
+
+RETOUR ARRIÈRE
+- Revenir au commit 334a5a8 (v17.49) : reprise groupée et pose des marqueurs
+  d'un bloc (problème de glisser du 01/10). Revenir au commit 2043673 (v17.48)
+  : tous les marqueurs posés en permanence, travaux pendant les gestes. Aucune
+  donnée du pilote touchée.
+
+FICHIERS MODIFIÉS
+src/260, src/220, src/010, src/350 (1 ligne DIAG), donc script.js ;
+index.html, manifest.json, style.css, sw.js (numéros de version). sia.js,
+src/100, src/280, src/340 : identiques à v17.49.
+
+VERSION
+- App : v17.50
+- Service Worker : `sw-v17-50_reprise_etalee_marqueurs`
+
+STATUT : À MESURER sur iPad (même scénario avec et sans VRP).
+
 
 VERSION TEST v17.49 — GESTES PLUS FLUIDES : PÉLIC ET TERRAINS PROCHES DE LA
 VUE SEULEMENT (P1) ; PAUSE DES TRAVAUX PENDANT UN GESTE (P2)

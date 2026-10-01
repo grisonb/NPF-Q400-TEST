@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.49';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.50';
 
 
 /*
@@ -2544,6 +2544,11 @@ const NPF_DIAG_DETAIL = (() => {
         wrapGlobal('updateTrafficSmoothPositions', { noStartup: true, activityMinMs: 8 });
         wrapGlobal('refreshGlobalLinkPositions', { noStartup: true });
 
+        /* v17.50 — C3 : reprise après geste et pose des marqueurs PÉLIC /
+         * terrains proches de la vue, visibles dans « en cours » des blocages. */
+        wrapGlobal('runNpfMapGestureResumeStep', { noStartup: true });
+        wrapGlobal('processNpfAirportMarkerViewChunk', { noStartup: true, activityMinMs: 4 });
+
         wrapGlobal('initMap', { after: () => installMapHooks() });
 
         /* v17.41 — lectures du pack encore en cours après leur délai, et
@@ -3224,7 +3229,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.49 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.50 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -3763,6 +3768,7 @@ function appendNpfDiagLaunchStorageHeader(lines) {
     lines.push('Écritures localStorage refusées (cette session) : ' + formatNpfDiagRefusedWrites(launchLog.refusedWrites()));
     try { appendNpfDiagV1746HeaderLines(lines); } catch (_) {}
     try { appendNpfDiagV1749GestureLines(lines); } catch (_) {}
+    try { appendNpfDiagV1750VrpLine(lines); } catch (_) {}
     safe_npfDiagBannerHeader(lines);
     lines.push(
         'SafeSky (showTrafficLayer) relu au lancement : ' + JSON.stringify(current.safeSkyAtLaunch)

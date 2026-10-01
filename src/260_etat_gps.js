@@ -1237,6 +1237,9 @@ function getNpfMapGesturePauseState() {
             lastUpAt: 0,
             resumeTimer: null,
             pending: {},
+            resumeQueue: {},
+            resumeRaf: null,
+            lastInputAt: 0,
             gestureStartAt: 0,
             gestureMoved: false,
             frames: 0,
@@ -1247,33 +1250,102 @@ function getNpfMapGesturePauseState() {
     return window.__npfMapGesturePause;
 }
 
+/*
+ * v17.50 — sécurité : un lever de doigt peut se perdre (fenêtre PDF dans un
+ * cadre, alerte, appli en arrière-plan). Sans aucun événement tactile depuis
+ * 3 s, ou si l'appli perd le premier plan, le doigt est considéré levé ; sinon
+ * la pose des marqueurs, la reprise et la restitution attendraient sans fin.
+ */
+const NPF_MAP_FINGER_STALE_MS = 3000;
+
+function releaseNpfMapFingerState() {
+    const state = getNpfMapGesturePauseState();
+    if (!(state.touches > 0 || state.mouseDown)) return;
+    state.touches = 0;
+    state.mouseDown = false;
+    noteNpfMapGestureUp();
+}
+
 function isNpfMapFingerDown() {
     const state = getNpfMapGesturePauseState();
-    return state.touches > 0 || state.mouseDown;
+    if (!(state.touches > 0 || state.mouseDown)) return false;
+    if (Date.now() - (Number(state.lastInputAt) || 0) > NPF_MAP_FINGER_STALE_MS) {
+        releaseNpfMapFingerState();
+        return false;
+    }
+    return true;
 }
 
 function isNpfMapGesturePauseActive() {
     const state = getNpfMapGesturePauseState();
-    if (state.touches > 0 || state.mouseDown) return true;
+    if (isNpfMapFingerDown()) return true;
     return state.lastUpAt > 0 && (Date.now() - state.lastUpAt) < NPF_MAP_GESTURE_PAUSE_AFTER_MS;
 }
 
+/*
+ * v17.50 — C1 : reprise étalée. Après le geste + 0,8 s, une seule tâche par
+ * image (vecteur avion, commune survolée, calculateur, SIA, SafeSky). Si un
+ * doigt se pose pendant la reprise, le reste attend la fin du geste suivant.
+ * Pendant la reprise, une nouvelle demande du même type remplace l'ancienne
+ * dans la file : toujours la DERNIÈRE position, jamais de rattrapage.
+ */
+const NPF_MAP_GESTURE_RESUME_ORDER = ['vector', 'commune', 'calculator', 'sia', 'trafficResume', 'traffic'];
+
 function deferNpfWorkDuringMapGesture(key, work) {
+    const state = getNpfMapGesturePauseState();
+    if (state.resumeQueue && Object.keys(state.resumeQueue).length && !isNpfMapGesturePauseActive()) {
+        state.resumeQueue[key] = work || true;
+        return true;
+    }
     if (!isNpfMapGesturePauseActive()) return false;
-    getNpfMapGesturePauseState().pending[key] = work || true;
+    state.pending[key] = work || true;
     return true;
 }
 
 function flushNpfMapGesturePausedWork() {
     const state = getNpfMapGesturePauseState();
     if (isNpfMapGesturePauseActive()) return;
-    const pending = state.pending;
+    const queue = state.resumeQueue || {};
+    for (const [key, work] of Object.entries(state.pending)) queue[key] = work;
     state.pending = {};
-    for (const key of ['vector', 'commune', 'calculator', 'sia', 'trafficResume', 'traffic']) {
-        const work = pending[key];
-        if (typeof work !== 'function') continue;
-        if (key === 'traffic' && typeof pending.trafficResume === 'function') continue;
-        try { work(); } catch (error) { console.warn('Reprise après geste impossible:', key, error); }
+    state.resumeQueue = queue;
+    if (!state.resumeRaf && Object.keys(queue).length) {
+        state.resumeRaf = true;
+        npfNextFrame(() => {
+            state.resumeRaf = null;
+            runNpfMapGestureResumeStep();
+        });
+    }
+}
+
+/* Nom global : suivi par le DIAG (« en cours » des blocages). */
+function runNpfMapGestureResumeStep() {
+    const state = getNpfMapGesturePauseState();
+    const queue = state.resumeQueue || {};
+    if (isNpfMapGesturePauseActive()) {
+        /* Un doigt s'est posé : le reste attend la fin du geste suivant ;
+         * une demande plus récente du même type garde la priorité. */
+        for (const [key, work] of Object.entries(queue)) {
+            if (!(key in state.pending)) state.pending[key] = work;
+        }
+        state.resumeQueue = {};
+        return;
+    }
+    const key = NPF_MAP_GESTURE_RESUME_ORDER.find(name => name in queue);
+    if (key) {
+        const work = queue[key];
+        delete queue[key];
+        if (key === 'trafficResume') delete queue.traffic;
+        if (typeof work === 'function') {
+            try { work(); } catch (error) { console.warn('Reprise après geste impossible:', key, error); }
+        }
+    }
+    if (Object.keys(queue).length && !state.resumeRaf) {
+        state.resumeRaf = true;
+        npfNextFrame(() => {
+            state.resumeRaf = null;
+            runNpfMapGestureResumeStep();
+        });
     }
 }
 
@@ -1325,23 +1397,28 @@ function installNpfMapGesturePauseTracking() {
     window.__npfMapGesturePauseInstalled = true;
     const state = getNpfMapGesturePauseState();
     const container = map.getContainer();
+    const noteInput = () => { state.lastInputAt = Date.now(); };
     const onTouchStart = event => {
         const wasDown = isNpfMapFingerDown();
+        noteInput();
         state.touches = Math.max(1, event.touches ? event.touches.length : 1);
         if (!wasDown) noteNpfMapGestureDown();
     };
     const onTouchEnd = event => {
         /* Seuls les touchers commencés sur la carte comptent. */
         if (state.touches <= 0) return;
+        noteInput();
         state.touches = event.touches ? event.touches.length : 0;
         if (state.touches === 0) noteNpfMapGestureUp();
     };
     container.addEventListener('touchstart', onTouchStart, { capture: true, passive: true });
     window.addEventListener('touchend', onTouchEnd, { capture: true, passive: true });
     window.addEventListener('touchcancel', onTouchEnd, { capture: true, passive: true });
+    window.addEventListener('touchmove', noteInput, { capture: true, passive: true });
     container.addEventListener('pointerdown', event => {
         if (event.pointerType !== 'mouse') return;
         const wasDown = isNpfMapFingerDown();
+        noteInput();
         state.mouseDown = true;
         if (!wasDown) noteNpfMapGestureDown();
     }, { capture: true, passive: true });
@@ -1350,9 +1427,36 @@ function installNpfMapGesturePauseTracking() {
         state.mouseDown = false;
         noteNpfMapGestureUp();
     }, { capture: true, passive: true });
+    window.addEventListener('pointermove', event => {
+        if (event.pointerType !== 'mouse' || !state.mouseDown) return;
+        if (event.buttons === 0) releaseNpfMapFingerState();
+        else noteInput();
+    }, { capture: true, passive: true });
+    window.addEventListener('pointercancel', event => {
+        if (event.pointerType === 'mouse') releaseNpfMapFingerState();
+    }, { capture: true, passive: true });
+    window.addEventListener('blur', () => releaseNpfMapFingerState());
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') releaseNpfMapFingerState();
+    });
     map.on('movestart zoomstart', () => {
         if (isNpfMapFingerDown()) state.gestureMoved = true;
     });
+}
+
+/* v17.50 — C3 : nombre de VRP posés sur la carte (dernier et maximum, relevé
+ * à chaque export et à chaque fin de rafraîchissement SIA). */
+function noteNpfDiagVrpCount() {
+    const count = document.querySelectorAll('.sia-vrp-div-icon').length;
+    const stats = window.__npfDiagVrpStats || (window.__npfDiagVrpStats = { last: 0, max: 0 });
+    stats.last = count;
+    stats.max = Math.max(stats.max, count);
+    return stats;
+}
+
+function appendNpfDiagV1750VrpLine(lines) {
+    const stats = noteNpfDiagVrpCount();
+    lines.push('VRP sur la carte : ' + stats.last + ' maintenant · maximum ' + stats.max);
 }
 
 function appendNpfDiagV1749GestureLines(lines) {

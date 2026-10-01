@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.49';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.50';
 
 
 /*
@@ -2544,6 +2544,11 @@ const NPF_DIAG_DETAIL = (() => {
         wrapGlobal('updateTrafficSmoothPositions', { noStartup: true, activityMinMs: 8 });
         wrapGlobal('refreshGlobalLinkPositions', { noStartup: true });
 
+        /* v17.50 — C3 : reprise après geste et pose des marqueurs PÉLIC /
+         * terrains proches de la vue, visibles dans « en cours » des blocages. */
+        wrapGlobal('runNpfMapGestureResumeStep', { noStartup: true });
+        wrapGlobal('processNpfAirportMarkerViewChunk', { noStartup: true, activityMinMs: 4 });
+
         wrapGlobal('initMap', { after: () => installMapHooks() });
 
         /* v17.41 — lectures du pack encore en cours après leur délai, et
@@ -3224,7 +3229,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.49 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.50 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -3763,6 +3768,7 @@ function appendNpfDiagLaunchStorageHeader(lines) {
     lines.push('Écritures localStorage refusées (cette session) : ' + formatNpfDiagRefusedWrites(launchLog.refusedWrites()));
     try { appendNpfDiagV1746HeaderLines(lines); } catch (_) {}
     try { appendNpfDiagV1749GestureLines(lines); } catch (_) {}
+    try { appendNpfDiagV1750VrpLine(lines); } catch (_) {}
     safe_npfDiagBannerHeader(lines);
     lines.push(
         'SafeSky (showTrafficLayer) relu au lancement : ' + JSON.stringify(current.safeSkyAtLaunch)
@@ -38311,20 +38317,171 @@ function scheduleAirportOperationalLabelsRefresh(delay = 120) {
  * la fenêtre est ouverte. Les zones de toucher (hitbox) restent toutes en place.
  */
 const NPF_AIRPORT_MARKER_VIEW_PAD_RATIO = 0.5;
-let npfAirportViewMarkerEntries = [];
+
+/*
+ * v17.50 — C2 : gestionnaire commun « marqueurs proches de la vue » (PÉLIC et
+ * terrains ici, VRP en src/350). Le recalcul n'est plus fait d'un bloc dans
+ * moveend / zoomend : il est étalé par paquets de 40 marqueurs par image, et
+ * il attend tant qu'un doigt est posé sur la carte. Les marqueurs dans la vue
+ * sont posés en premier, puis les retraits, puis la marge.
+ */
+const NPF_VIEW_WINDOW_BATCH_SIZE = 40;
+
+/* Prochaine image, ou au plus tard 150 ms (onglet en arrière-plan : le
+ * navigateur suspend requestAnimationFrame, ex. PDF VAC ouvert ailleurs). */
+function npfNextFrame(callback) {
+    let done = false;
+    const run = () => {
+        if (done) return;
+        done = true;
+        callback();
+    };
+    requestAnimationFrame(run);
+    setTimeout(run, 150);
+}
+
+function createNpfViewWindowManager(name, options) {
+    return {
+        name,
+        entries: [],
+        generation: 0,
+        job: null,
+        rafPending: false,
+        stats: options.stats || { present: 0, max: 0, total: 0 },
+        getLayer: options.getLayer,
+        isAlwaysShown: options.isAlwaysShown,
+        step: options.step
+    };
+}
+
+function resetNpfViewWindow(manager) {
+    manager.entries = [];
+    manager.generation += 1;
+    manager.job = null;
+    manager.stats.present = 0;
+    manager.stats.total = 0;
+}
+
+function registerNpfViewWindowMarker(manager, marker, lat, lng, key) {
+    manager.entries.push({
+        marker,
+        lat: Number(lat),
+        lng: Number(lng),
+        key,
+        layer: manager.getLayer(),
+        onMap: false
+    });
+    manager.stats.total = manager.entries.length;
+    return marker;
+}
+
+function scheduleNpfViewWindow(manager) {
+    manager.generation += 1;
+    manager.job = { generation: manager.generation, changes: null, index: 0 };
+    if (manager.rafPending) return;
+    manager.rafPending = true;
+    npfNextFrame(() => {
+        manager.rafPending = false;
+        manager.step();
+    });
+}
+
+function runNpfViewWindowStep(manager) {
+    const job = manager.job;
+    if (!job || job.generation !== manager.generation || !map) return;
+    const layer = manager.getLayer();
+    const again = () => {
+        if (manager.rafPending) return;
+        manager.rafPending = true;
+        npfNextFrame(() => {
+            manager.rafPending = false;
+            manager.step();
+        });
+    };
+    /* Jamais pendant qu'un doigt est posé sur la carte. */
+    if (typeof isNpfMapFingerDown === 'function' && isNpfMapFingerDown()) {
+        again();
+        return;
+    }
+    if (!job.changes) {
+        let bounds = null;
+        let view = null;
+        try {
+            view = map.getBounds();
+            bounds = view.pad(NPF_AIRPORT_MARKER_VIEW_PAD_RATIO);
+        } catch (_) {}
+        const addsInView = [];
+        const removals = [];
+        const addsInMargin = [];
+        for (const entry of manager.entries) {
+            if (entry.layer !== layer) continue;
+            const wanted = !bounds
+                || !Number.isFinite(entry.lat)
+                || !Number.isFinite(entry.lng)
+                || manager.isAlwaysShown(entry)
+                || bounds.contains([entry.lat, entry.lng]);
+            if (wanted && !entry.onMap) {
+                (view && view.contains([entry.lat, entry.lng]) ? addsInView : addsInMargin).push(entry);
+            } else if (!wanted && entry.onMap) {
+                removals.push(entry);
+            }
+        }
+        job.changes = [
+            ...addsInView.map(entry => [entry, true]),
+            ...removals.map(entry => [entry, false]),
+            ...addsInMargin.map(entry => [entry, true])
+        ];
+        job.index = 0;
+    }
+    let done = 0;
+    while (job.index < job.changes.length && done < NPF_VIEW_WINDOW_BATCH_SIZE) {
+        const [entry, wanted] = job.changes[job.index++];
+        if (!layer || entry.layer !== layer) continue;
+        if (wanted && !entry.onMap) {
+            layer.addLayer(entry.marker);
+            entry.onMap = true;
+        } else if (!wanted && entry.onMap) {
+            layer.removeLayer(entry.marker);
+            entry.onMap = false;
+        }
+        done += 1;
+    }
+    if (job.index < job.changes.length) {
+        again();
+        return;
+    }
+    manager.job = null;
+    let present = 0;
+    for (const entry of manager.entries) if (entry.onMap && entry.layer === layer) present += 1;
+    manager.stats.present = present;
+    manager.stats.total = manager.entries.length;
+    manager.stats.max = Math.max(manager.stats.max, present);
+}
+
 let npfAirportViewMarkerStats = { present: 0, max: 0, total: 0 };
+const npfAirportViewWindow = createNpfViewWindowManager('pelic', {
+    stats: npfAirportViewMarkerStats,
+    getLayer: () => permanentAirportLayer,
+    isAlwaysShown: entry => {
+        const key = entry.key;
+        return !!key && (
+            key === selectedPelicanOACI
+            || key === selectedBaseOACI
+            || key === getNpfOpenAirportPopupOaci()
+        );
+    },
+    step: () => processNpfAirportMarkerViewChunk()
+});
+
+/* Nom global : suivi par le DIAG (« en cours » des blocages). */
+function processNpfAirportMarkerViewChunk() {
+    runNpfViewWindowStep(npfAirportViewWindow);
+}
 
 function registerNpfAirportViewMarker(marker, airport) {
     if (!marker || !airport) return marker;
     marker._npfAirportOaci = airport.oaci;
-    npfAirportViewMarkerEntries.push({
-        marker,
-        lat: Number(airport.lat),
-        lng: Number(airport.lon),
-        oaci: airport.oaci,
-        onMap: false
-    });
-    return marker;
+    return registerNpfViewWindowMarker(npfAirportViewWindow, marker, airport.lat, airport.lon, airport.oaci);
 }
 
 function getNpfOpenAirportPopupOaci() {
@@ -38339,37 +38496,12 @@ function getNpfOpenAirportPopupOaci() {
 
 function applyNpfAirportMarkerViewWindow() {
     if (!map || !permanentAirportLayer) return;
-    let bounds = null;
-    try { bounds = map.getBounds().pad(NPF_AIRPORT_MARKER_VIEW_PAD_RATIO); } catch (_) { bounds = null; }
-    const alwaysShown = new Set([
-        selectedPelicanOACI,
-        selectedBaseOACI,
-        getNpfOpenAirportPopupOaci()
-    ].filter(Boolean));
-    let present = 0;
-    for (const entry of npfAirportViewMarkerEntries) {
-        const wanted = !bounds
-            || alwaysShown.has(entry.oaci)
-            || !Number.isFinite(entry.lat)
-            || !Number.isFinite(entry.lng)
-            || bounds.contains([entry.lat, entry.lng]);
-        if (wanted && !entry.onMap) {
-            permanentAirportLayer.addLayer(entry.marker);
-            entry.onMap = true;
-        } else if (!wanted && entry.onMap) {
-            permanentAirportLayer.removeLayer(entry.marker);
-            entry.onMap = false;
-        }
-        if (entry.onMap) present += 1;
-    }
-    npfAirportViewMarkerStats.present = present;
-    npfAirportViewMarkerStats.total = npfAirportViewMarkerEntries.length;
-    npfAirportViewMarkerStats.max = Math.max(npfAirportViewMarkerStats.max, present);
+    scheduleNpfViewWindow(npfAirportViewWindow);
 }
 
 function drawPermanentAirportMarkers() {
     permanentAirportLayer.clearLayers();
-    npfAirportViewMarkerEntries = [];
+    resetNpfViewWindow(npfAirportViewWindow);
 
     /*
      * v14.76 — retour au rendu de la v14.74 pour les aérodromes :
@@ -40716,6 +40848,9 @@ function getNpfMapGesturePauseState() {
             lastUpAt: 0,
             resumeTimer: null,
             pending: {},
+            resumeQueue: {},
+            resumeRaf: null,
+            lastInputAt: 0,
             gestureStartAt: 0,
             gestureMoved: false,
             frames: 0,
@@ -40726,33 +40861,102 @@ function getNpfMapGesturePauseState() {
     return window.__npfMapGesturePause;
 }
 
+/*
+ * v17.50 — sécurité : un lever de doigt peut se perdre (fenêtre PDF dans un
+ * cadre, alerte, appli en arrière-plan). Sans aucun événement tactile depuis
+ * 3 s, ou si l'appli perd le premier plan, le doigt est considéré levé ; sinon
+ * la pose des marqueurs, la reprise et la restitution attendraient sans fin.
+ */
+const NPF_MAP_FINGER_STALE_MS = 3000;
+
+function releaseNpfMapFingerState() {
+    const state = getNpfMapGesturePauseState();
+    if (!(state.touches > 0 || state.mouseDown)) return;
+    state.touches = 0;
+    state.mouseDown = false;
+    noteNpfMapGestureUp();
+}
+
 function isNpfMapFingerDown() {
     const state = getNpfMapGesturePauseState();
-    return state.touches > 0 || state.mouseDown;
+    if (!(state.touches > 0 || state.mouseDown)) return false;
+    if (Date.now() - (Number(state.lastInputAt) || 0) > NPF_MAP_FINGER_STALE_MS) {
+        releaseNpfMapFingerState();
+        return false;
+    }
+    return true;
 }
 
 function isNpfMapGesturePauseActive() {
     const state = getNpfMapGesturePauseState();
-    if (state.touches > 0 || state.mouseDown) return true;
+    if (isNpfMapFingerDown()) return true;
     return state.lastUpAt > 0 && (Date.now() - state.lastUpAt) < NPF_MAP_GESTURE_PAUSE_AFTER_MS;
 }
 
+/*
+ * v17.50 — C1 : reprise étalée. Après le geste + 0,8 s, une seule tâche par
+ * image (vecteur avion, commune survolée, calculateur, SIA, SafeSky). Si un
+ * doigt se pose pendant la reprise, le reste attend la fin du geste suivant.
+ * Pendant la reprise, une nouvelle demande du même type remplace l'ancienne
+ * dans la file : toujours la DERNIÈRE position, jamais de rattrapage.
+ */
+const NPF_MAP_GESTURE_RESUME_ORDER = ['vector', 'commune', 'calculator', 'sia', 'trafficResume', 'traffic'];
+
 function deferNpfWorkDuringMapGesture(key, work) {
+    const state = getNpfMapGesturePauseState();
+    if (state.resumeQueue && Object.keys(state.resumeQueue).length && !isNpfMapGesturePauseActive()) {
+        state.resumeQueue[key] = work || true;
+        return true;
+    }
     if (!isNpfMapGesturePauseActive()) return false;
-    getNpfMapGesturePauseState().pending[key] = work || true;
+    state.pending[key] = work || true;
     return true;
 }
 
 function flushNpfMapGesturePausedWork() {
     const state = getNpfMapGesturePauseState();
     if (isNpfMapGesturePauseActive()) return;
-    const pending = state.pending;
+    const queue = state.resumeQueue || {};
+    for (const [key, work] of Object.entries(state.pending)) queue[key] = work;
     state.pending = {};
-    for (const key of ['vector', 'commune', 'calculator', 'sia', 'trafficResume', 'traffic']) {
-        const work = pending[key];
-        if (typeof work !== 'function') continue;
-        if (key === 'traffic' && typeof pending.trafficResume === 'function') continue;
-        try { work(); } catch (error) { console.warn('Reprise après geste impossible:', key, error); }
+    state.resumeQueue = queue;
+    if (!state.resumeRaf && Object.keys(queue).length) {
+        state.resumeRaf = true;
+        npfNextFrame(() => {
+            state.resumeRaf = null;
+            runNpfMapGestureResumeStep();
+        });
+    }
+}
+
+/* Nom global : suivi par le DIAG (« en cours » des blocages). */
+function runNpfMapGestureResumeStep() {
+    const state = getNpfMapGesturePauseState();
+    const queue = state.resumeQueue || {};
+    if (isNpfMapGesturePauseActive()) {
+        /* Un doigt s'est posé : le reste attend la fin du geste suivant ;
+         * une demande plus récente du même type garde la priorité. */
+        for (const [key, work] of Object.entries(queue)) {
+            if (!(key in state.pending)) state.pending[key] = work;
+        }
+        state.resumeQueue = {};
+        return;
+    }
+    const key = NPF_MAP_GESTURE_RESUME_ORDER.find(name => name in queue);
+    if (key) {
+        const work = queue[key];
+        delete queue[key];
+        if (key === 'trafficResume') delete queue.traffic;
+        if (typeof work === 'function') {
+            try { work(); } catch (error) { console.warn('Reprise après geste impossible:', key, error); }
+        }
+    }
+    if (Object.keys(queue).length && !state.resumeRaf) {
+        state.resumeRaf = true;
+        npfNextFrame(() => {
+            state.resumeRaf = null;
+            runNpfMapGestureResumeStep();
+        });
     }
 }
 
@@ -40804,23 +41008,28 @@ function installNpfMapGesturePauseTracking() {
     window.__npfMapGesturePauseInstalled = true;
     const state = getNpfMapGesturePauseState();
     const container = map.getContainer();
+    const noteInput = () => { state.lastInputAt = Date.now(); };
     const onTouchStart = event => {
         const wasDown = isNpfMapFingerDown();
+        noteInput();
         state.touches = Math.max(1, event.touches ? event.touches.length : 1);
         if (!wasDown) noteNpfMapGestureDown();
     };
     const onTouchEnd = event => {
         /* Seuls les touchers commencés sur la carte comptent. */
         if (state.touches <= 0) return;
+        noteInput();
         state.touches = event.touches ? event.touches.length : 0;
         if (state.touches === 0) noteNpfMapGestureUp();
     };
     container.addEventListener('touchstart', onTouchStart, { capture: true, passive: true });
     window.addEventListener('touchend', onTouchEnd, { capture: true, passive: true });
     window.addEventListener('touchcancel', onTouchEnd, { capture: true, passive: true });
+    window.addEventListener('touchmove', noteInput, { capture: true, passive: true });
     container.addEventListener('pointerdown', event => {
         if (event.pointerType !== 'mouse') return;
         const wasDown = isNpfMapFingerDown();
+        noteInput();
         state.mouseDown = true;
         if (!wasDown) noteNpfMapGestureDown();
     }, { capture: true, passive: true });
@@ -40829,9 +41038,36 @@ function installNpfMapGesturePauseTracking() {
         state.mouseDown = false;
         noteNpfMapGestureUp();
     }, { capture: true, passive: true });
+    window.addEventListener('pointermove', event => {
+        if (event.pointerType !== 'mouse' || !state.mouseDown) return;
+        if (event.buttons === 0) releaseNpfMapFingerState();
+        else noteInput();
+    }, { capture: true, passive: true });
+    window.addEventListener('pointercancel', event => {
+        if (event.pointerType === 'mouse') releaseNpfMapFingerState();
+    }, { capture: true, passive: true });
+    window.addEventListener('blur', () => releaseNpfMapFingerState());
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') releaseNpfMapFingerState();
+    });
     map.on('movestart zoomstart', () => {
         if (isNpfMapFingerDown()) state.gestureMoved = true;
     });
+}
+
+/* v17.50 — C3 : nombre de VRP posés sur la carte (dernier et maximum, relevé
+ * à chaque export et à chaque fin de rafraîchissement SIA). */
+function noteNpfDiagVrpCount() {
+    const count = document.querySelectorAll('.sia-vrp-div-icon').length;
+    const stats = window.__npfDiagVrpStats || (window.__npfDiagVrpStats = { last: 0, max: 0 });
+    stats.last = count;
+    stats.max = Math.max(stats.max, count);
+    return stats;
+}
+
+function appendNpfDiagV1750VrpLine(lines) {
+    const stats = noteNpfDiagVrpCount();
+    lines.push('VRP sur la carte : ' + stats.last + ' maintenant · maximum ' + stats.max);
 }
 
 function appendNpfDiagV1749GestureLines(lines) {
@@ -60298,6 +60534,9 @@ async function refreshSiaLayers(reason = 'manual') {
                 totalLayers: Number(siaLayerGroup?.getLayers?.().length || 0)
             }
         );
+
+        /* v17.50 — DIAG : nombre de VRP posés (ligne d'en-tête). */
+        setTimeout(() => { try { noteNpfDiagVrpCount(); } catch (_) {} }, 0);
 
         /* v16.66 — contours/points sont maintenant engagés ; bandes
          * intérieures et libellés suivent au repos, sans retarder ce commit. */

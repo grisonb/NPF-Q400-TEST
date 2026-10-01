@@ -3180,6 +3180,9 @@ async function refreshSiaLayers(reason = 'manual') {
             }
         );
 
+        /* v17.50 — DIAG : nombre de VRP posés (ligne d'en-tête). */
+        setTimeout(() => { try { noteNpfDiagVrpCount(); } catch (_) {} }, 0);
+
         /* v16.66 — contours/points sont maintenant engagés ; bandes
          * intérieures et libellés suivent au repos, sans retarder ce commit. */
         if (siaMapAirspacesVisible && visibleAirspaceFeatures.length) {

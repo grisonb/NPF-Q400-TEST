@@ -877,20 +877,171 @@ function scheduleAirportOperationalLabelsRefresh(delay = 120) {
  * la fenêtre est ouverte. Les zones de toucher (hitbox) restent toutes en place.
  */
 const NPF_AIRPORT_MARKER_VIEW_PAD_RATIO = 0.5;
-let npfAirportViewMarkerEntries = [];
+
+/*
+ * v17.50 — C2 : gestionnaire commun « marqueurs proches de la vue » (PÉLIC et
+ * terrains ici, VRP en src/350). Le recalcul n'est plus fait d'un bloc dans
+ * moveend / zoomend : il est étalé par paquets de 40 marqueurs par image, et
+ * il attend tant qu'un doigt est posé sur la carte. Les marqueurs dans la vue
+ * sont posés en premier, puis les retraits, puis la marge.
+ */
+const NPF_VIEW_WINDOW_BATCH_SIZE = 40;
+
+/* Prochaine image, ou au plus tard 150 ms (onglet en arrière-plan : le
+ * navigateur suspend requestAnimationFrame, ex. PDF VAC ouvert ailleurs). */
+function npfNextFrame(callback) {
+    let done = false;
+    const run = () => {
+        if (done) return;
+        done = true;
+        callback();
+    };
+    requestAnimationFrame(run);
+    setTimeout(run, 150);
+}
+
+function createNpfViewWindowManager(name, options) {
+    return {
+        name,
+        entries: [],
+        generation: 0,
+        job: null,
+        rafPending: false,
+        stats: options.stats || { present: 0, max: 0, total: 0 },
+        getLayer: options.getLayer,
+        isAlwaysShown: options.isAlwaysShown,
+        step: options.step
+    };
+}
+
+function resetNpfViewWindow(manager) {
+    manager.entries = [];
+    manager.generation += 1;
+    manager.job = null;
+    manager.stats.present = 0;
+    manager.stats.total = 0;
+}
+
+function registerNpfViewWindowMarker(manager, marker, lat, lng, key) {
+    manager.entries.push({
+        marker,
+        lat: Number(lat),
+        lng: Number(lng),
+        key,
+        layer: manager.getLayer(),
+        onMap: false
+    });
+    manager.stats.total = manager.entries.length;
+    return marker;
+}
+
+function scheduleNpfViewWindow(manager) {
+    manager.generation += 1;
+    manager.job = { generation: manager.generation, changes: null, index: 0 };
+    if (manager.rafPending) return;
+    manager.rafPending = true;
+    npfNextFrame(() => {
+        manager.rafPending = false;
+        manager.step();
+    });
+}
+
+function runNpfViewWindowStep(manager) {
+    const job = manager.job;
+    if (!job || job.generation !== manager.generation || !map) return;
+    const layer = manager.getLayer();
+    const again = () => {
+        if (manager.rafPending) return;
+        manager.rafPending = true;
+        npfNextFrame(() => {
+            manager.rafPending = false;
+            manager.step();
+        });
+    };
+    /* Jamais pendant qu'un doigt est posé sur la carte. */
+    if (typeof isNpfMapFingerDown === 'function' && isNpfMapFingerDown()) {
+        again();
+        return;
+    }
+    if (!job.changes) {
+        let bounds = null;
+        let view = null;
+        try {
+            view = map.getBounds();
+            bounds = view.pad(NPF_AIRPORT_MARKER_VIEW_PAD_RATIO);
+        } catch (_) {}
+        const addsInView = [];
+        const removals = [];
+        const addsInMargin = [];
+        for (const entry of manager.entries) {
+            if (entry.layer !== layer) continue;
+            const wanted = !bounds
+                || !Number.isFinite(entry.lat)
+                || !Number.isFinite(entry.lng)
+                || manager.isAlwaysShown(entry)
+                || bounds.contains([entry.lat, entry.lng]);
+            if (wanted && !entry.onMap) {
+                (view && view.contains([entry.lat, entry.lng]) ? addsInView : addsInMargin).push(entry);
+            } else if (!wanted && entry.onMap) {
+                removals.push(entry);
+            }
+        }
+        job.changes = [
+            ...addsInView.map(entry => [entry, true]),
+            ...removals.map(entry => [entry, false]),
+            ...addsInMargin.map(entry => [entry, true])
+        ];
+        job.index = 0;
+    }
+    let done = 0;
+    while (job.index < job.changes.length && done < NPF_VIEW_WINDOW_BATCH_SIZE) {
+        const [entry, wanted] = job.changes[job.index++];
+        if (!layer || entry.layer !== layer) continue;
+        if (wanted && !entry.onMap) {
+            layer.addLayer(entry.marker);
+            entry.onMap = true;
+        } else if (!wanted && entry.onMap) {
+            layer.removeLayer(entry.marker);
+            entry.onMap = false;
+        }
+        done += 1;
+    }
+    if (job.index < job.changes.length) {
+        again();
+        return;
+    }
+    manager.job = null;
+    let present = 0;
+    for (const entry of manager.entries) if (entry.onMap && entry.layer === layer) present += 1;
+    manager.stats.present = present;
+    manager.stats.total = manager.entries.length;
+    manager.stats.max = Math.max(manager.stats.max, present);
+}
+
 let npfAirportViewMarkerStats = { present: 0, max: 0, total: 0 };
+const npfAirportViewWindow = createNpfViewWindowManager('pelic', {
+    stats: npfAirportViewMarkerStats,
+    getLayer: () => permanentAirportLayer,
+    isAlwaysShown: entry => {
+        const key = entry.key;
+        return !!key && (
+            key === selectedPelicanOACI
+            || key === selectedBaseOACI
+            || key === getNpfOpenAirportPopupOaci()
+        );
+    },
+    step: () => processNpfAirportMarkerViewChunk()
+});
+
+/* Nom global : suivi par le DIAG (« en cours » des blocages). */
+function processNpfAirportMarkerViewChunk() {
+    runNpfViewWindowStep(npfAirportViewWindow);
+}
 
 function registerNpfAirportViewMarker(marker, airport) {
     if (!marker || !airport) return marker;
     marker._npfAirportOaci = airport.oaci;
-    npfAirportViewMarkerEntries.push({
-        marker,
-        lat: Number(airport.lat),
-        lng: Number(airport.lon),
-        oaci: airport.oaci,
-        onMap: false
-    });
-    return marker;
+    return registerNpfViewWindowMarker(npfAirportViewWindow, marker, airport.lat, airport.lon, airport.oaci);
 }
 
 function getNpfOpenAirportPopupOaci() {
@@ -905,37 +1056,12 @@ function getNpfOpenAirportPopupOaci() {
 
 function applyNpfAirportMarkerViewWindow() {
     if (!map || !permanentAirportLayer) return;
-    let bounds = null;
-    try { bounds = map.getBounds().pad(NPF_AIRPORT_MARKER_VIEW_PAD_RATIO); } catch (_) { bounds = null; }
-    const alwaysShown = new Set([
-        selectedPelicanOACI,
-        selectedBaseOACI,
-        getNpfOpenAirportPopupOaci()
-    ].filter(Boolean));
-    let present = 0;
-    for (const entry of npfAirportViewMarkerEntries) {
-        const wanted = !bounds
-            || alwaysShown.has(entry.oaci)
-            || !Number.isFinite(entry.lat)
-            || !Number.isFinite(entry.lng)
-            || bounds.contains([entry.lat, entry.lng]);
-        if (wanted && !entry.onMap) {
-            permanentAirportLayer.addLayer(entry.marker);
-            entry.onMap = true;
-        } else if (!wanted && entry.onMap) {
-            permanentAirportLayer.removeLayer(entry.marker);
-            entry.onMap = false;
-        }
-        if (entry.onMap) present += 1;
-    }
-    npfAirportViewMarkerStats.present = present;
-    npfAirportViewMarkerStats.total = npfAirportViewMarkerEntries.length;
-    npfAirportViewMarkerStats.max = Math.max(npfAirportViewMarkerStats.max, present);
+    scheduleNpfViewWindow(npfAirportViewWindow);
 }
 
 function drawPermanentAirportMarkers() {
     permanentAirportLayer.clearLayers();
-    npfAirportViewMarkerEntries = [];
+    resetNpfViewWindow(npfAirportViewWindow);
 
     /*
      * v14.76 — retour au rendu de la v14.74 pour les aérodromes :
