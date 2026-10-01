@@ -367,6 +367,7 @@ function addAirportTouchHitbox(airport, popupHtml) {
             hitbox.openPopup();
         } catch (_) {}
     });
+    hitbox._npfAirportOaci = airport.oaci;
     hitbox.addTo(permanentAirportLayer);
     try { if (hitbox.bringToFront) hitbox.bringToFront(); } catch (_) {}
     return hitbox;

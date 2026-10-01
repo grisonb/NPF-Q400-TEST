@@ -416,6 +416,14 @@ function initMap() {
         scheduleNpfPelicPopupReposition(event?.popup);
     });
 
+    /* v17.49 — pause des travaux pendant les gestes (voir src/260). */
+    installNpfMapGesturePauseTracking();
+
+    /* v17.49 — PÉLIC et terrains proches de la vue seulement (voir src/220). */
+    map.on('moveend zoomend popupopen', () => {
+        try { applyNpfAirportMarkerViewWindow(); } catch (_) {}
+    });
+
     if (!npfStartupCorePriorityActive) {
         drawPermanentAirportMarkers();
         drawFireHistoryMarkers();
@@ -612,10 +620,16 @@ function scheduleTrafficVisualResumeAfterMapInteraction(reason = 'map-end') {
     trafficVisualResumeTimer = setTimeout(() => {
         if (token !== trafficVisualMapSequenceToken) return;
         trafficVisualResumeTimer = null;
-        resumeTrafficVisualUpdates('map-interaction', {
-            redraw: true,
-            reason
-        });
+        /* v17.49 — redessin SafeSky repoussé à la fin de la pause du geste (0,8 s). */
+        const resume = () => {
+            if (token !== trafficVisualMapSequenceToken) return;
+            resumeTrafficVisualUpdates('map-interaction', {
+                redraw: true,
+                reason
+            });
+        };
+        if (deferNpfWorkDuringMapGesture('trafficResume', resume)) return;
+        resume();
     }, TRAFFIC_VISUAL_RESUME_AFTER_MAP_MS);
 }
 

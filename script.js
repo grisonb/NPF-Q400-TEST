@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.48';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.49';
 
 
 /*
@@ -3224,7 +3224,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.48 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.49 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -3762,6 +3762,7 @@ function appendNpfDiagLaunchStorageHeader(lines) {
     );
     lines.push('Écritures localStorage refusées (cette session) : ' + formatNpfDiagRefusedWrites(launchLog.refusedWrites()));
     try { appendNpfDiagV1746HeaderLines(lines); } catch (_) {}
+    try { appendNpfDiagV1749GestureLines(lines); } catch (_) {}
     safe_npfDiagBannerHeader(lines);
     lines.push(
         'SafeSky (showTrafficLayer) relu au lancement : ' + JSON.stringify(current.safeSkyAtLaunch)
@@ -12510,8 +12511,13 @@ function scheduleNpfMapOverlayPriorityRestore(reason = 'map-end') {
      * restitution, begin() créera une nouvelle séquence et invalidera l'ancienne
      * par son token, ce qui est le comportement voulu.
      */
-    npfMapOverlayPriorityRestoreTimer = setTimeout(() => {
+    const startRestore = () => {
         npfMapOverlayPriorityRestoreTimer = null;
+        /* v17.49 — tant qu'un doigt est posé sur la carte, la restitution attend. */
+        if (isNpfMapFingerDown()) {
+            npfMapOverlayPriorityRestoreTimer = setTimeout(startRestore, 100);
+            return;
+        }
         npfMapManualGestureLockActive = false;
 
         runNpfMapOverlayPriorityRestore(token, reason).catch(error => {
@@ -12527,7 +12533,8 @@ function scheduleNpfMapOverlayPriorityRestore(reason = 'map-end') {
                 resumeNpfHeavyOverlayRenderersWithoutRefresh('erreur restitution');
             }
         });
-    }, NPF_MAP_MANUAL_GESTURE_SETTLE_MS);
+    };
+    npfMapOverlayPriorityRestoreTimer = setTimeout(startRestore, NPF_MAP_MANUAL_GESTURE_SETTLE_MS);
 }
 
 /*
@@ -13170,6 +13177,14 @@ function initMap() {
         scheduleNpfPelicPopupReposition(event?.popup);
     });
 
+    /* v17.49 — pause des travaux pendant les gestes (voir src/260). */
+    installNpfMapGesturePauseTracking();
+
+    /* v17.49 — PÉLIC et terrains proches de la vue seulement (voir src/220). */
+    map.on('moveend zoomend popupopen', () => {
+        try { applyNpfAirportMarkerViewWindow(); } catch (_) {}
+    });
+
     if (!npfStartupCorePriorityActive) {
         drawPermanentAirportMarkers();
         drawFireHistoryMarkers();
@@ -13366,10 +13381,16 @@ function scheduleTrafficVisualResumeAfterMapInteraction(reason = 'map-end') {
     trafficVisualResumeTimer = setTimeout(() => {
         if (token !== trafficVisualMapSequenceToken) return;
         trafficVisualResumeTimer = null;
-        resumeTrafficVisualUpdates('map-interaction', {
-            redraw: true,
-            reason
-        });
+        /* v17.49 — redessin SafeSky repoussé à la fin de la pause du geste (0,8 s). */
+        const resume = () => {
+            if (token !== trafficVisualMapSequenceToken) return;
+            resumeTrafficVisualUpdates('map-interaction', {
+                redraw: true,
+                reason
+            });
+        };
+        if (deferNpfWorkDuringMapGesture('trafficResume', resume)) return;
+        resume();
     }, TRAFFIC_VISUAL_RESUME_AFTER_MAP_MS);
 }
 
@@ -27917,6 +27938,16 @@ function renderTrafficAircraft(aircraftList, meta = {}) {
         return;
     }
 
+    /* v17.49 — pas de redessin SafeSky pendant un geste carte : le dernier
+     * instantané est redessiné une seule fois à la reprise. */
+    if (deferNpfWorkDuringMapGesture('traffic', () => {
+        if (isTrafficVisualUpdatesSuspended()) return;
+        redrawTrafficLayerFromSnapshot();
+        startTrafficSmoothAnimation();
+    })) {
+        return;
+    }
+
     let openTrafficPopupKey = '';
     trafficMarkerRegistry.forEach((entry, key) => {
         if (
@@ -36186,6 +36217,7 @@ function addAirportTouchHitbox(airport, popupHtml) {
             hitbox.openPopup();
         } catch (_) {}
     });
+    hitbox._npfAirportOaci = airport.oaci;
     hitbox.addTo(permanentAirportLayer);
     try { if (hitbox.bringToFront) hitbox.bringToFront(); } catch (_) {}
     return hitbox;
@@ -38268,8 +38300,76 @@ function scheduleAirportOperationalLabelsRefresh(delay = 120) {
     }, Math.max(0, Number(delay) || 0));
 }
 
+/*
+ * v17.49 — PÉLIC et terrains proches de la vue seulement.
+ * Mesure Chrome (iPad simulé, CPU ×4/×6) : les ~434 marqueurs (éléments de
+ * page, un calque graphique chacun) font l'essentiel du travail à chaque
+ * image d'un glisser ou d'un pincer. Seuls les marqueurs situés dans la vue
+ * plus une demi-vue de marge sont posés sur la carte ; recalcul à la fin d'un
+ * geste, au changement de zoom et quand le suivi avion déplace la carte
+ * (moveend / zoomend). Toujours posés : PÉLIC sélectionné, BASE, terrain dont
+ * la fenêtre est ouverte. Les zones de toucher (hitbox) restent toutes en place.
+ */
+const NPF_AIRPORT_MARKER_VIEW_PAD_RATIO = 0.5;
+let npfAirportViewMarkerEntries = [];
+let npfAirportViewMarkerStats = { present: 0, max: 0, total: 0 };
+
+function registerNpfAirportViewMarker(marker, airport) {
+    if (!marker || !airport) return marker;
+    marker._npfAirportOaci = airport.oaci;
+    npfAirportViewMarkerEntries.push({
+        marker,
+        lat: Number(airport.lat),
+        lng: Number(airport.lon),
+        oaci: airport.oaci,
+        onMap: false
+    });
+    return marker;
+}
+
+function getNpfOpenAirportPopupOaci() {
+    try {
+        const popup = map && map._popup;
+        if (!popup || !map.hasLayer(popup)) return '';
+        return String(popup._source?._npfAirportOaci || '');
+    } catch (_) {
+        return '';
+    }
+}
+
+function applyNpfAirportMarkerViewWindow() {
+    if (!map || !permanentAirportLayer) return;
+    let bounds = null;
+    try { bounds = map.getBounds().pad(NPF_AIRPORT_MARKER_VIEW_PAD_RATIO); } catch (_) { bounds = null; }
+    const alwaysShown = new Set([
+        selectedPelicanOACI,
+        selectedBaseOACI,
+        getNpfOpenAirportPopupOaci()
+    ].filter(Boolean));
+    let present = 0;
+    for (const entry of npfAirportViewMarkerEntries) {
+        const wanted = !bounds
+            || alwaysShown.has(entry.oaci)
+            || !Number.isFinite(entry.lat)
+            || !Number.isFinite(entry.lng)
+            || bounds.contains([entry.lat, entry.lng]);
+        if (wanted && !entry.onMap) {
+            permanentAirportLayer.addLayer(entry.marker);
+            entry.onMap = true;
+        } else if (!wanted && entry.onMap) {
+            permanentAirportLayer.removeLayer(entry.marker);
+            entry.onMap = false;
+        }
+        if (entry.onMap) present += 1;
+    }
+    npfAirportViewMarkerStats.present = present;
+    npfAirportViewMarkerStats.total = npfAirportViewMarkerEntries.length;
+    npfAirportViewMarkerStats.max = Math.max(npfAirportViewMarkerStats.max, present);
+}
+
 function drawPermanentAirportMarkers() {
     permanentAirportLayer.clearLayers();
+    npfAirportViewMarkerEntries = [];
 
     /*
      * v14.76 — retour au rendu de la v14.74 pour les aérodromes :
@@ -38277,7 +38377,7 @@ function drawPermanentAirportMarkers() {
      * pistes intégrée à la carte NPF. Les pistes ne remplacent plus les ronds.
      */
     additionalAerodromes.forEach(airport => {
-        L.marker([airport.lat, airport.lon], {
+        registerNpfAirportViewMarker(L.marker([airport.lat, airport.lon], {
             icon: buildTerrainAirportMapIcon(airport, {
                 inverted: true,
                 showCardinalTabs: false,
@@ -38286,7 +38386,7 @@ function drawPermanentAirportMarkers() {
             interactive: false,
             keyboard: false,
             zIndexOffset: 1700
-        }).addTo(permanentAirportLayer);
+        }), airport);
 
         const popupHtml = `<div class="airport-popup additional-aerodrome-popup"><b>${escapeHtml(airport.oaci)}</b><br>${escapeHtml(airport.name)}${buildVacButtonHtml(airport.oaci)}${buildAirportAddWpButtonHtml(airport.oaci)}</div>`;
         addAirportTouchHitbox(airport, popupHtml);
@@ -38312,7 +38412,7 @@ function drawPermanentAirportMarkers() {
             const popupHtml = `<div class="airport-popup"><b>${airport.oaci}</b><br>${airport.name}<div class="popup-buttons"><button class="${waterButtonClass}" onclick="window.toggleWater('${airport.oaci}')">${waterButtonText}</button><button class="${disableButtonClass}" onclick="window.toggleAirport('${airport.oaci}')">${disableButtonText}</button><button class="${baseButtonClass}" onclick="window.setBaseAirport('${airport.oaci}')">${baseButtonText}</button><button class="${customPelicClass}" onclick="window.toggleCustomPelican('${airport.oaci}')">${customPelicText}</button></div>${buildPelicPdfButtonsHtml(airport.oaci)}${buildVacButtonHtml(airport.oaci)}${buildPelicNotamsButtonHtml(airport.oaci)}${buildAirportGoToButtonHtml(airport.oaci)}${buildAirportAddWpButtonHtml(airport.oaci)}</div>`;
             const marker = L.marker([airport.lat, airport.lon], { icon: L.divIcon({ className: iconClass, html: iconHTML, iconSize: [26, 26], iconAnchor: [13, 13], popupAnchor: [0, -15] }), zIndexOffset: 2500, keyboard: false });
             marker.bindPopup(popupHtml, getNpfPelicPopupOptions());
-            marker.addTo(permanentAirportLayer);
+            registerNpfAirportViewMarker(marker, airport);
             addAirportTouchHitbox(airport, popupHtml);
             return;
         }
@@ -38323,7 +38423,7 @@ function drawPermanentAirportMarkers() {
          * bleue dédiée dont le trait central reprend l’orientation de la piste
          * principale disponible dans la base locale.
          */
-        L.marker([airport.lat, airport.lon], {
+        registerNpfAirportViewMarker(L.marker([airport.lat, airport.lon], {
             icon: buildTerrainAirportMapIcon(airport, {
                 inverted: false,
                 showCardinalTabs: true,
@@ -38332,7 +38432,7 @@ function drawPermanentAirportMarkers() {
             interactive: false,
             keyboard: false,
             zIndexOffset: 1850
-        }).addTo(permanentAirportLayer);
+        }), airport);
 
         const popupHtml = `<div class="airport-popup"><b>${airport.oaci}</b><br>${airport.name}<div class="popup-buttons"><button class="${baseButtonClass}" onclick="window.setBaseAirport('${airport.oaci}')">${baseButtonText}</button><button class="${customPelicClass}" onclick="window.toggleCustomPelican('${airport.oaci}')">${customPelicText}</button></div>${buildVacButtonHtml(airport.oaci)}${buildNpfNotamsButtonHtmlIfCovered(airport.oaci)}${buildAirportGoToButtonHtml(airport.oaci)}${buildAirportAddWpButtonHtml(airport.oaci)}</div>`;
         addAirportTouchHitbox(airport, popupHtml);
@@ -38354,9 +38454,11 @@ function drawPermanentAirportMarkers() {
         const baseButtonClass = isBase ? 'base-btn base-btn-active' : 'base-btn';
         const popupHtml = `<div class="airport-popup"><b>${airport.oaci}</b><br>${airport.name}<div class="popup-buttons"><button class="${waterButtonClass}" onclick="window.toggleWater('${airport.oaci}')">${waterButtonText}</button><button class="${disableButtonClass}" onclick="window.toggleAirport('${airport.oaci}')">${disableButtonText}</button><button class="${baseButtonClass}" onclick="window.setBaseAirport('${airport.oaci}')">${baseButtonText}</button></div>${buildPelicPdfButtonsHtml(airport.oaci)}${buildVacButtonHtml(airport.oaci)}${buildPelicNotamsButtonHtml(airport.oaci)}${buildAirportGoToButtonHtml(airport.oaci)}${buildAirportAddWpButtonHtml(airport.oaci)}</div>`;
         marker.bindPopup(popupHtml, getNpfPelicPopupOptions());
-        marker.addTo(permanentAirportLayer);
+        registerNpfAirportViewMarker(marker, airport);
         addAirportTouchHitbox(airport, popupHtml);
     });
+
+    applyNpfAirportMarkerViewWindow();
 
     /* v16.58 — précharge non bloquante du petit référentiel fréquence pour
      * qu'il soit déjà mémorisé lorsque l'utilisateur atteint l'échelle 2 NM. */
@@ -40594,6 +40696,160 @@ function installCenterGpsFollowHandlers() {
         }
     });
 }
+/*
+ * v17.49 — pause pendant un geste carte, puis 0,8 s après le lever du doigt.
+ * Mis en pause : affichage du calculateur (moment de mise à jour seulement,
+ * aucune formule touchée), commune survolée, vecteur avion, rafraîchissement
+ * SIA du suivi GPS, redessin SafeSky ; départ de la restitution (tuiles ->
+ * VFR -> HT -> Routes) tant qu'un doigt est posé. À la reprise : une seule
+ * mise à jour avec la DERNIÈRE position. Gardés : symbole avion, interrogation
+ * réseau SafeSky, délai de retour du suivi GPS.
+ * DIAG : images par seconde pendant les gestes (médiane / pire).
+ */
+const NPF_MAP_GESTURE_PAUSE_AFTER_MS = 800;
+
+function getNpfMapGesturePauseState() {
+    if (!window.__npfMapGesturePause) {
+        window.__npfMapGesturePause = {
+            touches: 0,
+            mouseDown: false,
+            lastUpAt: 0,
+            resumeTimer: null,
+            pending: {},
+            gestureStartAt: 0,
+            gestureMoved: false,
+            frames: 0,
+            rafId: null,
+            fps: []
+        };
+    }
+    return window.__npfMapGesturePause;
+}
+
+function isNpfMapFingerDown() {
+    const state = getNpfMapGesturePauseState();
+    return state.touches > 0 || state.mouseDown;
+}
+
+function isNpfMapGesturePauseActive() {
+    const state = getNpfMapGesturePauseState();
+    if (state.touches > 0 || state.mouseDown) return true;
+    return state.lastUpAt > 0 && (Date.now() - state.lastUpAt) < NPF_MAP_GESTURE_PAUSE_AFTER_MS;
+}
+
+function deferNpfWorkDuringMapGesture(key, work) {
+    if (!isNpfMapGesturePauseActive()) return false;
+    getNpfMapGesturePauseState().pending[key] = work || true;
+    return true;
+}
+
+function flushNpfMapGesturePausedWork() {
+    const state = getNpfMapGesturePauseState();
+    if (isNpfMapGesturePauseActive()) return;
+    const pending = state.pending;
+    state.pending = {};
+    for (const key of ['vector', 'commune', 'calculator', 'sia', 'trafficResume', 'traffic']) {
+        const work = pending[key];
+        if (typeof work !== 'function') continue;
+        if (key === 'traffic' && typeof pending.trafficResume === 'function') continue;
+        try { work(); } catch (error) { console.warn('Reprise après geste impossible:', key, error); }
+    }
+}
+
+function startNpfMapGestureFrameCount() {
+    const state = getNpfMapGesturePauseState();
+    state.gestureStartAt = performance.now();
+    state.gestureMoved = false;
+    state.frames = 0;
+    if (state.rafId) cancelAnimationFrame(state.rafId);
+    const tick = () => {
+        state.frames += 1;
+        state.rafId = requestAnimationFrame(tick);
+    };
+    state.rafId = requestAnimationFrame(tick);
+}
+
+function stopNpfMapGestureFrameCount() {
+    const state = getNpfMapGesturePauseState();
+    if (state.rafId) cancelAnimationFrame(state.rafId);
+    state.rafId = null;
+    const durationMs = performance.now() - state.gestureStartAt;
+    if (state.gestureMoved && durationMs >= 200 && state.frames > 1) {
+        state.fps.push(Math.round((state.frames - 1) * 1000 / durationMs));
+        if (state.fps.length > 300) state.fps.shift();
+    }
+}
+
+function noteNpfMapGestureDown() {
+    const state = getNpfMapGesturePauseState();
+    clearTimeout(state.resumeTimer);
+    state.resumeTimer = null;
+    startNpfMapGestureFrameCount();
+}
+
+function noteNpfMapGestureUp() {
+    const state = getNpfMapGesturePauseState();
+    if (state.touches > 0 || state.mouseDown) return;
+    stopNpfMapGestureFrameCount();
+    state.lastUpAt = Date.now();
+    clearTimeout(state.resumeTimer);
+    state.resumeTimer = setTimeout(() => {
+        state.resumeTimer = null;
+        flushNpfMapGesturePausedWork();
+    }, NPF_MAP_GESTURE_PAUSE_AFTER_MS + 20);
+}
+
+function installNpfMapGesturePauseTracking() {
+    if (!map || window.__npfMapGesturePauseInstalled) return;
+    window.__npfMapGesturePauseInstalled = true;
+    const state = getNpfMapGesturePauseState();
+    const container = map.getContainer();
+    const onTouchStart = event => {
+        const wasDown = isNpfMapFingerDown();
+        state.touches = Math.max(1, event.touches ? event.touches.length : 1);
+        if (!wasDown) noteNpfMapGestureDown();
+    };
+    const onTouchEnd = event => {
+        /* Seuls les touchers commencés sur la carte comptent. */
+        if (state.touches <= 0) return;
+        state.touches = event.touches ? event.touches.length : 0;
+        if (state.touches === 0) noteNpfMapGestureUp();
+    };
+    container.addEventListener('touchstart', onTouchStart, { capture: true, passive: true });
+    window.addEventListener('touchend', onTouchEnd, { capture: true, passive: true });
+    window.addEventListener('touchcancel', onTouchEnd, { capture: true, passive: true });
+    container.addEventListener('pointerdown', event => {
+        if (event.pointerType !== 'mouse') return;
+        const wasDown = isNpfMapFingerDown();
+        state.mouseDown = true;
+        if (!wasDown) noteNpfMapGestureDown();
+    }, { capture: true, passive: true });
+    window.addEventListener('pointerup', event => {
+        if (event.pointerType !== 'mouse' || !state.mouseDown) return;
+        state.mouseDown = false;
+        noteNpfMapGestureUp();
+    }, { capture: true, passive: true });
+    map.on('movestart zoomstart', () => {
+        if (isNpfMapFingerDown()) state.gestureMoved = true;
+    });
+}
+
+function appendNpfDiagV1749GestureLines(lines) {
+    const stats = (typeof npfAirportViewMarkerStats !== 'undefined' && npfAirportViewMarkerStats) || {};
+    lines.push(
+        'Marqueurs PÉLIC et terrains sur la carte (v17.49, vue + demi-vue) : '
+        + (Number(stats.present) || 0) + ' maintenant · maximum ' + (Number(stats.max) || 0)
+        + ' · sur ' + (Number(stats.total) || 0)
+    );
+    const list = getNpfMapGesturePauseState().fps.slice().sort((a, b) => a - b);
+    lines.push(
+        'Images par seconde pendant les gestes : '
+        + (list.length
+            ? 'médiane ' + list[Math.floor(list.length / 2)] + ' · pire ' + list[0] + ' (' + list.length + ' gestes)'
+            : 'aucun geste mesuré')
+    );
+}
+
 function enableCenterGpsFollow() {
     centerGpsFollowActive = true;
     centerGpsFollowPausedUntil = 0;
@@ -41577,11 +41833,15 @@ function updateUserPosition(pos) {
             : getSimulationTrueRouteDeg();
 
         if (simulationVisualRefreshDue) {
-            if (simulatedSpeedMps >= 1) {
-                updateOwnGpsVector(latitude, longitude, simulatedHeading, simulatedSpeedMps);
-            } else {
-                clearOwnGpsVector();
-            }
+            /* v17.49 — vecteur avion en pause pendant un geste carte (dernière position reprise ensuite). */
+            const applySimulatedVector = () => {
+                if (simulatedSpeedMps >= 1) {
+                    updateOwnGpsVector(latitude, longitude, simulatedHeading, simulatedSpeedMps);
+                } else {
+                    clearOwnGpsVector();
+                }
+            };
+            if (!deferNpfWorkDuringMapGesture('vector', applySimulatedVector)) applySimulatedVector();
         }
 
         const simulatedAltitudeMeters = Number(pos.coords.altitude);
@@ -41604,7 +41864,9 @@ function updateUserPosition(pos) {
             simulation: true
         };
     } else {
-        updateOwnGpsVector(latitude, longitude, motionHeading, motionSpeed);
+        /* v17.49 — vecteur avion en pause pendant un geste carte. */
+        const applyRealVector = () => updateOwnGpsVector(latitude, longitude, motionHeading, motionSpeed);
+        if (!deferNpfWorkDuringMapGesture('vector', applyRealVector)) applyRealVector();
         const storedSpeedMps = Number.isFinite(motionSpeed) ? motionSpeed : null;
         lastPosition = {
             lat: latitude,
@@ -41672,10 +41934,22 @@ function updateUserPosition(pos) {
      * réellement insuffisante.
      */
     if (!isSimulationPosition || simulationHeavyRefreshDue) {
-        updateNearestCommuneDisplay(latitude, longitude);
-        setTimeout(() => { if (typeof refreshNearestCommuneDisplayFromKnownGps === 'function') refreshNearestCommuneDisplayFromKnownGps(); }, 250);
+        /* v17.49 — commune survolée et contexte calculateur en pause pendant un geste carte. */
+        const applyNearestCommune = () => {
+            updateNearestCommuneDisplay(latitude, longitude);
+            setTimeout(() => { if (typeof refreshNearestCommuneDisplayFromKnownGps === 'function') refreshNearestCommuneDisplayFromKnownGps(); }, 250);
+        };
+        if (!deferNpfWorkDuringMapGesture('commune', applyNearestCommune)) applyNearestCommune();
 
-        if (typeof window.refreshCalculatorAirportContext === 'function') {
+        const applyCalculatorAirportContext = () => {
+            if (typeof window.refreshCalculatorAirportContext === 'function') {
+                window.refreshCalculatorAirportContext();
+            }
+            if (currentCommune) updateCalculatorData();
+        };
+        if (deferNpfWorkDuringMapGesture('calculator', applyCalculatorAirportContext)) {
+            /* repris après le geste */
+        } else if (typeof window.refreshCalculatorAirportContext === 'function') {
             window.refreshCalculatorAirportContext();
         }
 
@@ -41694,7 +41968,9 @@ function updateUserPosition(pos) {
 
  // Synchronise les calculs (dont GPS->Feu) à une cadence adaptée en simulation.
     if (currentCommune && (!isSimulationPosition || simulationHeavyRefreshDue)) {
-        updateCalculatorData();
+        /* v17.49 — pendant un geste carte, la mise à jour est faite à la reprise
+         * (applyCalculatorAirportContext ci-dessus), avec la dernière position. */
+        if (!isNpfMapGesturePauseActive()) updateCalculatorData();
     }
 
  // La route dynamique reste réactive sans être reconstruite deux fois par seconde.
@@ -55365,6 +55641,11 @@ function scheduleSiaLayerRefresh(reason = 'unspecified') {
     siaRefreshTimer = setTimeout(async () => {
         siaRefreshTimer = null;
         siaRefreshScheduledReason = null;
+        /* v17.49 — suivi GPS : pas de reconstruction SIA pendant un geste carte ;
+         * une seule vérification de couverture à la reprise. */
+        if (reason === 'gps-follow' && deferNpfWorkDuringMapGesture('sia', () => scheduleSiaCoverageRefresh('gps-follow'))) {
+            return;
+        }
         try {
             await waitForBaseMapBeforeSiaRefresh(reason, scheduledGeneration);
             throwIfSiaRefreshObsolete(scheduledGeneration);

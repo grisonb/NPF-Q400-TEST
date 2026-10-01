@@ -866,8 +866,76 @@ function scheduleAirportOperationalLabelsRefresh(delay = 120) {
     }, Math.max(0, Number(delay) || 0));
 }
 
+/*
+ * v17.49 — PÉLIC et terrains proches de la vue seulement.
+ * Mesure Chrome (iPad simulé, CPU ×4/×6) : les ~434 marqueurs (éléments de
+ * page, un calque graphique chacun) font l'essentiel du travail à chaque
+ * image d'un glisser ou d'un pincer. Seuls les marqueurs situés dans la vue
+ * plus une demi-vue de marge sont posés sur la carte ; recalcul à la fin d'un
+ * geste, au changement de zoom et quand le suivi avion déplace la carte
+ * (moveend / zoomend). Toujours posés : PÉLIC sélectionné, BASE, terrain dont
+ * la fenêtre est ouverte. Les zones de toucher (hitbox) restent toutes en place.
+ */
+const NPF_AIRPORT_MARKER_VIEW_PAD_RATIO = 0.5;
+let npfAirportViewMarkerEntries = [];
+let npfAirportViewMarkerStats = { present: 0, max: 0, total: 0 };
+
+function registerNpfAirportViewMarker(marker, airport) {
+    if (!marker || !airport) return marker;
+    marker._npfAirportOaci = airport.oaci;
+    npfAirportViewMarkerEntries.push({
+        marker,
+        lat: Number(airport.lat),
+        lng: Number(airport.lon),
+        oaci: airport.oaci,
+        onMap: false
+    });
+    return marker;
+}
+
+function getNpfOpenAirportPopupOaci() {
+    try {
+        const popup = map && map._popup;
+        if (!popup || !map.hasLayer(popup)) return '';
+        return String(popup._source?._npfAirportOaci || '');
+    } catch (_) {
+        return '';
+    }
+}
+
+function applyNpfAirportMarkerViewWindow() {
+    if (!map || !permanentAirportLayer) return;
+    let bounds = null;
+    try { bounds = map.getBounds().pad(NPF_AIRPORT_MARKER_VIEW_PAD_RATIO); } catch (_) { bounds = null; }
+    const alwaysShown = new Set([
+        selectedPelicanOACI,
+        selectedBaseOACI,
+        getNpfOpenAirportPopupOaci()
+    ].filter(Boolean));
+    let present = 0;
+    for (const entry of npfAirportViewMarkerEntries) {
+        const wanted = !bounds
+            || alwaysShown.has(entry.oaci)
+            || !Number.isFinite(entry.lat)
+            || !Number.isFinite(entry.lng)
+            || bounds.contains([entry.lat, entry.lng]);
+        if (wanted && !entry.onMap) {
+            permanentAirportLayer.addLayer(entry.marker);
+            entry.onMap = true;
+        } else if (!wanted && entry.onMap) {
+            permanentAirportLayer.removeLayer(entry.marker);
+            entry.onMap = false;
+        }
+        if (entry.onMap) present += 1;
+    }
+    npfAirportViewMarkerStats.present = present;
+    npfAirportViewMarkerStats.total = npfAirportViewMarkerEntries.length;
+    npfAirportViewMarkerStats.max = Math.max(npfAirportViewMarkerStats.max, present);
+}
+
 function drawPermanentAirportMarkers() {
     permanentAirportLayer.clearLayers();
+    npfAirportViewMarkerEntries = [];
 
     /*
      * v14.76 — retour au rendu de la v14.74 pour les aérodromes :
@@ -875,7 +943,7 @@ function drawPermanentAirportMarkers() {
      * pistes intégrée à la carte NPF. Les pistes ne remplacent plus les ronds.
      */
     additionalAerodromes.forEach(airport => {
-        L.marker([airport.lat, airport.lon], {
+        registerNpfAirportViewMarker(L.marker([airport.lat, airport.lon], {
             icon: buildTerrainAirportMapIcon(airport, {
                 inverted: true,
                 showCardinalTabs: false,
@@ -884,7 +952,7 @@ function drawPermanentAirportMarkers() {
             interactive: false,
             keyboard: false,
             zIndexOffset: 1700
-        }).addTo(permanentAirportLayer);
+        }), airport);
 
         const popupHtml = `<div class="airport-popup additional-aerodrome-popup"><b>${escapeHtml(airport.oaci)}</b><br>${escapeHtml(airport.name)}${buildVacButtonHtml(airport.oaci)}${buildAirportAddWpButtonHtml(airport.oaci)}</div>`;
         addAirportTouchHitbox(airport, popupHtml);
@@ -910,7 +978,7 @@ function drawPermanentAirportMarkers() {
             const popupHtml = `<div class="airport-popup"><b>${airport.oaci}</b><br>${airport.name}<div class="popup-buttons"><button class="${waterButtonClass}" onclick="window.toggleWater('${airport.oaci}')">${waterButtonText}</button><button class="${disableButtonClass}" onclick="window.toggleAirport('${airport.oaci}')">${disableButtonText}</button><button class="${baseButtonClass}" onclick="window.setBaseAirport('${airport.oaci}')">${baseButtonText}</button><button class="${customPelicClass}" onclick="window.toggleCustomPelican('${airport.oaci}')">${customPelicText}</button></div>${buildPelicPdfButtonsHtml(airport.oaci)}${buildVacButtonHtml(airport.oaci)}${buildPelicNotamsButtonHtml(airport.oaci)}${buildAirportGoToButtonHtml(airport.oaci)}${buildAirportAddWpButtonHtml(airport.oaci)}</div>`;
             const marker = L.marker([airport.lat, airport.lon], { icon: L.divIcon({ className: iconClass, html: iconHTML, iconSize: [26, 26], iconAnchor: [13, 13], popupAnchor: [0, -15] }), zIndexOffset: 2500, keyboard: false });
             marker.bindPopup(popupHtml, getNpfPelicPopupOptions());
-            marker.addTo(permanentAirportLayer);
+            registerNpfAirportViewMarker(marker, airport);
             addAirportTouchHitbox(airport, popupHtml);
             return;
         }
@@ -921,7 +989,7 @@ function drawPermanentAirportMarkers() {
          * bleue dédiée dont le trait central reprend l’orientation de la piste
          * principale disponible dans la base locale.
          */
-        L.marker([airport.lat, airport.lon], {
+        registerNpfAirportViewMarker(L.marker([airport.lat, airport.lon], {
             icon: buildTerrainAirportMapIcon(airport, {
                 inverted: false,
                 showCardinalTabs: true,
@@ -930,7 +998,7 @@ function drawPermanentAirportMarkers() {
             interactive: false,
             keyboard: false,
             zIndexOffset: 1850
-        }).addTo(permanentAirportLayer);
+        }), airport);
 
         const popupHtml = `<div class="airport-popup"><b>${airport.oaci}</b><br>${airport.name}<div class="popup-buttons"><button class="${baseButtonClass}" onclick="window.setBaseAirport('${airport.oaci}')">${baseButtonText}</button><button class="${customPelicClass}" onclick="window.toggleCustomPelican('${airport.oaci}')">${customPelicText}</button></div>${buildVacButtonHtml(airport.oaci)}${buildNpfNotamsButtonHtmlIfCovered(airport.oaci)}${buildAirportGoToButtonHtml(airport.oaci)}${buildAirportAddWpButtonHtml(airport.oaci)}</div>`;
         addAirportTouchHitbox(airport, popupHtml);
@@ -952,9 +1020,11 @@ function drawPermanentAirportMarkers() {
         const baseButtonClass = isBase ? 'base-btn base-btn-active' : 'base-btn';
         const popupHtml = `<div class="airport-popup"><b>${airport.oaci}</b><br>${airport.name}<div class="popup-buttons"><button class="${waterButtonClass}" onclick="window.toggleWater('${airport.oaci}')">${waterButtonText}</button><button class="${disableButtonClass}" onclick="window.toggleAirport('${airport.oaci}')">${disableButtonText}</button><button class="${baseButtonClass}" onclick="window.setBaseAirport('${airport.oaci}')">${baseButtonText}</button></div>${buildPelicPdfButtonsHtml(airport.oaci)}${buildVacButtonHtml(airport.oaci)}${buildPelicNotamsButtonHtml(airport.oaci)}${buildAirportGoToButtonHtml(airport.oaci)}${buildAirportAddWpButtonHtml(airport.oaci)}</div>`;
         marker.bindPopup(popupHtml, getNpfPelicPopupOptions());
-        marker.addTo(permanentAirportLayer);
+        registerNpfAirportViewMarker(marker, airport);
         addAirportTouchHitbox(airport, popupHtml);
     });
+
+    applyNpfAirportMarkerViewWindow();
 
     /* v16.58 — précharge non bloquante du petit référentiel fréquence pour
      * qu'il soit déjà mémorisé lorsque l'utilisateur atteint l'échelle 2 NM. */

@@ -2096,6 +2096,11 @@ function scheduleSiaLayerRefresh(reason = 'unspecified') {
     siaRefreshTimer = setTimeout(async () => {
         siaRefreshTimer = null;
         siaRefreshScheduledReason = null;
+        /* v17.49 — suivi GPS : pas de reconstruction SIA pendant un geste carte ;
+         * une seule vérification de couverture à la reprise. */
+        if (reason === 'gps-follow' && deferNpfWorkDuringMapGesture('sia', () => scheduleSiaCoverageRefresh('gps-follow'))) {
+            return;
+        }
         try {
             await waitForBaseMapBeforeSiaRefresh(reason, scheduledGeneration);
             throwIfSiaRefreshObsolete(scheduledGeneration);

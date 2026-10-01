@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.48';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.49';
 
 
 /*
@@ -3224,7 +3224,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.48 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.49 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -3762,6 +3762,7 @@ function appendNpfDiagLaunchStorageHeader(lines) {
     );
     lines.push('Écritures localStorage refusées (cette session) : ' + formatNpfDiagRefusedWrites(launchLog.refusedWrites()));
     try { appendNpfDiagV1746HeaderLines(lines); } catch (_) {}
+    try { appendNpfDiagV1749GestureLines(lines); } catch (_) {}
     safe_npfDiagBannerHeader(lines);
     lines.push(
         'SafeSky (showTrafficLayer) relu au lancement : ' + JSON.stringify(current.safeSkyAtLaunch)

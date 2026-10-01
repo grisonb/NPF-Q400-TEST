@@ -1223,8 +1223,13 @@ function scheduleNpfMapOverlayPriorityRestore(reason = 'map-end') {
      * restitution, begin() créera une nouvelle séquence et invalidera l'ancienne
      * par son token, ce qui est le comportement voulu.
      */
-    npfMapOverlayPriorityRestoreTimer = setTimeout(() => {
+    const startRestore = () => {
         npfMapOverlayPriorityRestoreTimer = null;
+        /* v17.49 — tant qu'un doigt est posé sur la carte, la restitution attend. */
+        if (isNpfMapFingerDown()) {
+            npfMapOverlayPriorityRestoreTimer = setTimeout(startRestore, 100);
+            return;
+        }
         npfMapManualGestureLockActive = false;
 
         runNpfMapOverlayPriorityRestore(token, reason).catch(error => {
@@ -1240,7 +1245,8 @@ function scheduleNpfMapOverlayPriorityRestore(reason = 'map-end') {
                 resumeNpfHeavyOverlayRenderersWithoutRefresh('erreur restitution');
             }
         });
-    }, NPF_MAP_MANUAL_GESTURE_SETTLE_MS);
+    };
+    npfMapOverlayPriorityRestoreTimer = setTimeout(startRestore, NPF_MAP_MANUAL_GESTURE_SETTLE_MS);
 }
 
 /*

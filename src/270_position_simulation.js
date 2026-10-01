@@ -52,11 +52,15 @@ function updateUserPosition(pos) {
             : getSimulationTrueRouteDeg();
 
         if (simulationVisualRefreshDue) {
-            if (simulatedSpeedMps >= 1) {
-                updateOwnGpsVector(latitude, longitude, simulatedHeading, simulatedSpeedMps);
-            } else {
-                clearOwnGpsVector();
-            }
+            /* v17.49 — vecteur avion en pause pendant un geste carte (dernière position reprise ensuite). */
+            const applySimulatedVector = () => {
+                if (simulatedSpeedMps >= 1) {
+                    updateOwnGpsVector(latitude, longitude, simulatedHeading, simulatedSpeedMps);
+                } else {
+                    clearOwnGpsVector();
+                }
+            };
+            if (!deferNpfWorkDuringMapGesture('vector', applySimulatedVector)) applySimulatedVector();
         }
 
         const simulatedAltitudeMeters = Number(pos.coords.altitude);
@@ -79,7 +83,9 @@ function updateUserPosition(pos) {
             simulation: true
         };
     } else {
-        updateOwnGpsVector(latitude, longitude, motionHeading, motionSpeed);
+        /* v17.49 — vecteur avion en pause pendant un geste carte. */
+        const applyRealVector = () => updateOwnGpsVector(latitude, longitude, motionHeading, motionSpeed);
+        if (!deferNpfWorkDuringMapGesture('vector', applyRealVector)) applyRealVector();
         const storedSpeedMps = Number.isFinite(motionSpeed) ? motionSpeed : null;
         lastPosition = {
             lat: latitude,
@@ -147,10 +153,22 @@ function updateUserPosition(pos) {
      * réellement insuffisante.
      */
     if (!isSimulationPosition || simulationHeavyRefreshDue) {
-        updateNearestCommuneDisplay(latitude, longitude);
-        setTimeout(() => { if (typeof refreshNearestCommuneDisplayFromKnownGps === 'function') refreshNearestCommuneDisplayFromKnownGps(); }, 250);
+        /* v17.49 — commune survolée et contexte calculateur en pause pendant un geste carte. */
+        const applyNearestCommune = () => {
+            updateNearestCommuneDisplay(latitude, longitude);
+            setTimeout(() => { if (typeof refreshNearestCommuneDisplayFromKnownGps === 'function') refreshNearestCommuneDisplayFromKnownGps(); }, 250);
+        };
+        if (!deferNpfWorkDuringMapGesture('commune', applyNearestCommune)) applyNearestCommune();
 
-        if (typeof window.refreshCalculatorAirportContext === 'function') {
+        const applyCalculatorAirportContext = () => {
+            if (typeof window.refreshCalculatorAirportContext === 'function') {
+                window.refreshCalculatorAirportContext();
+            }
+            if (currentCommune) updateCalculatorData();
+        };
+        if (deferNpfWorkDuringMapGesture('calculator', applyCalculatorAirportContext)) {
+            /* repris après le geste */
+        } else if (typeof window.refreshCalculatorAirportContext === 'function') {
             window.refreshCalculatorAirportContext();
         }
 
@@ -169,7 +187,9 @@ function updateUserPosition(pos) {
 
  // Synchronise les calculs (dont GPS->Feu) à une cadence adaptée en simulation.
     if (currentCommune && (!isSimulationPosition || simulationHeavyRefreshDue)) {
-        updateCalculatorData();
+        /* v17.49 — pendant un geste carte, la mise à jour est faite à la reprise
+         * (applyCalculatorAirportContext ci-dessus), avec la dernière position. */
+        if (!isNpfMapGesturePauseActive()) updateCalculatorData();
     }
 
  // La route dynamique reste réactive sans être reconstruite deux fois par seconde.

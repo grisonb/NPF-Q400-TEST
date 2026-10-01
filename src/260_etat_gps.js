@@ -1217,6 +1217,160 @@ function installCenterGpsFollowHandlers() {
         }
     });
 }
+/*
+ * v17.49 — pause pendant un geste carte, puis 0,8 s après le lever du doigt.
+ * Mis en pause : affichage du calculateur (moment de mise à jour seulement,
+ * aucune formule touchée), commune survolée, vecteur avion, rafraîchissement
+ * SIA du suivi GPS, redessin SafeSky ; départ de la restitution (tuiles ->
+ * VFR -> HT -> Routes) tant qu'un doigt est posé. À la reprise : une seule
+ * mise à jour avec la DERNIÈRE position. Gardés : symbole avion, interrogation
+ * réseau SafeSky, délai de retour du suivi GPS.
+ * DIAG : images par seconde pendant les gestes (médiane / pire).
+ */
+const NPF_MAP_GESTURE_PAUSE_AFTER_MS = 800;
+
+function getNpfMapGesturePauseState() {
+    if (!window.__npfMapGesturePause) {
+        window.__npfMapGesturePause = {
+            touches: 0,
+            mouseDown: false,
+            lastUpAt: 0,
+            resumeTimer: null,
+            pending: {},
+            gestureStartAt: 0,
+            gestureMoved: false,
+            frames: 0,
+            rafId: null,
+            fps: []
+        };
+    }
+    return window.__npfMapGesturePause;
+}
+
+function isNpfMapFingerDown() {
+    const state = getNpfMapGesturePauseState();
+    return state.touches > 0 || state.mouseDown;
+}
+
+function isNpfMapGesturePauseActive() {
+    const state = getNpfMapGesturePauseState();
+    if (state.touches > 0 || state.mouseDown) return true;
+    return state.lastUpAt > 0 && (Date.now() - state.lastUpAt) < NPF_MAP_GESTURE_PAUSE_AFTER_MS;
+}
+
+function deferNpfWorkDuringMapGesture(key, work) {
+    if (!isNpfMapGesturePauseActive()) return false;
+    getNpfMapGesturePauseState().pending[key] = work || true;
+    return true;
+}
+
+function flushNpfMapGesturePausedWork() {
+    const state = getNpfMapGesturePauseState();
+    if (isNpfMapGesturePauseActive()) return;
+    const pending = state.pending;
+    state.pending = {};
+    for (const key of ['vector', 'commune', 'calculator', 'sia', 'trafficResume', 'traffic']) {
+        const work = pending[key];
+        if (typeof work !== 'function') continue;
+        if (key === 'traffic' && typeof pending.trafficResume === 'function') continue;
+        try { work(); } catch (error) { console.warn('Reprise après geste impossible:', key, error); }
+    }
+}
+
+function startNpfMapGestureFrameCount() {
+    const state = getNpfMapGesturePauseState();
+    state.gestureStartAt = performance.now();
+    state.gestureMoved = false;
+    state.frames = 0;
+    if (state.rafId) cancelAnimationFrame(state.rafId);
+    const tick = () => {
+        state.frames += 1;
+        state.rafId = requestAnimationFrame(tick);
+    };
+    state.rafId = requestAnimationFrame(tick);
+}
+
+function stopNpfMapGestureFrameCount() {
+    const state = getNpfMapGesturePauseState();
+    if (state.rafId) cancelAnimationFrame(state.rafId);
+    state.rafId = null;
+    const durationMs = performance.now() - state.gestureStartAt;
+    if (state.gestureMoved && durationMs >= 200 && state.frames > 1) {
+        state.fps.push(Math.round((state.frames - 1) * 1000 / durationMs));
+        if (state.fps.length > 300) state.fps.shift();
+    }
+}
+
+function noteNpfMapGestureDown() {
+    const state = getNpfMapGesturePauseState();
+    clearTimeout(state.resumeTimer);
+    state.resumeTimer = null;
+    startNpfMapGestureFrameCount();
+}
+
+function noteNpfMapGestureUp() {
+    const state = getNpfMapGesturePauseState();
+    if (state.touches > 0 || state.mouseDown) return;
+    stopNpfMapGestureFrameCount();
+    state.lastUpAt = Date.now();
+    clearTimeout(state.resumeTimer);
+    state.resumeTimer = setTimeout(() => {
+        state.resumeTimer = null;
+        flushNpfMapGesturePausedWork();
+    }, NPF_MAP_GESTURE_PAUSE_AFTER_MS + 20);
+}
+
+function installNpfMapGesturePauseTracking() {
+    if (!map || window.__npfMapGesturePauseInstalled) return;
+    window.__npfMapGesturePauseInstalled = true;
+    const state = getNpfMapGesturePauseState();
+    const container = map.getContainer();
+    const onTouchStart = event => {
+        const wasDown = isNpfMapFingerDown();
+        state.touches = Math.max(1, event.touches ? event.touches.length : 1);
+        if (!wasDown) noteNpfMapGestureDown();
+    };
+    const onTouchEnd = event => {
+        /* Seuls les touchers commencés sur la carte comptent. */
+        if (state.touches <= 0) return;
+        state.touches = event.touches ? event.touches.length : 0;
+        if (state.touches === 0) noteNpfMapGestureUp();
+    };
+    container.addEventListener('touchstart', onTouchStart, { capture: true, passive: true });
+    window.addEventListener('touchend', onTouchEnd, { capture: true, passive: true });
+    window.addEventListener('touchcancel', onTouchEnd, { capture: true, passive: true });
+    container.addEventListener('pointerdown', event => {
+        if (event.pointerType !== 'mouse') return;
+        const wasDown = isNpfMapFingerDown();
+        state.mouseDown = true;
+        if (!wasDown) noteNpfMapGestureDown();
+    }, { capture: true, passive: true });
+    window.addEventListener('pointerup', event => {
+        if (event.pointerType !== 'mouse' || !state.mouseDown) return;
+        state.mouseDown = false;
+        noteNpfMapGestureUp();
+    }, { capture: true, passive: true });
+    map.on('movestart zoomstart', () => {
+        if (isNpfMapFingerDown()) state.gestureMoved = true;
+    });
+}
+
+function appendNpfDiagV1749GestureLines(lines) {
+    const stats = (typeof npfAirportViewMarkerStats !== 'undefined' && npfAirportViewMarkerStats) || {};
+    lines.push(
+        'Marqueurs PÉLIC et terrains sur la carte (v17.49, vue + demi-vue) : '
+        + (Number(stats.present) || 0) + ' maintenant · maximum ' + (Number(stats.max) || 0)
+        + ' · sur ' + (Number(stats.total) || 0)
+    );
+    const list = getNpfMapGesturePauseState().fps.slice().sort((a, b) => a - b);
+    lines.push(
+        'Images par seconde pendant les gestes : '
+        + (list.length
+            ? 'médiane ' + list[Math.floor(list.length / 2)] + ' · pire ' + list[0] + ' (' + list.length + ' gestes)'
+            : 'aucun geste mesuré')
+    );
+}
+
 function enableCenterGpsFollow() {
     centerGpsFollowActive = true;
     centerGpsFollowPausedUntil = 0;

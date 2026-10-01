@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 01/10/2026
-Version de travail actuelle : TEST v17.48
+Version de travail actuelle : TEST v17.49
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,12 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.49 — gestes plus fluides : seuls les PÉLIC et terrains proches de la
+  vue (vue + demi-vue) sont posés sur la carte (PÉLIC sélectionné, BASE et
+  terrain à fenêtre ouverte toujours posés) ; pendant un geste et 0,8 s après,
+  pause du calculateur (affichage), de la commune survolée, du vecteur avion,
+  du SIA en suivi GPS et du redessin SafeSky ; restitution retenue tant qu'un
+  doigt est posé ; 2 lignes DIAG (marqueurs, images par seconde) ;
 - v17.48 — fichiers statiques (lignes HT, localités, contours locaux et
   etalab, communes, icônes et images) : plus aucune vérification ni
   retéléchargement à chaque lancement ; une seule fois par nouvelle version
@@ -400,6 +406,10 @@ NON IMPLÉMENTÉ / OUVERT :
   (« ANALYSE DIAG v17.32 SOL + VOL ») : 5 défauts du DIAG lui-même relevés
   (D1 à D5) et 9 recommandations classées gain / risque (R1 à R9), aucune
   implémentée. Historique : À MESURER -> MESURÉ ;
+- v17.49 : À MESURER sur iPad (saccades et retard pendant les gestes, lignes
+  DIAG « Marqueurs PÉLIC et terrains » et « Images par seconde pendant les
+  gestes »). P3 (index SIA) et P4 (marge des canvas) : NON IMPLÉMENTÉ, à
+  décider après mesure de v17.49 ;
 - v17.48 : À MESURER sur iPad (boutons nets, HT à 2 NM sur la Carte
   NPF-Q400, export DIAG). Fichiers de l'app (script.js 3,2 Mo, style.css
   0,5 Mo, leaflet...) toujours retéléchargés à chaque lancement avec réseau
@@ -488,44 +498,44 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.48
+Version : TEST v17.49
 Date : 01/10/2026
-Base : v17.47 (commitée eb2744f, VALIDÉE sur iPad le 30/09/2026)
+Base : v17.48 (commitée 2043673, À MESURER)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.48.txt
-2_Index_v17.48.txt
-3_Manifest_v17.48.txt
-4_Script_v17.48.txt
-5_SIA_v17.48.txt
-6_Style_v17.48.txt
-7_Sw_v17.48.txt
+1_Modifications_v17.49.txt
+2_Index_v17.49.txt
+3_Manifest_v17.49.txt
+4_Script_v17.49.txt
+5_SIA_v17.49.txt
+6_Style_v17.49.txt
+7_Sw_v17.49.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.48 (et texte « TEST v17.48 » de l'écran de
+- Index : APP_VERSION = v17.49 (et texte « TEST v17.49 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.48
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.48
-- Style : NPF_STYLE_BUILD_VERSION = v17.48
-- Service Worker : `sw-v17-48_fichiers_statiques_icones` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-48_fichiers_statiques_icones`, `npf-q400-test-app-data-v1`,
+- Manifest : start_url = ./index.html?appv=v17.49
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.49
+- Style : NPF_STYLE_BUILD_VERSION = v17.49
+- Service Worker : `sw-v17-49_gestes_pelic_vue_pause` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-49_gestes_pelic_vue_pause`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-15.69-radio1026-1-maplite1`
 - SIA_DATA_REVISION (SW / Index) : 15.69-radio1026-1-maplite1 (inchangée)
-- sia.js v17.48 : strictement identique à v17.47.
+- sia.js v17.49 : strictement identique à v17.48.
 - Images de lancement : icons/startup-ipad9-portrait.png (1620 × 2160) et
   icons/startup-ipad9-landscape.png (2160 × 1620).
 - Icônes des boutons (v17.48) : calculator-fms-icon, search-commune-icon,
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.48 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.49 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
-- `sia.js` et moteur tuiles (src/100) identiques à v17.47 ;
-- tests Chrome v17.47 / v17.48 : entrée v17.48 ;
+- `sia.js` et moteur tuiles (src/100) identiques à v17.48 ;
+- tests Chrome v17.48 / v17.49 : entrée v17.49 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44 et v17.47 VALIDÉES ; v17.29, v17.31, v17.33
-  à v17.43, v17.45, v17.46 et v17.48 À MESURER.
+  à v17.43, v17.45, v17.46, v17.48 et v17.49 À MESURER.
 
 
 2. PROTOCOLE DE TRAVAIL À RESPECTER
@@ -2047,6 +2057,138 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.49 — GESTES PLUS FLUIDES : PÉLIC ET TERRAINS PROCHES DE LA
+VUE SEULEMENT (P1) ; PAUSE DES TRAVAUX PENDANT UN GESTE (P2)
+Date : 01/10/2026
+Base fonctionnelle : v17.48 (commit 2043673)
+Décision pilote : P1 + P2 validés ; P3 (index SIA) et P4 (marge des canvas)
+NON IMPLÉMENTÉ.
+
+ÉTAT AVANT (analyse du DIAG 01/10 11:32 et mesures Chrome)
+- 434 marqueurs PÉLIC et terrains posés en permanence (éléments de page,
+  un calque graphique chacun) : à chaque image d'un glisser ou d'un pincer,
+  le navigateur les recompose tous (Commit + Layerize ≈ 1 900 ms contre
+  ≈ 440 ms sans PÉLIC sur une trace Chrome, CPU ×4). Au pincer, Leaflet
+  repositionne en plus chaque marqueur à chaque image (zoom animé coupé
+  depuis v13.58).
+- Pendant les gestes, la chaîne GPS continue (calculateur jusqu'à 114 ms,
+  vecteur avion jusqu'à 152 ms, commune survolée), le SIA du suivi peut se
+  reconstruire, et le redessin SafeSky (112 ms) ou la restitution du geste
+  précédent tombent dans le geste suivant quand le pilote enchaîne.
+- Info pilote : saccades un peu moins fortes SafeSky éteint, mais présentes.
+
+RÉFÉRENCE AVANT CODAGE (comportements à conserver)
+- FdS / GAAR : src/170:140 (pont BFG), 943 (mot de passe de session), 978
+  (bouton carte -> NAS).
+- GLR : src/180:1415 (expiration locale à minuit), 1555 (OFF masque
+  seulement), 1573 (bouton).
+- SafeSky : src/030:695 (réglage mémorisé), src/140:3765 (bouton).
+- HT / Routes : src/110:1511 isNpfHeavyOverlayBaseMapAllowed.
+- Points VFR OACI 2 NM : src/340:1983.
+- Cartes : src/280:1400 import, 2474 sélection, 2942 suppression.
+- Feux : src/100:2861 recherche, src/050:424 historique.
+- Fenêtre des terrains : src/210:253 glissement, src/260:1085 fermeture au
+  retour du suivi.
+- PÉLIC : src/220:869 drawPermanentAirportMarkers, src/210:309 zones de
+  toucher, src/260:154-177 Désactiver / EAU / PÉLIC / BASE.
+- Calculateur : src/270:1296 updateCalculatorData (formules inchangées).
+- Suivi avion : src/260:969 recentrage, src/260:1220 suivi, délai de retour
+  getCenterGpsFollowRecenterDelayMs (inchangé).
+
+MODIFICATIONS
+- P1 (src/220, src/210, src/090) : registre des marqueurs PÉLIC et
+  terrains ; seuls ceux dans la vue + une demi-vue de marge sont posés sur la
+  carte, recalcul à moveend / zoomend (fin de geste, changement de zoom,
+  déplacement du suivi) et à l'ouverture d'une fenêtre. Toujours posés : PÉLIC
+  sélectionné, BASE, terrain dont la fenêtre est ouverte. Les 434 zones de
+  toucher restent toutes en place. Filtres, Désactiver, EAU/RETARDANT et
+  seuils de zoom inchangés (les marqueurs sont construits comme avant).
+  Interdits respectés : pas de placement 2D, PÉLIC jamais masqués pendant un
+  geste, zoom animé toujours coupé.
+- P2 (src/260 suivi des doigts sur la carte ; src/270, src/340, src/140,
+  src/090, src/080) : pendant un geste et 0,8 s après le lever du doigt,
+  mise en pause de l'affichage du calculateur (moment de mise à jour
+  seulement), de la commune survolée, du vecteur avion, de la reconstruction
+  SIA du suivi GPS et du redessin SafeSky ; la restitution tuiles -> VFR ->
+  HT -> Routes attend tant qu'un doigt est posé. Reprise : une seule mise à
+  jour avec la dernière position. Gardés : symbole avion, interrogation
+  réseau SafeSky, délai de retour du suivi.
+- DIAG (src/010, src/260) : 2 lignes en tête : « Marqueurs PÉLIC et terrains
+  sur la carte » (maintenant / maximum / total) et « Images par seconde
+  pendant les gestes » (médiane / pire).
+
+MESURES CHROME (iPad simulé 1080 × 810 ×2, Carte NPF-Q400 de test, HT ON,
+SafeSky ON, simulation GPS 300 kt + suivi, SIA zones + VRP, feu sélectionné ;
+6 glisser + 6 pincer par cas ; médianes ; saccade = image > 50 ms, total)
+Images par seconde (saccades) :
+                         v17.48      P1 seul     P1 + P2
+CPU ×4  1 NM  glisser    20 (168)    60 (11)     66 (16)
+CPU ×4  1 NM  pincer     14 (265)    40 (38)     40 (28)
+CPU ×4  5 NM  glisser    22 (57)     76 (27)     85 (19)
+CPU ×4  5 NM  pincer     14 (287)    30 (128)    49 (96)
+CPU ×6  1 NM  glisser    13 (302)    26 (113)    34 (51)
+CPU ×6  1 NM  pincer      6 (317)    22 (168)    26 (125)
+CPU ×6  5 NM  glisser     7 (468)    32 (32)     52 (29)
+CPU ×6  5 NM  pincer      7 (408)    20 (244)    20 (218)
+Durée moyenne d'une image, CPU ×6 : glisser 1 NM 78 -> 39 -> 27 ms ;
+5 NM 142 -> 30 -> 19 ms ; pincer 1 NM 154 -> 46 -> 39 ms ; 5 NM 153 -> 48
+-> 50 ms.
+Marqueurs posés : 434 en v17.48 ; v17.49 : 66 à 10 NM, 7 à 1 NM, 434 sur
+la France entière.
+Le « retard doigt -> carte » n'a pas pu être mesuré de façon fiable à 1 NM
+avec le suivi actif (même valeur dans les trois versions) : non retenu.
+
+CONTRÔLES FONCTIONNELS (Chrome, v17.48 contre v17.49)
+- Terrain hors marge qui entre dans la vue après un long glisser : posé en
+  fin de geste.
+- PÉLIC sélectionné et BASE posés même très loin de la vue ; fenêtre ouverte
+  gardée hors de la marge, retirée après fermeture et geste suivant.
+- Toucher d'un PÉLIC : fenêtre ouverte ; EAU/RETARDANT et Désactiver changent
+  bien le marqueur.
+- Doigt posé : 0 mise à jour calculateur / commune / vecteur (v17.48 : 4 / 7
+  / 4) ; 1,2 s après le lever : 1 seule, avec la dernière position.
+- Calculateur : valeurs et texte identiques à v17.48 pour une même position.
+- Restitution : attend le lever du doigt, puis se termine (HT affichées).
+
+NON-RÉGRESSION v17.49 CONTRE v17.48 (Chrome, NAS simulé)
+- FdS / GAAR (BFG connecté sans question ; sinon mot de passe puis NAS) : OK.
+- GLR (code du jour, expiration à minuit, OFF masque seulement) : OK.
+- SafeSky ON/OFF mémorisé : OK.
+- HT et Routes seulement sur les Cartes NPF-Q400 et la carte en ligne ;
+  grisés sur OACI / IGN, réglage gardé : OK.
+- Points VFR OACI à 2 NM : OK.
+- Cartes : import, sélection, suppression : OK (test des cartes relancé
+  seul : la 1re série en parallèle avait fait chevaucher deux imports dans
+  les deux versions).
+- Recherche de feux (nom, ancien nom) et historique des feux : OK.
+- Fenêtre des terrains (v17.44 / v17.45) : glissement et fermeture au retour
+  du suivi (10 s) : OK.
+- PÉLIC : affichage, toucher, PÉLIC sélectionné, BASE, EAU/RETARDANT,
+  Désactiver, terrain qui entre dans la vue après un long glisser : OK.
+- Calculateur : valeurs identiques pour une même position : OK.
+- Suivi avion et recentrage (délai de retour inchangé, 10 s) : OK.
+- Écran de démarrage, export DIAG (2 nouvelles lignes) : OK.
+- Service worker : caches npf-q400-test-* seulement : OK.
+Aucune exception JavaScript, aucune erreur console, dans les deux versions.
+
+RETOUR ARRIÈRE
+- Revenir au commit 2043673 (v17.48) : les 434 marqueurs PÉLIC et terrains
+  sont de nouveau tous posés et les travaux reprennent pendant les gestes.
+  Aucune donnée du pilote n'est touchée (réglages, feux, cartes).
+
+FICHIERS MODIFIÉS
+src/220, src/210, src/090, src/260, src/270, src/340, src/140, src/080,
+src/010, donc script.js ; index.html, manifest.json, style.css, sw.js
+(numéros de version). sia.js, src/100 (moteur des tuiles), src/280, src/350 :
+identiques à v17.48.
+
+VERSION
+- App : v17.49
+- Service Worker : `sw-v17-49_gestes_pelic_vue_pause`
+
+STATUT : À MESURER sur iPad.
+
 
 VERSION TEST v17.48 — FICHIERS STATIQUES GARDÉS HORS LIGNE (PLUS DE
 VÉRIFICATION À CHAQUE LANCEMENT) ; ICÔNES ALLÉGÉES

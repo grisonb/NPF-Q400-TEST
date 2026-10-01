@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v17-48_fichiers_statiques_icones';
-const APP_VERSION = 'v17.48';
+const SW_VERSION = 'sw-v17-49_gestes_pelic_vue_pause';
+const APP_VERSION = 'v17.49';
 const SIA_DATA_REVISION = '15.69-radio1026-1-maplite1';
 const SIA_DATA_URL = './sia.js';
 /*

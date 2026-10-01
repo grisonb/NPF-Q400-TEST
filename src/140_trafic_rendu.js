@@ -2936,6 +2936,16 @@ function renderTrafficAircraft(aircraftList, meta = {}) {
         return;
     }
 
+    /* v17.49 — pas de redessin SafeSky pendant un geste carte : le dernier
+     * instantané est redessiné une seule fois à la reprise. */
+    if (deferNpfWorkDuringMapGesture('traffic', () => {
+        if (isTrafficVisualUpdatesSuspended()) return;
+        redrawTrafficLayerFromSnapshot();
+        startTrafficSmoothAnimation();
+    })) {
+        return;
+    }
+
     let openTrafficPopupKey = '';
     trafficMarkerRegistry.forEach((entry, key) => {
         if (
