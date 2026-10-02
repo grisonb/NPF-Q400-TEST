@@ -886,6 +886,7 @@ const NPF_AIRPORT_MARKER_VIEW_PAD_RATIO = 0.5;
  * sont posés en premier, puis les retraits, puis la marge.
  */
 const NPF_VIEW_WINDOW_BATCH_SIZE = 40;
+const NPF_VIEW_WINDOW_FRAME_BUDGET_MS = 8;
 
 /* Prochaine image, ou au plus tard 150 ms (onglet en arrière-plan : le
  * navigateur suspend requestAnimationFrame, ex. PDF VAC ouvert ailleurs). */
@@ -993,8 +994,14 @@ function runNpfViewWindowStep(manager) {
         ];
         job.index = 0;
     }
+    /* v17.52 — C-b : paquet limité à ~8 ms de travail par image (au moins un
+     * marqueur) au lieu de 40 marqueurs (jusqu'à 521 ms au dézoom sur iPad). */
     let done = 0;
-    while (job.index < job.changes.length && done < NPF_VIEW_WINDOW_BATCH_SIZE) {
+    const sliceStartedAt = performance.now();
+    while (
+        job.index < job.changes.length
+        && (done === 0 || performance.now() - sliceStartedAt < NPF_VIEW_WINDOW_FRAME_BUDGET_MS)
+    ) {
         const [entry, wanted] = job.changes[job.index++];
         if (!layer || entry.layer !== layer) continue;
         if (wanted && !entry.onMap) {

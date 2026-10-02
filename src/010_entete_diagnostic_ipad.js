@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.51';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.52';
 
 
 /*
@@ -2548,6 +2548,8 @@ const NPF_DIAG_DETAIL = (() => {
          * terrains proches de la vue, visibles dans « en cours » des blocages. */
         wrapGlobal('runNpfMapGestureResumeStep', { noStartup: true });
         wrapGlobal('processNpfAirportMarkerViewChunk', { noStartup: true, activityMinMs: 4 });
+        /* v17.52 — pose des bordures intérieures des zones SIA par lots. */
+        wrapGlobal('runSiaInnerBandsStep', { noStartup: true, activityMinMs: 4 });
 
         wrapGlobal('initMap', { after: () => installMapHooks() });
 
@@ -3229,7 +3231,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.51 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.52 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -3769,6 +3771,7 @@ function appendNpfDiagLaunchStorageHeader(lines) {
     try { appendNpfDiagV1746HeaderLines(lines); } catch (_) {}
     try { appendNpfDiagV1749GestureLines(lines); } catch (_) {}
     try { appendNpfDiagV1750VrpLine(lines); } catch (_) {}
+    try { appendNpfDiagV1752TileLine(lines); } catch (_) {}
     safe_npfDiagBannerHeader(lines);
     lines.push(
         'SafeSky (showTrafficLayer) relu au lancement : ' + JSON.stringify(current.safeSkyAtLaunch)

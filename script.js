@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.51';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.52';
 
 
 /*
@@ -2548,6 +2548,8 @@ const NPF_DIAG_DETAIL = (() => {
          * terrains proches de la vue, visibles dans « en cours » des blocages. */
         wrapGlobal('runNpfMapGestureResumeStep', { noStartup: true });
         wrapGlobal('processNpfAirportMarkerViewChunk', { noStartup: true, activityMinMs: 4 });
+        /* v17.52 — pose des bordures intérieures des zones SIA par lots. */
+        wrapGlobal('runSiaInnerBandsStep', { noStartup: true, activityMinMs: 4 });
 
         wrapGlobal('initMap', { after: () => installMapHooks() });
 
@@ -3229,7 +3231,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.51 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.52 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -3769,6 +3771,7 @@ function appendNpfDiagLaunchStorageHeader(lines) {
     try { appendNpfDiagV1746HeaderLines(lines); } catch (_) {}
     try { appendNpfDiagV1749GestureLines(lines); } catch (_) {}
     try { appendNpfDiagV1750VrpLine(lines); } catch (_) {}
+    try { appendNpfDiagV1752TileLine(lines); } catch (_) {}
     safe_npfDiagBannerHeader(lines);
     lines.push(
         'SafeSky (showTrafficLayer) relu au lancement : ' + JSON.stringify(current.safeSkyAtLaunch)
@@ -13098,9 +13101,11 @@ function initMap() {
             pane: 'highVoltageLinesPane'
         })
         : null;
+    /* v17.52 — A1 : marge 0,35 -> 0,10 comme HT et Routes (canvas pistes
+     * 51,4 -> 25,6 Mo sur iPad) ; petit bord redessiné en fin de long glisser. */
     npfRunwayRenderer = L.canvas
         ? L.canvas({
-            padding: 0.35,
+            padding: 0.10,
             pane: 'npfRunwaysPane'
         })
         : null;
@@ -13185,6 +13190,8 @@ function initMap() {
 
     /* v17.49 — pause des travaux pendant les gestes (voir src/260). */
     installNpfMapGesturePauseTracking();
+    /* v17.52 — DIAG : compteurs passifs des tuiles hors ligne (voir src/260). */
+    installNpfDiagOfflineTileCounters();
 
     /* v17.49 — PÉLIC et terrains proches de la vue seulement (voir src/220). */
     map.on('moveend zoomend popupopen', () => {
@@ -13948,7 +13955,9 @@ function releaseStaleOfflineTileResources(reason = 'zoomend') {
 }
 
 function recordNpfZoomMemorySnapshot(reason = 'zoomend') {
-    const snapshot = getNpfStartupDiagnosticOverlaySnapshot();
+    /* v17.52 — C-a : plus de mesure de mise en page forcée en fin de zoom
+     * (jusqu'à 742 ms sur iPad) : mode « sans mesure DOM » des gestes. */
+    const snapshot = getNpfStartupDiagnosticOverlaySnapshot({ layoutFree: true });
     npfDiagSiaInteraction(
         'MÉMOIRE CARTE',
         `raison=${reason} · zoom=${map?.getZoom?.() ?? '—'}`,
@@ -38326,6 +38335,7 @@ const NPF_AIRPORT_MARKER_VIEW_PAD_RATIO = 0.5;
  * sont posés en premier, puis les retraits, puis la marge.
  */
 const NPF_VIEW_WINDOW_BATCH_SIZE = 40;
+const NPF_VIEW_WINDOW_FRAME_BUDGET_MS = 8;
 
 /* Prochaine image, ou au plus tard 150 ms (onglet en arrière-plan : le
  * navigateur suspend requestAnimationFrame, ex. PDF VAC ouvert ailleurs). */
@@ -38433,8 +38443,14 @@ function runNpfViewWindowStep(manager) {
         ];
         job.index = 0;
     }
+    /* v17.52 — C-b : paquet limité à ~8 ms de travail par image (au moins un
+     * marqueur) au lieu de 40 marqueurs (jusqu'à 521 ms au dézoom sur iPad). */
     let done = 0;
-    while (job.index < job.changes.length && done < NPF_VIEW_WINDOW_BATCH_SIZE) {
+    const sliceStartedAt = performance.now();
+    while (
+        job.index < job.changes.length
+        && (done === 0 || performance.now() - sliceStartedAt < NPF_VIEW_WINDOW_FRAME_BUDGET_MS)
+    ) {
         const [entry, wanted] = job.changes[job.index++];
         if (!layer || entry.layer !== layer) continue;
         if (wanted && !entry.onMap) {
@@ -41063,6 +41079,60 @@ function noteNpfDiagVrpCount() {
     stats.last = count;
     stats.max = Math.max(stats.max, count);
     return stats;
+}
+
+/*
+ * v17.52 — DIAG : tuiles hors ligne créées / retirées / encore en mémoire.
+ * Compteurs PASSIFS (événements Leaflet tileloadstart / tileunload des
+ * GridLayer, et FinalizationRegistry du navigateur pour les tuiles réellement
+ * libérées). Aucune ligne du moteur de tuiles (src/100) n'est touchée.
+ */
+function installNpfDiagOfflineTileCounters() {
+    if (!map || window.__npfDiagTileCounters) return;
+    const stats = window.__npfDiagTileCounters = {
+        created: 0,
+        unloaded: 0,
+        collected: 0,
+        maxAlive: 0,
+        seen: typeof WeakSet === 'function' ? new WeakSet() : null,
+        registry: typeof FinalizationRegistry === 'function'
+            ? new FinalizationRegistry(() => { stats.collected += 1; })
+            : null
+    };
+    const attach = layer => {
+        if (!layer || layer.__npfDiagTileCountersAttached || !(layer instanceof L.GridLayer)) return;
+        layer.__npfDiagTileCountersAttached = true;
+        layer.on('tileloadstart', event => {
+            if (typeof mapSourceMode !== 'undefined' && mapSourceMode !== 'offline') return;
+            stats.created += 1;
+            try { if (stats.seen && event?.tile) stats.seen.add(event.tile); } catch (_) {}
+            try { if (stats.registry && event?.tile) stats.registry.register(event.tile, 1); } catch (_) {}
+            stats.maxAlive = Math.max(stats.maxAlive, stats.created - stats.collected);
+        });
+        layer.on('tileunload', event => {
+            /* Seules les tuiles vues à leur création sont comptées. */
+            if (stats.seen && !(event?.tile && stats.seen.has(event.tile))) return;
+            stats.unloaded += 1;
+        });
+    };
+    map.on('layeradd', event => attach(event?.layer));
+    try { map.eachLayer(attach); } catch (_) {}
+}
+
+function appendNpfDiagV1752TileLine(lines) {
+    const stats = window.__npfDiagTileCounters;
+    if (!stats) {
+        lines.push('Tuiles hors ligne : compteurs indisponibles');
+        return;
+    }
+    let shown = 0;
+    try { shown = document.querySelectorAll('.leaflet-tile-pane img.leaflet-tile').length; } catch (_) {}
+    const alive = stats.created - stats.collected;
+    lines.push(
+        'Tuiles hors ligne : créées ' + stats.created + ' · retirées ' + stats.unloaded
+        + ' · encore en mémoire ' + (stats.registry ? alive + ' (maximum ' + Math.max(stats.maxAlive, alive) + ')' : '— (mesure indisponible sur ce Safari)')
+        + ' · affichées ' + shown
+    );
 }
 
 function appendNpfDiagV1750VrpLine(lines) {
@@ -54408,6 +54478,8 @@ function cancelAllSiaWorkForZoomStart() {
      * finale. Les contours principaux peuvent, eux, rester en double-buffer.
      */
     clearSiaZoomDependentLayers();
+    /* v17.52 — les bordures dépendent aussi de la projection : retirées au début du zoom. */
+    try { clearSiaInnerBands(); } catch (_) {}
 
     /* v16.58 — ne plus transporter un ancien jeu de centaines de calques SIA
      * pendant un zoom out. Sous charge combinée, ou dès que le rendu SIA est
@@ -54857,7 +54929,8 @@ function ensureSiaMapPanes() {
     }
 
     if (!siaAirspaceRenderer && L.canvas) {
-        siaAirspaceRenderer = L.canvas({ padding: 0.35, pane: 'siaAirspacePane' });
+        /* v17.52 — A1 : marge 0,35 -> 0,10 (canvas zones SIA 51,4 -> 25,6 Mo sur iPad). */
+        siaAirspaceRenderer = L.canvas({ padding: 0.10, pane: 'siaAirspacePane' });
     }
     if (!siaCtrTouchRenderer && L.svg) {
         siaCtrTouchRenderer = L.svg({ padding: 0.35, pane: 'siaCtrTouchPane' });
@@ -54896,6 +54969,8 @@ function clearSiaRenderedLayers() {
     if (siaLayerGroup) {
         try { siaLayerGroup.clearLayers(); } catch (_) {}
     }
+    /* v17.52 — bordures dans leur calque à part. */
+    try { clearSiaInnerBands(); } catch (_) {}
 }
 
 function normalizeSiaFilterCounts(dataset) {
@@ -57208,6 +57283,8 @@ function initializeSiaSystem() {
         });
         map.on('moveend', () => {
             markSiaDecorationMapMotion();
+            /* v17.52 — B4 / B5 : zones entrées à l'écran (glisser ou suivi GPS). */
+            try { scheduleSiaInnerBandsSync('moveend'); } catch (_) {}
             const sample = npfDiagMoveSample;
             npfDiagMoveSample = null;
             if (sample) {
@@ -58747,8 +58824,8 @@ function buildSiaCtrInsetSegmentsLatLngs(ring, geometry, insetPixels = 7) {
     return segments;
 }
 
-function addSiaCtrInnerBand(geometry, color = '#0066ff') {
-    if (!siaLayerGroup || !geometry || isCurrentOfflineOaciMap()) return [];
+function addSiaCtrInnerBand(geometry, color = '#0066ff', options = {}) {
+    if ((!siaLayerGroup && !options.collect) || !geometry || isCurrentOfflineOaciMap()) return [];
     const createdLayers = [];
     const rings = getSiaCtrOuterRings(geometry);
     rings.forEach(ring => {
@@ -58764,10 +58841,164 @@ function addSiaCtrInnerBand(geometry, color = '#0066ff') {
             lineCap: 'round',
             lineJoin: 'round',
             interactive: false
-        }).addTo(siaLayerGroup);
+        });
+        if (!options.collect) layer.addTo(siaLayerGroup);
         createdLayers.push(layer);
     });
     return createdLayers;
+}
+
+/*
+ * v17.52 — B4 / B5 : bordures intérieures gardées et complétées.
+ * - Les bordures vivent dans un calque à part (siaInnerBandLayerGroup), qui
+ *   survit au remplacement du calque SIA après un glisser : plus d'effacement
+ *   puis de redessin complet en 10 à 28 s.
+ * - Cache par zone pour l'échelle en cours (le décalage de 7 px dépend du
+ *   zoom ; le contour entier est calculé, donc valable après tout glisser).
+ * - Seules les zones de la vue sans bordure sont calculées, par lots d'environ
+ *   8 ms ; chaque lot est posé d'un coup (un seul redessin du canvas par lot).
+ * - Jamais pendant qu'un doigt est posé ; un recentrage du suivi GPS n'annule
+ *   plus rien : il ajoute seulement les zones entrées à l'écran.
+ * - Mêmes règles d'affichage qu'avant : < 10 NM, pas sur OACI hors ligne,
+ *   zones affichées, et « HT + Routes allumées -> à partir de 2 NM ».
+ */
+const SIA_INNER_BAND_FRAME_BUDGET_MS = 8;
+/* Pose groupée : un redessin du canvas pour environ 3 images de calcul. */
+const SIA_INNER_BAND_FLUSH_MS = 24;
+let siaInnerBandLayerGroup = null;
+const siaInnerBandCache = new Map();
+let siaInnerBandCacheZoom = null;
+let siaInnerBandJob = null;
+let siaInnerBandGeneration = 0;
+let siaInnerBandRafPending = false;
+
+function getSiaInnerBandLayerGroup() {
+    if (!siaInnerBandLayerGroup) siaInnerBandLayerGroup = L.layerGroup();
+    if (map && !map.hasLayer(siaInnerBandLayerGroup)) siaInnerBandLayerGroup.addTo(map);
+    return siaInnerBandLayerGroup;
+}
+
+function clearSiaInnerBands() {
+    siaInnerBandGeneration += 1;
+    siaInnerBandJob = null;
+    if (siaInnerBandLayerGroup) {
+        try { siaInnerBandLayerGroup.clearLayers(); } catch (_) {}
+    }
+    siaInnerBandCache.clear();
+    siaInnerBandCacheZoom = null;
+}
+
+function isSiaInnerBandDisplayAllowed() {
+    if (!map || !siaMapAirspacesVisible || isCurrentOfflineOaciMap()) return false;
+    if (!Array.isArray(siaRenderedAirspaceFeatures) || !siaRenderedAirspaceFeatures.length) return false;
+    const scaleNm = getCurrentNpfScaleNm();
+    if (!Number.isFinite(scaleNm) || scaleNm >= SIA_DECORATION_LIGHTWEIGHT_SCALE_NM) return false;
+    const combinedHeavyDecorationLoad = !!(siaMapAirspacesVisible && showRoadOverlayLayer && showHighVoltageLinesLayer);
+    if (combinedHeavyDecorationLoad && scaleNm >= 5) return false;
+    return true;
+}
+
+function scheduleSiaInnerBandsSync(reason = 'sync', options = {}) {
+    siaInnerBandGeneration += 1;
+    siaInnerBandJob = {
+        generation: siaInnerBandGeneration,
+        reason: String(reason || ''),
+        reorder: !!options.reorder || !!siaInnerBandJob?.reorder,
+        list: null,
+        index: 0
+    };
+    if (siaInnerBandRafPending) return;
+    siaInnerBandRafPending = true;
+    npfNextFrame(() => {
+        siaInnerBandRafPending = false;
+        runSiaInnerBandsStep();
+    });
+}
+
+/* Nom global : suivi par le DIAG (« en cours » des blocages). */
+function runSiaInnerBandsStep() {
+    const job = siaInnerBandJob;
+    if (!job || job.generation !== siaInnerBandGeneration || !map) return;
+    const again = () => {
+        if (siaInnerBandRafPending) return;
+        siaInnerBandRafPending = true;
+        npfNextFrame(() => {
+            siaInnerBandRafPending = false;
+            runSiaInnerBandsStep();
+        });
+    };
+    if (typeof isNpfMapFingerDown === 'function' && isNpfMapFingerDown()) {
+        again();
+        return;
+    }
+    if (!job.list) {
+        if (!isSiaInnerBandDisplayAllowed()) {
+            clearSiaInnerBands();
+            return;
+        }
+        const group = getSiaInnerBandLayerGroup();
+        const zoom = map.getZoom();
+        if (siaInnerBandCacheZoom !== zoom) {
+            try { group.clearLayers(); } catch (_) {}
+            siaInnerBandCache.clear();
+            siaInnerBandCacheZoom = zoom;
+        }
+        const renderedItems = new Set(siaRenderedAirspaceFeatures.map(feature => feature?.properties?.siaItem));
+        for (const [item, layers] of siaInnerBandCache) {
+            if (renderedItems.has(item)) continue;
+            layers.forEach(layer => { try { group.removeLayer(layer); } catch (_) {} });
+            siaInnerBandCache.delete(item);
+        }
+        /* Après un nouveau calque SIA : reposer les bordures gardées au-dessus
+         * des contours (même ordre de dessin qu'avant), sans aucun recalcul. */
+        if (job.reorder) {
+            for (const layers of siaInnerBandCache.values()) {
+                layers.forEach(layer => {
+                    try { group.removeLayer(layer); group.addLayer(layer); } catch (_) {}
+                });
+            }
+        }
+        job.list = getSiaDecorationFeaturesForCurrentView(siaRenderedAirspaceFeatures).filter(feature => {
+            const item = feature?.properties?.siaItem;
+            return item && Number(item?.co || 0) !== 1 && !siaInnerBandCache.has(item);
+        });
+        job.index = 0;
+        job.pending = [];
+        job.pendingMs = 0;
+    }
+    const group = getSiaInnerBandLayerGroup();
+    const sliceStartedAt = performance.now();
+    const batch = job.pending;
+    while (
+        job.index < job.list.length
+        && (batch.length === 0 || performance.now() - sliceStartedAt < SIA_INNER_BAND_FRAME_BUDGET_MS)
+    ) {
+        const feature = job.list[job.index++];
+        const item = feature.properties.siaItem;
+        if (siaInnerBandCache.has(item)) continue;
+        let layers = [];
+        try {
+            layers = addSiaCtrInnerBand(feature.geometry, getSiaAirspaceStyle(item).color, { collect: true });
+        } catch (_) {
+            layers = [];
+        }
+        siaInnerBandCache.set(item, layers);
+        batch.push(...layers);
+    }
+    job.pendingMs += performance.now() - sliceStartedAt;
+    const finished = job.index >= job.list.length;
+    /* Pose groupée : un seul passage (un redessin du canvas) pour plusieurs
+     * images de calcul, ou à la fin du travail. */
+    if (finished || job.pendingMs >= SIA_INNER_BAND_FLUSH_MS) {
+        batch.forEach(layer => { try { group.addLayer(layer); } catch (_) {} });
+        job.pending = [];
+        job.pendingMs = 0;
+    }
+    if (!finished) {
+        again();
+        return;
+    }
+    siaInnerBandJob = null;
 }
 
 function normalizeSiaBoundaryLabelAngle(angleDeg) {
@@ -59845,13 +60076,8 @@ function renderSiaZoomDependentDecorations(features) {
      */
     const decorationFeatures = getSiaDecorationFeaturesForCurrentView(features);
     const labelState = { points: [], count: 0 };
-    decorationFeatures.forEach(feature => {
-        const item = feature?.properties?.siaItem;
-        if (!item || Number(item?.co || 0) === 1) return;
-        const itemStyle = getSiaAirspaceStyle(item);
-        const layers = addSiaCtrInnerBand(feature.geometry, itemStyle.color);
-        if (Array.isArray(layers)) siaZoomDependentLayers.push(...layers);
-    });
+    /* v17.52 — bordures : gestionnaire dédié (gardées, complétées par lots). */
+    scheduleSiaInnerBandsSync('decorations');
 
     decorationFeatures
         .filter(feature => Number(feature?.properties?.siaItem?.co || 0) !== 1)
@@ -59921,13 +60147,8 @@ async function renderSiaZoomDependentDecorationsProgressive(features, refreshGen
             error.name = SIA_REFRESH_ABORT_ERROR_NAME;
             throw error;
         }
-        const feature = decorationFeatures[index];
-        const item = feature?.properties?.siaItem;
-        if (!skipInnerBands && item && Number(item?.co || 0) !== 1) {
-            const itemStyle = getSiaAirspaceStyle(item);
-            const layers = addSiaCtrInnerBand(feature.geometry, itemStyle.color);
-            if (Array.isArray(layers)) siaZoomDependentLayers.push(...layers);
-        }
+        /* v17.52 — bordures : gestionnaire dédié (gardées, complétées par lots). */
+        if (!skipInnerBands && index === 0) scheduleSiaInnerBandsSync('decorations-progressives');
         if (
             NPF_STARTUP_DIAGNOSTIC.now() - phaseBudgetStartedAt
             >= SIA_DECORATION_TIME_BUDGET_MS
@@ -60250,6 +60471,7 @@ async function refreshSiaLayers(reason = 'manual') {
              * zoomend. Le zoom rend la main immédiatement ; la décoration est
              * recalculée après stabilisation de la vue. */
             siaRenderedZoom = zoom;
+            scheduleSiaInnerBandsSync('zoomend-contenu');
             scheduleSiaMoveDecorationRefresh('zoomend-idle-v16.66');
             npfDiagSiaInteraction(
                 'SIA RAFRAÎCHISSEMENT',
@@ -60583,6 +60805,9 @@ async function refreshSiaLayers(reason = 'manual') {
 
         /* v17.50 — DIAG : nombre de VRP posés (ligne d'en-tête). */
         setTimeout(() => { try { noteNpfDiagVrpCount(); } catch (_) {} }, 0);
+
+        /* v17.52 — bordures gardées reposées sur le nouveau calque + zones manquantes. */
+        scheduleSiaInnerBandsSync(`commit-${reason}`, { reorder: true });
 
         /* v16.66 — contours/points sont maintenant engagés ; bandes
          * intérieures et libellés suivent au repos, sans retarder ce commit. */

@@ -627,6 +627,8 @@ function cancelAllSiaWorkForZoomStart() {
      * finale. Les contours principaux peuvent, eux, rester en double-buffer.
      */
     clearSiaZoomDependentLayers();
+    /* v17.52 — les bordures dépendent aussi de la projection : retirées au début du zoom. */
+    try { clearSiaInnerBands(); } catch (_) {}
 
     /* v16.58 — ne plus transporter un ancien jeu de centaines de calques SIA
      * pendant un zoom out. Sous charge combinée, ou dès que le rendu SIA est
@@ -1076,7 +1078,8 @@ function ensureSiaMapPanes() {
     }
 
     if (!siaAirspaceRenderer && L.canvas) {
-        siaAirspaceRenderer = L.canvas({ padding: 0.35, pane: 'siaAirspacePane' });
+        /* v17.52 — A1 : marge 0,35 -> 0,10 (canvas zones SIA 51,4 -> 25,6 Mo sur iPad). */
+        siaAirspaceRenderer = L.canvas({ padding: 0.10, pane: 'siaAirspacePane' });
     }
     if (!siaCtrTouchRenderer && L.svg) {
         siaCtrTouchRenderer = L.svg({ padding: 0.35, pane: 'siaCtrTouchPane' });
@@ -1115,6 +1118,8 @@ function clearSiaRenderedLayers() {
     if (siaLayerGroup) {
         try { siaLayerGroup.clearLayers(); } catch (_) {}
     }
+    /* v17.52 — bordures dans leur calque à part. */
+    try { clearSiaInnerBands(); } catch (_) {}
 }
 
 function normalizeSiaFilterCounts(dataset) {
@@ -3427,6 +3432,8 @@ function initializeSiaSystem() {
         });
         map.on('moveend', () => {
             markSiaDecorationMapMotion();
+            /* v17.52 — B4 / B5 : zones entrées à l'écran (glisser ou suivi GPS). */
+            try { scheduleSiaInnerBandsSync('moveend'); } catch (_) {}
             const sample = npfDiagMoveSample;
             npfDiagMoveSample = null;
             if (sample) {

@@ -331,9 +331,11 @@ function initMap() {
             pane: 'highVoltageLinesPane'
         })
         : null;
+    /* v17.52 — A1 : marge 0,35 -> 0,10 comme HT et Routes (canvas pistes
+     * 51,4 -> 25,6 Mo sur iPad) ; petit bord redessiné en fin de long glisser. */
     npfRunwayRenderer = L.canvas
         ? L.canvas({
-            padding: 0.35,
+            padding: 0.10,
             pane: 'npfRunwaysPane'
         })
         : null;
@@ -418,6 +420,8 @@ function initMap() {
 
     /* v17.49 — pause des travaux pendant les gestes (voir src/260). */
     installNpfMapGesturePauseTracking();
+    /* v17.52 — DIAG : compteurs passifs des tuiles hors ligne (voir src/260). */
+    installNpfDiagOfflineTileCounters();
 
     /* v17.49 — PÉLIC et terrains proches de la vue seulement (voir src/220). */
     map.on('moveend zoomend popupopen', () => {
@@ -1181,7 +1185,9 @@ function releaseStaleOfflineTileResources(reason = 'zoomend') {
 }
 
 function recordNpfZoomMemorySnapshot(reason = 'zoomend') {
-    const snapshot = getNpfStartupDiagnosticOverlaySnapshot();
+    /* v17.52 — C-a : plus de mesure de mise en page forcée en fin de zoom
+     * (jusqu'à 742 ms sur iPad) : mode « sans mesure DOM » des gestes. */
+    const snapshot = getNpfStartupDiagnosticOverlaySnapshot({ layoutFree: true });
     npfDiagSiaInteraction(
         'MÉMOIRE CARTE',
         `raison=${reason} · zoom=${map?.getZoom?.() ?? '—'}`,

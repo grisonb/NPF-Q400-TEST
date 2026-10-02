@@ -1454,6 +1454,60 @@ function noteNpfDiagVrpCount() {
     return stats;
 }
 
+/*
+ * v17.52 — DIAG : tuiles hors ligne créées / retirées / encore en mémoire.
+ * Compteurs PASSIFS (événements Leaflet tileloadstart / tileunload des
+ * GridLayer, et FinalizationRegistry du navigateur pour les tuiles réellement
+ * libérées). Aucune ligne du moteur de tuiles (src/100) n'est touchée.
+ */
+function installNpfDiagOfflineTileCounters() {
+    if (!map || window.__npfDiagTileCounters) return;
+    const stats = window.__npfDiagTileCounters = {
+        created: 0,
+        unloaded: 0,
+        collected: 0,
+        maxAlive: 0,
+        seen: typeof WeakSet === 'function' ? new WeakSet() : null,
+        registry: typeof FinalizationRegistry === 'function'
+            ? new FinalizationRegistry(() => { stats.collected += 1; })
+            : null
+    };
+    const attach = layer => {
+        if (!layer || layer.__npfDiagTileCountersAttached || !(layer instanceof L.GridLayer)) return;
+        layer.__npfDiagTileCountersAttached = true;
+        layer.on('tileloadstart', event => {
+            if (typeof mapSourceMode !== 'undefined' && mapSourceMode !== 'offline') return;
+            stats.created += 1;
+            try { if (stats.seen && event?.tile) stats.seen.add(event.tile); } catch (_) {}
+            try { if (stats.registry && event?.tile) stats.registry.register(event.tile, 1); } catch (_) {}
+            stats.maxAlive = Math.max(stats.maxAlive, stats.created - stats.collected);
+        });
+        layer.on('tileunload', event => {
+            /* Seules les tuiles vues à leur création sont comptées. */
+            if (stats.seen && !(event?.tile && stats.seen.has(event.tile))) return;
+            stats.unloaded += 1;
+        });
+    };
+    map.on('layeradd', event => attach(event?.layer));
+    try { map.eachLayer(attach); } catch (_) {}
+}
+
+function appendNpfDiagV1752TileLine(lines) {
+    const stats = window.__npfDiagTileCounters;
+    if (!stats) {
+        lines.push('Tuiles hors ligne : compteurs indisponibles');
+        return;
+    }
+    let shown = 0;
+    try { shown = document.querySelectorAll('.leaflet-tile-pane img.leaflet-tile').length; } catch (_) {}
+    const alive = stats.created - stats.collected;
+    lines.push(
+        'Tuiles hors ligne : créées ' + stats.created + ' · retirées ' + stats.unloaded
+        + ' · encore en mémoire ' + (stats.registry ? alive + ' (maximum ' + Math.max(stats.maxAlive, alive) + ')' : '— (mesure indisponible sur ce Safari)')
+        + ' · affichées ' + shown
+    );
+}
+
 function appendNpfDiagV1750VrpLine(lines) {
     const stats = noteNpfDiagVrpCount();
     lines.push('VRP sur la carte : ' + stats.last + ' maintenant · maximum ' + stats.max);

@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 02/10/2026
-Version de travail actuelle : TEST v17.51
+Version de travail actuelle : TEST v17.52
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,11 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.52 — bordures intérieures des zones gardées au rechargement et
+  complétées par lots (plus d'effacement après un glisser, visibles en suivi
+  à 1 et 0,5 NM) ; canvas zones SIA et pistes en marge 0,10 (−51 Mo sur
+  iPad) ; zoom : DIAG sans mesure de mise en page, PÉLIC posés par paquets de
+  8 ms ; DIAG « Tuiles hors ligne » ;
 - v17.51 — zones SIA : voiles légers à 5 NM et au-dessus, zones P rouge 0,12
   et zones D couleur du contour (#e91e63) 0,06 ; pas sur OACI hors ligne ni
   zones masquées ; bordures intérieures strictement inchangées (v17.50) ;
@@ -418,7 +423,11 @@ NON IMPLÉMENTÉ / OUVERT :
   10 et 5 NM ; fluidité du suivi GPS à 5 NM avec HT + Routes). Règle de
   travail du 02/10/2026 : à chaque version, seulement la non-régression
   rapide ; test complet une fois par jour, sur demande ;
-- POINT OUVERT (constaté le 02/10/2026, v17.50 et v17.51) : après un glisser
+- v17.52 : À MESURER sur iPad (bordures après glisser et en suivi à 1 /
+  0,5 NM ; zooms ; ligne DIAG « Tuiles hors ligne » pour savoir si la fuite
+  des tuiles existe sur iPad). Fuite des tuiles hors ligne (A2, moteur de
+  tuiles, règle 7) : NON IMPLÉMENTÉ, À DÉCIDER après le DIAG iPad ;
+- POINT OUVERT TRAITÉ EN v17.52 (constaté le 02/10/2026, v17.50 et v17.51) : après un glisser
   à 5 NM, le retour des couches recharge entièrement les zones SIA ; TOUTES
   les bordures intérieures s'effacent 0,8 à 1,9 s après le geste puis
   reviennent en 10 à 28 s (Chrome, iPad simulé, sans HT + Routes : v17.50
@@ -523,44 +532,44 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.51
+Version : TEST v17.52
 Date : 02/10/2026
-Base : v17.50 (commitée 4ca5383, À MESURER)
+Base : v17.51 (commitée 323b6b7, À MESURER)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.51.txt
-2_Index_v17.51.txt
-3_Manifest_v17.51.txt
-4_Script_v17.51.txt
-5_SIA_v17.51.txt
-6_Style_v17.51.txt
-7_Sw_v17.51.txt
+1_Modifications_v17.52.txt
+2_Index_v17.52.txt
+3_Manifest_v17.52.txt
+4_Script_v17.52.txt
+5_SIA_v17.52.txt
+6_Style_v17.52.txt
+7_Sw_v17.52.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.51 (et texte « TEST v17.51 » de l'écran de
+- Index : APP_VERSION = v17.52 (et texte « TEST v17.52 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.51
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.51
-- Style : NPF_STYLE_BUILD_VERSION = v17.51
-- Service Worker : `sw-v17-51_voiles_zones_p_d` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-51_voiles_zones_p_d`, `npf-q400-test-app-data-v1`,
+- Manifest : start_url = ./index.html?appv=v17.52
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.52
+- Style : NPF_STYLE_BUILD_VERSION = v17.52
+- Service Worker : `sw-v17-52_bordures_gardees_canvas_alleges` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-52_bordures_gardees_canvas_alleges`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-15.69-radio1026-1-maplite1`
 - SIA_DATA_REVISION (SW / Index) : 15.69-radio1026-1-maplite1 (inchangée)
-- sia.js v17.51 : strictement identique à v17.50.
+- sia.js v17.52 : strictement identique à v17.51.
 - Images de lancement : icons/startup-ipad9-portrait.png (1620 × 2160) et
   icons/startup-ipad9-landscape.png (2160 × 1620).
 - Icônes des boutons (v17.48) : calculator-fms-icon, search-commune-icon,
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.51 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.52 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
-- `sia.js` et moteur tuiles (src/100) identiques à v17.50 ;
-- tests Chrome v17.50 / v17.51 : entrée v17.51 ;
+- `sia.js` et moteur tuiles (src/100) identiques à v17.51 ;
+- tests Chrome v17.51 / v17.52 : entrée v17.52 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44 et v17.47 VALIDÉES ; v17.29, v17.31, v17.33
-  à v17.43, v17.45, v17.46, v17.48 à v17.51 À MESURER.
+  à v17.43, v17.45, v17.46, v17.48 à v17.52 À MESURER.
 
 
 2. PROTOCOLE DE TRAVAIL À RESPECTER
@@ -2082,6 +2091,105 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.52 — BORDURES DES ZONES GARDÉES ET COMPLÉTÉES ; CANVAS
+ALLÉGÉS ; ZOOMS ALLÉGÉS ; DIAG TUILES HORS LIGNE
+Date : 02/10/2026
+Base fonctionnelle : v17.51 (commit 323b6b7)
+Décision pilote : C-a + C-b + A1 + B4/B5 + ligne DIAG tuiles ; PAS de
+correction de la fuite des tuiles (A2) dans cette version.
+
+ÉTAT AVANT (analyse du 02/10, DIAG 08:49 v17.50 et 12:43 v17.51)
+- Plantage 08:48 (v17.50) : probablement iOS qui ferme la page faute de
+  mémoire, juste après un dézoom à 20 NM ; non prouvé (pas de mesure mémoire
+  totale dans le DIAG). Pic canvas 179,8 Mo dans les deux sessions.
+- Chrome : tas JavaScript stable (≈ 191 -> 195 Mo en 30 min) ; fuite
+  d'éléments de page en carte hors ligne : ≈ 185 images de tuiles retenues
+  par cycle de zoom (≈ +1 250 éléments / min), aussi en v17.48 ; retenues
+  par le navigateur (src/100:2530-2560, closures finish / revokeBlobUrl).
+  Sur iPad : inconnu -> ligne DIAG ajoutée.
+- Bordures : après un glisser, rechargement complet des zones (src/080:1028)
+  -> nouveau calque sans bordures (src/350:2943-2955), redessin complet après
+  0,95 s (src/350:3233, effacement src/350:2526), 7 bordures / s : 10 à 28 s.
+  En suivi à 1 / 0,5 NM : chaque recentrage annulait le dessin
+  (src/340:586-590, 705-708, 3363) : aucune bordure.
+- Zooms : instantané DIAG avec mesure de mise en page (jusqu'à 742 ms) ;
+  paquets de 40 PÉLIC / terrains (jusqu'à 521 ms).
+
+MODIFICATIONS
+- C-a (src/090) : instantané « mémoire carte » de fin de zoom en mode « sans
+  mesure DOM » (DIAG seulement).
+- C-b (src/220) : pose des PÉLIC / terrains par paquets d'environ 8 ms par
+  image (au moins un marqueur), toujours jamais doigt posé ; PÉLIC
+  sélectionné, BASE et terrain à fenêtre ouverte toujours posés.
+- A1 (src/340, src/090) : marge des canvas zones SIA et pistes 0,35 -> 0,10
+  (comme HT et Routes) : sur iPad 2 × 51,4 Mo -> 2 × 25,6 Mo (≈ −51 Mo,
+  pic attendu ≈ 128 Mo au lieu de 179,8 Mo) ; Chrome 96,4 -> 57,7 Mo.
+- B4 / B5 (src/350, src/340) : calque de bordures à part, gardé au
+  remplacement du calque SIA ; cache par zone pour l'échelle en cours ;
+  seules les zones de la vue sans bordure sont calculées (≈ 8 ms par image),
+  posées par lots groupés (un redessin pour ≈ 24 ms de calcul) ; jamais doigt
+  posé ; un recentrage du suivi n'annule plus rien et ajoute les zones
+  entrées à l'écran ; bordures retirées au début d'un zoom (comme avant) ;
+  mêmes règles qu'avant (< 10 NM, pas sur OACI, zones affichées, HT + Routes
+  -> à partir de 2 NM). Libellés : chemin inchangé.
+- DIAG (src/260, src/090, src/010) : ligne « Tuiles hors ligne : créées /
+  retirées / encore en mémoire (maximum) / affichées », compteurs passifs
+  (événements Leaflet tileloadstart / tileunload et FinalizationRegistry) ;
+  src/100 NON touché. Étape « bordures » suivie par le DIAG
+  (runSiaInnerBandsStep).
+
+MESURES CHROME (iPad 9e génération simulé, carte NPF-Q400 de test, HT ON,
+SIA zones, v17.51 contre v17.52)
+- Rendu final après 40 s, 20 à 0,5 NM, avec et sans HT + Routes : bordures,
+  libellés et voiles P / D identiques à v17.51.
+- Glisser à 5 NM : v17.51 toutes les bordures effacées ; v17.52 aucune
+  effacée, nouvelles visibles en 0,33 à 0,35 s (×4 et ×6).
+- Suivi GPS 300 kt, 60 s : v17.51 bordures 36 s / 60 à 1 NM, jamais toutes ;
+  v17.52 60 s / 60, toutes en 1 à 2 s. Images / s : v17.51 71 à 97, v17.52
+  105 à 118. Blocage total ×6 : 1 NM 1 162 -> 299 ms, 0,5 NM 984 -> 568 ms ;
+  pire blocage ×6 à 0,5 NM : 193 -> 319 ms (un blocage isolé).
+- Zooms 1 -> 50 NM (4 cycles, 2 passages) : ×4 images / s 36-39 -> 56, pire
+  blocage 503-699 -> 250-263 ms, total 14,3-14,5 -> 12,6-13,8 s ; ×6 images
+  / s 40-42 -> 54-56, pire blocage 351-375 -> 385-751 ms, total 11,8-12,1 ->
+  15,2-16,2 s ; saccades > 50 ms ≈ 200 -> ≈ 300. Cause : les bordures sont
+  maintenant redessinées juste après chaque zoom (avant : sur ≈ 25 s ou
+  jamais). À SURVEILLER sur iPad.
+- Canvas : 96,4 -> 57,7 Mo (Chrome).
+
+NON-RÉGRESSION RAPIDE (version finale, Chrome, contre v17.51)
+- Démarrage sans erreur JavaScript, Carte NPF-Q400, échelle en NM : OK.
+- FdS / GAAR (BFG silencieux ; sinon mot de passe puis NAS) : OK.
+- GLR (code du jour, expiration à minuit, OFF masque seulement) : OK.
+- Fenêtre terrain : ouverture, boutons (dont VAC puis NOTAMS, Go To, Ajout
+  WP), glissement, fermeture au retour sur l'avion (10 s) : OK.
+- Suivi GPS et retour automatique (délai inchangé) : OK.
+- PÉLIC : affichage, toucher, sélectionné, BASE, terrain entré après un long
+  glisser : OK.
+- Zones SIA : bordures à 5, 2, 1, 0,5 NM, voiles P / D, sélection au doigt,
+  libellés : OK (rendu final identique à v17.51).
+- Calculateur : identique à v17.51 pour une même position : OK.
+- Hors ligne et mise à jour v17.51 -> v17.52, rejoués après la dernière
+  retouche : OK ; caches de la pérenne intacts : OK.
+- Textes ajoutés : « NPF-Q400 » seulement : OK. Export DIAG : OK.
+Aucune exception JavaScript, aucune erreur console.
+
+RETOUR ARRIÈRE
+- Revenir au commit 323b6b7 (v17.51) : bordures de nouveau effacées après un
+  glisser et absentes en suivi à 1 / 0,5 NM ; canvas zones SIA et pistes de
+  nouveau à 51,4 Mo chacun sur iPad. Aucune donnée du pilote touchée.
+
+FICHIERS MODIFIÉS
+src/350, src/340, src/220, src/260, src/090, src/010, donc script.js ;
+index.html, manifest.json, style.css, sw.js (numéros de version). sia.js et
+src/100 (moteur de tuiles) : identiques à v17.51.
+
+VERSION
+- App : v17.52
+- Service Worker : `sw-v17-52_bordures_gardees_canvas_alleges`
+
+STATUT : À MESURER sur iPad.
+
 
 VERSION TEST v17.51 — VOILES LÉGERS DES ZONES P ET D
 Date : 02/10/2026
