@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.50';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.51';
 
 
 /*
@@ -3229,7 +3229,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.50 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.51 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -57299,6 +57299,8 @@ function initializeSiaSystem() {
         });
         map.on('zoomend', () => {
             markSiaDecorationMapMotion();
+            /* v17.51 — voiles P / D selon l'échelle (simple remplissage). */
+            try { applySiaAirspaceVeils(); } catch (_) {}
             const now = NPF_STARTUP_DIAGNOSTIC.now();
             siaZoomGestureActive = false;
             if (npfDiagZoomStartedAt > 0) {
@@ -58507,9 +58509,9 @@ function getSiaAirspaceStyle(item) {
         dashArray = null;
         fillOpacity = 0;
     }
-    else if (type === 'P') color = '#d50000';
+    else if (type === 'P') { color = '#d50000'; fillOpacity = getSiaAirspaceVeilOpacity('P'); }
     else if (type === 'R') color = '#ff6d00';
-    else if (type === 'D') color = '#e91e63';
+    else if (type === 'D') { color = '#e91e63'; fillOpacity = getSiaAirspaceVeilOpacity('D'); }
     else if (type === 'TRA') { color = '#ff6d00'; dashArray = '7 5'; }
     else if (type === 'CTR') {
         color = '#0066ff';
@@ -59746,6 +59748,44 @@ function addSiaCtrTouchSurface(feature) {
     return touchGeoJson;
 }
 
+/*
+ * v17.51 — voiles légers des zones P (interdites, rouge 0,12) et D
+ * (dangereuses, couleur du contour 0,06), à 5 NM et au-dessus seulement.
+ * Simple remplissage des formes déjà dessinées : aucune géométrie recalculée.
+ * Pas de voile sur la carte OACI hors ligne ; zones masquées = formes retirées
+ * = pas de voile. Aucune autre zone ne reçoit de voile ; bordures inchangées.
+ */
+const SIA_AIRSPACE_VEIL_OPACITY = { P: 0.12, D: 0.06 };
+const SIA_AIRSPACE_VEIL_MIN_SCALE_NM = 5;
+let siaAirspaceVeilLayers = [];
+let siaAirspaceVeilAppliedKey = null;
+
+function getSiaAirspaceVeilOpacity(type) {
+    const opacity = SIA_AIRSPACE_VEIL_OPACITY[type] || 0;
+    if (!opacity) return 0;
+    try {
+        if (isCurrentOfflineOaciMap()) return 0;
+        const scaleNm = getCurrentNpfScaleNm();
+        return Number.isFinite(scaleNm) && scaleNm >= SIA_AIRSPACE_VEIL_MIN_SCALE_NM - 1e-6 ? opacity : 0;
+    } catch (_) {
+        return 0;
+    }
+}
+
+function applySiaAirspaceVeils() {
+    if (!siaAirspaceVeilLayers.length) return;
+    const key = getSiaAirspaceVeilOpacity('P') + '|' + getSiaAirspaceVeilOpacity('D');
+    if (key === siaAirspaceVeilAppliedKey) return;
+    siaAirspaceVeilAppliedKey = key;
+    for (const layer of siaAirspaceVeilLayers) {
+        try {
+            const type = String(layer?.feature?.properties?.siaItem?.t || '');
+            const opacity = getSiaAirspaceVeilOpacity(type);
+            if (layer._map && layer.options.fillOpacity !== opacity) layer.setStyle({ fillOpacity: opacity });
+        } catch (_) {}
+    }
+}
+
 function clearSiaZoomDependentLayers() {
     if (!siaLayerGroup || !Array.isArray(siaZoomDependentLayers)) {
         siaZoomDependentLayers = [];
@@ -60332,6 +60372,8 @@ async function refreshSiaLayers(reason = 'manual') {
 
         if (visibleAirspaceFeatures.length) {
             const npfDiagGeoStart = NPF_STARTUP_DIAGNOSTIC.now();
+            siaAirspaceVeilLayers = [];
+            siaAirspaceVeilAppliedKey = getSiaAirspaceVeilOpacity('P') + '|' + getSiaAirspaceVeilOpacity('D');
             const airspaceLayer = L.geoJSON(
                 { type: 'FeatureCollection', features: visibleAirspaceFeatures },
                 {
@@ -60352,6 +60394,10 @@ async function refreshSiaLayers(reason = 'manual') {
                     },
                     onEachFeature: (_feature, layer) => {
                         try { layer.options.interactive = false; } catch (_) {}
+                        try {
+                            const veilType = String(_feature?.properties?.siaItem?.t || '');
+                            if (veilType === 'P' || veilType === 'D') siaAirspaceVeilLayers.push(layer);
+                        } catch (_) {}
                     }
                 }
             );

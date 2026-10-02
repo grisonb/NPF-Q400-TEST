@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v17-50_reprise_etalee_marqueurs';
-const APP_VERSION = 'v17.50';
+const SW_VERSION = 'sw-v17-51_voiles_zones_p_d';
+const APP_VERSION = 'v17.51';
 const SIA_DATA_REVISION = '15.69-radio1026-1-maplite1';
 const SIA_DATA_URL = './sia.js';
 /*

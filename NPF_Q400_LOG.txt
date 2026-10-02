@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
-Mise à jour : 01/10/2026
-Version de travail actuelle : TEST v17.50
+Mise à jour : 02/10/2026
+Version de travail actuelle : TEST v17.51
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,9 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.51 — zones SIA : voiles légers à 5 NM et au-dessus, zones P rouge 0,12
+  et zones D couleur du contour (#e91e63) 0,06 ; pas sur OACI hors ligne ni
+  zones masquées ; bordures intérieures strictement inchangées (v17.50) ;
 - v17.50 — reprise après geste étalée (une tâche par image, arrêtée si un
   doigt se pose) ; pose des PÉLIC et terrains proches de la vue étalée (40
   par image, jamais doigt posé) ; DIAG : reprise et pose suivies, ligne
@@ -411,6 +414,17 @@ NON IMPLÉMENTÉ / OUVERT :
   (« ANALYSE DIAG v17.32 SOL + VOL ») : 5 défauts du DIAG lui-même relevés
   (D1 à D5) et 9 recommandations classées gain / risque (R1 à R9), aucune
   implémentée. Historique : À MESURER -> MESURÉ ;
+- v17.51 : À MESURER sur iPad (lisibilité P / D / HT avec les voiles à 20,
+  10 et 5 NM ; fluidité du suivi GPS à 5 NM avec HT + Routes). Règle de
+  travail du 02/10/2026 : à chaque version, seulement la non-régression
+  rapide ; test complet une fois par jour, sur demande ;
+- POINT OUVERT (constaté le 02/10/2026, v17.50 et v17.51) : après un glisser
+  à 5 NM, le retour des couches recharge entièrement les zones SIA ; TOUTES
+  les bordures intérieures s'effacent 0,8 à 1,9 s après le geste puis
+  reviennent en 10 à 28 s (Chrome, iPad simulé, sans HT + Routes : v17.50
+  10 à 15 s CPU normal, 10 à 18 s CPU ×4 ; v17.51 essai bordures 12 à 20 s /
+  15 à 28 s). Statut : À DÉCIDER (piste : garder les bordures déjà dessinées
+  au rechargement et ne dessiner que les manquantes) ;
 - v17.50 : À MESURER sur iPad (glisser courts rapprochés qui ne démarraient
   pas ; pincer ; même scénario avec et sans VRP). Si pas d'amélioration :
   retour possible en v17.48 (2043673), À DÉCIDER ;
@@ -509,44 +523,44 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.50
-Date : 01/10/2026
-Base : v17.49 (commitée 334a5a8, À MESURER)
+Version : TEST v17.51
+Date : 02/10/2026
+Base : v17.50 (commitée 4ca5383, À MESURER)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.50.txt
-2_Index_v17.50.txt
-3_Manifest_v17.50.txt
-4_Script_v17.50.txt
-5_SIA_v17.50.txt
-6_Style_v17.50.txt
-7_Sw_v17.50.txt
+1_Modifications_v17.51.txt
+2_Index_v17.51.txt
+3_Manifest_v17.51.txt
+4_Script_v17.51.txt
+5_SIA_v17.51.txt
+6_Style_v17.51.txt
+7_Sw_v17.51.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.50 (et texte « TEST v17.50 » de l'écran de
+- Index : APP_VERSION = v17.51 (et texte « TEST v17.51 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.50
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.50
-- Style : NPF_STYLE_BUILD_VERSION = v17.50
-- Service Worker : `sw-v17-50_reprise_etalee_marqueurs` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-50_reprise_etalee_marqueurs`, `npf-q400-test-app-data-v1`,
+- Manifest : start_url = ./index.html?appv=v17.51
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.51
+- Style : NPF_STYLE_BUILD_VERSION = v17.51
+- Service Worker : `sw-v17-51_voiles_zones_p_d` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-51_voiles_zones_p_d`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-15.69-radio1026-1-maplite1`
 - SIA_DATA_REVISION (SW / Index) : 15.69-radio1026-1-maplite1 (inchangée)
-- sia.js v17.50 : strictement identique à v17.49.
+- sia.js v17.51 : strictement identique à v17.50.
 - Images de lancement : icons/startup-ipad9-portrait.png (1620 × 2160) et
   icons/startup-ipad9-landscape.png (2160 × 1620).
 - Icônes des boutons (v17.48) : calculator-fms-icon, search-commune-icon,
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.50 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.51 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
-- `sia.js` et moteur tuiles (src/100) identiques à v17.49 ;
-- tests Chrome v17.49 / v17.50 : entrée v17.50 ;
+- `sia.js` et moteur tuiles (src/100) identiques à v17.50 ;
+- tests Chrome v17.50 / v17.51 : entrée v17.51 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44 et v17.47 VALIDÉES ; v17.29, v17.31, v17.33
-  à v17.43, v17.45, v17.46, v17.48, v17.49 et v17.50 À MESURER.
+  à v17.43, v17.45, v17.46, v17.48 à v17.51 À MESURER.
 
 
 2. PROTOCOLE DE TRAVAIL À RESPECTER
@@ -2068,6 +2082,75 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.51 — VOILES LÉGERS DES ZONES P ET D
+Date : 02/10/2026
+Base fonctionnelle : v17.50 (commit 4ca5383)
+
+DEMANDE ET DÉROULÉ
+- Demande initiale : bordure intérieure dès 5 NM quels que soient HT et
+  Routes, voile rouge des zones P, bordures des zones entrées à l'écran après
+  un glisser. Essai codé et mesuré, NON LIVRÉ : après chaque glisser le retour
+  des couches recharge entièrement les zones SIA, toutes les bordures
+  s'effacent puis reviennent en 10 à 28 s (voir POINT OUVERT en tête) ; le
+  complément en suivi GPS rendait le suivi nettement moins fluide (Chrome ×4,
+  60 s : 2,9 à 6,8 s bloquées contre 0,5 à 1,6 s).
+- Décision pilote : livrer seulement des voiles légers, sans toucher aux
+  bordures (comportement v17.50 strictement conservé, règle « HT + Routes ->
+  2 NM » comprise), ni au rechargement des zones SIA, ni aux lignes HT.
+
+MODIFICATIONS
+- src/350 getSiaAirspaceStyle : remplissage des zones P (rouge #d50000,
+  opacité 0,12) et D (couleur de leur contour #e91e63, opacité 0,06) à 5 NM
+  et au-dessus ; 0 en dessous de 5 NM et sur la carte OACI hors ligne. Zones
+  masquées = formes retirées = pas de voile. Aucune autre zone voilée.
+- src/350 : liste des formes P / D à leur création ; src/340 zoomend : mise à
+  jour du seul remplissage (setStyle), sans aucun calcul de géométrie.
+
+TESTS CIBLÉS (Chrome, iPad 9e génération, paysage et portrait, v17.50 contre
+v17.51, carte en ligne, Carte NPF-Q400 de test, OACI de test)
+- 20, 10, 5 NM : toutes les zones P voilées (0,12) et toutes les D (0,06,
+  #e91e63) ; 2 et 1 NM : aucun voile ; aucune autre zone remplie.
+- OACI hors ligne : aucun voile. Zones masquées : aucun voile, aucune bordure.
+- Bordures : mêmes nombres qu'en v17.50 à chaque échelle, avec et sans
+  HT + Routes (toujours aucune bordure à 5 NM avec HT + Routes).
+- Glisser court et long à 5 NM (HT + Routes) : voiles présents avant et après ;
+  pendant le remplacement du calque SIA, voiles ET contours absents ensemble
+  2 à 3 relevés de 50 ms (même trou pour les contours en v17.50 : existant).
+- Lignes HT identiques (couleur, épaisseur, style) ; fenêtre au doigt
+  identique.
+
+FLUIDITÉ (Chrome ×4, Carte NPF-Q400, 5 NM, HT + Routes, 3 passages)
+- Retour des couches après un geste : v17.50 55 à 68 ms ; v17.51 54 à 69 ms.
+- Suivi GPS simulé 60 s : v17.50 116 à 174 ms bloquées au total (1 à 2
+  blocages > 50 ms) ; v17.51 113 à 121 ms (1 blocage). Pas de différence.
+
+NON-RÉGRESSION RAPIDE (règle du 02/10/2026)
+- Démarrage sans erreur JavaScript, Carte NPF-Q400 affichée, échelle en NM :
+  OK.
+- FdS / GAAR (BFG connecté : silencieux ; sinon mot de passe puis NAS) ; GLR
+  (code une fois par jour, OFF masque seulement le trafic) : OK.
+- Fenêtre terrain (ouverture, glissement, fermeture au retour sur l'avion) :
+  OK. Suivi GPS : retour sur l'avion après un geste : OK.
+- Hors ligne et mise à jour v17.50 -> v17.51, rejoués sur la version finale :
+  OK (même comportement du service worker que v17.49 -> v17.50).
+- Caches de la pérenne intacts (3 caches témoins) : OK.
+- Textes ajoutés : « NPF-Q400 » seulement : OK.
+
+RETOUR ARRIÈRE
+- Revenir au commit 4ca5383 (v17.50) : plus de voiles, rien d'autre ne change.
+
+FICHIERS MODIFIÉS
+src/350, src/340, src/010 (version), donc script.js ; index.html,
+manifest.json, style.css, sw.js (numéros de version). sia.js et le reste de
+src/ : identiques à v17.50.
+
+VERSION
+- App : v17.51
+- Service Worker : `sw-v17-51_voiles_zones_p_d`
+
+STATUT : À MESURER sur iPad.
+
 
 VERSION TEST v17.50 — REPRISE APRÈS GESTE ÉTALÉE (C1) ; POSE DES MARQUEURS
 ÉTALÉE (C2) ; DIAG (C3) ; VRP PROCHES DE LA VUE (C4) NON RETENU

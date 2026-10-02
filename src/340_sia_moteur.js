@@ -3518,6 +3518,8 @@ function initializeSiaSystem() {
         });
         map.on('zoomend', () => {
             markSiaDecorationMapMotion();
+            /* v17.51 — voiles P / D selon l'échelle (simple remplissage). */
+            try { applySiaAirspaceVeils(); } catch (_) {}
             const now = NPF_STARTUP_DIAGNOSTIC.now();
             siaZoomGestureActive = false;
             if (npfDiagZoomStartedAt > 0) {
