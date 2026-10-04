@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
-Mise à jour : 02/10/2026
-Version de travail actuelle : TEST v17.52
+Mise à jour : 04/10/2026
+Version de travail actuelle : TEST v17.53
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,12 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.53 — rafraîchissement des zones SIA allégé (index par cases construit
+  une fois, aucune reconstruction si les objets sont les mêmes, rien pendant
+  un geste ; rendu identique à v17.52) ; retour automatique à 10 s aussi en
+  simulation ; déclinaison magnétique WMM2025 à la position de l'avion (au
+  lieu de 1° fixe) ; libellés des zones vers l'intérieur de leur zone ;
+  DIAG « Déclinaison » et compteurs SIA ;
 - v17.52 — bordures intérieures des zones gardées au rechargement et
   complétées par lots (plus d'effacement après un glisser, visibles en suivi
   à 1 et 0,5 NM) ; canvas zones SIA et pistes en marge 0,10 (−51 Mo sur
@@ -423,7 +429,16 @@ NON IMPLÉMENTÉ / OUVERT :
   10 et 5 NM ; fluidité du suivi GPS à 5 NM avec HT + Routes). Règle de
   travail du 02/10/2026 : à chaque version, seulement la non-régression
   rapide ; test complet une fois par jour, sur demande ;
-- v17.52 : À MESURER sur iPad (bordures après glisser et en suivi à 1 /
+- v17.53 : À MESURER sur iPad (suivi GPS à 5 / 2 / 1 / 0,5 NM : lignes
+  « SIA RAFRAÎCHISSEMENT » (objets lus par l'index, reconstruction évitée) ;
+  caps Go To et ligne « Déclinaison » ; libellés des zones ; retour 10 s en
+  simulation). enableSimulationMode 3 425 ms (DIAG iPad v17.52) : NON
+  TRAITÉ, À DÉCIDER (coût payé une fois au lancement de la simulation) ;
+- v17.52 : VALIDÉE sur iPad par le pilote (zooms meilleurs que v17.51,
+  bordures OK après glisser et en suivi, pic canvas 128,1 Mo). Historique :
+  À MESURER -> VALIDÉE. Fuite des tuiles hors ligne (A2) : pas de fuite
+  durable mesurée sur iPad -> ABANDONNÉ (NON IMPLÉMENTÉ) ;
+  ancien statut : À MESURER sur iPad (bordures après glisser et en suivi à 1 /
   0,5 NM ; zooms ; ligne DIAG « Tuiles hors ligne » pour savoir si la fuite
   des tuiles existe sur iPad). Fuite des tuiles hors ligne (A2, moteur de
   tuiles, règle 7) : NON IMPLÉMENTÉ, À DÉCIDER après le DIAG iPad ;
@@ -532,44 +547,44 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.52
-Date : 02/10/2026
-Base : v17.51 (commitée 323b6b7, À MESURER)
+Version : TEST v17.53
+Date : 04/10/2026
+Base : v17.52 (commitée 05b4e56, VALIDÉE sur iPad)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.52.txt
-2_Index_v17.52.txt
-3_Manifest_v17.52.txt
-4_Script_v17.52.txt
-5_SIA_v17.52.txt
-6_Style_v17.52.txt
-7_Sw_v17.52.txt
+1_Modifications_v17.53.txt
+2_Index_v17.53.txt
+3_Manifest_v17.53.txt
+4_Script_v17.53.txt
+5_SIA_v17.53.txt
+6_Style_v17.53.txt
+7_Sw_v17.53.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.52 (et texte « TEST v17.52 » de l'écran de
+- Index : APP_VERSION = v17.53 (et texte « TEST v17.53 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.52
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.52
-- Style : NPF_STYLE_BUILD_VERSION = v17.52
-- Service Worker : `sw-v17-52_bordures_gardees_canvas_alleges` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-52_bordures_gardees_canvas_alleges`, `npf-q400-test-app-data-v1`,
+- Manifest : start_url = ./index.html?appv=v17.53
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.53
+- Style : NPF_STYLE_BUILD_VERSION = v17.53
+- Service Worker : `sw-v17-53_sia_index_declinaison_libelles` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-53_sia_index_declinaison_libelles`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-15.69-radio1026-1-maplite1`
 - SIA_DATA_REVISION (SW / Index) : 15.69-radio1026-1-maplite1 (inchangée)
-- sia.js v17.52 : strictement identique à v17.51.
+- sia.js v17.53 : strictement identique à v17.52.
 - Images de lancement : icons/startup-ipad9-portrait.png (1620 × 2160) et
   icons/startup-ipad9-landscape.png (2160 × 1620).
 - Icônes des boutons (v17.48) : calculator-fms-icon, search-commune-icon,
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.52 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.53 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
-- `sia.js` et moteur tuiles (src/100) identiques à v17.51 ;
-- tests Chrome v17.51 / v17.52 : entrée v17.52 ;
+- `sia.js` et moteur tuiles (src/100) identiques à v17.52 ;
+- tests Chrome v17.52 / v17.53 : entrée v17.53 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
-  sur iPad ; v17.32 MESURÉE ; v17.44 et v17.47 VALIDÉES ; v17.29, v17.31, v17.33
-  à v17.43, v17.45, v17.46, v17.48 à v17.52 À MESURER.
+  sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51 et v17.53 À MESURER.
 
 
 2. PROTOCOLE DE TRAVAIL À RESPECTER
@@ -2091,6 +2106,183 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.53 — RAFRAÎCHISSEMENT SIA ALLÉGÉ (P3) ; RETOUR 10 S EN
+SIMULATION ; DÉCLINAISON WMM2025 ; LIBELLÉS DE ZONES VERS L'INTÉRIEUR
+Date : 04/10/2026
+Base fonctionnelle : v17.52 (commit 05b4e56), VALIDÉE sur iPad par le pilote.
+Demande : P3 + A + B + C + 2 lignes DIAG ; rien d'autre.
+
+DIAG iPAD v17.52 (rappel de la demande)
+- Pic canvas 128,1 Mo ; tuiles hors ligne : pas de fuite durable sur iPad ->
+  A2 (fuite des tuiles, moteur src/100) : NON IMPLÉMENTÉ, ABANDONNÉ (pas de
+  fuite mesurée sur iPad).
+- enableSimulationMode 3 425 ms : NON TRAITÉ dans cette version (coût payé
+  une seule fois au lancement de la simulation, pas pendant l'usage en vol).
+  Statut : À DÉCIDER.
+- P3 : rafraîchissement SIA en suivi GPS ≈ 180-200 ms (scanMs 80-100,
+  pointsMs ≈ 95).
+
+RELEVÉ AVANT CODAGE (v17.52, fichier:ligne)
+- SIA : refreshSiaLayers src/350:2959 ; scheduleSiaLayerRefresh src/340:2090 ;
+  scheduleSiaCoverageRefresh src/340:690 ; bordures isSiaInnerBandDisplayAllowed
+  src/350:1457 (HT + Routes -> bordures à partir de 2 NM : src/350:1463),
+  runSiaInnerBandsStep src/350:1485, addSiaCtrInnerBand src/350:1393 ; voiles
+  getSiaAirspaceVeilOpacity src/350:2560, mis à jour au zoom src/340:3529 ;
+  points SIA (VFR, VRP) à 5 NM et moins shouldDisplaySiaDesignatedPoints
+  src/350:1832 ; sélection au doigt handleSiaAirspaceTouch src/350:2373.
+- Suivi GPS / retour : CENTER_GPS_FOLLOW_RECENTER_DELAY_MS = 10 s src/030:291 ;
+  SIMULATION_FOLLOW_RECENTER_DELAY_MS = 5 s src/030:1018, choisi par
+  getCenterGpsFollowRecenterDelayMs src/260:767 ; scheduleCenterGpsFollowRecentering
+  src/260:1094 (ferme la fenêtre terrain puis recentre) ; toucher dans la
+  fenêtre terrain = relance du délai src/260:1166-1180 ; doigt posé
+  isNpfMapFingerDown src/260:1269, deferNpfWorkDuringMapGesture src/260:1294.
+- Caps : MAGNETIC_DECLINATION = 1,0 src/030:274, utilisée en 5 endroits :
+  bandeau Go To src/110:1361 ; route avion -> cible src/260:1745 ; route
+  simulée (magnétique -> vraie) src/270:224-228 ; route Feu -> BASE
+  src/270:709 ; caps des WP src/200:389. Arrondi au degré formatRouteDegrees
+  src/050:9. sia.js n'utilise pas la déclinaison.
+- Libellés de zones : addSiaAirspaceBoundaryLabel src/350:1763 (aucun à
+  10 NM et au-dessus src/350:1770, 70 au plus src/350:1776),
+  findSiaBoundaryLabelPlacements src/350:1673 (centre à 22 / 30 / 38 px du
+  bord, src/350:1721) ; bordure estompée : axe à 7 px, 12 px de large.
+
+MODIFICATIONS
+- P3 (src/350) :
+  - index par cases de 0,25° des zones (5 066), terrains (877) et points
+    (1 899), construit une seule fois par jeu de données chargé (≈ 18 ms
+    Chrome) ; zones sans limites lisibles ou très étendues (161) toujours
+    relues ;
+  - le rafraîchissement ne relit que les objets des cases de la zone chargée,
+    puis applique EXACTEMENT les mêmes filtres et tests qu'avant, dans l'ordre
+    d'origine ;
+  - plus de pause d'une image systématique : sélection sans aucune pause ;
+    construction avec une seule pause quand un morceau de travail dépasse
+    50 ms (vues larges, 5 NM ; jamais à 1 et 0,5 NM). Écart volontaire à la
+    demande « aucune pause » : sans elle, le rafraîchissement à 5 NM faisait
+    un seul blocage d'environ 1 s (Chrome ×6) contre 0,42 s en v17.52 ;
+  - mêmes objets que le rendu en place (même échelle, mêmes filtres) ->
+    aucune reconstruction : seule la zone chargée avance, bordures et libellés
+    suivent comme après une reconstruction (déplacements carte et suivi GPS
+    seulement) ;
+  - doigt posé sur la carte : aucune reconstruction, une seule reprise à la
+    fin du geste ;
+  - C1 / C2 (reprise étalée v17.50) et bordures v17.52 inchangées.
+- A (src/030) : SIMULATION_FOLLOW_RECENTER_DELAY_MS 5 s -> 10 s. Délai
+  toujours compté depuis le dernier mouvement de la carte, fenêtre terrain
+  fermée au retour, toucher dans la fenêtre = délai relancé (inchangés).
+- B (src/030, src/110, src/260, src/270, src/200, src/010) :
+  - modèle WMM2025 officiel NOAA / NGA embarqué (fichier WMM.COF du
+    13/11/2024, 90 lignes de coefficients, valable 2025-2030), calcul hors
+    ligne ; déclinaison à la position de l'avion (GPS ou simulé), à défaut
+    au départ de la route, à défaut au centre de la France ;
+  - recalcul seulement après 5 NM de déplacement (ou un mois écoulé) ;
+  - remplace la valeur fixe 1,0° aux 5 endroits relevés ; caps toujours
+    affichés au degré ;
+  - DIAG : ligne « Déclinaison » (valeur, position, nombre de calculs, coût).
+- C (src/350) : libellés de zones posés à l'intérieur de leur zone,
+  parallèles au bord, juste après la bordure estompée (13 px) + 4 px d'écart :
+  centre à 17 px + demi-hauteur du texte (taille réelle mesurée une fois par
+  texte). Même décalage que la bordure soit affichée ou non. Ordre de choix :
+  texte entièrement dans la zone et hors des bordures, puis dans la zone, puis
+  centre dans la zone au même décalage, puis l'ancien placement (aucun
+  libellé ne disparaît). Milieu du bord d'abord, puis glissé d'un quart vers
+  chaque bout. Zones P : texte horizontal intérieur contrôlé de la même façon.
+  Contrôle du cadre fait à la demande (au plus 24 par libellé, segments
+  éloignés ignorés) : coût proche de v17.52.
+  Contenu, police, taille, seuils (10 NM, 70 libellés) inchangés ; HT et
+  Routes inchangés.
+- DIAG (src/010) : dans « SIA RAFRAÎCHISSEMENT » nombre d'objets lus par
+  l'index et « reconstruction évitée (identique) » (ligne et synthèse) ; ligne
+  « Déclinaison ». Rien d'autre.
+- sia.js : NON modifié (strictement identique à v17.52). Moteur de tuiles
+  src/100 : NON modifié.
+
+DÉCLINAISON — NOAA EN LIGNE / APPLICATION (date 2026,756, Est positive)
+- Brest 48,390 N 4,486 W : NOAA 0,04° / appli 0,04° (écart 0,00°)
+- Paris 48,857 N 2,352 E : 2,08° / 2,08° (0,00°)
+- Clermont-Ferrand 45,778 N 3,087 E : 2,33° / 2,33° (0,00°)
+- Strasbourg 48,573 N 7,752 E : 3,50° / 3,50° (0,00°)
+- Nice 43,710 N 7,262 E : 3,23° / 3,23° (0,00°)
+- Ajaccio 41,919 N 8,739 E : 3,43° / 3,43° (0,00°)
+- 100 valeurs de test officielles WMM2025 : écart max 0,005°.
+- L'ancienne valeur fixe 1° était fausse de 1° à 2,5° sur la métropole.
+- Coût : un calcul 0,12 à 0,47 ms (Chrome ×4 / ×6), appel en mémoire
+  < 0,003 ms ; 25 calculs en 20 min de suivi à 300 kt (un tous les 5 NM).
+
+MESURES CHROME (iPad simulé, Carte NPF-Q400 de test, HT ON, toutes zones SIA ;
+v17.52 -> v17.53 ; suivi 300 kt 5 min par échelle ; temps bloqué = tâches
+longues JavaScript)
+- ×4 : zooms 1-50 NM temps bloqué 20,2 -> 14,6 s, pire 1 272 -> 788 ms ;
+  glisser 2,9 -> 1,8 s ; suivi 5 NM 1,9 -> 0,9 s ; 2 NM 2,3 -> 1,4 s ;
+  1 NM 0,9 -> 0,6 s ; 0,5 NM 0,9 -> 0,5 s.
+- ×6 : zooms 42,2 -> 26,5 s, pire 2 529 -> 1 106 ms, images / s 21 -> 31 ;
+  glisser 9,1 -> 3,5 s ; suivi 5 NM 9,7 -> 4,7 s ; 2 NM 9,2 -> 3,7 s ;
+  1 NM 5,4 -> 2,0 s ; 0,5 NM 6,0 -> 1,6 s.
+- Rafraîchissement SIA en suivi (×6, détail) : 5 NM 2 808 -> 1 069 ms ;
+  2 NM 630-2 458 -> 162-320 ms ; 1 NM 340-395 -> 83-112 ms ; lecture des
+  zones 67-2 129 -> 1-6 ms, des points 66-81 -> 2-9 ms ; objets lus par
+  l'index 315 (0,5 NM) à 882 (5 NM) au lieu de 7 842.
+  Rafraîchissements lents (>= 120 ms) à 0,5 NM : 12 / 12 -> 0 / 11.
+- Reconstruction évitée (identique) : 1 par passage de 5 min à 0,5 NM.
+- À SURVEILLER : en suivi à 1 et 0,5 NM, images / s un peu plus basses
+  (×4 : 119 -> 105) et plus d'images > 100 ms, sans tâche JavaScript longue ;
+  cause NON PROUVÉE (la trajectoire simulée n'est plus la même : cap vrai
+  92,9° au lieu de 91° avec la vraie déclinaison).
+- Bordures : 60 / 60 relevés avec bordures dans tous les suivis ; glisser :
+  aucune effacée. Canvas inchangé (96,2 Mo Chrome).
+
+TESTS CIBLÉS
+- Rendu SIA identique à v17.52 (zones, points VFR et VRP, voiles P / D,
+  surfaces tactiles, zone chargée) : 112 vues sans HT + Routes, 42 avec, 8
+  régions, zooms 0,5-50 NM et glisser ; contrôle interne index / relecture
+  complète OK partout. Seuls les libellés diffèrent (C).
+- Libellés (Marseille, contrôle du cadre réel) : texte entièrement dans sa
+  zone 2 NM 6 / 26 -> 20 / 27 ; 1 NM 3 / 12 -> 9 / 13 ; 0,5 NM 3 / 4 -> 4 / 4 ;
+  5 NM 8 / 33 -> 20 / 38 ; écart médian au bord 1 px -> 16-17 px. Restent
+  hors cadre : zones trop petites ou trop étroites pour leur texte à cette
+  échelle (libellé gardé, comme avant). Zones voisines (bord commun, ex.
+  CTR ISTRES 1.1 / 1.2 / 1.3, TMA PROVENCE) : chaque libellé de son côté.
+  Captures avant / après : dossier de livraison, captures_libelles.
+- Sélection d'une zone au doigt, voiles P / D, bordures après glisser et en
+  suivi, points VFR et VRP (dont OACI) : OK (tests v17.51 rejoués).
+- Caps : Go To Brest 152° -> 153° (déclinaison 0,04°), Nice 235° -> 232°
+  (3,23°) ; route simulée 090° -> trace vraie 90,04° à Brest, 93,22° à Nice ;
+  au degré. Ligne DIAG « Déclinaison » présente.
+- Retour automatique : GPS réel 10 s (inchangé), fenêtre terrain fermée au
+  retour, toucher dans la fenêtre = délai relancé (retour 10 s après le
+  toucher) ; simulation 5 s -> 10 s (relevé direct de la pause).
+- Calculateur identique à v17.52 (seule l'heure du coucher de soleil change
+  avec la date du test) ; il n'utilise pas la déclinaison.
+
+NON-RÉGRESSION RAPIDE (version finale, Chrome, contre v17.52)
+- Démarrage sans erreur JavaScript, Carte NPF-Q400, échelle en NM : OK.
+- FdS / GAAR : OK. GLR : OK.
+- Fenêtre terrain (VAC puis NOTAMS, Go To, Ajout WP ; glissement) : OK.
+- Suivi GPS et simulation : OK (caps des feux décalés de la déclinaison
+  locale, voulu : ex. 331° -> 329° vers Lyon).
+- Hors ligne (déclinaison comprise) et mise à jour v17.52 -> v17.53, rejoués
+  après la dernière retouche : OK ; seuls des caches npf-q400-test-* créés,
+  caches de la pérenne intacts : OK.
+- Textes ajoutés : « NPF-Q400 » seulement : OK. Export DIAG : OK.
+Aucune exception JavaScript, aucune erreur console.
+
+RETOUR ARRIÈRE
+- Revenir au commit 05b4e56 (v17.52) : rafraîchissement SIA comme avant,
+  déclinaison fixe 1°, retour 5 s en simulation, libellés sur le bord. Aucune
+  donnée du pilote touchée.
+
+FICHIERS MODIFIÉS
+src/350, src/030, src/010, src/110, src/200, src/260, src/270, donc
+script.js ; index.html, manifest.json, style.css, sw.js (numéros de version).
+sia.js et src/100 (moteur de tuiles) : identiques à v17.52.
+
+VERSION
+- App : v17.53
+- Service Worker : `sw-v17-53_sia_index_declinaison_libelles`
+
+STATUT : À MESURER sur iPad.
+
 
 VERSION TEST v17.52 — BORDURES DES ZONES GARDÉES ET COMPLÉTÉES ; CANVAS
 ALLÉGÉS ; ZOOMS ALLÉGÉS ; DIAG TUILES HORS LIGNE
