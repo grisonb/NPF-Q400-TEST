@@ -1356,9 +1356,14 @@ function updateCommuneGpsRouteDisplay() {
         return;
     }
 
-    const distance = calculateDistanceInNm(userLatLng.lat, userLatLng.lng, target.lat, target.lon);
-    const trueBearingToTarget = calculateBearing(userLatLng.lat, userLatLng.lng, target.lat, target.lon);
-    const magneticBearing = (trueBearingToTarget - getNpfMagneticDeclination(userLatLng.lat, userLatLng.lng) + 360) % 360;
+    /* v17.57 — A : cap magnétique constant jusqu'à la cible (feu, PÉLIC,
+     * terrain Go To) ; distance le long de ce même chemin. */
+    const courseToTarget = computeNpfConstantMagneticCourse(
+        userLatLng.lat, userLatLng.lng, target.lat, target.lon,
+        { startDeclination: getNpfMagneticDeclination(userLatLng.lat, userLatLng.lng) }
+    );
+    const distance = courseToTarget ? courseToTarget.distanceNm : NaN;
+    const magneticBearing = courseToTarget ? courseToTarget.magneticBearing : NaN;
 
     if (routeInfo) {
         routeInfo.textContent = `${formatRouteDegrees(magneticBearing)} / ${Math.round(distance)} Nm / ${formatGpsEtaMinutes(distance)}`;

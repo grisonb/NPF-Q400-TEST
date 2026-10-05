@@ -270,6 +270,8 @@ function updateCommunesLayerAppearance() {
      */
     if (!shouldDrawCommunes) {
         communesLabelsLayer.clearLayers();
+        try { communesLayerGroup.clearLayers(); } catch (_) {}
+        releaseCommuneBoundaryLayers();
 
         if (map.hasLayer(communesLabelsLayer)) {
             map.removeLayer(communesLabelsLayer);
@@ -296,6 +298,27 @@ function updateCommunesLayerAppearance() {
 }
 
 
+/* v17.57 — B : tracé d'une commune à partir de l'index des contours
+ * (mêmes anneaux GeoJSON [lon, lat], polygones séparés, trous compris). */
+function buildCommuneBoundaryLayer(commune) {
+    const polygons = Array.isArray(commune?.polygons) ? commune.polygons : [];
+    if (!polygons.length) return null;
+    const toLatLngs = rings => rings.map(ring => ring.map(coord => [Number(coord[1]), Number(coord[0])]));
+    const latlngs = polygons.length === 1 ? toLatLngs(polygons[0]) : polygons.map(toLatLngs);
+    try {
+        return L.polygon(latlngs, getCommunesBoundaryStyle());
+    } catch (_) {
+        return null;
+    }
+}
+
+/* v17.57 — B : calque communes masqué -> tous les tracés créés sont libérés. */
+function releaseCommuneBoundaryLayers() {
+    for (const item of communesViewportLayerData) {
+        if (item) item.layer = null;
+    }
+}
+
 function renderVisibleCommuneLayers() {
     if (!map || !communesLayerGroup || !areCommunesVisible || !hasLoadedCommunes) return;
 
@@ -309,8 +332,15 @@ function renderVisibleCommuneLayers() {
     let visibleCount = 0;
 
     for (const item of communesViewportLayerData) {
-        if (!item || !item.layer || !item.bounds) continue;
-        if (!viewportBounds.intersects(item.bounds)) continue;
+        if (!item || !item.bounds) continue;
+        if (!viewportBounds.intersects(item.bounds)) {
+            /* v17.57 — B : tracé libéré dès que la commune sort de l'écran. */
+            item.layer = null;
+            continue;
+        }
+
+        if (!item.layer) item.layer = buildCommuneBoundaryLayer(item.commune);
+        if (!item.layer) continue;
 
         if (typeof item.layer.setStyle === 'function') {
             item.layer.setStyle(style);
@@ -698,13 +728,23 @@ function buildCommunePolygonIndex(communesGeojson) {
         if (!bounds) return;
 
         const codeInsee = getCommuneInseeCodeFromProperties(properties);
+        /* v17.57 — B : population du fichier gardée pour les noms du calque. */
+        const directPopulation = [
+            properties.population,
+            properties.population_municipale,
+            properties.populationMunicipale,
+            properties.pop
+        ]
+            .map(value => Number(value))
+            .find(value => Number.isFinite(value) && value >= 0);
 
         index.push({
             name,
             codeInsee,
             depCode: getCommuneDepCodeFromProperties(properties),
             polygons,
-            bounds
+            bounds,
+            directPopulation
         });
     });
 
@@ -809,40 +849,39 @@ async function loadCommunesLayerData() {
         throw new Error(`HTTP ${response.status}`);
     }
 
-    const communesGeojson = await response.json();
+    let communesGeojson = await response.json();
 
     communesPolygonData = buildCommunePolygonIndex(communesGeojson);
+    /* v17.57 — B : le fichier lu n'est plus gardé ; seul l'index des contours
+     * reste (commune survolée, nom des feux, calque communes). */
+    communesGeojson = null;
     communesLabelData = [];
     communesViewportLayerData = [];
     communesLayerGroup.clearLayers();
     communesLabelsLayer.clearLayers();
 
-    const geoJsonLayer = L.geoJSON(communesGeojson, {
-        style: getCommunesBoundaryStyle
-    });
-
-    geoJsonLayer.eachLayer((layer) => {
-        const properties = layer.feature?.properties || {};
-        const communeName = getCommuneNameFromProperties(properties);
-        if (!communeName || !layer.getBounds) return;
-
-        const layerBounds = layer.getBounds();
+    /*
+     * v17.57 — B : plus de calque Leaflet créé d'avance pour les ≈ 35 000
+     * communes. Le tracé d'une commune est créé seulement quand elle est à
+     * l'écran avec le calque Communes affiché, puis libéré ensuite
+     * (renderVisibleCommuneLayers). Même tracé et même style qu'avant.
+     */
+    communesPolygonData.forEach((commune) => {
+        const bounds = commune.bounds;
+        const layerBounds = L.latLngBounds(
+            [bounds.minLat, bounds.minLon],
+            [bounds.maxLat, bounds.maxLon]
+        );
         communesViewportLayerData.push({
-            layer,
+            commune,
+            layer: null,
             bounds: layerBounds
         });
 
         const center = layerBounds.getCenter();
-        const inseeCode = getCommuneInseeCodeFromProperties(properties);
-        const directPopulationCandidates = [
-            properties.population,
-            properties.population_municipale,
-            properties.populationMunicipale,
-            properties.pop
-        ];
-        const directPopulation = directPopulationCandidates
-            .map(value => Number(value))
-            .find(value => Number.isFinite(value) && value >= 0);
+        const inseeCode = commune.codeInsee;
+        const communeName = commune.name;
+        const directPopulation = commune.directPopulation;
         const indexedPopulation = inseeCode
             ? Number(communesPopulationByInsee.get(String(inseeCode)))
             : NaN;

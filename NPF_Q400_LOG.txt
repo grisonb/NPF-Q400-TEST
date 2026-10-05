@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 05/10/2026
-Version de travail actuelle : TEST v17.56
+Version de travail actuelle : TEST v17.57
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,10 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.57 — cap constant du départ à l'arrivée (Go To, feux, Feu -> BASE,
+  WP ; ligne rouge et vecteur sur ce chemin) ; communes allégées (champs
+  utiles seulement, contours créés à la demande) ; couche Routes sur un
+  seul canvas ;
 - v17.56 — routes et caps affichés au dixième de degré (« 283,4° ») ; cap de
   simulation réglable au dixième (virgule ou point) ; DIAG « Mémoire
   estimée » ;
@@ -436,7 +440,15 @@ NON IMPLÉMENTÉ / OUVERT :
   10 et 5 NM ; fluidité du suivi GPS à 5 NM avec HT + Routes). Règle de
   travail du 02/10/2026 : à chaque version, seulement la non-régression
   rapide ; test complet une fois par jour, sur demande ;
-- v17.56 : À MESURER sur iPad (affichage au dixième partout, saisie du cap
+- v17.57 : À MESURER sur iPad (cap Go To constant en vol, ligne rouge
+  alignée avec le vecteur ; recherche / commune survolée / calque Communes ;
+  aspect de la couche Routes ; ligne « Mémoire estimée » et page blanche
+  sur iPad encombré) ;
+- v17.56 : VALIDÉE en vol le 05/10/2026 15:31-17:30 (GPS réel, HT + Routes,
+  aucun plantage, 52 images / s pendant les gestes, ressenti « très bon » ;
+  mémoire estimée ≈ 242 Mo). Option 1 (cap constant) et économies 2 et 3
+  (communes, canvas Routes) : TRAITÉES en v17.57. Ancien statut : À MESURER
+  sur iPad (affichage au dixième partout, saisie du cap
   de simulation, ligne DIAG « Mémoire estimée »). Écart Go To / vecteur
   (orthodromie / loxodromie) : expliqué, NON IMPLÉMENTÉ, À DÉCIDER (Bastien).
   Économies de mémoire (communes, canvas masqués, etc.) : NON IMPLÉMENTÉ,
@@ -585,45 +597,46 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.56
+Version : TEST v17.57
 Date : 05/10/2026
-Base : v17.55 (98b8989, code v17.53, VALIDÉE sur iPad redémarré)
+Base : v17.56 (70a3249, VALIDÉE en vol le 05/10/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.56.txt
-2_Index_v17.56.txt
-3_Manifest_v17.56.txt
-4_Script_v17.56.txt
-5_SIA_v17.56.txt
-6_Style_v17.56.txt
-7_Sw_v17.56.txt
+1_Modifications_v17.57.txt
+2_Index_v17.57.txt
+3_Manifest_v17.57.txt
+4_Script_v17.57.txt
+5_SIA_v17.57.txt
+6_Style_v17.57.txt
+7_Sw_v17.57.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.56 (et texte « TEST v17.56 » de l'écran de
+- Index : APP_VERSION = v17.57 (et texte « TEST v17.57 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.56
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.56
-- Style : NPF_STYLE_BUILD_VERSION = v17.56
-- Service Worker : `sw-v17-56_caps_dixieme_degre` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-56_caps_dixieme_degre`, `npf-q400-test-app-data-v1`,
+- Manifest : start_url = ./index.html?appv=v17.57
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.57
+- Style : NPF_STYLE_BUILD_VERSION = v17.57
+- Service Worker : `sw-v17-57_cap_constant_memoire` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-57_cap_constant_memoire`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-15.69-radio1026-1-maplite1`
 - SIA_DATA_REVISION (SW / Index) : 15.69-radio1026-1-maplite1 (inchangée)
-- sia.js v17.56 : strictement identique à v17.52.
+- sia.js v17.57 : strictement identique à v17.52.
 - Images de lancement : icons/startup-ipad9-portrait.png (1620 × 2160) et
   icons/startup-ipad9-landscape.png (2160 × 1620).
 - Icônes des boutons (v17.48) : calculator-fms-icon, search-commune-icon,
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.56 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.57 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
 - `sia.js` et moteur tuiles (src/100) identiques à v17.52 ;
-- tests courts v17.56 : entrée v17.56 ;
+- tests courts v17.57 : entrée v17.57 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51 et v17.56 À MESURER ;
-  v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE.
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51 et v17.57 À MESURER ;
+  v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE ;
+  v17.56 VALIDÉE en vol.
 
 
 2. PROTOCOLE DE TRAVAIL À RESPECTER
@@ -2145,6 +2158,122 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.57 — CAP CONSTANT GO TO / FEUX ; COMMUNES ALLÉGÉES ; COUCHE
+ROUTES SUR UN SEUL CALQUE
+Date : 05/10/2026
+Base fonctionnelle : v17.56 (commit 70a3249), VALIDÉE en vol le 05/10/2026
+(15:31-17:30, GPS réel, HT + Routes : aucun plantage, 52 images / s pendant
+les gestes ; « Mémoire estimée » ≈ 242 Mo). Sur iPad encombré : page blanche
+(iOS ferme l'appli, probablement par manque de mémoire, déduit).
+Décisions de Bastien : A (option 1, cap constant), B et C (mémoire).
+
+A — CAP CONSTANT DU DÉPART À L'ARRIVÉE
+- Règle : le cap affiché au départ reste le même jusqu'à l'arrivée. La
+  déclinaison change le long du trajet (≈ 2,8° à Marseille, ≈ 1° à Bordeaux) :
+  un cap VRAI constant ferait bouger le cap magnétique affiché d'environ 1,8°.
+  Le cap calculé est donc le cap MAGNÉTIQUE constant qui mène à la cible
+  (ce que tient le pilote au compas et ce que tient la simulation), avec la
+  déclinaison WMM2025 prise en plusieurs points du trajet (src/030
+  computeNpfConstantMagneticCourse, ligne 521 ; fonctions loxodromiques et
+  déclinaison en un point juste avant). Distance : longueur de ce chemin.
+- Endroits modifiés (avant : route orthodromique de départ, calculateBearing) :
+  - bandeau Go To / feu / PÉLIC auto (caps des feux) src/110:1361 ;
+  - ligne rouge avion -> cible et son cap src/260:1792 (+ drawRoute
+    src/150:226-238 qui reçoit le chemin et la distance) ;
+  - Feu -> BASE src/270:718 ;
+  - WP : segments src/200:572 (tracé) et 646 (étiquette), avion -> WP
+    src/200:1297 (bandeau WP), fonction src/200:389-399 ;
+  - vecteur jaune : droite à cap constant src/260:2470 et 2498 (avant :
+    orthodromie v17.18).
+- Inchangés : routes PÉLIC (aucun cap affiché, distance et tracé
+  orthodromiques comme avant), calculateur (distances Base / Pélic / Feu
+  inchangées, règle « calculs » : écart avec la distance du bandeau ≤ 0,1 %
+  à 250 NM, signalé, non modifié), déclinaison WMM2025, affichage au dixième.
+- Déclinaison de l'avion recalculée tous les 1 NM au lieu de 5 NM (src/030,
+  < 0,5 ms par calcul) pour tenir le cap à 0,1° près.
+
+B — COMMUNES ALLÉGÉES
+- Usages relevés avant de coder : recherche (src/070, src/100:2861, alias
+  src/070:61-101), commune la plus proche / survolée (src/260:1884,
+  src/250:754), nom des feux (src/050:206-351), détail d'une commune
+  (src/110), calque Communes (src/250:260-460), population (src/250:369),
+  localStorage currentCommune (src/050:567), GAAR (src/270:865-888).
+- Champs lus : code_insee, nom_standard, dep_code, dep_nom, code_postal,
+  population, latitude_mairie, longitude_mairie (+ 4 champs de recherche
+  calculés). Les 43 autres (dont « polygone » ≈ 20 Mo, jamais utilisé) ne
+  sont plus gardés (src/060:433-452).
+- Contours (data/communes-500m.geojson sur iPad) : l'index des contours est
+  gardé (commune survolée, nom des feux) ; le fichier lu n'est plus gardé ;
+  les ≈ 35 000 tracés de carte ne sont plus créés d'avance : créés pour les
+  communes à l'écran quand le calque Communes est affiché (2 NM et moins),
+  libérés à la sortie de l'écran et quand le calque est masqué (src/250:303-
+  345, 270-275, 849-877). Même tracé, même style, mêmes noms.
+- Mesure (Chrome, mode iPad, tas JavaScript après ménage) : 193 -> 95 Mo ;
+  communes 71 -> 17 Mo ; contours 83 -> 39 Mo.
+
+C — COUCHE ROUTES SUR UN SEUL CALQUE
+- Bordures et lignes sur un seul canvas (src/090:351-366), dans le pane des
+  lignes (aucun pane entre 405 et 410). Ordre de dessin conservé : bordures
+  d'une nouvelle partie replacées juste après les bordures déjà présentes,
+  avant toutes les lignes (src/120:2307, 2322-2366). Moteur de tuiles (src/100)
+  non touché.
+- Rappel : v14.16 avait séparé les deux canvas (« redessins incomplets sur
+  Safari/iPadOS » avec un renderer partagé) : À SURVEILLER sur iPad.
+- Canvas Routes : 2 × 25,6 -> 1 × 25,6 Mo sur iPad (Chrome 38,4 -> 19,2 Mo).
+- DIAG : canvas nommé « canvas Routes » ; ligne « Mémoire estimée » : tailles
+  remesurées (communes ≈ 17 Mo, contours ≈ 39 Mo ajoutés, SIA ≈ 18 Mo, HT
+  ≈ 13 Mo).
+
+MÉMOIRE ESTIMÉE (mêmes conditions que le vol : 5 canvas, communes, contours,
+SIA, HT ; tuiles non comptées) : avant ≈ 313 Mo (128 + 71 + 83 + 18 + 13 ;
+la ligne DIAG v17.56 affichait 242 Mo car elle ne comptait pas les contours
+et sous-estimait les communes) ; après ≈ 190 Mo (102,4 + 17 + 39 + 18 + 13).
+
+TESTS COURTS (Chrome, bloquants, 05/10/2026)
+- A, vol simulé au cap Go To affiché (au dixième) depuis LFML :
+  - LFMT 55 NM : 276,5° -> 276,6° à 25 NM ; arrivée à 0,04 NM : OK ;
+  - LFBO 168 NM : 271,7° puis 271,8° à 48 NM ; arrivée à 0,05 NM : OK ;
+  - LFBD 269 NM : 285,9° jusqu'à 149 NM, 286,0° de 119 à 59 NM, 286,1° à
+    29 NM (0,2°) ; arrivée à 0,11 NM : RÉSERVE (critère 0,1° dépassé à
+    29 NM de l'arrivée). Cause : cap tenu arrondi au dixième (285,9 au lieu
+    de ≈ 285,94) -> ≈ 0,2 NM d'écart en fin de trajet, que le cap affiché
+    corrige. Au cap exact : 0,0° de variation, arrivée à 0,02 NM.
+  - ligne rouge et vecteur alignés (0,01 à 0,03°) : OK ;
+  - Feu -> BASE : 177,8° / 129 NM = calcul attendu : OK ; caps des feux :
+    même code que le Go To (cdp_nr : 329,3° / 029,2°, inchangés au dixième
+    pour 26 et 5 NM).
+- B : recherche « marseille », alias « cherbourg octeville », commune
+  survolée (Marseille 13), commune contenant un point (Lyon), détail
+  (Aubagne 13), calque Communes à 1 NM (117 contours, 83 noms) : identiques à
+  v17.56 ; 12 champs gardés au lieu de 51 ; tracés en mémoire hors calque :
+  0 au lieu de 35 014 : OK.
+- C : un seul canvas Routes (19,2 Mo Chrome au lieu de 38,4) ; 2 NM : image
+  identique au pixel près (262 417 pixels) ; 0,5 NM : mêmes 815 251 pixels,
+  1,7 % avec une teinte différente de 2 / 255 au plus (arrondi de mélange,
+  invisible) : RÉSERVE ; 1 NM : référence v17.56 non obtenue (Routes non
+  redessinées à temps en v17.56 dans ce scénario) ; 5 NM : couche Routes non
+  dessinée dans les deux versions avec ces données de test.
+- cdp_map, cdp_nr (FdS / GAAR, GLR), cdp_btn : identiques à v17.56 ; retour
+  sur l'avion 10 s ; déclinaison et dixième de degré (cdp_cap56) ; mise à jour
+  v17.56 -> v17.57, hors ligne, caches de la pérenne intacts : OK.
+- Les deux RÉSERVES (cap 0,2° à 29 NM de LFBD ; teinte ≤ 2 / 255 à 0,5 NM)
+  ont été ACCEPTÉES par Bastien le 05/10/2026 avant le push.
+
+RETOUR ARRIÈRE
+- git revert du commit v17.57 : redonne v17.56.
+
+FICHIERS MODIFIÉS
+src/030, src/060, src/090, src/110, src/120, src/150, src/200, src/250,
+src/260, src/270, src/010, donc script.js ; index.html, manifest.json,
+style.css, sw.js (version). sia.js et src/100 : inchangés.
+
+VERSION
+- App : v17.57
+- Service Worker : `sw-v17-57_cap_constant_memoire`
+
+STATUT : À MESURER sur iPad.
+
 
 VERSION TEST v17.56 — ROUTES ET CAPS AU DIXIÈME DE DEGRÉ ; CAP DE SIMULATION AU
 DIXIÈME ; DIAG MÉMOIRE ESTIMÉE

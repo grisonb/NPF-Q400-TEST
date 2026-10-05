@@ -2304,6 +2304,7 @@ async function loadRoadOverlayPart(part, token, tier, renderBounds) {
 
     casing.addTo(roadOverlayCasingLayer);
     lines.addTo(roadOverlayLineLayer);
+    placeRoadOverlayCasingBeforeLines(casing);
 
     const record = {
         casing,
@@ -2317,6 +2318,55 @@ async function loadRoadOverlayPart(part, token, tier, renderBounds) {
     };
     loadedRoadOverlayParts.set(part.key, record);
     return record;
+}
+
+/*
+ * v17.57 — C : un seul canvas pour bordures et lignes. Leaflet dessine les
+ * tracés dans l'ordre d'ajout ; les bordures d'une nouvelle partie sont donc
+ * replacées juste après la dernière bordure déjà présente, avant toutes les
+ * lignes, dans leur ordre d'origine : même rendu qu'avec deux canvas.
+ */
+function placeRoadOverlayCasingBeforeLines(casingGroup) {
+    const renderer = roadOverlayCasingRenderer;
+    if (!renderer || renderer !== roadOverlayLineRenderer || !casingGroup) return;
+    const paths = [];
+    casingGroup.eachLayer(layer => {
+        if (layer && typeof layer.eachLayer === 'function' && !layer._order) {
+            layer.eachLayer(inner => paths.push(inner));
+        } else if (layer) {
+            paths.push(layer);
+        }
+    });
+    paths.forEach(path => { path.__npfRoadCasing = true; });
+    const nodes = paths.map(path => path._order).filter(Boolean);
+    if (!nodes.length) return;
+    const unlink = node => {
+        if (node.prev) node.prev.next = node.next; else renderer._drawFirst = node.next;
+        if (node.next) node.next.prev = node.prev; else renderer._drawLast = node.prev;
+        node.prev = null;
+        node.next = null;
+    };
+    nodes.forEach(unlink);
+    let anchor = null;
+    for (let node = renderer._drawFirst; node; node = node.next) {
+        if (node.layer && node.layer.__npfRoadCasing) anchor = node;
+    }
+    nodes.forEach(node => {
+        if (anchor) {
+            node.prev = anchor;
+            node.next = anchor.next;
+            if (anchor.next) anchor.next.prev = node; else renderer._drawLast = node;
+            anchor.next = node;
+        } else {
+            node.prev = null;
+            node.next = renderer._drawFirst;
+            if (renderer._drawFirst) renderer._drawFirst.prev = node;
+            renderer._drawFirst = node;
+            if (!renderer._drawLast) renderer._drawLast = node;
+        }
+        anchor = node;
+    });
+    try { renderer._requestRedraw(paths[0]); } catch (_) {}
 }
 
 async function waitForRoadOverlayOfflineTiles(token) {

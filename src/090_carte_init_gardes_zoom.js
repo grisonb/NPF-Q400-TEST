@@ -350,18 +350,20 @@ function initMap() {
      * sont masqués pendant les gestes manuels et redessinés au moveend ; deux
      * canvas d'environ 78 Mo chacun sur iPad passent à environ 26 Mo.
      */
-    roadOverlayCasingRenderer = L.canvas
-        ? L.canvas({
-            padding: 0.10,
-            pane: 'roadOverlayCasingPane'
-        })
-        : null;
+    /*
+     * v17.57 — C : bordures et lignes des Routes sur UN SEUL canvas (−25,6 Mo
+     * sur iPad), dans le pane des lignes (rien entre les panes 405 et 410).
+     * L'ordre de dessin reste celui des deux canvas : toutes les bordures,
+     * puis toutes les lignes (placeRoadOverlayCasingBeforeLines, src/120).
+     * Les deux noms de variables sont gardés et désignent le même canvas.
+     */
     roadOverlayLineRenderer = L.canvas
         ? L.canvas({
             padding: 0.10,
             pane: 'roadOverlayLinePane'
         })
         : null;
+    roadOverlayCasingRenderer = roadOverlayLineRenderer;
 
     setupBaseTileLayer();
     npfRunwayMapLayer = L.layerGroup().addTo(map);

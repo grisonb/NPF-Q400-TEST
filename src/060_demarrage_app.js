@@ -426,11 +426,25 @@ async function initializeApp() {
             if (!data) data = await loadCommunesData();
             npfStartupDiagMark('communes_data_ready', 'Communes — données prêtes', `${Array.isArray(data?.data) ? data.data.length : 0} communes`);
 
+            /*
+             * v17.57 — B : communes allégées. Seuls les champs lus par l'appli
+             * sont gardés en mémoire (recherche, commune la plus proche,
+             * détail, feux, calque communes) ; les 43 autres (dont le contour
+             * « polygone », jamais utilisé : les contours viennent de
+             * data/communes-500m.geojson) ne sont plus conservés (≈ −40 Mo).
+             */
             allCommunes = data.data.map(c => {
                 const normalizedName = simplifyString(c.nom_standard);
                 const searchParts = normalizedName.split(' ').filter(Boolean);
                 return {
-                    ...c,
+                    code_insee: c.code_insee,
+                    nom_standard: c.nom_standard,
+                    dep_code: c.dep_code,
+                    dep_nom: c.dep_nom,
+                    code_postal: c.code_postal,
+                    population: c.population,
+                    latitude_mairie: c.latitude_mairie,
+                    longitude_mairie: c.longitude_mairie,
                     normalized_name: normalizedName,
                     search_parts: searchParts,
                     search_compact: searchParts.join(''),

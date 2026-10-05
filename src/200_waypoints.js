@@ -384,9 +384,18 @@ function formatNpfWaypointDistanceNm(distanceNm) {
     return `${value < 100 ? value.toFixed(1) : Math.round(value)} Nm`;
 }
 
-function getNpfWaypointMagneticBearing(fromLat, fromLon, toLat, toLon) {
-    const trueBearing = calculateBearing(fromLat, fromLon, toLat, toLon);
-    return (trueBearing - getNpfMagneticDeclination(fromLat, fromLon) + 360) % 360;
+/* v17.57 — A : routes des WP au cap magnétique constant. Départ = l'avion
+ * (fromAircraft) : déclinaison de l'avion ; sinon celle du point de départ. */
+function getNpfWaypointCourse(fromLat, fromLon, toLat, toLon, fromAircraft = false) {
+    return computeNpfConstantMagneticCourse(
+        fromLat, fromLon, toLat, toLon,
+        fromAircraft ? { startDeclination: getNpfMagneticDeclination(fromLat, fromLon) } : {}
+    );
+}
+
+function getNpfWaypointMagneticBearing(fromLat, fromLon, toLat, toLon, fromAircraft = false) {
+    const course = getNpfWaypointCourse(fromLat, fromLon, toLat, toLon, fromAircraft);
+    return course ? course.magneticBearing : NaN;
 }
 
 function isNpfWaypointSourceLinked(wp) {
@@ -560,10 +569,8 @@ function drawNpfWaypointRouteLines() {
     for (let i = 0; i < routePoints.length - 1; i += 1) {
         const from = routePoints[i];
         const to = routePoints[i + 1];
-        const latlngs = buildNpfGreatCircleLatLngs(
-            [from.lat, from.lon],
-            [to.lat, to.lon]
-        );
+        const segmentCourse = getNpfWaypointCourse(from.lat, from.lon, to.lat, to.lon);
+        const latlngs = segmentCourse ? segmentCourse.latlngs : [[from.lat, from.lon], [to.lat, to.lon]];
         L.polyline(latlngs, {
             pane: 'npfWaypointLinePane',
             color: '#ffffff',
@@ -636,8 +643,9 @@ function buildNpfWaypointSegmentLabel(from, to) {
     const metrics = getNpfWaypointSegmentScreenMetrics(from, to);
     if (!metrics || metrics.length < 34) return null;
 
-    const distance = calculateDistanceInNm(from.lat, from.lon, to.lat, to.lon);
-    const magneticBearing = getNpfWaypointMagneticBearing(from.lat, from.lon, to.lat, to.lon);
+    const segmentCourse = getNpfWaypointCourse(from.lat, from.lon, to.lat, to.lon);
+    const distance = segmentCourse ? segmentCourse.distanceNm : NaN;
+    const magneticBearing = segmentCourse ? segmentCourse.magneticBearing : NaN;
     const routeText = formatRouteDegrees(magneticBearing);
     const distanceText = formatNpfWaypointDistanceNm(distance);
     const timeText = formatGpsEtaMinutes(distance);
@@ -1286,8 +1294,9 @@ function updateNpfWaypointNavigationBannerMetrics() {
         if (!userLatLng || !Number.isFinite(userLatLng.lat) || !Number.isFinite(userLatLng.lng)) {
             return '---,-° / -- Nm / -- min';
         }
-        const distance = calculateDistanceInNm(userLatLng.lat, userLatLng.lng, wp.lat, wp.lon);
-        const bearing = getNpfWaypointMagneticBearing(userLatLng.lat, userLatLng.lng, wp.lat, wp.lon);
+        const wpCourse = getNpfWaypointCourse(userLatLng.lat, userLatLng.lng, wp.lat, wp.lon, true);
+        const distance = wpCourse ? wpCourse.distanceNm : NaN;
+        const bearing = wpCourse ? wpCourse.magneticBearing : NaN;
         return `${formatRouteDegrees(bearing)} / ${formatNpfWaypointDistanceNm(distance)} / ${formatGpsEtaMinutes(distance)}`;
     };
 

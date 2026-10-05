@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.56';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.57';
 
 
 /*
@@ -1450,8 +1450,9 @@ const NPF_DIAG_DETAIL = (() => {
         [
             ['canvas HT', safe(() => highVoltageLinesRenderer, null)],
             ['canvas pistes', safe(() => npfRunwayRenderer, null)],
-            ['canvas Routes bordure', safe(() => roadOverlayCasingRenderer, null)],
-            ['canvas Routes ligne', safe(() => roadOverlayLineRenderer, null)]
+            /* v17.57 — C : un seul canvas Routes (bordures + lignes). */
+            ['canvas Routes', safe(() => roadOverlayLineRenderer, null)],
+            ['canvas Routes bordure', safe(() => roadOverlayCasingRenderer, null)]
         ].forEach(([label, renderer]) => {
             if (!renderer || renderer.__npfDiagWrapped) return;
             renderer.__npfDiagWrapped = true;
@@ -3238,7 +3239,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.56 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.57 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }

@@ -1515,6 +1515,9 @@ function appendNpfDiagV1752TileLine(lines) {
  * seule, moteur src/100 non touché) et données chargées (tailles mesurées
  * dans Chrome le 05/10/2026 : communes ≈ 61 Mo dont contours ≈ 20 Mo, zones
  * SIA ≈ 18 Mo, lignes HT ≈ 13 Mo).
+ * v17.57 — tailles remesurées en mode iPad, après allègement : communes
+ * ≈ 17 Mo, contours des communes (communes-500m) ≈ 39 Mo, zones SIA ≈ 18 Mo,
+ * lignes HT ≈ 13 Mo.
  */
 function appendNpfDiagV1756MemoryLine(lines) {
     const mo = bytes => (Math.round(bytes / 1048576 * 10) / 10).toString().replace('.', ',');
@@ -1540,7 +1543,8 @@ function appendNpfDiagV1756MemoryLine(lines) {
     } catch (_) {}
     let dataMo = 0;
     const data = [];
-    try { if (Array.isArray(allCommunes) && allCommunes.length) { dataMo += 61; data.push('communes ≈ 61 Mo'); } } catch (_) {}
+    try { if (Array.isArray(allCommunes) && allCommunes.length) { dataMo += 17; data.push('communes ≈ 17 Mo'); } } catch (_) {}
+    try { if (Array.isArray(communesPolygonData) && communesPolygonData.length) { dataMo += 39; data.push('contours des communes ≈ 39 Mo'); } } catch (_) {}
     try { if (siaDataset) { dataMo += 18; data.push('zones SIA ≈ 18 Mo'); } } catch (_) {}
     try { if (highVoltageLinesData) { dataMo += 13; data.push('lignes HT ≈ 13 Mo'); } } catch (_) {}
     let heap = '';
@@ -1783,13 +1787,16 @@ function drawUserToTargetRoute() {
         && Number.isFinite(Number(userLatLng.lng))
         && Number.isFinite(target.lat) && Number.isFinite(target.lon)) {
 
-        const trueBearingToTarget = calculateBearing(
+        /* v17.57 — A : ligne rouge et cap le long du même chemin à cap
+         * magnétique constant (droite sur la carte, alignée avec le vecteur). */
+        const courseToTarget = computeNpfConstantMagneticCourse(
             userLatLng.lat,
             userLatLng.lng,
             target.lat,
-            target.lon
+            target.lon,
+            { startDeclination: getNpfMagneticDeclination(userLatLng.lat, userLatLng.lng) }
         );
-        const magneticBearing = (trueBearingToTarget - getNpfMagneticDeclination(userLatLng.lat, userLatLng.lng) + 360) % 360;
+        const magneticBearing = courseToTarget ? courseToTarget.magneticBearing : NaN;
 
         /*
          * v16.96 — navigation WP : le pointillé dynamique utilise un pane situé
@@ -1806,6 +1813,8 @@ function drawUserToTargetRoute() {
             {
                 isUser: true,
                 magneticBearing,
+                routeLatLngs: courseToTarget ? courseToTarget.latlngs : null,
+                distanceNm: courseToTarget ? courseToTarget.distanceNm : null,
                 pane: routeWaypointTarget ? 'npfWaypointGotoPane' : undefined
             }
         );
@@ -2453,16 +2462,13 @@ function updateOwnGpsVector(latitude, longitude, headingDeg, speedMps) {
     const timeMarksMinutes = [2, 5, 10];
     const maxMinutes = Math.max(...timeMarksMinutes);
     const endDistanceMeters = speedMps * maxMinutes * 60;
-    const end = calculateDestinationLatLng(latitude, longitude, headingDeg, endDistanceMeters);
     /*
-     * v17.18 — la ligne de foi/vecteur temps suit la même orthodromie que les
-     * routes NPF. Les repères 2/5/10 min restent à leurs positions exactes.
+     * v17.57 — A : le vecteur suit le cap actuel tenu constant (loxodromie :
+     * droite sur la carte), comme la ligne rouge Go To. Avant : orthodromie
+     * (v17.18). Les repères 2/5/10 min sont sur cette même droite.
      */
-    const vectorLatLngs = buildNpfGreatCircleLatLngs(
-        start,
-        end,
-        endDistanceMeters / 1852
-    );
+    const end = calculateNpfRhumbDestination(latitude, longitude, headingDeg, endDistanceMeters / 1852);
+    const vectorLatLngs = [start, end];
 
     /* v13.04 — vecteur de position plus visible : halo noir + jaune. */
     L.polyline(vectorLatLngs, {
@@ -2489,7 +2495,7 @@ function updateOwnGpsVector(latitude, longitude, headingDeg, speedMps) {
 
     timeMarksMinutes.forEach((minutes) => {
         const markDistanceMeters = speedMps * minutes * 60;
-        const point = calculateDestinationLatLng(latitude, longitude, headingDeg, markDistanceMeters);
+        const point = calculateNpfRhumbDestination(latitude, longitude, headingDeg, markDistanceMeters / 1852);
 
         L.circleMarker(point, {
             pane: 'ownAircraftPane',

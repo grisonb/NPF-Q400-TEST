@@ -714,9 +714,14 @@ function drawLftwRoute() {
     if (!baseAirport) return;
     const { latitude_mairie: lat, longitude_mairie: lon } = currentCommune;
     const { lat: baseLat, lon: baseLon } = baseAirport;
-    const trueBearing = calculateBearing(lat, lon, baseLat, baseLon);
-    const magneticBearing = (trueBearing - getNpfMagneticDeclination(lat, lon) + 360) % 360;
-    drawRoute([lat, lon], [baseLat, baseLon], { isLftwRoute: true, magneticBearing: magneticBearing });
+    /* v17.57 — A : Feu -> BASE au cap magnétique constant (même règle). */
+    const course = computeNpfConstantMagneticCourse(lat, lon, baseLat, baseLon);
+    drawRoute([lat, lon], [baseLat, baseLon], {
+        isLftwRoute: true,
+        magneticBearing: course ? course.magneticBearing : NaN,
+        routeLatLngs: course ? course.latlngs : null,
+        distanceNm: course ? course.distanceNm : null
+    });
 }
 
 function toggleGaarVisibility() {

@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.56';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.57';
 
 
 /*
@@ -1450,8 +1450,9 @@ const NPF_DIAG_DETAIL = (() => {
         [
             ['canvas HT', safe(() => highVoltageLinesRenderer, null)],
             ['canvas pistes', safe(() => npfRunwayRenderer, null)],
-            ['canvas Routes bordure', safe(() => roadOverlayCasingRenderer, null)],
-            ['canvas Routes ligne', safe(() => roadOverlayLineRenderer, null)]
+            /* v17.57 — C : un seul canvas Routes (bordures + lignes). */
+            ['canvas Routes', safe(() => roadOverlayLineRenderer, null)],
+            ['canvas Routes bordure', safe(() => roadOverlayCasingRenderer, null)]
         ].forEach(([label, renderer]) => {
             if (!renderer || renderer.__npfDiagWrapped) return;
             renderer.__npfDiagWrapped = true;
@@ -3238,7 +3239,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.56 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.57 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -6128,7 +6129,8 @@ const NPF_WMM2025_COEFFICIENTS = [
     [12,7,0.5,-0.1,0,0], [12,8,-0.1,0.8,0,0], [12,9,-0.4,0.1,0,0], [12,10,-0.2,-1,-0.1,0],
     [12,11,-1.3,0.1,0,0], [12,12,-0.7,0.2,-0.1,-0.1]
 ];
-const NPF_MAGNETIC_DECLINATION_RECOMPUTE_NM = 5;
+/* v17.57 — 5 -> 1 NM : cap constant tenu à 0,1° près (coût < 0,5 ms par NM). */
+const NPF_MAGNETIC_DECLINATION_RECOMPUTE_NM = 1;
 /* Sans position avion ni point fourni : centre de la France métropolitaine. */
 const NPF_MAGNETIC_DECLINATION_DEFAULT_POSITION = { lat: 46.6, lon: 2.4 };
 let npfMagneticDeclinationCache = null;
@@ -6267,6 +6269,138 @@ function getNpfMagneticDeclination(fallbackLat, fallbackLon) {
         costMs: performance.now() - startedAt
     };
     return value;
+}
+
+/*
+ * v17.57 — A : CAP CONSTANT du départ à l'arrivée (décision de Bastien).
+ * Route Go To, caps des feux, Feu -> BASE et routes des WP : cap MAGNÉTIQUE
+ * constant qui mène au point visé (loxodromie magnétique, ce que tient le
+ * pilote au compas et ce que tient la simulation). Comme la déclinaison
+ * change le long du trajet, le cap vrai suivi varie légèrement : il est
+ * calculé pas à pas, avec la déclinaison prise en plusieurs points du trajet
+ * (tous les 50 NM environ, au plus 6 points). Si l'avion tient ce cap, le cap affiché ne bouge
+ * plus jusqu'à l'arrivée. Distance : longueur de ce même chemin.
+ * Rayon terrestre 6 371 km, comme calculateDistanceInNm.
+ */
+const NPF_RHUMB_EARTH_RADIUS_NM = 6371 / 1.852;
+const npfPointDeclinationCache = new Map();
+
+function getNpfRhumbDeltas(lat1, lon1, lat2, lon2) {
+    const phi1 = toRad(Number(lat1));
+    const phi2 = toRad(Number(lat2));
+    const dPhi = phi2 - phi1;
+    let dLambda = toRad(Number(lon2) - Number(lon1));
+    if (Math.abs(dLambda) > Math.PI) dLambda = dLambda > 0 ? -(2 * Math.PI - dLambda) : (2 * Math.PI + dLambda);
+    const dPsi = Math.log(Math.tan(Math.PI / 4 + phi2 / 2) / Math.tan(Math.PI / 4 + phi1 / 2));
+    const q = Math.abs(dPsi) > 1e-12 ? dPhi / dPsi : Math.cos(phi1);
+    return { dPhi, dPsi, dLambda, q };
+}
+
+function calculateNpfRhumbBearing(lat1, lon1, lat2, lon2) {
+    const { dPsi, dLambda } = getNpfRhumbDeltas(lat1, lon1, lat2, lon2);
+    return (toDeg(Math.atan2(dLambda, dPsi)) + 360) % 360;
+}
+
+function calculateNpfRhumbDistanceNm(lat1, lon1, lat2, lon2) {
+    const { dPhi, dLambda, q } = getNpfRhumbDeltas(lat1, lon1, lat2, lon2);
+    return Math.sqrt(dPhi * dPhi + q * q * dLambda * dLambda) * NPF_RHUMB_EARTH_RADIUS_NM;
+}
+
+function calculateNpfRhumbDestination(lat, lon, bearingDeg, distanceNm) {
+    const delta = Number(distanceNm) / NPF_RHUMB_EARTH_RADIUS_NM;
+    const theta = toRad(Number(bearingDeg));
+    const phi1 = toRad(Number(lat));
+    let phi2 = phi1 + delta * Math.cos(theta);
+    if (Math.abs(phi2) > Math.PI / 2) phi2 = phi2 > 0 ? Math.PI - phi2 : -Math.PI - phi2;
+    const dPsi = Math.log(Math.tan(Math.PI / 4 + phi2 / 2) / Math.tan(Math.PI / 4 + phi1 / 2));
+    const q = Math.abs(dPsi) > 1e-12 ? (phi2 - phi1) / dPsi : Math.cos(phi1);
+    const dLambda = delta * Math.sin(theta) / q;
+    const lon2 = ((toDeg(toRad(Number(lon)) + dLambda) + 540) % 360) - 180;
+    return [toDeg(phi2), lon2];
+}
+
+/* Déclinaison WMM2025 en un point fixe (feu, base, WP, cible), mise en mémoire. */
+function getNpfDeclinationAtPoint(lat, lon) {
+    const latNum = Number(lat);
+    const lonNum = Number(lon);
+    if (!Number.isFinite(latNum) || !Number.isFinite(lonNum)) return getNpfMagneticDeclination();
+    const decimalYear = getNpfDecimalYear(new Date());
+    const key = `${latNum.toFixed(2)}|${lonNum.toFixed(2)}|${decimalYear.toFixed(1)}`;
+    const cached = npfPointDeclinationCache.get(key);
+    if (cached !== undefined) return cached;
+    const value = computeNpfWmm2025Declination(latNum, lonNum, 0, decimalYear);
+    const safeValue = Number.isFinite(value) ? value : getNpfMagneticDeclination();
+    if (npfPointDeclinationCache.size > 400) npfPointDeclinationCache.clear();
+    npfPointDeclinationCache.set(key, safeValue);
+    return safeValue;
+}
+
+/*
+ * Cap magnétique constant de (startLat, startLon) vers (endLat, endLon).
+ * options.startDeclination : déclinaison au départ (avion : celle de
+ * getNpfMagneticDeclination, la même que la simulation) ; sinon calculée au
+ * point de départ. Retour : { magneticBearing, distanceNm, latlngs }.
+ */
+function computeNpfConstantMagneticCourse(startLat, startLon, endLat, endLon, options = {}) {
+    const lat1 = Number(startLat);
+    const lon1 = Number(startLon);
+    const lat2 = Number(endLat);
+    const lon2 = Number(endLon);
+    if (![lat1, lon1, lat2, lon2].every(Number.isFinite)) return null;
+
+    const startDeclination = Number.isFinite(Number(options.startDeclination))
+        ? Number(options.startDeclination)
+        : getNpfDeclinationAtPoint(lat1, lon1);
+    const endDeclination = getNpfDeclinationAtPoint(lat2, lon2);
+    const directBearing = calculateNpfRhumbBearing(lat1, lon1, lat2, lon2);
+    const directDistance = calculateNpfRhumbDistanceNm(lat1, lon1, lat2, lon2);
+    const normalize = value => ((Number(value) % 360) + 360) % 360;
+    const signedDiff = (a, b) => ((a - b + 540) % 360) - 180;
+
+    if (!Number.isFinite(directDistance) || directDistance < 0.05) {
+        return {
+            magneticBearing: normalize(directBearing - startDeclination),
+            distanceNm: Number.isFinite(directDistance) ? directDistance : 0,
+            latlngs: [[lat1, lon1], [lat2, lon2]]
+        };
+    }
+
+    /* Déclinaison le long du trajet : départ, points intermédiaires, arrivée. */
+    const samples = Math.min(6, Math.max(1, Math.ceil(directDistance / 50)));
+    const declinations = [startDeclination];
+    for (let index = 1; index < samples; index += 1) {
+        const point = calculateNpfRhumbDestination(lat1, lon1, directBearing, directDistance * index / samples);
+        declinations.push(getNpfDeclinationAtPoint(point[0], point[1]));
+    }
+    declinations.push(endDeclination);
+    const declinationAt = fraction => {
+        const position = Math.min(samples, Math.max(0, fraction * samples));
+        const index = Math.min(samples - 1, Math.floor(position));
+        return declinations[index] + (declinations[index + 1] - declinations[index]) * (position - index);
+    };
+    const steps = Math.min(48, Math.max(2, Math.ceil(directDistance / 5)));
+    let magnetic = normalize(directBearing - declinations.reduce((a, v) => a + v, 0) / declinations.length);
+    let pathLength = directDistance;
+    let points = [];
+    for (let iteration = 0; iteration < 6; iteration += 1) {
+        let point = [lat1, lon1];
+        points = [point];
+        for (let index = 0; index < steps; index += 1) {
+            const fraction = (index + 0.5) / steps;
+            const declination = declinationAt(fraction);
+            point = calculateNpfRhumbDestination(point[0], point[1], magnetic + declination, pathLength / steps);
+            points.push(point);
+        }
+        const reachedBearing = calculateNpfRhumbBearing(lat1, lon1, point[0], point[1]);
+        const reachedDistance = calculateNpfRhumbDistanceNm(lat1, lon1, point[0], point[1]);
+        const bearingError = signedDiff(directBearing, reachedBearing);
+        const scale = reachedDistance > 0 ? directDistance / reachedDistance : 1;
+        magnetic = normalize(magnetic + bearingError);
+        pathLength *= scale;
+        if (Math.abs(bearingError) < 0.0005 && Math.abs(scale - 1) < 0.00001) break;
+    }
+    points[points.length - 1] = [lat2, lon2];
+    return { magneticBearing: magnetic, distanceNm: pathLength, latlngs: points };
 }
 
 /* v17.53 — DIAG : ligne « Déclinaison ». */
@@ -9846,11 +9980,25 @@ async function initializeApp() {
             if (!data) data = await loadCommunesData();
             npfStartupDiagMark('communes_data_ready', 'Communes — données prêtes', `${Array.isArray(data?.data) ? data.data.length : 0} communes`);
 
+            /*
+             * v17.57 — B : communes allégées. Seuls les champs lus par l'appli
+             * sont gardés en mémoire (recherche, commune la plus proche,
+             * détail, feux, calque communes) ; les 43 autres (dont le contour
+             * « polygone », jamais utilisé : les contours viennent de
+             * data/communes-500m.geojson) ne sont plus conservés (≈ −40 Mo).
+             */
             allCommunes = data.data.map(c => {
                 const normalizedName = simplifyString(c.nom_standard);
                 const searchParts = normalizedName.split(' ').filter(Boolean);
                 return {
-                    ...c,
+                    code_insee: c.code_insee,
+                    nom_standard: c.nom_standard,
+                    dep_code: c.dep_code,
+                    dep_nom: c.dep_nom,
+                    code_postal: c.code_postal,
+                    population: c.population,
+                    latitude_mairie: c.latitude_mairie,
+                    longitude_mairie: c.longitude_mairie,
                     normalized_name: normalizedName,
                     search_parts: searchParts,
                     search_compact: searchParts.join(''),
@@ -13331,18 +13479,20 @@ function initMap() {
      * sont masqués pendant les gestes manuels et redessinés au moveend ; deux
      * canvas d'environ 78 Mo chacun sur iPad passent à environ 26 Mo.
      */
-    roadOverlayCasingRenderer = L.canvas
-        ? L.canvas({
-            padding: 0.10,
-            pane: 'roadOverlayCasingPane'
-        })
-        : null;
+    /*
+     * v17.57 — C : bordures et lignes des Routes sur UN SEUL canvas (−25,6 Mo
+     * sur iPad), dans le pane des lignes (rien entre les panes 405 et 410).
+     * L'ordre de dessin reste celui des deux canvas : toutes les bordures,
+     * puis toutes les lignes (placeRoadOverlayCasingBeforeLines, src/120).
+     * Les deux noms de variables sont gardés et désignent le même canvas.
+     */
     roadOverlayLineRenderer = L.canvas
         ? L.canvas({
             padding: 0.10,
             pane: 'roadOverlayLinePane'
         })
         : null;
+    roadOverlayCasingRenderer = roadOverlayLineRenderer;
 
     setupBaseTileLayer();
     npfRunwayMapLayer = L.layerGroup().addTo(map);
@@ -18507,9 +18657,14 @@ function updateCommuneGpsRouteDisplay() {
         return;
     }
 
-    const distance = calculateDistanceInNm(userLatLng.lat, userLatLng.lng, target.lat, target.lon);
-    const trueBearingToTarget = calculateBearing(userLatLng.lat, userLatLng.lng, target.lat, target.lon);
-    const magneticBearing = (trueBearingToTarget - getNpfMagneticDeclination(userLatLng.lat, userLatLng.lng) + 360) % 360;
+    /* v17.57 — A : cap magnétique constant jusqu'à la cible (feu, PÉLIC,
+     * terrain Go To) ; distance le long de ce même chemin. */
+    const courseToTarget = computeNpfConstantMagneticCourse(
+        userLatLng.lat, userLatLng.lng, target.lat, target.lon,
+        { startDeclination: getNpfMagneticDeclination(userLatLng.lat, userLatLng.lng) }
+    );
+    const distance = courseToTarget ? courseToTarget.distanceNm : NaN;
+    const magneticBearing = courseToTarget ? courseToTarget.magneticBearing : NaN;
 
     if (routeInfo) {
         routeInfo.textContent = `${formatRouteDegrees(magneticBearing)} / ${Math.round(distance)} Nm / ${formatGpsEtaMinutes(distance)}`;
@@ -21785,6 +21940,7 @@ async function loadRoadOverlayPart(part, token, tier, renderBounds) {
 
     casing.addTo(roadOverlayCasingLayer);
     lines.addTo(roadOverlayLineLayer);
+    placeRoadOverlayCasingBeforeLines(casing);
 
     const record = {
         casing,
@@ -21798,6 +21954,55 @@ async function loadRoadOverlayPart(part, token, tier, renderBounds) {
     };
     loadedRoadOverlayParts.set(part.key, record);
     return record;
+}
+
+/*
+ * v17.57 — C : un seul canvas pour bordures et lignes. Leaflet dessine les
+ * tracés dans l'ordre d'ajout ; les bordures d'une nouvelle partie sont donc
+ * replacées juste après la dernière bordure déjà présente, avant toutes les
+ * lignes, dans leur ordre d'origine : même rendu qu'avec deux canvas.
+ */
+function placeRoadOverlayCasingBeforeLines(casingGroup) {
+    const renderer = roadOverlayCasingRenderer;
+    if (!renderer || renderer !== roadOverlayLineRenderer || !casingGroup) return;
+    const paths = [];
+    casingGroup.eachLayer(layer => {
+        if (layer && typeof layer.eachLayer === 'function' && !layer._order) {
+            layer.eachLayer(inner => paths.push(inner));
+        } else if (layer) {
+            paths.push(layer);
+        }
+    });
+    paths.forEach(path => { path.__npfRoadCasing = true; });
+    const nodes = paths.map(path => path._order).filter(Boolean);
+    if (!nodes.length) return;
+    const unlink = node => {
+        if (node.prev) node.prev.next = node.next; else renderer._drawFirst = node.next;
+        if (node.next) node.next.prev = node.prev; else renderer._drawLast = node.prev;
+        node.prev = null;
+        node.next = null;
+    };
+    nodes.forEach(unlink);
+    let anchor = null;
+    for (let node = renderer._drawFirst; node; node = node.next) {
+        if (node.layer && node.layer.__npfRoadCasing) anchor = node;
+    }
+    nodes.forEach(node => {
+        if (anchor) {
+            node.prev = anchor;
+            node.next = anchor.next;
+            if (anchor.next) anchor.next.prev = node; else renderer._drawLast = node;
+            anchor.next = node;
+        } else {
+            node.prev = null;
+            node.next = renderer._drawFirst;
+            if (renderer._drawFirst) renderer._drawFirst.prev = node;
+            renderer._drawFirst = node;
+            if (!renderer._drawLast) renderer._drawLast = node;
+        }
+        anchor = node;
+    });
+    try { renderer._requestRedraw(paths[0]); } catch (_) {}
 }
 
 async function waitForRoadOverlayOfflineTiles(token) {
@@ -29299,9 +29504,15 @@ function buildNpfGreatCircleLatLngs(startLatLng, endLatLng, distanceNm = null) {
 
 function drawRoute(startLatLng, endLatLng, options = {}) {
     const { oaci, isUser, isLftwRoute, magneticBearing, pane } = options;
-    const distance = calculateDistanceInNm(startLatLng[0], startLatLng[1], endLatLng[0], endLatLng[1]);
-    /* v17.18 — toutes les routes de navigation dessinées ici partagent la même orthodromie. */
-    const routeLatLngs = buildNpfGreatCircleLatLngs(startLatLng, endLatLng, distance);
+    /* v17.57 — A : route avion -> cible et Feu -> BASE : chemin à cap constant
+     * et distance fournis par l'appelant. Routes PÉLIC (sans cap affiché) :
+     * orthodromie et distance inchangées (v17.18). */
+    const distance = Number.isFinite(Number(options.distanceNm))
+        ? Number(options.distanceNm)
+        : calculateDistanceInNm(startLatLng[0], startLatLng[1], endLatLng[0], endLatLng[1]);
+    const routeLatLngs = Array.isArray(options.routeLatLngs) && options.routeLatLngs.length >= 2
+        ? options.routeLatLngs
+        : buildNpfGreatCircleLatLngs(startLatLng, endLatLng, distance);
     let labelText, color = 'var(--primary-color)', dashArray = '', layer = routesLayer;
 
     if (isUser) {
@@ -34807,9 +35018,18 @@ function formatNpfWaypointDistanceNm(distanceNm) {
     return `${value < 100 ? value.toFixed(1) : Math.round(value)} Nm`;
 }
 
-function getNpfWaypointMagneticBearing(fromLat, fromLon, toLat, toLon) {
-    const trueBearing = calculateBearing(fromLat, fromLon, toLat, toLon);
-    return (trueBearing - getNpfMagneticDeclination(fromLat, fromLon) + 360) % 360;
+/* v17.57 — A : routes des WP au cap magnétique constant. Départ = l'avion
+ * (fromAircraft) : déclinaison de l'avion ; sinon celle du point de départ. */
+function getNpfWaypointCourse(fromLat, fromLon, toLat, toLon, fromAircraft = false) {
+    return computeNpfConstantMagneticCourse(
+        fromLat, fromLon, toLat, toLon,
+        fromAircraft ? { startDeclination: getNpfMagneticDeclination(fromLat, fromLon) } : {}
+    );
+}
+
+function getNpfWaypointMagneticBearing(fromLat, fromLon, toLat, toLon, fromAircraft = false) {
+    const course = getNpfWaypointCourse(fromLat, fromLon, toLat, toLon, fromAircraft);
+    return course ? course.magneticBearing : NaN;
 }
 
 function isNpfWaypointSourceLinked(wp) {
@@ -34983,10 +35203,8 @@ function drawNpfWaypointRouteLines() {
     for (let i = 0; i < routePoints.length - 1; i += 1) {
         const from = routePoints[i];
         const to = routePoints[i + 1];
-        const latlngs = buildNpfGreatCircleLatLngs(
-            [from.lat, from.lon],
-            [to.lat, to.lon]
-        );
+        const segmentCourse = getNpfWaypointCourse(from.lat, from.lon, to.lat, to.lon);
+        const latlngs = segmentCourse ? segmentCourse.latlngs : [[from.lat, from.lon], [to.lat, to.lon]];
         L.polyline(latlngs, {
             pane: 'npfWaypointLinePane',
             color: '#ffffff',
@@ -35059,8 +35277,9 @@ function buildNpfWaypointSegmentLabel(from, to) {
     const metrics = getNpfWaypointSegmentScreenMetrics(from, to);
     if (!metrics || metrics.length < 34) return null;
 
-    const distance = calculateDistanceInNm(from.lat, from.lon, to.lat, to.lon);
-    const magneticBearing = getNpfWaypointMagneticBearing(from.lat, from.lon, to.lat, to.lon);
+    const segmentCourse = getNpfWaypointCourse(from.lat, from.lon, to.lat, to.lon);
+    const distance = segmentCourse ? segmentCourse.distanceNm : NaN;
+    const magneticBearing = segmentCourse ? segmentCourse.magneticBearing : NaN;
     const routeText = formatRouteDegrees(magneticBearing);
     const distanceText = formatNpfWaypointDistanceNm(distance);
     const timeText = formatGpsEtaMinutes(distance);
@@ -35709,8 +35928,9 @@ function updateNpfWaypointNavigationBannerMetrics() {
         if (!userLatLng || !Number.isFinite(userLatLng.lat) || !Number.isFinite(userLatLng.lng)) {
             return '---,-° / -- Nm / -- min';
         }
-        const distance = calculateDistanceInNm(userLatLng.lat, userLatLng.lng, wp.lat, wp.lon);
-        const bearing = getNpfWaypointMagneticBearing(userLatLng.lat, userLatLng.lng, wp.lat, wp.lon);
+        const wpCourse = getNpfWaypointCourse(userLatLng.lat, userLatLng.lng, wp.lat, wp.lon, true);
+        const distance = wpCourse ? wpCourse.distanceNm : NaN;
+        const bearing = wpCourse ? wpCourse.magneticBearing : NaN;
         return `${formatRouteDegrees(bearing)} / ${formatNpfWaypointDistanceNm(distance)} / ${formatGpsEtaMinutes(distance)}`;
     };
 
@@ -39213,6 +39433,8 @@ function updateCommunesLayerAppearance() {
      */
     if (!shouldDrawCommunes) {
         communesLabelsLayer.clearLayers();
+        try { communesLayerGroup.clearLayers(); } catch (_) {}
+        releaseCommuneBoundaryLayers();
 
         if (map.hasLayer(communesLabelsLayer)) {
             map.removeLayer(communesLabelsLayer);
@@ -39239,6 +39461,27 @@ function updateCommunesLayerAppearance() {
 }
 
 
+/* v17.57 — B : tracé d'une commune à partir de l'index des contours
+ * (mêmes anneaux GeoJSON [lon, lat], polygones séparés, trous compris). */
+function buildCommuneBoundaryLayer(commune) {
+    const polygons = Array.isArray(commune?.polygons) ? commune.polygons : [];
+    if (!polygons.length) return null;
+    const toLatLngs = rings => rings.map(ring => ring.map(coord => [Number(coord[1]), Number(coord[0])]));
+    const latlngs = polygons.length === 1 ? toLatLngs(polygons[0]) : polygons.map(toLatLngs);
+    try {
+        return L.polygon(latlngs, getCommunesBoundaryStyle());
+    } catch (_) {
+        return null;
+    }
+}
+
+/* v17.57 — B : calque communes masqué -> tous les tracés créés sont libérés. */
+function releaseCommuneBoundaryLayers() {
+    for (const item of communesViewportLayerData) {
+        if (item) item.layer = null;
+    }
+}
+
 function renderVisibleCommuneLayers() {
     if (!map || !communesLayerGroup || !areCommunesVisible || !hasLoadedCommunes) return;
 
@@ -39252,8 +39495,15 @@ function renderVisibleCommuneLayers() {
     let visibleCount = 0;
 
     for (const item of communesViewportLayerData) {
-        if (!item || !item.layer || !item.bounds) continue;
-        if (!viewportBounds.intersects(item.bounds)) continue;
+        if (!item || !item.bounds) continue;
+        if (!viewportBounds.intersects(item.bounds)) {
+            /* v17.57 — B : tracé libéré dès que la commune sort de l'écran. */
+            item.layer = null;
+            continue;
+        }
+
+        if (!item.layer) item.layer = buildCommuneBoundaryLayer(item.commune);
+        if (!item.layer) continue;
 
         if (typeof item.layer.setStyle === 'function') {
             item.layer.setStyle(style);
@@ -39641,13 +39891,23 @@ function buildCommunePolygonIndex(communesGeojson) {
         if (!bounds) return;
 
         const codeInsee = getCommuneInseeCodeFromProperties(properties);
+        /* v17.57 — B : population du fichier gardée pour les noms du calque. */
+        const directPopulation = [
+            properties.population,
+            properties.population_municipale,
+            properties.populationMunicipale,
+            properties.pop
+        ]
+            .map(value => Number(value))
+            .find(value => Number.isFinite(value) && value >= 0);
 
         index.push({
             name,
             codeInsee,
             depCode: getCommuneDepCodeFromProperties(properties),
             polygons,
-            bounds
+            bounds,
+            directPopulation
         });
     });
 
@@ -39752,40 +40012,39 @@ async function loadCommunesLayerData() {
         throw new Error(`HTTP ${response.status}`);
     }
 
-    const communesGeojson = await response.json();
+    let communesGeojson = await response.json();
 
     communesPolygonData = buildCommunePolygonIndex(communesGeojson);
+    /* v17.57 — B : le fichier lu n'est plus gardé ; seul l'index des contours
+     * reste (commune survolée, nom des feux, calque communes). */
+    communesGeojson = null;
     communesLabelData = [];
     communesViewportLayerData = [];
     communesLayerGroup.clearLayers();
     communesLabelsLayer.clearLayers();
 
-    const geoJsonLayer = L.geoJSON(communesGeojson, {
-        style: getCommunesBoundaryStyle
-    });
-
-    geoJsonLayer.eachLayer((layer) => {
-        const properties = layer.feature?.properties || {};
-        const communeName = getCommuneNameFromProperties(properties);
-        if (!communeName || !layer.getBounds) return;
-
-        const layerBounds = layer.getBounds();
+    /*
+     * v17.57 — B : plus de calque Leaflet créé d'avance pour les ≈ 35 000
+     * communes. Le tracé d'une commune est créé seulement quand elle est à
+     * l'écran avec le calque Communes affiché, puis libéré ensuite
+     * (renderVisibleCommuneLayers). Même tracé et même style qu'avant.
+     */
+    communesPolygonData.forEach((commune) => {
+        const bounds = commune.bounds;
+        const layerBounds = L.latLngBounds(
+            [bounds.minLat, bounds.minLon],
+            [bounds.maxLat, bounds.maxLon]
+        );
         communesViewportLayerData.push({
-            layer,
+            commune,
+            layer: null,
             bounds: layerBounds
         });
 
         const center = layerBounds.getCenter();
-        const inseeCode = getCommuneInseeCodeFromProperties(properties);
-        const directPopulationCandidates = [
-            properties.population,
-            properties.population_municipale,
-            properties.populationMunicipale,
-            properties.pop
-        ];
-        const directPopulation = directPopulationCandidates
-            .map(value => Number(value))
-            .find(value => Number.isFinite(value) && value >= 0);
+        const inseeCode = commune.codeInsee;
+        const communeName = commune.name;
+        const directPopulation = commune.directPopulation;
         const indexedPopulation = inseeCode
             ? Number(communesPopulationByInsee.get(String(inseeCode)))
             : NaN;
@@ -41353,6 +41612,9 @@ function appendNpfDiagV1752TileLine(lines) {
  * seule, moteur src/100 non touché) et données chargées (tailles mesurées
  * dans Chrome le 05/10/2026 : communes ≈ 61 Mo dont contours ≈ 20 Mo, zones
  * SIA ≈ 18 Mo, lignes HT ≈ 13 Mo).
+ * v17.57 — tailles remesurées en mode iPad, après allègement : communes
+ * ≈ 17 Mo, contours des communes (communes-500m) ≈ 39 Mo, zones SIA ≈ 18 Mo,
+ * lignes HT ≈ 13 Mo.
  */
 function appendNpfDiagV1756MemoryLine(lines) {
     const mo = bytes => (Math.round(bytes / 1048576 * 10) / 10).toString().replace('.', ',');
@@ -41378,7 +41640,8 @@ function appendNpfDiagV1756MemoryLine(lines) {
     } catch (_) {}
     let dataMo = 0;
     const data = [];
-    try { if (Array.isArray(allCommunes) && allCommunes.length) { dataMo += 61; data.push('communes ≈ 61 Mo'); } } catch (_) {}
+    try { if (Array.isArray(allCommunes) && allCommunes.length) { dataMo += 17; data.push('communes ≈ 17 Mo'); } } catch (_) {}
+    try { if (Array.isArray(communesPolygonData) && communesPolygonData.length) { dataMo += 39; data.push('contours des communes ≈ 39 Mo'); } } catch (_) {}
     try { if (siaDataset) { dataMo += 18; data.push('zones SIA ≈ 18 Mo'); } } catch (_) {}
     try { if (highVoltageLinesData) { dataMo += 13; data.push('lignes HT ≈ 13 Mo'); } } catch (_) {}
     let heap = '';
@@ -41621,13 +41884,16 @@ function drawUserToTargetRoute() {
         && Number.isFinite(Number(userLatLng.lng))
         && Number.isFinite(target.lat) && Number.isFinite(target.lon)) {
 
-        const trueBearingToTarget = calculateBearing(
+        /* v17.57 — A : ligne rouge et cap le long du même chemin à cap
+         * magnétique constant (droite sur la carte, alignée avec le vecteur). */
+        const courseToTarget = computeNpfConstantMagneticCourse(
             userLatLng.lat,
             userLatLng.lng,
             target.lat,
-            target.lon
+            target.lon,
+            { startDeclination: getNpfMagneticDeclination(userLatLng.lat, userLatLng.lng) }
         );
-        const magneticBearing = (trueBearingToTarget - getNpfMagneticDeclination(userLatLng.lat, userLatLng.lng) + 360) % 360;
+        const magneticBearing = courseToTarget ? courseToTarget.magneticBearing : NaN;
 
         /*
          * v16.96 — navigation WP : le pointillé dynamique utilise un pane situé
@@ -41644,6 +41910,8 @@ function drawUserToTargetRoute() {
             {
                 isUser: true,
                 magneticBearing,
+                routeLatLngs: courseToTarget ? courseToTarget.latlngs : null,
+                distanceNm: courseToTarget ? courseToTarget.distanceNm : null,
                 pane: routeWaypointTarget ? 'npfWaypointGotoPane' : undefined
             }
         );
@@ -42291,16 +42559,13 @@ function updateOwnGpsVector(latitude, longitude, headingDeg, speedMps) {
     const timeMarksMinutes = [2, 5, 10];
     const maxMinutes = Math.max(...timeMarksMinutes);
     const endDistanceMeters = speedMps * maxMinutes * 60;
-    const end = calculateDestinationLatLng(latitude, longitude, headingDeg, endDistanceMeters);
     /*
-     * v17.18 — la ligne de foi/vecteur temps suit la même orthodromie que les
-     * routes NPF. Les repères 2/5/10 min restent à leurs positions exactes.
+     * v17.57 — A : le vecteur suit le cap actuel tenu constant (loxodromie :
+     * droite sur la carte), comme la ligne rouge Go To. Avant : orthodromie
+     * (v17.18). Les repères 2/5/10 min sont sur cette même droite.
      */
-    const vectorLatLngs = buildNpfGreatCircleLatLngs(
-        start,
-        end,
-        endDistanceMeters / 1852
-    );
+    const end = calculateNpfRhumbDestination(latitude, longitude, headingDeg, endDistanceMeters / 1852);
+    const vectorLatLngs = [start, end];
 
     /* v13.04 — vecteur de position plus visible : halo noir + jaune. */
     L.polyline(vectorLatLngs, {
@@ -42327,7 +42592,7 @@ function updateOwnGpsVector(latitude, longitude, headingDeg, speedMps) {
 
     timeMarksMinutes.forEach((minutes) => {
         const markDistanceMeters = speedMps * minutes * 60;
-        const point = calculateDestinationLatLng(latitude, longitude, headingDeg, markDistanceMeters);
+        const point = calculateNpfRhumbDestination(latitude, longitude, headingDeg, markDistanceMeters / 1852);
 
         L.circleMarker(point, {
             pane: 'ownAircraftPane',
@@ -43059,9 +43324,14 @@ function drawLftwRoute() {
     if (!baseAirport) return;
     const { latitude_mairie: lat, longitude_mairie: lon } = currentCommune;
     const { lat: baseLat, lon: baseLon } = baseAirport;
-    const trueBearing = calculateBearing(lat, lon, baseLat, baseLon);
-    const magneticBearing = (trueBearing - getNpfMagneticDeclination(lat, lon) + 360) % 360;
-    drawRoute([lat, lon], [baseLat, baseLon], { isLftwRoute: true, magneticBearing: magneticBearing });
+    /* v17.57 — A : Feu -> BASE au cap magnétique constant (même règle). */
+    const course = computeNpfConstantMagneticCourse(lat, lon, baseLat, baseLon);
+    drawRoute([lat, lon], [baseLat, baseLon], {
+        isLftwRoute: true,
+        magneticBearing: course ? course.magneticBearing : NaN,
+        routeLatLngs: course ? course.latlngs : null,
+        distanceNm: course ? course.distanceNm : null
+    });
 }
 
 function toggleGaarVisibility() {

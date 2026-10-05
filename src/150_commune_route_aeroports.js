@@ -225,9 +225,15 @@ function buildNpfGreatCircleLatLngs(startLatLng, endLatLng, distanceNm = null) {
 
 function drawRoute(startLatLng, endLatLng, options = {}) {
     const { oaci, isUser, isLftwRoute, magneticBearing, pane } = options;
-    const distance = calculateDistanceInNm(startLatLng[0], startLatLng[1], endLatLng[0], endLatLng[1]);
-    /* v17.18 — toutes les routes de navigation dessinées ici partagent la même orthodromie. */
-    const routeLatLngs = buildNpfGreatCircleLatLngs(startLatLng, endLatLng, distance);
+    /* v17.57 — A : route avion -> cible et Feu -> BASE : chemin à cap constant
+     * et distance fournis par l'appelant. Routes PÉLIC (sans cap affiché) :
+     * orthodromie et distance inchangées (v17.18). */
+    const distance = Number.isFinite(Number(options.distanceNm))
+        ? Number(options.distanceNm)
+        : calculateDistanceInNm(startLatLng[0], startLatLng[1], endLatLng[0], endLatLng[1]);
+    const routeLatLngs = Array.isArray(options.routeLatLngs) && options.routeLatLngs.length >= 2
+        ? options.routeLatLngs
+        : buildNpfGreatCircleLatLngs(startLatLng, endLatLng, distance);
     let labelText, color = 'var(--primary-color)', dashArray = '', layer = routesLayer;
 
     if (isUser) {

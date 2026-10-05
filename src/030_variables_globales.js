@@ -306,7 +306,8 @@ const NPF_WMM2025_COEFFICIENTS = [
     [12,7,0.5,-0.1,0,0], [12,8,-0.1,0.8,0,0], [12,9,-0.4,0.1,0,0], [12,10,-0.2,-1,-0.1,0],
     [12,11,-1.3,0.1,0,0], [12,12,-0.7,0.2,-0.1,-0.1]
 ];
-const NPF_MAGNETIC_DECLINATION_RECOMPUTE_NM = 5;
+/* v17.57 — 5 -> 1 NM : cap constant tenu à 0,1° près (coût < 0,5 ms par NM). */
+const NPF_MAGNETIC_DECLINATION_RECOMPUTE_NM = 1;
 /* Sans position avion ni point fourni : centre de la France métropolitaine. */
 const NPF_MAGNETIC_DECLINATION_DEFAULT_POSITION = { lat: 46.6, lon: 2.4 };
 let npfMagneticDeclinationCache = null;
@@ -445,6 +446,138 @@ function getNpfMagneticDeclination(fallbackLat, fallbackLon) {
         costMs: performance.now() - startedAt
     };
     return value;
+}
+
+/*
+ * v17.57 — A : CAP CONSTANT du départ à l'arrivée (décision de Bastien).
+ * Route Go To, caps des feux, Feu -> BASE et routes des WP : cap MAGNÉTIQUE
+ * constant qui mène au point visé (loxodromie magnétique, ce que tient le
+ * pilote au compas et ce que tient la simulation). Comme la déclinaison
+ * change le long du trajet, le cap vrai suivi varie légèrement : il est
+ * calculé pas à pas, avec la déclinaison prise en plusieurs points du trajet
+ * (tous les 50 NM environ, au plus 6 points). Si l'avion tient ce cap, le cap affiché ne bouge
+ * plus jusqu'à l'arrivée. Distance : longueur de ce même chemin.
+ * Rayon terrestre 6 371 km, comme calculateDistanceInNm.
+ */
+const NPF_RHUMB_EARTH_RADIUS_NM = 6371 / 1.852;
+const npfPointDeclinationCache = new Map();
+
+function getNpfRhumbDeltas(lat1, lon1, lat2, lon2) {
+    const phi1 = toRad(Number(lat1));
+    const phi2 = toRad(Number(lat2));
+    const dPhi = phi2 - phi1;
+    let dLambda = toRad(Number(lon2) - Number(lon1));
+    if (Math.abs(dLambda) > Math.PI) dLambda = dLambda > 0 ? -(2 * Math.PI - dLambda) : (2 * Math.PI + dLambda);
+    const dPsi = Math.log(Math.tan(Math.PI / 4 + phi2 / 2) / Math.tan(Math.PI / 4 + phi1 / 2));
+    const q = Math.abs(dPsi) > 1e-12 ? dPhi / dPsi : Math.cos(phi1);
+    return { dPhi, dPsi, dLambda, q };
+}
+
+function calculateNpfRhumbBearing(lat1, lon1, lat2, lon2) {
+    const { dPsi, dLambda } = getNpfRhumbDeltas(lat1, lon1, lat2, lon2);
+    return (toDeg(Math.atan2(dLambda, dPsi)) + 360) % 360;
+}
+
+function calculateNpfRhumbDistanceNm(lat1, lon1, lat2, lon2) {
+    const { dPhi, dLambda, q } = getNpfRhumbDeltas(lat1, lon1, lat2, lon2);
+    return Math.sqrt(dPhi * dPhi + q * q * dLambda * dLambda) * NPF_RHUMB_EARTH_RADIUS_NM;
+}
+
+function calculateNpfRhumbDestination(lat, lon, bearingDeg, distanceNm) {
+    const delta = Number(distanceNm) / NPF_RHUMB_EARTH_RADIUS_NM;
+    const theta = toRad(Number(bearingDeg));
+    const phi1 = toRad(Number(lat));
+    let phi2 = phi1 + delta * Math.cos(theta);
+    if (Math.abs(phi2) > Math.PI / 2) phi2 = phi2 > 0 ? Math.PI - phi2 : -Math.PI - phi2;
+    const dPsi = Math.log(Math.tan(Math.PI / 4 + phi2 / 2) / Math.tan(Math.PI / 4 + phi1 / 2));
+    const q = Math.abs(dPsi) > 1e-12 ? (phi2 - phi1) / dPsi : Math.cos(phi1);
+    const dLambda = delta * Math.sin(theta) / q;
+    const lon2 = ((toDeg(toRad(Number(lon)) + dLambda) + 540) % 360) - 180;
+    return [toDeg(phi2), lon2];
+}
+
+/* Déclinaison WMM2025 en un point fixe (feu, base, WP, cible), mise en mémoire. */
+function getNpfDeclinationAtPoint(lat, lon) {
+    const latNum = Number(lat);
+    const lonNum = Number(lon);
+    if (!Number.isFinite(latNum) || !Number.isFinite(lonNum)) return getNpfMagneticDeclination();
+    const decimalYear = getNpfDecimalYear(new Date());
+    const key = `${latNum.toFixed(2)}|${lonNum.toFixed(2)}|${decimalYear.toFixed(1)}`;
+    const cached = npfPointDeclinationCache.get(key);
+    if (cached !== undefined) return cached;
+    const value = computeNpfWmm2025Declination(latNum, lonNum, 0, decimalYear);
+    const safeValue = Number.isFinite(value) ? value : getNpfMagneticDeclination();
+    if (npfPointDeclinationCache.size > 400) npfPointDeclinationCache.clear();
+    npfPointDeclinationCache.set(key, safeValue);
+    return safeValue;
+}
+
+/*
+ * Cap magnétique constant de (startLat, startLon) vers (endLat, endLon).
+ * options.startDeclination : déclinaison au départ (avion : celle de
+ * getNpfMagneticDeclination, la même que la simulation) ; sinon calculée au
+ * point de départ. Retour : { magneticBearing, distanceNm, latlngs }.
+ */
+function computeNpfConstantMagneticCourse(startLat, startLon, endLat, endLon, options = {}) {
+    const lat1 = Number(startLat);
+    const lon1 = Number(startLon);
+    const lat2 = Number(endLat);
+    const lon2 = Number(endLon);
+    if (![lat1, lon1, lat2, lon2].every(Number.isFinite)) return null;
+
+    const startDeclination = Number.isFinite(Number(options.startDeclination))
+        ? Number(options.startDeclination)
+        : getNpfDeclinationAtPoint(lat1, lon1);
+    const endDeclination = getNpfDeclinationAtPoint(lat2, lon2);
+    const directBearing = calculateNpfRhumbBearing(lat1, lon1, lat2, lon2);
+    const directDistance = calculateNpfRhumbDistanceNm(lat1, lon1, lat2, lon2);
+    const normalize = value => ((Number(value) % 360) + 360) % 360;
+    const signedDiff = (a, b) => ((a - b + 540) % 360) - 180;
+
+    if (!Number.isFinite(directDistance) || directDistance < 0.05) {
+        return {
+            magneticBearing: normalize(directBearing - startDeclination),
+            distanceNm: Number.isFinite(directDistance) ? directDistance : 0,
+            latlngs: [[lat1, lon1], [lat2, lon2]]
+        };
+    }
+
+    /* Déclinaison le long du trajet : départ, points intermédiaires, arrivée. */
+    const samples = Math.min(6, Math.max(1, Math.ceil(directDistance / 50)));
+    const declinations = [startDeclination];
+    for (let index = 1; index < samples; index += 1) {
+        const point = calculateNpfRhumbDestination(lat1, lon1, directBearing, directDistance * index / samples);
+        declinations.push(getNpfDeclinationAtPoint(point[0], point[1]));
+    }
+    declinations.push(endDeclination);
+    const declinationAt = fraction => {
+        const position = Math.min(samples, Math.max(0, fraction * samples));
+        const index = Math.min(samples - 1, Math.floor(position));
+        return declinations[index] + (declinations[index + 1] - declinations[index]) * (position - index);
+    };
+    const steps = Math.min(48, Math.max(2, Math.ceil(directDistance / 5)));
+    let magnetic = normalize(directBearing - declinations.reduce((a, v) => a + v, 0) / declinations.length);
+    let pathLength = directDistance;
+    let points = [];
+    for (let iteration = 0; iteration < 6; iteration += 1) {
+        let point = [lat1, lon1];
+        points = [point];
+        for (let index = 0; index < steps; index += 1) {
+            const fraction = (index + 0.5) / steps;
+            const declination = declinationAt(fraction);
+            point = calculateNpfRhumbDestination(point[0], point[1], magnetic + declination, pathLength / steps);
+            points.push(point);
+        }
+        const reachedBearing = calculateNpfRhumbBearing(lat1, lon1, point[0], point[1]);
+        const reachedDistance = calculateNpfRhumbDistanceNm(lat1, lon1, point[0], point[1]);
+        const bearingError = signedDiff(directBearing, reachedBearing);
+        const scale = reachedDistance > 0 ? directDistance / reachedDistance : 1;
+        magnetic = normalize(magnetic + bearingError);
+        pathLength *= scale;
+        if (Math.abs(bearingError) < 0.0005 && Math.abs(scale - 1) < 0.00001) break;
+    }
+    points[points.length - 1] = [lat2, lon2];
+    return { magneticBearing: magnetic, distanceNm: pathLength, latlngs: points };
 }
 
 /* v17.53 — DIAG : ligne « Déclinaison ». */
