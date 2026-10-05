@@ -267,8 +267,17 @@ function focusAndSelectSimulationInput(input) {
     requestAnimationFrame(() => selectWholeSimulationInputValue(input));
 }
 
+/* v17.56 — route de simulation au dixième de degré : saisie avec une virgule
+ * ou un point, arrondie au dixième, ramenée entre 000,0 et 359,9 (360 -> 000,0). */
+function parseSimulationRouteInput(value) {
+    const numericValue = Number(String(value ?? '').trim().replace(',', '.'));
+    if (!Number.isFinite(numericValue)) return 0;
+    const tenths = Math.round(numericValue * 10);
+    return (((tenths % 3600) + 3600) % 3600) / 10;
+}
+
 function formatSimulationRoute(value) {
-    return String(Math.round(normalizeSimulationRoute(value)) % 360).padStart(3, '0');
+    return formatNpfAngleTenth(normalizeSimulationRoute(value)) || '000,0';
 }
 
 function refreshSimulationMotionButtonState() {
@@ -311,7 +320,7 @@ function openSimulationMotionModal() {
             : simulationSpeedKt.toFixed(1);
     }
     if (routeInput) {
-        routeInput.value = String(Math.round(simulationRouteDeg) % 360);
+        routeInput.value = formatSimulationRoute(simulationRouteDeg);
     }
     if (altitudeInput) {
         altitudeInput.value = String(Math.round(simulationAltitudeFt));
@@ -328,7 +337,7 @@ function openSimulationMotionModal() {
 
 function applySimulationMotionSettings(speedKt, routeDeg, altitudeFt) {
     simulationSpeedKt = normalizeSimulationSpeed(speedKt);
-    simulationRouteDeg = normalizeSimulationRoute(routeDeg);
+    simulationRouteDeg = parseSimulationRouteInput(routeDeg);
     simulationAltitudeFt = normalizeSimulationAltitude(altitudeFt);
 
     localStorage.setItem(SIMULATION_SPEED_STORAGE_KEY, String(simulationSpeedKt));

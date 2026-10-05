@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.55';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.56';
 
 
 /*
@@ -1105,7 +1105,7 @@ const NPF_DIAG_DETAIL = (() => {
             accuracyM: Number.isFinite(accuracy) ? Math.round(accuracy) : null,
             heading: coords?.heading === null || coords?.heading === undefined || !Number.isFinite(Number(coords.heading))
                 ? null
-                : Math.round(Number(coords.heading)),
+                : Math.round(Number(coords.heading) * 10) / 10,
             follow: isGpsFollowActive(),
             recenter: null,
             shiftM: null
@@ -1114,7 +1114,7 @@ const NPF_DIAG_DETAIL = (() => {
 
     const currentSimulationSettings = () => safe(() => ({
         speedKt: Math.round(Number(simulationSpeedKt) || 0),
-        routeDeg: Math.round(Number(simulationRouteDeg) || 0),
+        routeDeg: Math.round((Number(simulationRouteDeg) || 0) * 10) / 10,
         altitudeFt: Math.round(Number(simulationAltitudeFt) || 0)
     }), { speedKt: null, routeDeg: null, altitudeFt: null });
 
@@ -3238,7 +3238,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.55 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.56 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -3394,7 +3394,7 @@ function appendNpfDiagV1733ExportSections(lines) {
 /* v17.35 — en tête de l'export : simulation utilisée, périodes et réglages. */
 function formatNpfDiagSimSettings(settings) {
     if (!settings) return '—';
-    const route = Number.isFinite(Number(settings.routeDeg)) ? String(Math.round(settings.routeDeg)).padStart(3, '0') + '°' : '—';
+    const route = Number.isFinite(Number(settings.routeDeg)) ? formatRouteDegrees(settings.routeDeg) : '—';
     return settings.speedKt + ' kt · route ' + route + ' · ' + settings.altitudeFt + ' ft';
 }
 
@@ -3431,7 +3431,7 @@ function appendNpfDiagSimulationSection(lines) {
         '   ' + formatNpfDiagClock(item.at) + ' | + ' + (item.t / 1000).toFixed(2) + ' s | ' + (item.sim ? 'SIM ' : 'RÉEL')
         + ' | ' + item.lat + ', ' + item.lon
         + ' | ' + (item.speedKt === null ? '—' : item.speedKt + ' kt')
-        + ' | cap ' + (item.heading === null || item.heading === undefined ? '—' : item.heading + '°')
+        + ' | cap ' + (item.heading === null || item.heading === undefined ? '—' : formatRouteDegrees(item.heading))
         + ' | précision ' + (item.accuracyM === null ? 'non fournie' : item.accuracyM + ' m')
         + ' | suivi ' + (item.follow ? 'oui' : 'non')
         + ' | ' + (item.recenter ? 'recentrage ' + item.recenter + (item.shiftM === null || item.shiftM === undefined ? '' : ' (' + item.shiftM + ' m)') : 'pas de recentrage')
@@ -3780,6 +3780,7 @@ function appendNpfDiagLaunchStorageHeader(lines) {
     try { appendNpfDiagV1750VrpLine(lines); } catch (_) {}
     try { appendNpfDiagV1752TileLine(lines); } catch (_) {}
     try { appendNpfDiagV1753DeclinationLine(lines); } catch (_) {}
+    try { appendNpfDiagV1756MemoryLine(lines); } catch (_) {}
     safe_npfDiagBannerHeader(lines);
     lines.push(
         'SafeSky (showTrafficLayer) relu au lancement : ' + JSON.stringify(current.safeSkyAtLaunch)
@@ -8344,11 +8345,18 @@ const toRad = deg => deg * Math.PI / 180, toDeg = rad => rad * 180 / Math.PI;
 const simplifyString = str => typeof str !== 'string' ? '' : str.toLowerCase().replace(/\bst\b/g, 'saint').normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9\s]/g, ' ').trim().replace(/\s+/g, ' ');
 const calculateDistanceInNm = (lat1, lon1, lat2, lon2) => { const R = 6371, dLat = toRad(lat2 - lat1), dLon = toRad(lon2 - lon1), a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2), c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)); return (R * c) / 1.852; };
 const calculateBearing = (lat1, lon1, lat2, lon2) => { const lat1Rad = toRad(lat1), lon1Rad = toRad(lon1), lat2Rad = toRad(lat2), lon2Rad = toRad(lon2), dLon = lon2Rad - lon1Rad, y = Math.sin(dLon) * Math.cos(lat2Rad), x = Math.cos(lat1Rad) * Math.sin(lat2Rad) - Math.sin(lat1Rad) * Math.cos(lat2Rad) * Math.cos(dLon); let bearingRad = Math.atan2(y, x), bearingDeg = toDeg(bearingRad); return (bearingDeg + 360) % 360; };
+/* v17.56 — routes et caps affichés au dixième de degré : « 283,4° »,
+ * « 031,0° » (trois chiffres avant la virgule). Affichage seulement : les
+ * calculs restent inchangés. 359,96 s'affiche 000,0. */
+const formatNpfAngleTenth = (value) => {
+    const tenths = Math.round(Number(value) * 10);
+    if (!Number.isFinite(tenths)) return null;
+    const normalizedTenths = ((tenths % 3600) + 3600) % 3600;
+    return `${String(Math.floor(normalizedTenths / 10)).padStart(3, '0')},${normalizedTenths % 10}`;
+};
 const formatRouteDegrees = (bearing) => {
-    const roundedBearing = Math.round(Number(bearing));
-    if (!Number.isFinite(roundedBearing)) return '---°';
-    const normalizedBearing = ((roundedBearing % 360) + 360) % 360;
-    return `${String(normalizedBearing).padStart(3, '0')}°`;
+    const text = formatNpfAngleTenth(bearing);
+    return text === null ? '---,-°' : `${text}°`;
 };
 function calculateOneWayFlightTimeMinutes(distanceNm) {
     /*
@@ -18274,7 +18282,7 @@ function updateCommuneDisplay(commune) {
         const airportOaci = escapeHtml(airport.oaci);
         communeDisplay.innerHTML = `
             <span class="commune-name airport-destination-name" title="${airportName}">${airportOaci}</span>
-            <div id="gps-feu-route-info" class="gps-feu-route-info" title="Route, distance et temps GPS vers ${airportOaci}">---° / -- Nm / -- min</div>
+            <div id="gps-feu-route-info" class="gps-feu-route-info" title="Route, distance et temps GPS vers ${airportOaci}">---,-° / -- Nm / -- min</div>
             <button type="button" id="clear-airport-destination-btn" class="clear-commune-btn clear-airport-destination-btn" title="Quitter la route vers ${airportOaci}" aria-label="Quitter la route vers ${airportOaci}">×</button>
         `;
         updateCommuneGpsRouteDisplay();
@@ -18338,7 +18346,7 @@ function updateCommuneDisplay(commune) {
     const depCode = depLabel ? ` (${depLabel})` : '';
     const communeNameHTML = `<span class="commune-name">${displayCommune.nom_standard || commune.nom_standard}${depCode}</span>`;
     const closeButtonHTML = `<span id="clear-commune-btn" class="clear-commune-btn" title="Effacer le feu">×</span>`;
-    const routeInfoHTML = `<div id="gps-feu-route-info" class="gps-feu-route-info" title="Route, distance et temps GPS vers le feu">---° / -- Nm / -- min</div><div id="gps-feu-rotation-info" class="gps-feu-rotation-info" title="Durée de rotation issue de l’onglet Suivi largages">Rot. -- min</div>`;
+    const routeInfoHTML = `<div id="gps-feu-route-info" class="gps-feu-route-info" title="Route, distance et temps GPS vers le feu">---,-° / -- Nm / -- min</div><div id="gps-feu-rotation-info" class="gps-feu-rotation-info" title="Durée de rotation issue de l’onglet Suivi largages">Rot. -- min</div>`;
     let sunsetHTML = '';
     if (typeof SunCalc !== 'undefined') {
         try {
@@ -18481,7 +18489,7 @@ function updateCommuneGpsRouteDisplay() {
 
     if (!target || !userMarker || !userMarker.getLatLng) {
         if (routeInfo) {
-            routeInfo.textContent = '---° / -- Nm / -- min';
+            routeInfo.textContent = '---,-° / -- Nm / -- min';
             routeInfo.classList.add('gps-feu-route-info-empty');
         }
         if (!selectedAirportDestination) updateCommuneMapRotationInfo();
@@ -18492,7 +18500,7 @@ function updateCommuneGpsRouteDisplay() {
 
     if (!Number.isFinite(target.lat) || !Number.isFinite(target.lon) || !userLatLng) {
         if (routeInfo) {
-            routeInfo.textContent = '---° / -- Nm / -- min';
+            routeInfo.textContent = '---,-° / -- Nm / -- min';
             routeInfo.classList.add('gps-feu-route-info-empty');
         }
         if (!selectedAirportDestination) updateCommuneMapRotationInfo();
@@ -27778,7 +27786,7 @@ function buildTrafficAircraftPopupHtml(
             <div>Altitude : <b>${escapeHtml(ac.altitude)}</b></div>
             <div>Écart avec moi : <b>${escapeHtml(relativeAltitudeText)}</b> — ${escapeHtml(altitudeState.label)}</div>
             <div>Vitesse sol : <b>${escapeHtml(ac.gs)}</b></div>
-            <div>Route : <b>${Number.isFinite(ac.track) ? Math.round(ac.track) + '°' : '--'}</b></div>
+            <div>Route : <b>${Number.isFinite(ac.track) ? formatRouteDegrees(ac.track) : '--'}</b></div>
             ${Number.isFinite(ac.turnRateDegPerSec) ? `<div>Taux de virage : <b>${ac.turnRateDegPerSec > 0 ? '+' : ''}${Number(ac.turnRateDegPerSec).toFixed(1)}°/s</b></div>` : ''}
             ${Number.isFinite(ac.verticalRateFpm) ? `<div>Vitesse verticale : <b>${ac.verticalRateFpm > 0 ? '+' : ''}${Math.round(ac.verticalRateFpm)} ft/min</b></div>` : ''}
             ${ac.remarks ? `<div>Remarque : <b>${escapeHtml(ac.remarks)}</b></div>` : ''}
@@ -35673,11 +35681,11 @@ function renderNpfWaypointNavigationBanner() {
     display.innerHTML = `
         <div class="wp-route-band-metric">
             <span class="wp-route-band-label">WP${activeNumber}</span>
-            <span id="wp-route-active-metric">---° / -- Nm / -- min</span>
+            <span id="wp-route-active-metric">---,-° / -- Nm / -- min</span>
         </div>
         <div class="wp-route-band-metric wp-route-band-final">
             <span class="wp-route-band-label">WP Final</span>
-            <span id="wp-route-final-metric">---° / -- Nm / -- min</span>
+            <span id="wp-route-final-metric">---,-° / -- Nm / -- min</span>
         </div>
         <button type="button" class="wp-route-band-button wp-route-disable-goto" onclick="window.npfWaypointDisableGoto()">Désact. GoTo</button>
         <button type="button" class="wp-route-band-button wp-route-delete-all" onclick="window.npfWaypointDeleteRoute()">Supp. Route</button>
@@ -35699,7 +35707,7 @@ function updateNpfWaypointNavigationBannerMetrics() {
     const userLatLng = getNpfWaypointCurrentPositionLatLng();
     const formatMetric = wp => {
         if (!userLatLng || !Number.isFinite(userLatLng.lat) || !Number.isFinite(userLatLng.lng)) {
-            return '---° / -- Nm / -- min';
+            return '---,-° / -- Nm / -- min';
         }
         const distance = calculateDistanceInNm(userLatLng.lat, userLatLng.lng, wp.lat, wp.lon);
         const bearing = getNpfWaypointMagneticBearing(userLatLng.lat, userLatLng.lng, wp.lat, wp.lon);
@@ -41338,6 +41346,53 @@ function appendNpfDiagV1752TileLine(lines) {
     );
 }
 
+/*
+ * v17.56 — DIAG : mémoire ESTIMÉE par l'appli (Safari iPad ne donne pas la
+ * mémoire réelle d'une page). Calculée seulement à l'export : dessins de la
+ * carte (canvas), images de tuiles en mémoire, caches de tuiles (lecture
+ * seule, moteur src/100 non touché) et données chargées (tailles mesurées
+ * dans Chrome le 05/10/2026 : communes ≈ 61 Mo dont contours ≈ 20 Mo, zones
+ * SIA ≈ 18 Mo, lignes HT ≈ 13 Mo).
+ */
+function appendNpfDiagV1756MemoryLine(lines) {
+    const mo = bytes => (Math.round(bytes / 1048576 * 10) / 10).toString().replace('.', ',');
+    let canvasBytes = 0;
+    try { document.querySelectorAll('canvas').forEach(c => { canvasBytes += c.width * c.height * 4; }); } catch (_) {}
+    let tileImages = 0;
+    let tileBytes = 0;
+    try {
+        document.querySelectorAll('img.leaflet-tile').forEach(img => {
+            tileImages += 1;
+            tileBytes += (img.naturalWidth || 256) * (img.naturalHeight || 256) * 4;
+        });
+    } catch (_) {}
+    let blobBytes = 0;
+    let blobCount = 0;
+    try {
+        [directOfflineTileBlobCache, directOfflineNpfZoomReturnBlobCache].forEach(cache => {
+            cache.forEach(value => {
+                blobCount += 1;
+                blobBytes += Number(value?.size) || Number(value?.blob?.size) || 0;
+            });
+        });
+    } catch (_) {}
+    let dataMo = 0;
+    const data = [];
+    try { if (Array.isArray(allCommunes) && allCommunes.length) { dataMo += 61; data.push('communes ≈ 61 Mo'); } } catch (_) {}
+    try { if (siaDataset) { dataMo += 18; data.push('zones SIA ≈ 18 Mo'); } } catch (_) {}
+    try { if (highVoltageLinesData) { dataMo += 13; data.push('lignes HT ≈ 13 Mo'); } } catch (_) {}
+    let heap = '';
+    try { if (performance.memory) heap = ' · tas JavaScript mesuré ' + mo(performance.memory.usedJSHeapSize); } catch (_) {}
+    const total = canvasBytes + tileBytes + blobBytes + dataMo * 1048576;
+    lines.push(
+        'Mémoire estimée (calcul de l\'appli, pas une mesure iOS) : total ≈ ' + mo(total) + ' Mo'
+        + ' | dessins carte ' + mo(canvasBytes) + ' Mo'
+        + ' | images de tuiles ' + tileImages + ' (' + mo(tileBytes) + ' Mo)'
+        + ' | caches de tuiles ' + blobCount + ' (' + mo(blobBytes) + ' Mo)'
+        + ' | données ' + (data.length ? data.join(', ') : 'aucune') + heap
+    );
+}
+
 function appendNpfDiagV1750VrpLine(lines) {
     const stats = noteNpfDiagVrpCount();
     lines.push('VRP sur la carte : ' + stats.last + ' maintenant · maximum ' + stats.max);
@@ -42557,8 +42612,17 @@ function focusAndSelectSimulationInput(input) {
     requestAnimationFrame(() => selectWholeSimulationInputValue(input));
 }
 
+/* v17.56 — route de simulation au dixième de degré : saisie avec une virgule
+ * ou un point, arrondie au dixième, ramenée entre 000,0 et 359,9 (360 -> 000,0). */
+function parseSimulationRouteInput(value) {
+    const numericValue = Number(String(value ?? '').trim().replace(',', '.'));
+    if (!Number.isFinite(numericValue)) return 0;
+    const tenths = Math.round(numericValue * 10);
+    return (((tenths % 3600) + 3600) % 3600) / 10;
+}
+
 function formatSimulationRoute(value) {
-    return String(Math.round(normalizeSimulationRoute(value)) % 360).padStart(3, '0');
+    return formatNpfAngleTenth(normalizeSimulationRoute(value)) || '000,0';
 }
 
 function refreshSimulationMotionButtonState() {
@@ -42601,7 +42665,7 @@ function openSimulationMotionModal() {
             : simulationSpeedKt.toFixed(1);
     }
     if (routeInput) {
-        routeInput.value = String(Math.round(simulationRouteDeg) % 360);
+        routeInput.value = formatSimulationRoute(simulationRouteDeg);
     }
     if (altitudeInput) {
         altitudeInput.value = String(Math.round(simulationAltitudeFt));
@@ -42618,7 +42682,7 @@ function openSimulationMotionModal() {
 
 function applySimulationMotionSettings(speedKt, routeDeg, altitudeFt) {
     simulationSpeedKt = normalizeSimulationSpeed(speedKt);
-    simulationRouteDeg = normalizeSimulationRoute(routeDeg);
+    simulationRouteDeg = parseSimulationRouteInput(routeDeg);
     simulationAltitudeFt = normalizeSimulationAltitude(altitudeFt);
 
     localStorage.setItem(SIMULATION_SPEED_STORAGE_KEY, String(simulationSpeedKt));
@@ -57091,7 +57155,7 @@ async function renderSiaAirspaceProfile(reason = 'manual') {
         const ceilingText = Number.isFinite(profileCeilingFt)
             ? ` · plafond ${Math.round(profileCeilingFt)} ft`
             : '';
-        subtitle.textContent = `Route ${String(Math.round(position.heading)).padStart(3, '0')}° · 0–${siaProfileDistanceNm} NM${ceilingText} · ${siaProfileSegments.length} volume${siaProfileSegments.length > 1 ? 's' : ''}`;
+        subtitle.textContent = `Route ${formatRouteDegrees(position.heading)} · 0–${siaProfileDistanceNm} NM${ceilingText} · ${siaProfileSegments.length} volume${siaProfileSegments.length > 1 ? 's' : ''}`;
     }
 
     if (!siaProfileSegments.length) {

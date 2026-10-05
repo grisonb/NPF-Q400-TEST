@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v17-55_nouveautes_v17-53_remises';
-const APP_VERSION = 'v17.55';
+const SW_VERSION = 'sw-v17-56_caps_dixieme_degre';
+const APP_VERSION = 'v17.56';
 const SIA_DATA_REVISION = '15.69-radio1026-1-maplite1';
 const SIA_DATA_URL = './sia.js';
 /*

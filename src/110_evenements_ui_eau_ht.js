@@ -1131,7 +1131,7 @@ function updateCommuneDisplay(commune) {
         const airportOaci = escapeHtml(airport.oaci);
         communeDisplay.innerHTML = `
             <span class="commune-name airport-destination-name" title="${airportName}">${airportOaci}</span>
-            <div id="gps-feu-route-info" class="gps-feu-route-info" title="Route, distance et temps GPS vers ${airportOaci}">---° / -- Nm / -- min</div>
+            <div id="gps-feu-route-info" class="gps-feu-route-info" title="Route, distance et temps GPS vers ${airportOaci}">---,-° / -- Nm / -- min</div>
             <button type="button" id="clear-airport-destination-btn" class="clear-commune-btn clear-airport-destination-btn" title="Quitter la route vers ${airportOaci}" aria-label="Quitter la route vers ${airportOaci}">×</button>
         `;
         updateCommuneGpsRouteDisplay();
@@ -1195,7 +1195,7 @@ function updateCommuneDisplay(commune) {
     const depCode = depLabel ? ` (${depLabel})` : '';
     const communeNameHTML = `<span class="commune-name">${displayCommune.nom_standard || commune.nom_standard}${depCode}</span>`;
     const closeButtonHTML = `<span id="clear-commune-btn" class="clear-commune-btn" title="Effacer le feu">×</span>`;
-    const routeInfoHTML = `<div id="gps-feu-route-info" class="gps-feu-route-info" title="Route, distance et temps GPS vers le feu">---° / -- Nm / -- min</div><div id="gps-feu-rotation-info" class="gps-feu-rotation-info" title="Durée de rotation issue de l’onglet Suivi largages">Rot. -- min</div>`;
+    const routeInfoHTML = `<div id="gps-feu-route-info" class="gps-feu-route-info" title="Route, distance et temps GPS vers le feu">---,-° / -- Nm / -- min</div><div id="gps-feu-rotation-info" class="gps-feu-rotation-info" title="Durée de rotation issue de l’onglet Suivi largages">Rot. -- min</div>`;
     let sunsetHTML = '';
     if (typeof SunCalc !== 'undefined') {
         try {
@@ -1338,7 +1338,7 @@ function updateCommuneGpsRouteDisplay() {
 
     if (!target || !userMarker || !userMarker.getLatLng) {
         if (routeInfo) {
-            routeInfo.textContent = '---° / -- Nm / -- min';
+            routeInfo.textContent = '---,-° / -- Nm / -- min';
             routeInfo.classList.add('gps-feu-route-info-empty');
         }
         if (!selectedAirportDestination) updateCommuneMapRotationInfo();
@@ -1349,7 +1349,7 @@ function updateCommuneGpsRouteDisplay() {
 
     if (!Number.isFinite(target.lat) || !Number.isFinite(target.lon) || !userLatLng) {
         if (routeInfo) {
-            routeInfo.textContent = '---° / -- Nm / -- min';
+            routeInfo.textContent = '---,-° / -- Nm / -- min';
             routeInfo.classList.add('gps-feu-route-info-empty');
         }
         if (!selectedAirportDestination) updateCommuneMapRotationInfo();

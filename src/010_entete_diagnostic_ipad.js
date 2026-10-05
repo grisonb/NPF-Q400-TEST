@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.55';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.56';
 
 
 /*
@@ -1105,7 +1105,7 @@ const NPF_DIAG_DETAIL = (() => {
             accuracyM: Number.isFinite(accuracy) ? Math.round(accuracy) : null,
             heading: coords?.heading === null || coords?.heading === undefined || !Number.isFinite(Number(coords.heading))
                 ? null
-                : Math.round(Number(coords.heading)),
+                : Math.round(Number(coords.heading) * 10) / 10,
             follow: isGpsFollowActive(),
             recenter: null,
             shiftM: null
@@ -1114,7 +1114,7 @@ const NPF_DIAG_DETAIL = (() => {
 
     const currentSimulationSettings = () => safe(() => ({
         speedKt: Math.round(Number(simulationSpeedKt) || 0),
-        routeDeg: Math.round(Number(simulationRouteDeg) || 0),
+        routeDeg: Math.round((Number(simulationRouteDeg) || 0) * 10) / 10,
         altitudeFt: Math.round(Number(simulationAltitudeFt) || 0)
     }), { speedKt: null, routeDeg: null, altitudeFt: null });
 
@@ -3238,7 +3238,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.55 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.56 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -3394,7 +3394,7 @@ function appendNpfDiagV1733ExportSections(lines) {
 /* v17.35 — en tête de l'export : simulation utilisée, périodes et réglages. */
 function formatNpfDiagSimSettings(settings) {
     if (!settings) return '—';
-    const route = Number.isFinite(Number(settings.routeDeg)) ? String(Math.round(settings.routeDeg)).padStart(3, '0') + '°' : '—';
+    const route = Number.isFinite(Number(settings.routeDeg)) ? formatRouteDegrees(settings.routeDeg) : '—';
     return settings.speedKt + ' kt · route ' + route + ' · ' + settings.altitudeFt + ' ft';
 }
 
@@ -3431,7 +3431,7 @@ function appendNpfDiagSimulationSection(lines) {
         '   ' + formatNpfDiagClock(item.at) + ' | + ' + (item.t / 1000).toFixed(2) + ' s | ' + (item.sim ? 'SIM ' : 'RÉEL')
         + ' | ' + item.lat + ', ' + item.lon
         + ' | ' + (item.speedKt === null ? '—' : item.speedKt + ' kt')
-        + ' | cap ' + (item.heading === null || item.heading === undefined ? '—' : item.heading + '°')
+        + ' | cap ' + (item.heading === null || item.heading === undefined ? '—' : formatRouteDegrees(item.heading))
         + ' | précision ' + (item.accuracyM === null ? 'non fournie' : item.accuracyM + ' m')
         + ' | suivi ' + (item.follow ? 'oui' : 'non')
         + ' | ' + (item.recenter ? 'recentrage ' + item.recenter + (item.shiftM === null || item.shiftM === undefined ? '' : ' (' + item.shiftM + ' m)') : 'pas de recentrage')
@@ -3780,6 +3780,7 @@ function appendNpfDiagLaunchStorageHeader(lines) {
     try { appendNpfDiagV1750VrpLine(lines); } catch (_) {}
     try { appendNpfDiagV1752TileLine(lines); } catch (_) {}
     try { appendNpfDiagV1753DeclinationLine(lines); } catch (_) {}
+    try { appendNpfDiagV1756MemoryLine(lines); } catch (_) {}
     safe_npfDiagBannerHeader(lines);
     lines.push(
         'SafeSky (showTrafficLayer) relu au lancement : ' + JSON.stringify(current.safeSkyAtLaunch)

@@ -2558,7 +2558,7 @@ function buildTrafficAircraftPopupHtml(
             <div>Altitude : <b>${escapeHtml(ac.altitude)}</b></div>
             <div>Écart avec moi : <b>${escapeHtml(relativeAltitudeText)}</b> — ${escapeHtml(altitudeState.label)}</div>
             <div>Vitesse sol : <b>${escapeHtml(ac.gs)}</b></div>
-            <div>Route : <b>${Number.isFinite(ac.track) ? Math.round(ac.track) + '°' : '--'}</b></div>
+            <div>Route : <b>${Number.isFinite(ac.track) ? formatRouteDegrees(ac.track) : '--'}</b></div>
             ${Number.isFinite(ac.turnRateDegPerSec) ? `<div>Taux de virage : <b>${ac.turnRateDegPerSec > 0 ? '+' : ''}${Number(ac.turnRateDegPerSec).toFixed(1)}°/s</b></div>` : ''}
             ${Number.isFinite(ac.verticalRateFpm) ? `<div>Vitesse verticale : <b>${ac.verticalRateFpm > 0 ? '+' : ''}${Math.round(ac.verticalRateFpm)} ft/min</b></div>` : ''}
             ${ac.remarks ? `<div>Remarque : <b>${escapeHtml(ac.remarks)}</b></div>` : ''}

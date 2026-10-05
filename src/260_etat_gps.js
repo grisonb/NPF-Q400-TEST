@@ -1508,6 +1508,53 @@ function appendNpfDiagV1752TileLine(lines) {
     );
 }
 
+/*
+ * v17.56 — DIAG : mémoire ESTIMÉE par l'appli (Safari iPad ne donne pas la
+ * mémoire réelle d'une page). Calculée seulement à l'export : dessins de la
+ * carte (canvas), images de tuiles en mémoire, caches de tuiles (lecture
+ * seule, moteur src/100 non touché) et données chargées (tailles mesurées
+ * dans Chrome le 05/10/2026 : communes ≈ 61 Mo dont contours ≈ 20 Mo, zones
+ * SIA ≈ 18 Mo, lignes HT ≈ 13 Mo).
+ */
+function appendNpfDiagV1756MemoryLine(lines) {
+    const mo = bytes => (Math.round(bytes / 1048576 * 10) / 10).toString().replace('.', ',');
+    let canvasBytes = 0;
+    try { document.querySelectorAll('canvas').forEach(c => { canvasBytes += c.width * c.height * 4; }); } catch (_) {}
+    let tileImages = 0;
+    let tileBytes = 0;
+    try {
+        document.querySelectorAll('img.leaflet-tile').forEach(img => {
+            tileImages += 1;
+            tileBytes += (img.naturalWidth || 256) * (img.naturalHeight || 256) * 4;
+        });
+    } catch (_) {}
+    let blobBytes = 0;
+    let blobCount = 0;
+    try {
+        [directOfflineTileBlobCache, directOfflineNpfZoomReturnBlobCache].forEach(cache => {
+            cache.forEach(value => {
+                blobCount += 1;
+                blobBytes += Number(value?.size) || Number(value?.blob?.size) || 0;
+            });
+        });
+    } catch (_) {}
+    let dataMo = 0;
+    const data = [];
+    try { if (Array.isArray(allCommunes) && allCommunes.length) { dataMo += 61; data.push('communes ≈ 61 Mo'); } } catch (_) {}
+    try { if (siaDataset) { dataMo += 18; data.push('zones SIA ≈ 18 Mo'); } } catch (_) {}
+    try { if (highVoltageLinesData) { dataMo += 13; data.push('lignes HT ≈ 13 Mo'); } } catch (_) {}
+    let heap = '';
+    try { if (performance.memory) heap = ' · tas JavaScript mesuré ' + mo(performance.memory.usedJSHeapSize); } catch (_) {}
+    const total = canvasBytes + tileBytes + blobBytes + dataMo * 1048576;
+    lines.push(
+        'Mémoire estimée (calcul de l\'appli, pas une mesure iOS) : total ≈ ' + mo(total) + ' Mo'
+        + ' | dessins carte ' + mo(canvasBytes) + ' Mo'
+        + ' | images de tuiles ' + tileImages + ' (' + mo(tileBytes) + ' Mo)'
+        + ' | caches de tuiles ' + blobCount + ' (' + mo(blobBytes) + ' Mo)'
+        + ' | données ' + (data.length ? data.join(', ') : 'aucune') + heap
+    );
+}
+
 function appendNpfDiagV1750VrpLine(lines) {
     const stats = noteNpfDiagVrpCount();
     lines.push('VRP sur la carte : ' + stats.last + ' maintenant · maximum ' + stats.max);

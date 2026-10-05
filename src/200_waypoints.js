@@ -1258,11 +1258,11 @@ function renderNpfWaypointNavigationBanner() {
     display.innerHTML = `
         <div class="wp-route-band-metric">
             <span class="wp-route-band-label">WP${activeNumber}</span>
-            <span id="wp-route-active-metric">---° / -- Nm / -- min</span>
+            <span id="wp-route-active-metric">---,-° / -- Nm / -- min</span>
         </div>
         <div class="wp-route-band-metric wp-route-band-final">
             <span class="wp-route-band-label">WP Final</span>
-            <span id="wp-route-final-metric">---° / -- Nm / -- min</span>
+            <span id="wp-route-final-metric">---,-° / -- Nm / -- min</span>
         </div>
         <button type="button" class="wp-route-band-button wp-route-disable-goto" onclick="window.npfWaypointDisableGoto()">Désact. GoTo</button>
         <button type="button" class="wp-route-band-button wp-route-delete-all" onclick="window.npfWaypointDeleteRoute()">Supp. Route</button>
@@ -1284,7 +1284,7 @@ function updateNpfWaypointNavigationBannerMetrics() {
     const userLatLng = getNpfWaypointCurrentPositionLatLng();
     const formatMetric = wp => {
         if (!userLatLng || !Number.isFinite(userLatLng.lat) || !Number.isFinite(userLatLng.lng)) {
-            return '---° / -- Nm / -- min';
+            return '---,-° / -- Nm / -- min';
         }
         const distance = calculateDistanceInNm(userLatLng.lat, userLatLng.lng, wp.lat, wp.lon);
         const bearing = getNpfWaypointMagneticBearing(userLatLng.lat, userLatLng.lng, wp.lat, wp.lon);

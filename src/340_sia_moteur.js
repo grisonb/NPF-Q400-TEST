@@ -3037,7 +3037,7 @@ async function renderSiaAirspaceProfile(reason = 'manual') {
         const ceilingText = Number.isFinite(profileCeilingFt)
             ? ` · plafond ${Math.round(profileCeilingFt)} ft`
             : '';
-        subtitle.textContent = `Route ${String(Math.round(position.heading)).padStart(3, '0')}° · 0–${siaProfileDistanceNm} NM${ceilingText} · ${siaProfileSegments.length} volume${siaProfileSegments.length > 1 ? 's' : ''}`;
+        subtitle.textContent = `Route ${formatRouteDegrees(position.heading)} · 0–${siaProfileDistanceNm} NM${ceilingText} · ${siaProfileSegments.length} volume${siaProfileSegments.length > 1 ? 's' : ''}`;
     }
 
     if (!siaProfileSegments.length) {

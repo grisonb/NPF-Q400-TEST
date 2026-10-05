@@ -5,11 +5,18 @@ const toRad = deg => deg * Math.PI / 180, toDeg = rad => rad * 180 / Math.PI;
 const simplifyString = str => typeof str !== 'string' ? '' : str.toLowerCase().replace(/\bst\b/g, 'saint').normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9\s]/g, ' ').trim().replace(/\s+/g, ' ');
 const calculateDistanceInNm = (lat1, lon1, lat2, lon2) => { const R = 6371, dLat = toRad(lat2 - lat1), dLon = toRad(lon2 - lon1), a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2), c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)); return (R * c) / 1.852; };
 const calculateBearing = (lat1, lon1, lat2, lon2) => { const lat1Rad = toRad(lat1), lon1Rad = toRad(lon1), lat2Rad = toRad(lat2), lon2Rad = toRad(lon2), dLon = lon2Rad - lon1Rad, y = Math.sin(dLon) * Math.cos(lat2Rad), x = Math.cos(lat1Rad) * Math.sin(lat2Rad) - Math.sin(lat1Rad) * Math.cos(lat2Rad) * Math.cos(dLon); let bearingRad = Math.atan2(y, x), bearingDeg = toDeg(bearingRad); return (bearingDeg + 360) % 360; };
+/* v17.56 — routes et caps affichés au dixième de degré : « 283,4° »,
+ * « 031,0° » (trois chiffres avant la virgule). Affichage seulement : les
+ * calculs restent inchangés. 359,96 s'affiche 000,0. */
+const formatNpfAngleTenth = (value) => {
+    const tenths = Math.round(Number(value) * 10);
+    if (!Number.isFinite(tenths)) return null;
+    const normalizedTenths = ((tenths % 3600) + 3600) % 3600;
+    return `${String(Math.floor(normalizedTenths / 10)).padStart(3, '0')},${normalizedTenths % 10}`;
+};
 const formatRouteDegrees = (bearing) => {
-    const roundedBearing = Math.round(Number(bearing));
-    if (!Number.isFinite(roundedBearing)) return '---°';
-    const normalizedBearing = ((roundedBearing % 360) + 360) % 360;
-    return `${String(normalizedBearing).padStart(3, '0')}°`;
+    const text = formatNpfAngleTenth(bearing);
+    return text === null ? '---,-°' : `${text}°`;
 };
 function calculateOneWayFlightTimeMinutes(distanceNm) {
     /*

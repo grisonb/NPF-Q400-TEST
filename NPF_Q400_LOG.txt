@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 05/10/2026
-Version de travail actuelle : TEST v17.55
+Version de travail actuelle : TEST v17.56
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,9 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.56 — routes et caps affichés au dixième de degré (« 283,4° ») ; cap de
+  simulation réglable au dixième (virgule ou point) ; DIAG « Mémoire
+  estimée » ;
 - v17.55 — nouveautés v17.53 remises (code v17.53 + numéro de version), à
   tester sur iPad fraîchement redémarré ;
 - v17.54 — retour exact au code v17.52 (v17.53 retirée par git revert,
@@ -433,7 +436,17 @@ NON IMPLÉMENTÉ / OUVERT :
   10 et 5 NM ; fluidité du suivi GPS à 5 NM avec HT + Routes). Règle de
   travail du 02/10/2026 : à chaque version, seulement la non-régression
   rapide ; test complet une fois par jour, sur demande ;
-- v17.55 : À MESURER sur iPad FRAÎCHEMENT REDÉMARRÉ (fluidité gestes /
+- v17.56 : À MESURER sur iPad (affichage au dixième partout, saisie du cap
+  de simulation, ligne DIAG « Mémoire estimée »). Écart Go To / vecteur
+  (orthodromie / loxodromie) : expliqué, NON IMPLÉMENTÉ, À DÉCIDER (Bastien).
+  Économies de mémoire (communes, canvas masqués, etc.) : NON IMPLÉMENTÉ,
+  À DÉCIDER ;
+- v17.55 : VALIDÉE sur iPad redémarré (DIAG 05/10/2026 14:25 : images / s
+  pendant les gestes médiane 53, ≈ 0,4 blocage > 100 ms / min). La
+  régression vue en v17.53 venait de l'état de l'iPad, pas du code. Sur un
+  iPad encombré, page blanche : iOS ferme l'appli, probablement par manque
+  de mémoire (déduit, non prouvé). Ancien statut : À MESURER sur iPad
+  FRAÎCHEMENT REDÉMARRÉ (fluidité gestes /
   zooms / suivi ; caps et ligne « Déclinaison » ; libellés ; retour 10 s en
   simulation). Code identique à v17.53 (fb9cac7) ;
 - v17.54 : MESURÉE sur iPad le 05/10/2026 : page blanche à 12:22 sur un
@@ -572,45 +585,45 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.55
+Version : TEST v17.56
 Date : 05/10/2026
-Base : code v17.53 (fb9cac7), remis par git revert de v17.55 (e454325)
+Base : v17.55 (98b8989, code v17.53, VALIDÉE sur iPad redémarré)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.55.txt
-2_Index_v17.55.txt
-3_Manifest_v17.55.txt
-4_Script_v17.55.txt
-5_SIA_v17.55.txt
-6_Style_v17.55.txt
-7_Sw_v17.55.txt
+1_Modifications_v17.56.txt
+2_Index_v17.56.txt
+3_Manifest_v17.56.txt
+4_Script_v17.56.txt
+5_SIA_v17.56.txt
+6_Style_v17.56.txt
+7_Sw_v17.56.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.55 (et texte « TEST v17.55 » de l'écran de
+- Index : APP_VERSION = v17.56 (et texte « TEST v17.56 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.55
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.55
-- Style : NPF_STYLE_BUILD_VERSION = v17.55
-- Service Worker : `sw-v17-55_nouveautes_v17-53_remises` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-55_nouveautes_v17-53_remises`, `npf-q400-test-app-data-v1`,
+- Manifest : start_url = ./index.html?appv=v17.56
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.56
+- Style : NPF_STYLE_BUILD_VERSION = v17.56
+- Service Worker : `sw-v17-56_caps_dixieme_degre` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-56_caps_dixieme_degre`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-15.69-radio1026-1-maplite1`
 - SIA_DATA_REVISION (SW / Index) : 15.69-radio1026-1-maplite1 (inchangée)
-- sia.js v17.55 : strictement identique à v17.52.
+- sia.js v17.56 : strictement identique à v17.52.
 - Images de lancement : icons/startup-ipad9-portrait.png (1620 × 2160) et
   icons/startup-ipad9-landscape.png (2160 × 1620).
 - Icônes des boutons (v17.48) : calculator-fms-icon, search-commune-icon,
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.55 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.56 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
 - `sia.js` et moteur tuiles (src/100) identiques à v17.52 ;
-- tests courts v17.55 : entrée v17.55 ;
+- tests courts v17.56 : entrée v17.56 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51 et v17.55 À MESURER ;
-  v17.53 retirée en v17.54 puis remise en v17.55 ; v17.54 MESURÉE.
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51 et v17.56 À MESURER ;
+  v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE.
 
 
 2. PROTOCOLE DE TRAVAIL À RESPECTER
@@ -2133,6 +2146,146 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
 
+VERSION TEST v17.56 — ROUTES ET CAPS AU DIXIÈME DE DEGRÉ ; CAP DE SIMULATION AU
+DIXIÈME ; DIAG MÉMOIRE ESTIMÉE
+Date : 05/10/2026
+Base fonctionnelle : v17.55 (commit 98b8989, code v17.53), VALIDÉE sur iPad
+redémarré (DIAG 05/10 14:25 : gestes médiane 53 images / s, ≈ 0,4 blocage
+> 100 ms / min).
+Demande de Bastien : A (affichage au dixième, codé) ; B (écart Go To /
+vecteur : étude seule) ; C (mémoire : mesure et propositions, seulement une
+ligne DIAG).
+
+A — ENDROITS OÙ UNE ROUTE / UN CAP EST AFFICHÉ (relevé v17.55, fichier:ligne)
+- Format commun formatRouteDegrees src/050:8-13 (arrondi au degré), utilisé
+  par : bandeau Go To / feu src/110:1364 ; étiquette route avion -> cible et
+  route Feu -> BASE src/150:234 et 239 ; WP (segments et bandeau WP)
+  src/200:641 et 1291.
+- Textes d'attente « ---° » : src/110:1134, 1198, 1341, 1352 ;
+  src/200:1261, 1265, 1287.
+- Simulation : bouton (route réglée) src/270:270-271 et 288 ; champ de saisie
+  src/270:314 ; enregistrement src/270:331 (normalizeSimulationRoute) ;
+  champ index.html:437 (inputmode numeric, 3 caractères).
+- Fenêtre SafeSky (route d'un trafic) src/140:2561.
+- Profil SIA (route) src/340:3040.
+- DIAG : réglages de simulation src/010:1117 et 3397 ; cap des positions GPS
+  src/010:1108 et 3434.
+- Non concernés : calculateur (aucune route affichée), fenêtres terrain /
+  PÉLIC (aucun cap ; étiquettes PÉLIC = distance et temps), vecteur avion
+  (dessin seulement, pas de valeur), ligne « Déclinaison » (2 décimales,
+  ce n'est pas une route).
+
+A — MODIFICATIONS
+- src/050 : formatNpfAngleTenth (« 283,4 », trois chiffres, virgule, 359,96
+  -> 000,0) ; formatRouteDegrees l'utilise (« 283,4° », attente « ---,-° »).
+  Calculs inchangés (seul l'affichage change).
+- src/110, src/200 : textes d'attente « ---,-° ».
+- src/140 (SafeSky), src/340 (profil SIA), src/010 (DIAG : réglages et cap
+  des positions) : formatRouteDegrees.
+- src/270 + index.html : cap de simulation au dixième. Saisie avec virgule ou
+  point, arrondie au dixième, ramenée entre 000,0 et 359,9 (360 -> 000,0,
+  -5 -> 355,0, texte non numérique -> 000,0 comme avant) ; champ
+  « inputmode decimal », 5 caractères ; bouton et champ affichent « 283,4 ».
+- src/010 : DIAG réglages de simulation gardés au dixième.
+
+B — ÉCART ENTRE LA ROUTE GO TO ET LE VECTEUR (étude, aucun calcul changé)
+- Méthodes (code v17.55) :
+  - route Go To affichée et caps des feux : route ORTHODROMIQUE AU DÉPART,
+    depuis la position actuelle de l'avion, recalculée à chaque position
+    (calculateBearing src/050:7 ; src/110:1360-1361, src/260:1739-1745) ;
+  - ligne rouge avion -> cible : orthodromie (drawRoute src/150:226-230,
+    buildNpfGreatCircleLatLngs src/150:178-224) ;
+  - vecteur jaune : petit morceau d'orthodromie dans l'axe du cap actuel
+    (updateOwnGpsVector src/260:2394-2420) ;
+  - simulation : cap vrai CONSTANT, pas de 0,5 s (src/270:403-440) = route
+    LOXODROMIQUE ;
+  - distances : orthodromiques (calculateDistanceInNm src/050:6).
+- Écart orthodromie / loxodromie au départ (route vraie) :
+  - LFML -> LFMT (55 NM) : 279,2 / 278,8 -> 0,4° ; écart max entre les deux
+    chemins 0,1 NM ;
+  - LFML -> LFBO (168 NM) : 275,3 / 274,0 -> 1,3° ; 1,0 NM ;
+  - LFML -> LFBD (269 NM) : 290,2 / 288,1 -> 2,0° (2,1° à l'arrivée) ; 2,3 NM ;
+  - 44° N, 245 NM plein ouest : 272,0 / 270,0 -> 2,0° (et non 3°) ; 2,1 NM.
+- Explication : si le pilote (ou la simulation) affiche la route Go To du
+  départ (ex. 272,0) et ne la change plus, l'avion suit une loxodromie qui
+  s'écarte de l'orthodromie. La route Go To, recalculée depuis la nouvelle
+  position, tourne alors : écart vecteur / ligne rouge 1,1° après 60 NM,
+  2,9° après 120 NM, 6,9° après 180 NM, et passage à ≈ 10 NM de la cible.
+  En suivant la route Go To au fur et à mesure (ou la ligne rouge), pas
+  d'écart.
+- Options (NON IMPLÉMENTÉ, À DÉCIDER par Bastien) :
+  1. tout en loxodromie (route Go To = cap constant à tenir, ligne droite sur
+     la carte, distance loxodromique ≈ +0,1 % à 250 NM) ;
+  2. tout en orthodromie (situation actuelle, la simulation suivrait la
+     ligne en tournant progressivement) ;
+  3. orthodromie gardée + cap constant « loxo » affiché à côté.
+  Recommandation pour le VFR : option 1 (cap unique à tenir, cohérent avec
+  la carte et le vecteur ; écart de chemin ≤ 2,3 NM à 270 NM).
+
+C — MÉMOIRE (mesures Chrome du 05/10/2026, tas JavaScript après ménage)
+- Tas JavaScript : 84 Mo au démarrage, 102 Mo avec les zones SIA, 115 Mo
+  avec les lignes HT et après gestes. Dont communes ≈ 61 Mo (34 935 communes,
+  52 champs chacune, contours ≈ 20 Mo), zones SIA ≈ 18 Mo, lignes HT
+  ≈ 13 Mo, reste de l'appli ≈ 54 Mo.
+- Dessins de la carte (canvas, hors tas) : 4 à 5 × 25,6 Mo = 102 à 128 Mo,
+  gardés même quand HT / Routes sont masqués (DIAG iPad « masqué »).
+- Images de tuiles en mémoire : jusqu'à 556 (DIAG v17.53) × 0,25 Mo ≈ 139 Mo
+  décodés au pire (iOS peut en libérer) ; caches de tuiles 160 + 128 images
+  compressées (quelques Mo). Stockage disque (pas la mémoire) : ≈ 93 Mo.
+- Propositions (NON IMPLÉMENTÉ, À DÉCIDER), par gain puis risque :
+  1. Libérer les dessins HT / Routes quand ils sont masqués : −25 à −77 Mo ;
+     risque faible-moyen (redessin à la réapparition) ;
+  2. Communes : ne garder que les champs utiles, contours chargés à la
+     demande : −30 à −45 Mo ; risque faible (rien de visible) ;
+  3. Fusionner les deux dessins Routes (bordure + ligne) en un : −25,6 Mo ;
+     risque moyen ;
+  4. Dessins à densité 1 au lieu de 2 : −75 % des canvas (≈ −90 Mo) ; risque
+     visible (traits moins nets) ;
+  5. Moins d'images de tuiles gardées (moteur de tuiles, RÈGLE 7) : gain
+     potentiel le plus fort (jusqu'à −100 Mo) mais NE PAS TOUCHER sans
+     raison très forte et DIAG iPad.
+- DIAG : Safari iPad ne donne pas la mémoire réelle d'une page
+  (performance.memory et measureUserAgentSpecificMemory absents). Ajout
+  d'une ligne « Mémoire estimée » calculée à l'export seulement (src/260
+  appendNpfDiagV1756MemoryLine, appel src/010) : dessins, images de tuiles,
+  caches de tuiles (lecture seule, src/100 non touché), données chargées.
+
+TESTS COURTS (Chrome, bloquants, 05/10/2026) — tous OK
+- Format : 283,44 -> 283,4° ; 31 -> 031,0° ; 359,96 et 360 -> 000,0° ;
+  valeur absente -> ---,-°.
+- Bandeau Go To (Brest 152,8°, Paris 170,2°, Nice 232,3°) et caps des feux
+  (329,3° et 029,2° : mêmes valeurs qu'en v17.55, au dixième) ; déclinaison
+  inchangée (0,04° / 2,08° / 3,23°).
+- La ligne rouge avion -> cible n'a pas d'étiquette (voulu, src/150:326) ;
+  étiquette PÉLIC / BASE : distance et temps seulement (pas de cap).
+- Simulation : saisie « 283,4 » et « 283.4 » -> 283,4 ; « 0 » -> 000,0 ;
+  « 359,9 » -> 359,9 ; « 360 » -> 000,0 ; « 12,36 » -> 012,4 ; « -5 » ->
+  355,0 ; vol réglé à 283,4 -> trace magnétique 283,40 (vraie 286,63 avec
+  3,23° de déclinaison) ; bouton et DIAG « route 283,4° ».
+- DIAG : cap des positions « 271,3° », ligne « Déclinaison », ligne
+  « Mémoire estimée » présentes.
+- cdp_map, cdp_nr (FdS / GAAR, GLR), cdp_btn : identiques à v17.55 hors
+  affichage du dixième ; aucune erreur JavaScript.
+- Retour sur l'avion 10 s (simulation et GPS réel, fenêtre terrain fermée,
+  toucher = délai relancé) : OK.
+- Mise à jour v17.55 -> v17.56, hors ligne, relance : OK ; caches de la
+  pérenne intacts, seuls des caches npf-q400-test-* créés.
+
+RETOUR ARRIÈRE
+- git revert du commit v17.56 : redonne v17.55 (affichage au degré).
+
+FICHIERS MODIFIÉS
+src/050, src/110, src/140, src/200, src/270, src/340, src/260, src/010, donc
+script.js ; index.html (champ de saisie + version), manifest.json, style.css,
+sw.js (version). sia.js et src/100 : inchangés.
+
+VERSION
+- App : v17.56
+- Service Worker : `sw-v17-56_caps_dixieme_degre`
+
+STATUT : À MESURER sur iPad.
+
+
 VERSION TEST v17.55 — NOUVEAUTÉS v17.53 REMISES, À TESTER SUR iPAD REDÉMARRÉ
 Date : 05/10/2026
 Base : v17.54 (e454325) annulée par git revert (sans reset ni --force) :
@@ -2185,7 +2338,8 @@ VERSION
 - App : v17.55
 - Service Worker : `sw-v17-55_nouveautes_v17-53_remises`
 
-STATUT : À MESURER sur iPad fraîchement redémarré.
+STATUT : VALIDÉE sur iPad redémarré (DIAG 05/10/2026 14:25). Ancien statut :
+À MESURER sur iPad fraîchement redémarré.
 
 
 VERSION TEST v17.54 — RETOUR AU CODE v17.52 (v17.53 RETIRÉE)
