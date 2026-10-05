@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v17-53_sia_index_declinaison_libelles';
-const APP_VERSION = 'v17.53';
+const SW_VERSION = 'sw-v17-54_retour_code_v17-52';
+const APP_VERSION = 'v17.54';
 const SIA_DATA_REVISION = '15.69-radio1026-1-maplite1';
 const SIA_DATA_URL = './sia.js';
 /*

@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
-Mise à jour : 04/10/2026
-Version de travail actuelle : TEST v17.53
+Mise à jour : 05/10/2026
+Version de travail actuelle : TEST v17.54
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,7 +178,9 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
-- v17.53 — rafraîchissement des zones SIA allégé (index par cases construit
+- v17.54 — retour exact au code v17.52 (v17.53 retirée par git revert,
+  régression de fluidité sur iPad) ; seul le numéro de version change ;
+- v17.53 (RETIRÉE en v17.54) — rafraîchissement des zones SIA allégé (index par cases construit
   une fois, aucune reconstruction si les objets sont les mêmes, rien pendant
   un geste ; rendu identique à v17.52) ; retour automatique à 10 s aussi en
   simulation ; déclinaison magnétique WMM2025 à la position de l'avion (au
@@ -429,7 +431,18 @@ NON IMPLÉMENTÉ / OUVERT :
   10 et 5 NM ; fluidité du suivi GPS à 5 NM avec HT + Routes). Règle de
   travail du 02/10/2026 : à chaque version, seulement la non-régression
   rapide ; test complet une fois par jour, sur demande ;
-- v17.53 : À MESURER sur iPad (suivi GPS à 5 / 2 / 1 / 0,5 NM : lignes
+- v17.54 : À MESURER sur iPad (fluidité gestes et zooms revenue au niveau
+  v17.52 ?). Code identique à v17.52 (05b4e56) ;
+- v17.53 : ABANDONNÉ en l'état (retirée en v17.54, décision de Bastien du
+  05/10/2026). DIAG iPad 05/10 08:40 : images / s pendant les gestes médiane
+  9 (v17.52 : 40) ; blocages > 100 ms 5,5 / min (v17.52 : 1,3), max 1,8 s ;
+  updateUserPosition 50 blocages ; 373 marqueurs PÉLIC / terrains sur la
+  carte. Cause NON PROUVÉE (analyse du 04/10 au soir interrompue ; outils
+  prêts : outils_tests_NPF-Q400-TEST/run_pil53.sh et
+  REPRISE_analyse_v17.53.txt). Les nouveautés (P3 index SIA, A retour 10 s
+  en simulation, B déclinaison WMM2025, C libellés vers l'intérieur) seront
+  remises UNE PAR UNE dans des versions suivantes : À DÉCIDER.
+  Ancien statut : À MESURER sur iPad (suivi GPS à 5 / 2 / 1 / 0,5 NM : lignes
   « SIA RAFRAÎCHISSEMENT » (objets lus par l'index, reconstruction évitée) ;
   caps Go To et ligne « Déclinaison » ; libellés des zones ; retour 10 s en
   simulation). enableSimulationMode 3 425 ms (DIAG iPad v17.52) : NON
@@ -547,44 +560,45 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.53
-Date : 04/10/2026
-Base : v17.52 (commitée 05b4e56, VALIDÉE sur iPad)
+Version : TEST v17.54
+Date : 05/10/2026
+Base : code v17.52 (05b4e56, VALIDÉE sur iPad) ; v17.53 (fb9cac7) retirée
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.53.txt
-2_Index_v17.53.txt
-3_Manifest_v17.53.txt
-4_Script_v17.53.txt
-5_SIA_v17.53.txt
-6_Style_v17.53.txt
-7_Sw_v17.53.txt
+1_Modifications_v17.54.txt
+2_Index_v17.54.txt
+3_Manifest_v17.54.txt
+4_Script_v17.54.txt
+5_SIA_v17.54.txt
+6_Style_v17.54.txt
+7_Sw_v17.54.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.53 (et texte « TEST v17.53 » de l'écran de
+- Index : APP_VERSION = v17.54 (et texte « TEST v17.54 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.53
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.53
-- Style : NPF_STYLE_BUILD_VERSION = v17.53
-- Service Worker : `sw-v17-53_sia_index_declinaison_libelles` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-53_sia_index_declinaison_libelles`, `npf-q400-test-app-data-v1`,
+- Manifest : start_url = ./index.html?appv=v17.54
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.54
+- Style : NPF_STYLE_BUILD_VERSION = v17.54
+- Service Worker : `sw-v17-54_retour_code_v17-52` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-54_retour_code_v17-52`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-15.69-radio1026-1-maplite1`
 - SIA_DATA_REVISION (SW / Index) : 15.69-radio1026-1-maplite1 (inchangée)
-- sia.js v17.53 : strictement identique à v17.52.
+- sia.js v17.54 : strictement identique à v17.52.
 - Images de lancement : icons/startup-ipad9-portrait.png (1620 × 2160) et
   icons/startup-ipad9-landscape.png (2160 × 1620).
 - Icônes des boutons (v17.48) : calculator-fms-icon, search-commune-icon,
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.53 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.54 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
 - `sia.js` et moteur tuiles (src/100) identiques à v17.52 ;
-- tests Chrome v17.52 / v17.53 : entrée v17.53 ;
+- tests courts v17.54 : entrée v17.54 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51 et v17.53 À MESURER.
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51 et v17.54 À MESURER ;
+  v17.53 ABANDONNÉE (retirée en v17.54).
 
 
 2. PROTOCOLE DE TRAVAIL À RESPECTER
@@ -2107,6 +2121,64 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
 
+VERSION TEST v17.54 — RETOUR AU CODE v17.52 (v17.53 RETIRÉE)
+Date : 05/10/2026
+Base : v17.53 (commit fb9cac7) annulée par git revert (sans reset ni
+--force) ; code identique à v17.52 (05b4e56).
+Décision de Bastien : revenir exactement au code v17.52 pour le vérifier sur
+iPad, puis remettre les nouveautés de v17.53 une par une.
+
+POURQUOI (DIAG iPad du 05/10/2026 08:40, v17.53 contre v17.52)
+- Images / s pendant les gestes : médiane 9 contre 40.
+- Blocages > 100 ms : 5,5 / min contre 1,3 ; le plus long 1,8 s.
+- updateUserPosition bloque 50 fois ; 373 marqueurs PÉLIC / terrains sur la
+  carte.
+- Cause NON PROUVÉE. Les mesures Chrome de v17.53 annonçaient un gain : elles
+  n'ont pas prévu la régression iPad (voir le bilan des tests ci-dessous).
+
+CE QUI CHANGE
+- Tout le code de v17.53 retiré : rafraîchissement SIA (index par cases),
+  retour 5 s en simulation, déclinaison fixe 1°, libellés des zones comme
+  en v17.52, DIAG comme en v17.52.
+- Différences restantes avec 05b4e56 : numéro de version seulement
+  (index.html : APP_VERSION, appv ×3, « TEST v17.54 » ; manifest start_url ;
+  style.css en-tête ; script.js NPF_SCRIPT_BUILD_VERSION et ligne
+  « Instrumentation » ; sw.js APP_VERSION et SW_VERSION) + ce journal
+  (historique v17.53 conservé, règle F).
+- sia.js et src/100 : identiques à v17.52.
+- Outils gardés hors dépôt (outils_tests_NPF-Q400-TEST) : run_pil53.sh,
+  cdp_pil53.js, REPRISE_analyse_v17.53.txt et tous les tests v17.53.
+
+TESTS COURTS (Chrome, bloquants, 05/10/2026) — tous OK
+- Code : script.js identique à 05b4e56 sauf 2 lignes de version ; index,
+  manifest, style, sw, sia.js identiques hors numéro ; src/ identique (hors
+  numéro dans src/010). Syntaxe Script / SW / SIA, 2 scripts de l'Index,
+  JSON du Manifest : OK ; build --check : IDENTIQUE.
+- Déclinaison fixe 1° : caps Go To Brest 152°, Nice 235° ; route simulée
+  090° -> trace 91° ; feux 331° / 031° : comme v17.52.
+- Retour sur l'avion : GPS réel 10 s, fenêtre terrain fermée, toucher dans
+  la fenêtre = délai relancé ; simulation 5 s : comme v17.52.
+- Libellés des zones : code v17.52 (identique octet pour octet).
+- DIAG : mêmes lignes qu'en v17.52 (pas de ligne « Déclinaison », synthèse
+  SIA sans compteurs v17.53).
+- Démarrage sans erreur JavaScript, carte affichée, glisser et zooms ; FdS /
+  GAAR ; GLR : OK (identiques à v17.52 hors heure).
+- Mise à jour v17.53 -> v17.54 puis hors ligne puis relance : OK ; caches de
+  la pérenne intacts ; seuls des caches npf-q400-test-* créés.
+- Pas de mesure de vitesse sur PC (l'iPad jugera la fluidité).
+
+RETOUR ARRIÈRE
+- Revenir à v17.53 : git revert du commit v17.54 (déconseillé tant que la
+  régression n'est pas comprise). Revenir à v17.52 exacte : commit 05b4e56
+  (même code, autre numéro).
+
+VERSION
+- App : v17.54
+- Service Worker : `sw-v17-54_retour_code_v17-52`
+
+STATUT : À MESURER sur iPad.
+
+
 VERSION TEST v17.53 — RAFRAÎCHISSEMENT SIA ALLÉGÉ (P3) ; RETOUR 10 S EN
 SIMULATION ; DÉCLINAISON WMM2025 ; LIBELLÉS DE ZONES VERS L'INTÉRIEUR
 Date : 04/10/2026
@@ -2281,7 +2353,8 @@ VERSION
 - App : v17.53
 - Service Worker : `sw-v17-53_sia_index_declinaison_libelles`
 
-STATUT : À MESURER sur iPad.
+STATUT : ABANDONNÉ — retirée en v17.54 (régression de fluidité sur iPad,
+DIAG du 05/10/2026 08:40). Ancien statut : À MESURER sur iPad.
 
 
 VERSION TEST v17.52 — BORDURES DES ZONES GARDÉES ET COMPLÉTÉES ; CANVAS

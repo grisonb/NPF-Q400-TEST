@@ -386,7 +386,7 @@ function formatNpfWaypointDistanceNm(distanceNm) {
 
 function getNpfWaypointMagneticBearing(fromLat, fromLon, toLat, toLon) {
     const trueBearing = calculateBearing(fromLat, fromLon, toLat, toLon);
-    return (trueBearing - getNpfMagneticDeclination(fromLat, fromLon) + 360) % 360;
+    return (trueBearing - MAGNETIC_DECLINATION + 360) % 360;
 }
 
 function isNpfWaypointSourceLinked(wp) {

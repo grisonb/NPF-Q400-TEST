@@ -223,7 +223,7 @@ function normalizeSimulationRoute(value) {
  */
 function getSimulationTrueRouteDeg() {
     return normalizeSimulationRoute(
-        Number(simulationRouteDeg) + Number(getNpfMagneticDeclination() || 0)
+        Number(simulationRouteDeg) + Number(MAGNETIC_DECLINATION || 0)
     );
 }
 
@@ -706,7 +706,7 @@ function drawLftwRoute() {
     const { latitude_mairie: lat, longitude_mairie: lon } = currentCommune;
     const { lat: baseLat, lon: baseLon } = baseAirport;
     const trueBearing = calculateBearing(lat, lon, baseLat, baseLon);
-    const magneticBearing = (trueBearing - getNpfMagneticDeclination(lat, lon) + 360) % 360;
+    const magneticBearing = (trueBearing - MAGNETIC_DECLINATION + 360) % 360;
     drawRoute([lat, lon], [baseLat, baseLon], { isLftwRoute: true, magneticBearing: magneticBearing });
 }
 

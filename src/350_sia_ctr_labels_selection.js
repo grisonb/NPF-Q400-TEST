@@ -1670,113 +1670,18 @@ function buildSiaProhibitedInteriorLabelPlacements(geometry, bounds) {
     return placements;
 }
 
-/*
- * v17.53 — C : libellés de zones vers l'INTÉRIEUR de leur zone.
- * Le texte, parallèle au bord, est posé entièrement dans la zone, juste après
- * la bordure estompée (axe à 7 px du bord, 12 px de large -> 13 px) avec un
- * petit écart de 4 px. Même décalage que la bordure soit affichée ou non à
- * cette échelle. Contenu, police, taille et seuils inchangés.
- */
-const SIA_BOUNDARY_LABEL_BAND_OUTER_PX = 13;
-const SIA_BOUNDARY_LABEL_GAP_PX = 4;
-const siaBoundaryLabelSizeCache = new Map();
-let siaBoundaryLabelProbe = null;
-
-/* Taille réelle du libellé (avant rotation), mesurée une fois par texte. */
-function measureSiaBoundaryLabelSize(html) {
-    const cached = siaBoundaryLabelSizeCache.get(html);
-    if (cached) return cached;
-    let size = null;
-    try {
-        if (!siaBoundaryLabelProbe) {
-            siaBoundaryLabelProbe = L.DomUtil.create('div', 'leaflet-marker-icon sia-boundary-label-icon');
-            siaBoundaryLabelProbe.style.cssText = 'position:absolute;left:-10000px;top:-10000px;width:1px;height:1px;visibility:hidden;pointer-events:none;';
-        }
-        const pane = map.getPane('siaAirspacePane') || map.getContainer();
-        if (siaBoundaryLabelProbe.parentNode !== pane) pane.appendChild(siaBoundaryLabelProbe);
-        siaBoundaryLabelProbe.innerHTML = html;
-        const element = siaBoundaryLabelProbe.firstElementChild;
-        if (element) {
-            element.style.transform = 'none';
-            size = { width: element.offsetWidth, height: element.offsetHeight };
-        }
-        siaBoundaryLabelProbe.innerHTML = '';
-    } catch (_) {
-        size = null;
-    }
-    if (!size || !(size.width > 0) || !(size.height > 0)) return null;
-    if (siaBoundaryLabelSizeCache.size > 1500) siaBoundaryLabelSizeCache.clear();
-    siaBoundaryLabelSizeCache.set(html, size);
-    return size;
-}
-
-/* Cadre du texte : 0 = dans la zone et hors de toute bordure estompée ;
- * 1 = dans la zone mais touche la bordure d'un autre bord ; 2 = déborde. */
-function getSiaBoundaryLabelBoxFit(geometry, ringPointLists, center, tangent, normal, halfWidth, halfHeight) {
-    const samples = [];
-    for (const along of [-1, -0.5, 0, 0.5, 1]) {
-        for (const across of [-1, 1]) {
-            samples.push(L.point(
-                center.x + tangent.x * along * halfWidth + normal.x * across * halfHeight,
-                center.y + tangent.y * along * halfWidth + normal.y * across * halfHeight
-            ));
-        }
-    }
-    for (const point of samples) {
-        if (!siaGeometryContainsLatLng(geometry, map.containerPointToLatLng(point))) return 2;
-    }
-    const margin = SIA_BOUNDARY_LABEL_BAND_OUTER_PX;
-    const minX = Math.min(...samples.map(point => point.x)) - margin;
-    const maxX = Math.max(...samples.map(point => point.x)) + margin;
-    const minY = Math.min(...samples.map(point => point.y)) - margin;
-    const maxY = Math.max(...samples.map(point => point.y)) + margin;
-    for (const ringPoints of ringPointLists) {
-        for (let index = 1; index < ringPoints.length; index += 1) {
-            const a = ringPoints[index - 1];
-            const c = ringPoints[index];
-            /* Segment loin du texte : rien à tester. */
-            if ((a.x < minX && c.x < minX) || (a.x > maxX && c.x > maxX)
-                || (a.y < minY && c.y < minY) || (a.y > maxY && c.y > maxY)) continue;
-            for (const point of samples) {
-                if (siaDistancePointToSegmentPx(point, a, c) < margin) return 1;
-            }
-        }
-    }
-    return 0;
-}
-
-function findSiaBoundaryLabelPlacements(item, geometry, labelSize = null) {
+function findSiaBoundaryLabelPlacements(item, geometry) {
     if (!map || !geometry) return [];
 
     const rings = getSiaCtrOuterRings(geometry);
     if (!rings.length) return [];
-    const ringPointLists = labelSize
-        ? rings.map(ring => (Array.isArray(ring) ? ring : [])
-            .filter(coord => Array.isArray(coord) && coord.length >= 2)
-            .map(coord => map.latLngToContainerPoint(L.latLng(Number(coord[1]), Number(coord[0])))))
-        : [];
 
     const bounds = map.getBounds().pad(-0.01);
     const minimumLengthPx = getSiaBoundaryLabelMinimumSegmentPx(item);
     const placements = [];
 
     if (String(item?.t || '').trim().toUpperCase() === 'P') {
-        const interiorPlacements = buildSiaProhibitedInteriorLabelPlacements(geometry, bounds);
-        /* v17.53 — C : le texte horizontal des zones P est aussi contrôlé. */
-        if (labelSize) {
-            interiorPlacements.forEach(placement => {
-                placement.inward = true;
-                placement.fit = undefined;
-                placement.resolveFit = () => {
-                    placement.fit = getSiaBoundaryLabelBoxFit(
-                        geometry, ringPointLists, placement.point, { x: 1, y: 0 }, { x: 0, y: 1 },
-                        labelSize.width / 2, labelSize.height / 2
-                    );
-                    return placement.fit;
-                };
-            });
-        }
-        placements.push(...interiorPlacements);
+        placements.push(...buildSiaProhibitedInteriorLabelPlacements(geometry, bounds));
     }
 
     rings.forEach(ring => {
@@ -1813,69 +1718,6 @@ function findSiaBoundaryLabelPlacements(item, geometry, labelSize = null) {
                 { x: -dy / segmentLength, y: dx / segmentLength },
                 { x: dy / segmentLength, y: -dx / segmentLength }
             ];
-
-            /* v17.53 — C : placement vers l'intérieur (voir plus haut). */
-            if (labelSize) {
-                const halfWidth = labelSize.width / 2;
-                const halfHeight = labelSize.height / 2;
-                const inwardInsetPx = SIA_BOUNDARY_LABEL_BAND_OUTER_PX + SIA_BOUNDARY_LABEL_GAP_PX + halfHeight;
-                const tangent = { x: dx / segmentLength, y: dy / segmentLength };
-                /* Centre au milieu du bord, côté intérieur ; le contrôle du cadre
-                 * (coûteux) n'est fait qu'à la demande, au moment du choix. */
-                const pointAt = (shift, normal) => L.point(
-                    midpoint.x + tangent.x * shift * segmentLength + normal.x * inwardInsetPx,
-                    midpoint.y + tangent.y * shift * segmentLength + normal.y * inwardInsetPx
-                );
-                const isUsableCenter = point => {
-                    const latlng = map.containerPointToLatLng(point);
-                    return bounds.contains(latlng) && siaGeometryContainsLatLng(geometry, latlng) ? latlng : null;
-                };
-                let firstPoint = null;
-                let firstLatLng = null;
-                for (const normal of normals) {
-                    const point = pointAt(0, normal);
-                    const latlng = isUsableCenter(point);
-                    if (latlng) { firstPoint = point; firstLatLng = latlng; break; }
-                }
-                if (firstPoint) {
-                    const inwardPlacement = {
-                        latlng: firstLatLng,
-                        point: firstPoint,
-                        angle,
-                        lengthPx,
-                        insetPx: inwardInsetPx,
-                        inward: true,
-                        fit: undefined
-                    };
-                    /* Milieu du bord d'abord, puis glissé d'un quart vers chaque bout. */
-                    inwardPlacement.resolveFit = () => {
-                        let best = null;
-                        for (const shift of [0, -0.25, 0.25]) {
-                            for (const normal of normals) {
-                                const point = pointAt(shift, normal);
-                                const latlng = isUsableCenter(point);
-                                if (!latlng) continue;
-                                const fit = getSiaBoundaryLabelBoxFit(
-                                    geometry, ringPointLists, point, tangent, normal, halfWidth, halfHeight
-                                );
-                                if (!best || fit < best.fit) best = { point, latlng, fit };
-                                if (fit === 0) break;
-                            }
-                            if (best && best.fit === 0) break;
-                        }
-                        if (best) {
-                            inwardPlacement.point = best.point;
-                            inwardPlacement.latlng = best.latlng;
-                            inwardPlacement.fit = best.fit;
-                        } else {
-                            inwardPlacement.fit = 2;
-                        }
-                        return inwardPlacement.fit;
-                    };
-                    placements.push(inwardPlacement);
-                }
-            }
-
             const insetDistances = [22, 30, 38];
             let insidePlacement = null;
 
@@ -1909,11 +1751,7 @@ function findSiaBoundaryLabelPlacements(item, geometry, labelSize = null) {
      * Les segments les plus longs sont essayés d'abord. En cas de collision,
      * addSiaAirspaceBoundaryLabel() essaie les suivants au lieu d'abandonner.
      */
-    /* v17.53 — C : placements vers l'intérieur d'abord (le choix final par
-     * qualité du cadre est fait dans addSiaAirspaceBoundaryLabel), l'ancien
-     * placement en dernier recours (aucun libellé ne disparaît). */
     placements.sort((a, b) => {
-        if (!!a.inward !== !!b.inward) return a.inward ? -1 : 1;
         if (!!a.interior !== !!b.interior) return a.interior ? -1 : 1;
         if (a.lengthPx !== b.lengthPx) return b.lengthPx - a.lengthPx;
         return b.insetPx - a.insetPx;
@@ -1942,40 +1780,16 @@ function addSiaAirspaceBoundaryLabel(item, geometry, labelState) {
     const frequencyText = getSiaAirspaceBoundaryFrequencyText(item);
     const verticalText = getSiaAirspaceBoundaryVerticalText(item);
 
+    const placements = findSiaBoundaryLabelPlacements(item, geometry);
+    if (!placements.length) return null;
+
     const priority = getSiaBoundaryLabelPriority(item);
     const nearFiveNm = getCurrentNpfScaleNm() <= 5.000001;
     const isSiv = isSiaFlightInformationSector(item);
-    /* v17.53 — C : même contenu qu'avant ; la rotation est ajoutée à la pose. */
-    const labelInnerHtml = `<div class="sia-boundary-label-text${String(item?.t || '').trim().toUpperCase() === 'P' ? ' sia-prohibited-label' : ''}${isSiv ? ' sia-siv-label' : ''}${nearFiveNm ? ' sia-zone-label-near' : ''}" style="transform:translate(-50%,-50%) rotate(@@ANGLE@@deg)"><div class="sia-boundary-label-main">${escapeHtml(text)}</div>${frequencyText ? `<div class="sia-boundary-label-frequency">${escapeHtml(frequencyText)}</div>` : ''}${verticalText ? `<div class="sia-boundary-label-altitude">${escapeHtml(verticalText)}</div>` : ''}</div>`;
-    const labelSize = measureSiaBoundaryLabelSize(labelInnerHtml.replace('@@ANGLE@@', '0'));
-
-    const placements = findSiaBoundaryLabelPlacements(item, geometry, labelSize);
-    if (!placements.length) return null;
-
     const collisionDistance = (priority <= 20 ? 92 : 105) + (nearFiveNm ? 18 : 0) + (isSiv ? 12 : 0);
-    const isFree = candidate => !state.points.some(point => point.distanceTo(candidate.point) < collisionDistance);
-    /* v17.53 — C : meilleur cadre parmi les places libres, contrôlé à la
-     * demande (au plus 24 contrôles) : 0 = entièrement dans la zone, hors
-     * bordures ; 1 = dans la zone ; 2 = centre seul ; 3 = ancien placement. */
-    let placement = null;
-    let placementRank = Infinity;
-    let fitChecks = 0;
-    for (const candidate of placements) {
-        let rank = 3;
-        if (candidate.inward) {
-            if (candidate.fit === undefined && typeof candidate.resolveFit === 'function') {
-                if (fitChecks >= 24) continue;
-                fitChecks += 1;
-                candidate.resolveFit();
-            }
-            rank = Number.isFinite(candidate.fit) ? candidate.fit : 2;
-        }
-        if (rank >= placementRank) continue;
-        if (!isFree(candidate)) continue;
-        placement = candidate;
-        placementRank = rank;
-        if (rank === 0) break;
-    }
+    const placement = placements.find(candidate =>
+        !state.points.some(point => point.distanceTo(candidate.point) < collisionDistance)
+    );
     if (!placement) return null;
 
     const marker = L.marker(placement.latlng, {
@@ -1984,7 +1798,7 @@ function addSiaAirspaceBoundaryLabel(item, geometry, labelState) {
         keyboard: false,
         icon: L.divIcon({
             className: 'sia-boundary-label-icon',
-            html: labelInnerHtml.replace('@@ANGLE@@', placement.angle.toFixed(1)),
+            html: `<div class="sia-boundary-label-text${String(item?.t || '').trim().toUpperCase() === 'P' ? ' sia-prohibited-label' : ''}${isSiv ? ' sia-siv-label' : ''}${nearFiveNm ? ' sia-zone-label-near' : ''}" style="transform:translate(-50%,-50%) rotate(${placement.angle.toFixed(1)}deg)"><div class="sia-boundary-label-main">${escapeHtml(text)}</div>${frequencyText ? `<div class="sia-boundary-label-frequency">${escapeHtml(frequencyText)}</div>` : ''}${verticalText ? `<div class="sia-boundary-label-altitude">${escapeHtml(verticalText)}</div>` : ''}</div>`,
             iconSize: [1, 1],
             iconAnchor: [0, 0]
         })
@@ -3142,164 +2956,6 @@ async function addSiaDesignatedPointsToExistingCoverage(dataset, bounds, refresh
     return rendered;
 }
 
-/*
- * v17.53 — P3 : rafraîchissement SIA allégé.
- * Index par cases (0,25°) des zones, terrains et points SIA, construit une
- * seule fois par jeu de données chargé. Le rafraîchissement ne lit plus que
- * les objets des cases couvertes par la zone chargée ; les mêmes filtres et
- * les mêmes tests de limites qu'avant sont appliqués ensuite, dans l'ordre
- * d'origine des données : le résultat affiché est strictement le même.
- * Objets sans limites lisibles ou très étendus : toujours relus (liste à part).
- */
-const SIA_GRID_INDEX_CELL_DEG = 0.25;
-const SIA_GRID_INDEX_MAX_CELLS_PER_ITEM = 256;
-const SIA_REFRESH_MAP_MOTION_REASONS = new Set(['gps-follow', 'moveend', 'zoomend', 'move-preload']);
-/* Construction : pas de pause d'une image systématique ; une seule pause quand
- * un morceau de travail dépasse 50 ms (vues larges, 5 NM), jamais sinon. */
-const SIA_REFRESH_SLICE_MS = 50;
-let siaGridIndexCache = null;
-let siaRenderedTerrainItems = [];
-let siaRenderedPointItems = [];
-
-function getSiaGridCellRow(lat) {
-    return Math.floor((Number(lat) + 90) / SIA_GRID_INDEX_CELL_DEG);
-}
-
-function getSiaGridCellCol(lon) {
-    return Math.floor((Number(lon) + 180) / SIA_GRID_INDEX_CELL_DEG);
-}
-
-function buildSiaGridIndexPart(items, getBox) {
-    const cells = new Map();
-    const always = [];
-    const list = Array.isArray(items) ? items : [];
-    for (let index = 0; index < list.length; index += 1) {
-        const box = getBox(list[index]);
-        if (!box) {
-            always.push(index);
-            continue;
-        }
-        const row0 = getSiaGridCellRow(box[1]);
-        const row1 = getSiaGridCellRow(box[3]);
-        const col0 = getSiaGridCellCol(box[0]);
-        const col1 = getSiaGridCellCol(box[2]);
-        if ((row1 - row0 + 1) * (col1 - col0 + 1) > SIA_GRID_INDEX_MAX_CELLS_PER_ITEM) {
-            always.push(index);
-            continue;
-        }
-        for (let row = row0; row <= row1; row += 1) {
-            for (let col = col0; col <= col1; col += 1) {
-                const key = row * 4096 + col;
-                let bucket = cells.get(key);
-                if (!bucket) {
-                    bucket = [];
-                    cells.set(key, bucket);
-                }
-                bucket.push(index);
-            }
-        }
-    }
-    return { items: list, cells, always, marks: new Uint8Array(list.length) };
-}
-
-function getSiaAirspaceGridBox(item) {
-    const b = item?.b;
-    if (!Array.isArray(b) || b.length !== 4) return null;
-    const box = b.map(Number);
-    if (!box.every(Number.isFinite)) return null;
-    if (box[0] > box[2] || box[1] > box[3]) return null;
-    if (box[0] < -180 || box[2] > 180 || box[1] < -90 || box[3] > 90) return null;
-    return box;
-}
-
-function getSiaPointGridBox(item) {
-    const lat = Number(item?.x);
-    const lon = Number(item?.y);
-    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
-    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
-    return [lon, lat, lon, lat];
-}
-
-function getSiaGridIndex(dataset) {
-    const cache = siaGridIndexCache;
-    if (
-        cache
-        && cache.dataset === dataset
-        && cache.airspaces.items === (Array.isArray(dataset?.airspaces) ? dataset.airspaces : cache.airspaces.items)
-        && cache.terrain.items === (Array.isArray(dataset?.terrain) ? dataset.terrain : cache.terrain.items)
-        && cache.points.items === (Array.isArray(dataset?.points) ? dataset.points : cache.points.items)
-    ) {
-        return cache;
-    }
-    const startedAt = NPF_STARTUP_DIAGNOSTIC.now();
-    siaGridIndexCache = {
-        dataset,
-        airspaces: buildSiaGridIndexPart(dataset?.airspaces, getSiaAirspaceGridBox),
-        terrain: buildSiaGridIndexPart(dataset?.terrain, getSiaPointGridBox),
-        points: buildSiaGridIndexPart(dataset?.points, getSiaPointGridBox),
-        buildMs: 0
-    };
-    siaGridIndexCache.buildMs = NPF_STARTUP_DIAGNOSTIC.now() - startedAt;
-    try {
-        window.__npfSiaGridIndexStats = {
-            buildMs: siaGridIndexCache.buildMs,
-            airspaces: siaGridIndexCache.airspaces.items.length,
-            airspacesAlways: siaGridIndexCache.airspaces.always.length,
-            terrain: siaGridIndexCache.terrain.items.length,
-            points: siaGridIndexCache.points.items.length
-        };
-    } catch (_) {}
-    return siaGridIndexCache;
-}
-
-/* Indices des objets à relire pour ces limites, dans l'ordre d'origine. */
-function querySiaGridIndex(part, bounds) {
-    const total = part.items.length;
-    const all = () => {
-        const list = new Array(total);
-        for (let index = 0; index < total; index += 1) list[index] = index;
-        return list;
-    };
-    if (!bounds) return all();
-    const south = bounds.getSouth();
-    const north = bounds.getNorth();
-    const west = bounds.getWest();
-    const east = bounds.getEast();
-    /* Vue hors du cas simple (antiméridien, carte enroulée) : relecture complète. */
-    if (!(west <= east) || west < -180 || east > 180 || !Number.isFinite(south) || !Number.isFinite(north)) {
-        return all();
-    }
-    const row0 = Math.max(0, getSiaGridCellRow(Math.max(-90, south)));
-    const row1 = getSiaGridCellRow(Math.min(90, north));
-    const col0 = Math.max(0, getSiaGridCellCol(west));
-    const col1 = getSiaGridCellCol(east);
-    const marks = part.marks;
-    const result = [];
-    const take = index => {
-        if (marks[index]) return;
-        marks[index] = 1;
-        result.push(index);
-    };
-    part.always.forEach(take);
-    for (let row = row0; row <= row1; row += 1) {
-        for (let col = col0; col <= col1; col += 1) {
-            const bucket = part.cells.get(row * 4096 + col);
-            if (bucket) bucket.forEach(take);
-        }
-    }
-    result.forEach(index => { marks[index] = 0; });
-    result.sort((a, b) => a - b);
-    return result;
-}
-
-function isSameSiaItemList(previous, next, getPrevious, getNext = getPrevious) {
-    if (!Array.isArray(previous) || !Array.isArray(next) || previous.length !== next.length) return false;
-    for (let index = 0; index < next.length; index += 1) {
-        if (getPrevious(previous[index]) !== getNext(next[index])) return false;
-    }
-    return true;
-}
-
 async function refreshSiaLayers(reason = 'manual') {
     if (!map) return;
     ensureSiaMapPanes();
@@ -3409,19 +3065,6 @@ async function refreshSiaLayers(reason = 'manual') {
             return;
         }
 
-        /* v17.53 — P3 : aucune reconstruction pendant qu'un doigt est posé sur
-         * la carte ; une seule reprise à la fin du geste (reprise étalée v17.50). */
-        if (
-            SIA_REFRESH_MAP_MOTION_REASONS.has(String(reason || ''))
-            && typeof isNpfMapFingerDown === 'function'
-            && isNpfMapFingerDown()
-        ) {
-            const resumeSiaRefresh = reason === 'gps-follow'
-                ? () => scheduleSiaCoverageRefresh('gps-follow')
-                : () => scheduleSiaLayerRefresh(reason);
-            if (deferNpfWorkDuringMapGesture('sia', resumeSiaRefresh)) return;
-        }
-
         clearTimeout(siaMoveDecorationRefreshTimer);
         siaMoveDecorationRefreshTimer = null;
 
@@ -3444,128 +3087,6 @@ async function refreshSiaLayers(reason = 'manual') {
          * quel que soit le zoom : stabilité mémoire prioritaire sur iPad. */
         const preservePreviousSiaDuringRebuild = siaMapAirspacesVisible
             && !siaCombinedHeavyMapLoad;
-
-        // Charger légèrement au-delà du viewport évite les reconstructions à
-        // chaque mouvement du suivi GPS tout en bornant la mémoire Safari/iPad.
-        const renderPadRatio = siaMapAirspacesVisible
-            ? (siaCombinedHeavyMapLoad
-                ? SIA_COMBINED_HEAVY_RENDER_PAD_RATIO
-                : SIA_RENDER_BOUNDS_PAD_RATIO)
-            : SIA_POINT_ONLY_RENDER_BOUNDS_PAD_RATIO;
-        const renderBounds = currentBounds.pad(renderPadRatio);
-        const pointBounds = renderBounds.pad(0.03);
-        let rendered = 0;
-
-        /*
-         * v17.53 — P3 : sélection d'abord (index par cases, sans pause d'une
-         * image), construction ensuite. Mêmes filtres et même ordre qu'avant.
-         */
-        const siaGridIndex = getSiaGridIndex(dataset);
-        let npfDiagIndexRead = 0;
-        const visibleAirspaceFeatures = [];
-        const npfDiagScanStart = NPF_STARTUP_DIAGNOSTIC.now();
-
-        if (siaMapAirspacesVisible) {
-            const airspaceCandidates = querySiaGridIndex(siaGridIndex.airspaces, renderBounds);
-            npfDiagIndexRead += airspaceCandidates.length;
-            for (const candidateIndex of airspaceCandidates) {
-                const item = siaGridIndex.airspaces.items[candidateIndex];
-                if (!isSiaFilterEnabled(getSiaEffectiveFilterKey(item))) continue;
-                if (shouldHideSiaAirspaceAboveFl115(item)) continue;
-                if (isSiaTechnicalTmaUnionParent(item)) continue;
-                if (isSiaTechnicalSivParent(item, dataset)) continue;
-                if (isSiaGenericTmaWithoutAltitude(item, siaTmaOperationalFamilies)) continue;
-                if (!item.g) continue;
-                if (!siaBoundsIntersects(item.b, renderBounds)) continue;
-
-                const geometry = getSiaCachedGeometry(item);
-                if (!geometry) continue;
-
-                visibleAirspaceFeatures.push({
-                    type: 'Feature',
-                    properties: { siaItem: item },
-                    geometry
-                });
-            }
-        }
-        npfDiagScanMs = NPF_STARTUP_DIAGNOSTIC.now() - npfDiagScanStart;
-        npfDiagVisibleZones = visibleAirspaceFeatures.length;
-
-        const showSiaDesignatedPoints = showSiaDesignatedPointsNow;
-        const npfDiagPointsStart = NPF_STARTUP_DIAGNOSTIC.now();
-
-        const visibleTerrainItems = [];
-        const terrainCandidates = querySiaGridIndex(siaGridIndex.terrain, pointBounds);
-        npfDiagIndexRead += terrainCandidates.length;
-        for (const candidateIndex of terrainCandidates) {
-            const item = siaGridIndex.terrain.items[candidateIndex];
-            if (!isSiaFilterEnabled(getSiaEffectiveFilterKey(item))) continue;
-            const latlng = L.latLng(Number(item.x), Number(item.y));
-            if (!pointBounds.contains(latlng)) continue;
-            visibleTerrainItems.push({ item, latlng });
-        }
-
-        const visiblePointItems = [];
-        if (showSiaDesignatedPoints) {
-            const pointCandidates = querySiaGridIndex(siaGridIndex.points, pointBounds);
-            npfDiagIndexRead += pointCandidates.length;
-            for (const candidateIndex of pointCandidates) {
-                const item = siaGridIndex.points.items[candidateIndex];
-                if (!isSiaFilterEnabled(getSiaEffectiveFilterKey(item))) continue;
-                if (item.k === 'dpn:VRP' && !siaMapVrpVisible) continue;
-                const latlng = L.latLng(Number(item.x), Number(item.y));
-                if (!pointBounds.contains(latlng)) continue;
-                visiblePointItems.push({ item, latlng });
-            }
-        }
-        const npfDiagSelectPointsMs = NPF_STARTUP_DIAGNOSTIC.now() - npfDiagPointsStart;
-
-        /*
-         * v17.53 — P3 : mêmes objets que le rendu en place (même échelle, mêmes
-         * filtres) -> aucune reconstruction. Seule la zone chargée avance ;
-         * bordures et libellés suivent comme après une reconstruction.
-         */
-        if (
-            SIA_REFRESH_MAP_MOTION_REASONS.has(String(reason || ''))
-            && siaRenderedCoverageBounds
-            && siaLayerGroup
-            && map.hasLayer(siaLayerGroup)
-            && siaRenderedZoom === zoom
-            && siaRenderedSignature === signature
-            && siaRenderedShowDesignatedPoints === showSiaDesignatedPointsNow
-            && siaRenderedPointLabelsEnabled === pointLabelsEnabledNow
-            && isSameSiaItemList(siaRenderedAirspaceFeatures, visibleAirspaceFeatures, feature => feature?.properties?.siaItem)
-            && isSameSiaItemList(siaRenderedTerrainItems, visibleTerrainItems, item => item, entry => entry.item)
-            && isSameSiaItemList(siaRenderedPointItems, visiblePointItems, item => item, entry => entry.item)
-        ) {
-            siaRenderedCoverageBounds = renderBounds;
-            scheduleSiaInnerBandsSync(`identique-${reason}`);
-            if (siaMapAirspacesVisible && siaRenderedAirspaceFeatures.length) {
-                scheduleSiaMoveDecorationRefresh(`sia-${reason}-idle-v16.66`);
-            }
-            npfDiagSiaInteraction(
-                'SIA RAFRAÎCHISSEMENT',
-                `raison=${reason} · reconstruction évitée (identique) · zones=${npfDiagVisibleZones} · objets=${npfDiagVisibleZones + visibleTerrainItems.length + visiblePointItems.length} · lus index=${npfDiagIndexRead} · zoom=${zoom} · carteZones=${siaMapAirspacesVisible ? 'ON' : 'OFF'}`,
-                {
-                    totalMs: Math.round(NPF_STARTUP_DIAGNOSTIC.now() - npfDiagRefreshStartedAt),
-                    datasetMs: Math.round(npfDiagDatasetMs),
-                    scanMs: Math.round(npfDiagScanMs),
-                    pointsMs: Math.round(npfDiagSelectPointsMs),
-                    indexRead: npfDiagIndexRead,
-                    identicalAvoided: 1
-                }
-            );
-            scheduleSiaProfileRefresh(`sia-${reason}`);
-            return;
-        }
-
-        let siaRefreshSliceStartedAt = NPF_STARTUP_DIAGNOSTIC.now();
-        const yieldSiaRefreshIfLong = async () => {
-            if (NPF_STARTUP_DIAGNOSTIC.now() - siaRefreshSliceStartedAt < SIA_REFRESH_SLICE_MS) return;
-            await yieldSiaRefreshToMap(refreshGeneration);
-            siaRefreshSliceStartedAt = NPF_STARTUP_DIAGNOSTIC.now();
-        };
-
         previousSiaLayerGroupForSwap = siaLayerGroup;
         replacementSiaLayerGroupForSwap = L.layerGroup();
         siaLayerGroup = replacementSiaLayerGroupForSwap;
@@ -3594,6 +3115,48 @@ async function refreshSiaLayers(reason = 'manual') {
         siaSelectedCtrTouchLayer = null;
         siaAirspaceTouchEntries = [];
         siaZoomDependentLayers = [];
+
+        // Charger légèrement au-delà du viewport évite les reconstructions à
+        // chaque mouvement du suivi GPS tout en bornant la mémoire Safari/iPad.
+        const renderPadRatio = siaMapAirspacesVisible
+            ? (siaCombinedHeavyMapLoad
+                ? SIA_COMBINED_HEAVY_RENDER_PAD_RATIO
+                : SIA_RENDER_BOUNDS_PAD_RATIO)
+            : SIA_POINT_ONLY_RENDER_BOUNDS_PAD_RATIO;
+        const renderBounds = currentBounds.pad(renderPadRatio);
+        const pointBounds = renderBounds.pad(0.03);
+        let rendered = 0;
+
+        const visibleAirspaceFeatures = [];
+        const npfDiagScanStart = NPF_STARTUP_DIAGNOSTIC.now();
+
+        if (siaMapAirspacesVisible) {
+            let siaAirspaceScanIndex = 0;
+            for (const item of dataset.airspaces || []) {
+                siaAirspaceScanIndex += 1;
+                if (siaAirspaceScanIndex % 768 === 0) {
+                    await yieldSiaRefreshToMap(refreshGeneration);
+                }
+                if (!isSiaFilterEnabled(getSiaEffectiveFilterKey(item))) continue;
+                if (shouldHideSiaAirspaceAboveFl115(item)) continue;
+                if (isSiaTechnicalTmaUnionParent(item)) continue;
+                if (isSiaTechnicalSivParent(item, dataset)) continue;
+                if (isSiaGenericTmaWithoutAltitude(item, siaTmaOperationalFamilies)) continue;
+                if (!item.g) continue;
+                if (!siaBoundsIntersects(item.b, renderBounds)) continue;
+
+                const geometry = getSiaCachedGeometry(item);
+                if (!geometry) continue;
+
+                visibleAirspaceFeatures.push({
+                    type: 'Feature',
+                    properties: { siaItem: item },
+                    geometry
+                });
+            }
+        }
+        npfDiagScanMs = NPF_STARTUP_DIAGNOSTIC.now() - npfDiagScanStart;
+        npfDiagVisibleZones = visibleAirspaceFeatures.length;
 
         if (visibleAirspaceFeatures.length) {
             const npfDiagGeoStart = NPF_STARTUP_DIAGNOSTIC.now();
@@ -3628,19 +3191,29 @@ async function refreshSiaLayers(reason = 'manual') {
             );
             airspaceLayer.addTo(siaLayerGroup);
             npfDiagGeoJsonMs = NPF_STARTUP_DIAGNOSTIC.now() - npfDiagGeoStart;
-            await yieldSiaRefreshIfLong();
 
             const npfDiagTouchStart = NPF_STARTUP_DIAGNOSTIC.now();
             /*
-             * v17.53 — P3 : surfaces tactiles sans pause systématique (une seule
-             * pause si le travail dépasse 50 ms). Depuis v15.75, une surface est
-             * une simple entrée géométrique (seuls les D-OTHER ponctuels créent
-             * une hitbox) : le lot entier est court.
+             * v16.35 — zoom arrière / vue allégée : la très grande majorité des
+             * volumes ne crée plus de calque tactile Leaflet depuis v15.75 ; elle
+             * ajoute seulement une entrée géométrique dans siaAirspaceTouchEntries.
+             * Rendre la main toutes les 24 zones imposait donc artificiellement
+             * ~16 ms de délai par lot (jusqu'à ~0,8 s pour 1 100+ zones), alors
+             * que le travail entre deux yields est minime. À >= 10 NM, on conserve
+             * les mêmes données et la même sélection Zone mais on espace fortement
+             * les yields. Les vues rapprochées gardent le lot prudent historique.
              */
+            const siaTouchScaleNm = getCurrentNpfScaleNm();
+            const siaTouchBatchSize = siaTouchScaleNm >= SIA_DECORATION_LIGHTWEIGHT_SCALE_NM
+                ? SIA_TOUCH_SURFACE_LIGHTWEIGHT_BATCH_SIZE
+                : SIA_TOUCH_SURFACE_BATCH_SIZE;
+
             for (let index = 0; index < visibleAirspaceFeatures.length; index += 1) {
                 throwIfSiaRefreshObsolete(refreshGeneration);
                 addSiaCtrTouchSurface(visibleAirspaceFeatures[index]);
-                await yieldSiaRefreshIfLong();
+                if ((index + 1) % siaTouchBatchSize === 0) {
+                    await yieldSiaRefreshToMap(refreshGeneration);
+                }
             }
 
             /* v16.66 — ne pas bloquer le rendu principal avec les bandes
@@ -3650,10 +3223,19 @@ async function refreshSiaLayers(reason = 'manual') {
             rendered += visibleAirspaceFeatures.length;
         }
 
-        const npfDiagBuildPointsStart = NPF_STARTUP_DIAGNOSTIC.now();
+        const showSiaDesignatedPoints = showSiaDesignatedPointsNow;
+        const npfDiagPointsStart = NPF_STARTUP_DIAGNOSTIC.now();
 
-        for (const { item, latlng } of visibleTerrainItems) {
-            await yieldSiaRefreshIfLong();
+        let siaTerrainScanIndex = 0;
+        for (const item of dataset.terrain || []) {
+            siaTerrainScanIndex += 1;
+            if (siaTerrainScanIndex % 256 === 0) {
+                await yieldSiaRefreshToMap(refreshGeneration);
+            }
+            if (!isSiaFilterEnabled(getSiaEffectiveFilterKey(item))) continue;
+            const latlng = L.latLng(Number(item.x), Number(item.y));
+            if (!pointBounds.contains(latlng)) continue;
+
             const terrainPopupHtml = buildSiaTerrainPopup(item);
             const marker = L.circleMarker(latlng, {
                 ...getSiaTerrainMarkerStyle(item),
@@ -3677,8 +3259,18 @@ async function refreshSiaLayers(reason = 'manual') {
             rendered += 1;
         }
 
-        for (const { item, latlng } of visiblePointItems) {
-            await yieldSiaRefreshIfLong();
+        let siaPointScanIndex = 0;
+        for (const item of dataset.points || []) {
+            if (!showSiaDesignatedPoints) break;
+            siaPointScanIndex += 1;
+            if (siaPointScanIndex % 512 === 0) {
+                await yieldSiaRefreshToMap(refreshGeneration);
+            }
+            if (!isSiaFilterEnabled(getSiaEffectiveFilterKey(item))) continue;
+            if (item.k === 'dpn:VRP' && !siaMapVrpVisible) continue;
+            const latlng = L.latLng(Number(item.x), Number(item.y));
+            if (!pointBounds.contains(latlng)) continue;
+
             const popupHtml = buildSiaPointPopup(item);
 
             if (item.k === 'dpn:VRP') {
@@ -3729,8 +3321,7 @@ async function refreshSiaLayers(reason = 'manual') {
             npfDiagOtherPointCount += 1;
             rendered += 1;
         }
-        npfDiagPointsMs = npfDiagSelectPointsMs + (NPF_STARTUP_DIAGNOSTIC.now() - npfDiagBuildPointsStart);
-        await yieldSiaRefreshIfLong();
+        npfDiagPointsMs = NPF_STARTUP_DIAGNOSTIC.now() - npfDiagPointsStart;
 
         throwIfSiaRefreshObsolete(refreshGeneration);
 
@@ -3754,8 +3345,6 @@ async function refreshSiaLayers(reason = 'manual') {
         siaRenderedSignature = signature;
         siaRenderedAirspaceFeatures = visibleAirspaceFeatures;
         siaRenderedShowDesignatedPoints = showSiaDesignatedPointsNow;
-        siaRenderedTerrainItems = visibleTerrainItems.map(entry => entry.item);
-        siaRenderedPointItems = visiblePointItems.map(entry => entry.item);
         siaRenderedPointLabelsEnabled = pointLabelsEnabledNow;
         siaRenderedDiagnosticCounts = {
             zones: visibleAirspaceFeatures.length,
@@ -3809,7 +3398,7 @@ async function refreshSiaLayers(reason = 'manual') {
 
         npfDiagSiaInteraction(
             'SIA RAFRAÎCHISSEMENT',
-            `raison=${reason} · zones=${npfDiagVisibleZones} · objets=${npfDiagRenderedObjects} · lus index=${npfDiagIndexRead} · zoom=${zoom} · carteZones=${siaMapAirspacesVisible ? 'ON' : 'OFF'}`,
+            `raison=${reason} · zones=${npfDiagVisibleZones} · objets=${npfDiagRenderedObjects} · zoom=${zoom} · carteZones=${siaMapAirspacesVisible ? 'ON' : 'OFF'}`,
             {
                 totalMs: Math.round(NPF_STARTUP_DIAGNOSTIC.now() - npfDiagRefreshStartedAt),
                 datasetMs: Math.round(npfDiagDatasetMs),
@@ -3817,8 +3406,7 @@ async function refreshSiaLayers(reason = 'manual') {
                 geoJsonMs: Math.round(npfDiagGeoJsonMs),
                 touchDecorMs: Math.round(npfDiagTouchDecorMs),
                 pointsMs: Math.round(npfDiagPointsMs),
-                commitMs: Math.round(npfDiagCommitMs),
-                indexRead: npfDiagIndexRead
+                commitMs: Math.round(npfDiagCommitMs)
             }
         );
 

@@ -1742,7 +1742,7 @@ function drawUserToTargetRoute() {
             target.lat,
             target.lon
         );
-        const magneticBearing = (trueBearingToTarget - getNpfMagneticDeclination(userLatLng.lat, userLatLng.lng) + 360) % 360;
+        const magneticBearing = (trueBearingToTarget - MAGNETIC_DECLINATION + 360) % 360;
 
         /*
          * v16.96 — navigation WP : le pointillé dynamique utilise un pane situé

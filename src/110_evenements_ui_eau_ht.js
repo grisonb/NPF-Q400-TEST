@@ -1358,7 +1358,7 @@ function updateCommuneGpsRouteDisplay() {
 
     const distance = calculateDistanceInNm(userLatLng.lat, userLatLng.lng, target.lat, target.lon);
     const trueBearingToTarget = calculateBearing(userLatLng.lat, userLatLng.lng, target.lat, target.lon);
-    const magneticBearing = (trueBearingToTarget - getNpfMagneticDeclination(userLatLng.lat, userLatLng.lng) + 360) % 360;
+    const magneticBearing = (trueBearingToTarget - MAGNETIC_DECLINATION + 360) % 360;
 
     if (routeInfo) {
         routeInfo.textContent = `${formatRouteDegrees(magneticBearing)} / ${Math.round(distance)} Nm / ${formatGpsEtaMinutes(distance)}`;

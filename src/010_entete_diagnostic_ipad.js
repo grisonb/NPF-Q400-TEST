@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.53';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.54';
 
 
 /*
@@ -139,13 +139,6 @@ const NPF_STARTUP_DIAGNOSTIC = (() => {
             summary.siaMaxMs = Math.max(summary.siaMaxMs, totalMs);
             summary.siaMaxPointsMs = Math.max(summary.siaMaxPointsMs, Math.max(0, Number(safeMetrics.pointsMs) || 0));
             summary.siaMaxDecorMs = Math.max(summary.siaMaxDecorMs, Math.max(0, Number(safeMetrics.touchDecorMs) || Number(safeMetrics.decorationsMs) || 0));
-            /* v17.53 — P3 : reconstructions évitées (identique) et objets lus par l'index. */
-            if (Number(safeMetrics.identicalAvoided) > 0) summary.siaIdenticalAvoidedCount = Number(summary.siaIdenticalAvoidedCount || 0) + 1;
-            if (Number.isFinite(Number(safeMetrics.indexRead))) {
-                summary.siaIndexReadCount = Number(summary.siaIndexReadCount || 0) + 1;
-                summary.siaIndexReadTotal = Number(summary.siaIndexReadTotal || 0) + Number(safeMetrics.indexRead);
-                summary.siaIndexReadMax = Math.max(Number(summary.siaIndexReadMax || 0), Number(safeMetrics.indexRead));
-            }
         }
 
         /* v17.33 — D2 : les passages « SIA GPS » sans travail sont comptés,
@@ -3238,7 +3231,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.53 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.54 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -3779,7 +3772,6 @@ function appendNpfDiagLaunchStorageHeader(lines) {
     try { appendNpfDiagV1749GestureLines(lines); } catch (_) {}
     try { appendNpfDiagV1750VrpLine(lines); } catch (_) {}
     try { appendNpfDiagV1752TileLine(lines); } catch (_) {}
-    try { appendNpfDiagV1753DeclinationLine(lines); } catch (_) {}
     safe_npfDiagBannerHeader(lines);
     lines.push(
         'SafeSky (showTrafficLayer) relu au lancement : ' + JSON.stringify(current.safeSkyAtLaunch)
@@ -4650,9 +4642,7 @@ function buildNpfStartupDiagnosticExportText() {
         + 'lectures actives max ' + Math.round(layerDiag.tileActiveMax || 0) + ' | '
         + 'snapshots écran sans tuile ' + Math.round(layerDiag.tileBlankSnapshots || 0) + ' | '
         + 'file abandonnée max ' + Math.round(layerDiag.tileQueuedDiscardedMax || 0) + ' / lectures obsolètes max ' + Math.round(layerDiag.tileAbortedMax || 0) + ' / reprises max ' + Math.round(layerDiag.tileRetriesMax || 0) + ' | '
-        + 'SIA ' + Math.round(layerDiag.siaRefreshCount || 0) + ' refresh (' + Math.round(layerDiag.siaSlowCount || 0) + ' lents, max ' + Math.round(layerDiag.siaMaxMs || 0) + ' ms'
-        + ', reconstruction évitée (identique) ' + Math.round(layerDiag.siaIdenticalAvoidedCount || 0)
-        + ', objets lus par l\'index : moyenne ' + (layerDiag.siaIndexReadCount ? Math.round(layerDiag.siaIndexReadTotal / layerDiag.siaIndexReadCount) : 0) + ' · max ' + Math.round(layerDiag.siaIndexReadMax || 0) + ') | '
+        + 'SIA ' + Math.round(layerDiag.siaRefreshCount || 0) + ' refresh (' + Math.round(layerDiag.siaSlowCount || 0) + ' lents, max ' + Math.round(layerDiag.siaMaxMs || 0) + ' ms) | '
         + 'HT ' + Math.round(layerDiag.htRenderCount || 0) + ' rendus | Routes ' + Math.round(layerDiag.roadRenderCount || 0) + ' rendus | '
         + 'filtres ' + Math.round(layerDiag.filterActivationCount || 0)
         + ' événements (attente tuiles max ' + Math.round(layerDiag.filterActivationMaxWaitMs || 0)
