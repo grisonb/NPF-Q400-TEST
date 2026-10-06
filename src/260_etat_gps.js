@@ -2463,12 +2463,21 @@ function updateOwnGpsVector(latitude, longitude, headingDeg, speedMps) {
     const maxMinutes = Math.max(...timeMarksMinutes);
     const endDistanceMeters = speedMps * maxMinutes * 60;
     /*
-     * v17.57 — A : le vecteur suit le cap actuel tenu constant (loxodromie :
-     * droite sur la carte), comme la ligne rouge Go To. Avant : orthodromie
-     * (v17.18). Les repères 2/5/10 min sont sur cette même droite.
+     * v17.58 — A : le vecteur et ses repères suivent le chemin parcouru en
+     * tenant le cap MAGNÉTIQUE actuel constant (même calcul que la ligne
+     * rouge, src/030 computeNpfConstantMagneticTrack). v17.57 : droite au
+     * cap vrai de l'instant (≈ 0,1 NM d'écart au repère 10').
      */
-    const end = calculateNpfRhumbDestination(latitude, longitude, headingDeg, endDistanceMeters / 1852);
-    const vectorLatLngs = [start, end];
+    const vectorTrack = computeNpfConstantMagneticTrack(
+        latitude,
+        longitude,
+        headingDeg,
+        endDistanceMeters / 1852,
+        timeMarksMinutes.map(minutes => speedMps * minutes * 60 / 1852)
+    );
+    const vectorLatLngs = vectorTrack
+        ? vectorTrack.latlngs
+        : [start, calculateNpfRhumbDestination(latitude, longitude, headingDeg, endDistanceMeters / 1852)];
 
     /* v13.04 — vecteur de position plus visible : halo noir + jaune. */
     L.polyline(vectorLatLngs, {
@@ -2493,9 +2502,11 @@ function updateOwnGpsVector(latitude, longitude, headingDeg, speedMps) {
         lineJoin: 'round'
     }).addTo(layer);
 
-    timeMarksMinutes.forEach((minutes) => {
+    timeMarksMinutes.forEach((minutes, markIndex) => {
         const markDistanceMeters = speedMps * minutes * 60;
-        const point = calculateNpfRhumbDestination(latitude, longitude, headingDeg, markDistanceMeters / 1852);
+        const point = vectorTrack && vectorTrack.marks[markIndex]
+            ? vectorTrack.marks[markIndex]
+            : calculateNpfRhumbDestination(latitude, longitude, headingDeg, markDistanceMeters / 1852);
 
         L.circleMarker(point, {
             pane: 'ownAircraftPane',

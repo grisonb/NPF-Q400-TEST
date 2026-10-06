@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.57';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.58';
 
 
 /*
@@ -3239,7 +3239,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.57 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.58 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -6222,16 +6222,26 @@ function getNpfDecimalYear(date = new Date()) {
     return year + (date.getTime() - start) / (end - start);
 }
 
+/* v17.58 — B : le DIAG dit si la déclinaison vient de l'avion simulé ou du GPS. */
+let npfMagneticDeclinationLastSimulated = null;
+
+function getNpfDeclinationAircraftSourceLabel() {
+    try {
+        if (isSimulationMode && lastPosition && lastPosition.simulation === true) return 'avion simulé';
+    } catch (_) {}
+    return 'avion, GPS';
+}
+
 function getNpfAircraftLatLngForDeclination() {
     try {
         const latLng = userMarker && typeof userMarker.getLatLng === 'function' ? userMarker.getLatLng() : null;
         if (latLng && Number.isFinite(Number(latLng.lat)) && Number.isFinite(Number(latLng.lng))) {
-            return { lat: Number(latLng.lat), lon: Number(latLng.lng), source: 'avion' };
+            return { lat: Number(latLng.lat), lon: Number(latLng.lng), source: getNpfDeclinationAircraftSourceLabel() };
         }
     } catch (_) {}
     try {
         if (lastPosition && Number.isFinite(Number(lastPosition.latitude)) && Number.isFinite(Number(lastPosition.longitude))) {
-            return { lat: Number(lastPosition.latitude), lon: Number(lastPosition.longitude), source: 'avion' };
+            return { lat: Number(lastPosition.latitude), lon: Number(lastPosition.longitude), source: getNpfDeclinationAircraftSourceLabel() };
         }
     } catch (_) {}
     return null;
@@ -6268,6 +6278,9 @@ function getNpfMagneticDeclination(fallbackLat, fallbackLon) {
         decimalYear,
         costMs: performance.now() - startedAt
     };
+    if (position.source === 'avion simulé') {
+        npfMagneticDeclinationLastSimulated = { value, lat: position.lat, lon: position.lon, at: Date.now() };
+    }
     return value;
 }
 
@@ -6403,6 +6416,52 @@ function computeNpfConstantMagneticCourse(startLat, startLon, endLat, endLon, op
     return { magneticBearing: magnetic, distanceNm: pathLength, latlngs: points };
 }
 
+/*
+ * v17.58 — A : chemin parcouru en tenant le cap MAGNÉTIQUE actuel constant
+ * (vecteur jaune et repères 2' / 5' / 10'), même calcul que la ligne rouge :
+ * cap magnétique = cap vrai de l'instant - déclinaison à l'avion ; le cap
+ * vrai suivi tourne ensuite avec la déclinaison (départ -> bout du vecteur,
+ * variation linéaire). Peu de points (8 pas) ; résultat gardé tant que la
+ * position, le cap et la vitesse ne changent pas.
+ */
+let npfConstantMagneticTrackCache = null;
+
+function computeNpfConstantMagneticTrack(lat, lon, trueHeadingDeg, distanceNm, markDistancesNm = []) {
+    const lat1 = Number(lat);
+    const lon1 = Number(lon);
+    const heading = Number(trueHeadingDeg);
+    const total = Number(distanceNm);
+    if (![lat1, lon1, heading, total].every(Number.isFinite) || total <= 0) return null;
+    const key = `${lat1.toFixed(5)}|${lon1.toFixed(5)}|${heading.toFixed(2)}|${total.toFixed(3)}|${markDistancesNm.map(d => Number(d).toFixed(3)).join(',')}`;
+    if (npfConstantMagneticTrackCache && npfConstantMagneticTrackCache.key === key) return npfConstantMagneticTrackCache.result;
+
+    const startDeclination = getNpfMagneticDeclination(lat1, lon1);
+    const magnetic = heading - startDeclination;
+    const roughEnd = calculateNpfRhumbDestination(lat1, lon1, heading, total);
+    const endDeclination = getNpfDeclinationAtPoint(roughEnd[0], roughEnd[1]);
+    const declinationAt = s => startDeclination + (endDeclination - startDeclination) * (s / total);
+    const STEPS = 8;
+    const pointAt = s => {
+        if (s <= 0) return [lat1, lon1];
+        const steps = Math.max(1, Math.ceil(STEPS * s / total));
+        const stepLength = s / steps;
+        let point = [lat1, lon1];
+        for (let index = 0; index < steps; index += 1) {
+            point = calculateNpfRhumbDestination(point[0], point[1], magnetic + declinationAt((index + 0.5) * stepLength), stepLength);
+        }
+        return point;
+    };
+    const latlngs = [[lat1, lon1]];
+    let point = [lat1, lon1];
+    for (let index = 0; index < STEPS; index += 1) {
+        point = calculateNpfRhumbDestination(point[0], point[1], magnetic + declinationAt((index + 0.5) * total / STEPS), total / STEPS);
+        latlngs.push(point);
+    }
+    const result = { latlngs, marks: markDistancesNm.map(pointAt) };
+    npfConstantMagneticTrackCache = { key, result };
+    return result;
+}
+
 /* v17.53 — DIAG : ligne « Déclinaison ». */
 function appendNpfDiagV1753DeclinationLine(lines) {
     const cache = npfMagneticDeclinationCache;
@@ -6418,6 +6477,13 @@ function appendNpfDiagV1753DeclinationLine(lines) {
         + ' (' + cache.source + ')'
         + ' · calculs ' + npfMagneticDeclinationComputeCount + ' (recalcul tous les ' + NPF_MAGNETIC_DECLINATION_RECOMPUTE_NM + ' NM)'
         + ' · dernier calcul ' + fr(cache.costMs, 2) + ' ms'
+        + (npfMagneticDeclinationLastSimulated && cache.source !== 'avion simulé'
+            ? ' · dernière en simulation : ' + fr(Math.abs(npfMagneticDeclinationLastSimulated.value), 2) + '° '
+                + (npfMagneticDeclinationLastSimulated.value >= 0 ? 'E' : 'W') + ' à '
+                + fr(Math.abs(npfMagneticDeclinationLastSimulated.lat), 4) + (npfMagneticDeclinationLastSimulated.lat >= 0 ? ' N ' : ' S ')
+                + fr(Math.abs(npfMagneticDeclinationLastSimulated.lon), 4) + (npfMagneticDeclinationLastSimulated.lon >= 0 ? ' E' : ' W')
+                + ' (' + new Date(npfMagneticDeclinationLastSimulated.at).toLocaleTimeString('fr-FR') + ')'
+            : '')
     );
 }
 let userMarker = null, watchId = null, accuracyCircle = null, headingLayer = null, lastPosition = null;
@@ -42560,12 +42626,21 @@ function updateOwnGpsVector(latitude, longitude, headingDeg, speedMps) {
     const maxMinutes = Math.max(...timeMarksMinutes);
     const endDistanceMeters = speedMps * maxMinutes * 60;
     /*
-     * v17.57 — A : le vecteur suit le cap actuel tenu constant (loxodromie :
-     * droite sur la carte), comme la ligne rouge Go To. Avant : orthodromie
-     * (v17.18). Les repères 2/5/10 min sont sur cette même droite.
+     * v17.58 — A : le vecteur et ses repères suivent le chemin parcouru en
+     * tenant le cap MAGNÉTIQUE actuel constant (même calcul que la ligne
+     * rouge, src/030 computeNpfConstantMagneticTrack). v17.57 : droite au
+     * cap vrai de l'instant (≈ 0,1 NM d'écart au repère 10').
      */
-    const end = calculateNpfRhumbDestination(latitude, longitude, headingDeg, endDistanceMeters / 1852);
-    const vectorLatLngs = [start, end];
+    const vectorTrack = computeNpfConstantMagneticTrack(
+        latitude,
+        longitude,
+        headingDeg,
+        endDistanceMeters / 1852,
+        timeMarksMinutes.map(minutes => speedMps * minutes * 60 / 1852)
+    );
+    const vectorLatLngs = vectorTrack
+        ? vectorTrack.latlngs
+        : [start, calculateNpfRhumbDestination(latitude, longitude, headingDeg, endDistanceMeters / 1852)];
 
     /* v13.04 — vecteur de position plus visible : halo noir + jaune. */
     L.polyline(vectorLatLngs, {
@@ -42590,9 +42665,11 @@ function updateOwnGpsVector(latitude, longitude, headingDeg, speedMps) {
         lineJoin: 'round'
     }).addTo(layer);
 
-    timeMarksMinutes.forEach((minutes) => {
+    timeMarksMinutes.forEach((minutes, markIndex) => {
         const markDistanceMeters = speedMps * minutes * 60;
-        const point = calculateNpfRhumbDestination(latitude, longitude, headingDeg, markDistanceMeters / 1852);
+        const point = vectorTrack && vectorTrack.marks[markIndex]
+            ? vectorTrack.marks[markIndex]
+            : calculateNpfRhumbDestination(latitude, longitude, headingDeg, markDistanceMeters / 1852);
 
         L.circleMarker(point, {
             pane: 'ownAircraftPane',
@@ -59430,8 +59507,8 @@ function isSiaInnerBandDisplayAllowed() {
     if (!Array.isArray(siaRenderedAirspaceFeatures) || !siaRenderedAirspaceFeatures.length) return false;
     const scaleNm = getCurrentNpfScaleNm();
     if (!Number.isFinite(scaleNm) || scaleNm >= SIA_DECORATION_LIGHTWEIGHT_SCALE_NM) return false;
-    const combinedHeavyDecorationLoad = !!(siaMapAirspacesVisible && showRoadOverlayLayer && showHighVoltageLinesLayer);
-    if (combinedHeavyDecorationLoad && scaleNm >= 5) return false;
+    /* v17.58 — C (essai) : bordures dès 5 NM, même avec HT + Routes (avant :
+     * à partir de 2 NM avec HT + Routes). Toujours rien à 10 NM et au-dessus. */
     return true;
 }
 
@@ -60782,7 +60859,8 @@ function renderSiaZoomDependentDecorations(features) {
      */
     const scaleNm = getCurrentNpfScaleNm();
     const combinedHeavyDecorationLoad = !!(siaMapAirspacesVisible && showRoadOverlayLayer && showHighVoltageLinesLayer);
-    const combinedHeavyLightweight = combinedHeavyDecorationLoad && Number.isFinite(scaleNm) && scaleNm >= 5;
+    /* v17.58 — C (essai) : noms et bordures dès 5 NM avec HT + Routes. */
+    const combinedHeavyLightweight = combinedHeavyDecorationLoad && Number.isFinite(scaleNm) && scaleNm > 5.000001;
     if (scaleNm >= SIA_DECORATION_LIGHTWEIGHT_SCALE_NM || combinedHeavyLightweight) {
         npfDiagSiaInteraction(
             'SIA DÉCORATIONS',
@@ -60840,7 +60918,8 @@ async function renderSiaZoomDependentDecorationsProgressive(features, refreshGen
      */
     const scaleNm = getCurrentNpfScaleNm();
     const combinedHeavyDecorationLoad = !!(siaMapAirspacesVisible && showRoadOverlayLayer && showHighVoltageLinesLayer);
-    const combinedHeavyLightweight = combinedHeavyDecorationLoad && Number.isFinite(scaleNm) && scaleNm >= 5;
+    /* v17.58 — C (essai) : noms et bordures dès 5 NM avec HT + Routes. */
+    const combinedHeavyLightweight = combinedHeavyDecorationLoad && Number.isFinite(scaleNm) && scaleNm > 5.000001;
     if (scaleNm >= SIA_DECORATION_LIGHTWEIGHT_SCALE_NM || combinedHeavyLightweight) {
         throwIfSiaRefreshObsolete(refreshGeneration);
         npfDiagSiaInteraction(
@@ -60897,6 +60976,12 @@ async function renderSiaZoomDependentDecorationsProgressive(features, refreshGen
             const error = new Error('Décorations SIA remplacées par une vue plus récente');
             error.name = SIA_REFRESH_ABORT_ERROR_NAME;
             throw error;
+        }
+        /* v17.58 — C : pas de calcul de nom pendant qu'un doigt est posé sur
+         * la carte (comme les bordures) ; reprise au relâchement. */
+        while (typeof isNpfMapFingerDown === 'function' && isNpfMapFingerDown()) {
+            await yieldSiaRefreshToMap(refreshGeneration);
+            phaseBudgetStartedAt = NPF_STARTUP_DIAGNOSTIC.now();
         }
         const feature = labelFeatures[index];
         const marker = addSiaAirspaceBoundaryLabel(

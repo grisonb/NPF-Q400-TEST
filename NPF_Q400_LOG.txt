@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 05/10/2026
-Version de travail actuelle : TEST v17.57
+Version de travail actuelle : TEST v17.58
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,9 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.58 — vecteur jaune au cap magnétique constant (superposé à la ligne
+  rouge) ; DIAG « Déclinaison » (source avion simulé / GPS) ; ESSAI :
+  bordures intérieures et noms des zones dès 5 NM même avec HT + Routes ;
 - v17.57 — cap constant du départ à l'arrivée (Go To, feux, Feu -> BASE,
   WP ; ligne rouge et vecteur sur ce chemin) ; communes allégées (champs
   utiles seulement, contours créés à la demande) ; couche Routes sur un
@@ -440,7 +443,13 @@ NON IMPLÉMENTÉ / OUVERT :
   10 et 5 NM ; fluidité du suivi GPS à 5 NM avec HT + Routes). Règle de
   travail du 02/10/2026 : à chaque version, seulement la non-régression
   rapide ; test complet une fois par jour, sur demande ;
-- v17.57 : À MESURER sur iPad (cap Go To constant en vol, ligne rouge
+- v17.58 : À MESURER sur iPad (vecteur et ligne rouge superposés à 0,5 NM ;
+  ESSAI bordures et noms à 5 NM avec HT + Routes : fluidité des gestes et
+  zooms à surveiller, À DÉCIDER après essai) ;
+- v17.57 : VALIDÉE sur iPad le 06/10/2026 (DIAG 08:31 : tout fonctionne,
+  49 images / s pendant les gestes, mémoire estimée ≈ 205 Mo). Écart
+  vecteur / ligne rouge ≈ 0,1 NM au repère 10' : TRAITÉ en v17.58. Ancien
+  statut : À MESURER sur iPad (cap Go To constant en vol, ligne rouge
   alignée avec le vecteur ; recherche / commune survolée / calque Communes ;
   aspect de la couche Routes ; ligne « Mémoire estimée » et page blanche
   sur iPad encombré) ;
@@ -597,46 +606,46 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.57
-Date : 05/10/2026
-Base : v17.56 (70a3249, VALIDÉE en vol le 05/10/2026)
+Version : TEST v17.58
+Date : 06/10/2026
+Base : v17.57 (760be31, VALIDÉE sur iPad le 06/10/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.57.txt
-2_Index_v17.57.txt
-3_Manifest_v17.57.txt
-4_Script_v17.57.txt
-5_SIA_v17.57.txt
-6_Style_v17.57.txt
-7_Sw_v17.57.txt
+1_Modifications_v17.58.txt
+2_Index_v17.58.txt
+3_Manifest_v17.58.txt
+4_Script_v17.58.txt
+5_SIA_v17.58.txt
+6_Style_v17.58.txt
+7_Sw_v17.58.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.57 (et texte « TEST v17.57 » de l'écran de
+- Index : APP_VERSION = v17.58 (et texte « TEST v17.58 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.57
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.57
-- Style : NPF_STYLE_BUILD_VERSION = v17.57
-- Service Worker : `sw-v17-57_cap_constant_memoire` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-57_cap_constant_memoire`, `npf-q400-test-app-data-v1`,
+- Manifest : start_url = ./index.html?appv=v17.58
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.58
+- Style : NPF_STYLE_BUILD_VERSION = v17.58
+- Service Worker : `sw-v17-58_vecteur_bordures_5nm` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-58_vecteur_bordures_5nm`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-15.69-radio1026-1-maplite1`
 - SIA_DATA_REVISION (SW / Index) : 15.69-radio1026-1-maplite1 (inchangée)
-- sia.js v17.57 : strictement identique à v17.52.
+- sia.js v17.58 : strictement identique à v17.52.
 - Images de lancement : icons/startup-ipad9-portrait.png (1620 × 2160) et
   icons/startup-ipad9-landscape.png (2160 × 1620).
 - Icônes des boutons (v17.48) : calculator-fms-icon, search-commune-icon,
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.57 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.58 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
 - `sia.js` et moteur tuiles (src/100) identiques à v17.52 ;
-- tests courts v17.57 : entrée v17.57 ;
+- tests courts v17.58 : entrée v17.58 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51 et v17.57 À MESURER ;
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51 et v17.58 À MESURER ;
   v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE ;
-  v17.56 VALIDÉE en vol.
+  v17.56 VALIDÉE en vol ; v17.57 VALIDÉE sur iPad.
 
 
 2. PROTOCOLE DE TRAVAIL À RESPECTER
@@ -2159,6 +2168,82 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
 
+VERSION TEST v17.58 — VECTEUR AU CAP MAGNÉTIQUE CONSTANT ; DIAG DÉCLINAISON ;
+ESSAI BORDURES ET NOMS DES ZONES DÈS 5 NM
+Date : 06/10/2026
+Base fonctionnelle : v17.57 (commit 760be31), VALIDÉE sur iPad (DIAG 06/10
+08:31 : 49 images / s pendant les gestes, mémoire estimée ≈ 205 Mo).
+
+A — VECTEUR JAUNE SUR LE MÊME CALCUL QUE LA LIGNE ROUGE
+- Hypothèse de Bastien CONFIRMÉE : en v17.57 le vecteur était une droite au
+  cap VRAI de l'instant (src/260:2470 et 2498), la ligne rouge suit le cap
+  MAGNÉTIQUE constant dont le cap vrai tourne avec la déclinaison. Écart au
+  repère 10' (300 kt, Marseille -> Montpellier / Toulouse / Bordeaux, cap
+  exact) : 0,10 à 0,14 NM.
+- Correction : vecteur et repères 2' / 5' / 10' = chemin parcouru en tenant
+  le cap magnétique actuel constant, déclinaison de l'avion au départ et au
+  bout du vecteur (src/030 computeNpfConstantMagneticTrack, ligne 606 ;
+  src/260:2471). 8 pas ; résultat gardé tant que position, cap et vitesse
+  ne changent pas ; déclinaison au bout du vecteur mémorisée par carré de
+  0,01°. Simulation et GPS réel.
+- Écart restant au repère 10' (cap exact) : 0,000 à 0,009 NM.
+
+B — DIAG « DÉCLINAISON »
+- Calcul JUSTE : pendant la simulation de 07:53-08:31 la déclinaison suivait
+  l'avion simulé (184 recalculs, un par NM) ; la simulation s'est arrêtée à
+  08:31:39 et l'export (08:31:49) montrait le dernier calcul, à la vraie
+  position GPS (Nîmes). Seul l'affichage prêtait à confusion.
+- Affichage : la ligne indique la source (« avion simulé » ou « avion,
+  GPS ») et, hors simulation, la dernière déclinaison utilisée en simulation
+  avec sa position et son heure (src/030:405-421, 459, ligne DIAG).
+
+C — ESSAI : BORDURES INTÉRIEURES ET NOMS DES ZONES DÈS 5 NM
+- Avant : bordures et noms à 5 NM et en dessous ; avec HT + Routes, à partir
+  de 2 NM seulement (rien à 5 NM). Voiles P / D à 5 NM et au-dessus. Donc à
+  5 NM avec HT + Routes : voiles seuls.
+- Après : bordures et noms à 5 NM et en dessous, avec ou sans HT + Routes
+  (src/350:1462, 2815, 2874). Voiles inchangés. À 5 NM pile : voiles P / D +
+  bordures + noms. Rien à 10 NM et au-dessus ; rien sur l'OACI hors ligne ;
+  rien si les zones sont masquées ; aspect et placement inchangés.
+- Fluidité : bordures dessinées par étapes de ≈ 8 ms (runSiaInnerBandsStep),
+  arrêtées tant qu'un doigt est posé ; noms calculés par tranches, et
+  désormais mis en pause tant qu'un doigt est posé (src/350:2932).
+  RISQUE : une étape de bordure calcule au moins une zone entière ; une très
+  grande zone peut prendre 200 à 400 ms sur iPad (déjà vu en v17.52, 442 ms
+  max) et ne s'interrompt pas en cours de zone. À 5 NM avec HT + Routes, plus
+  de zones à l'écran. À SURVEILLER (DIAG « runSiaInnerBandsStep »).
+
+TESTS COURTS (Chrome, bloquants, 06/10/2026) — tous OK
+- A (dans l'appli, simulation 300 kt au cap Go To exact depuis LFML) : écart
+  repère 10' / ligne rouge : LFMT 0,001 NM ; LFBO 0,000 à 0,002 NM ; LFBD
+  0,000 à 0,009 NM (≤ 0,02 demandé). GPS réel : repère 10' = calcul attendu
+  (écart 0), à 0,11 NM de l'ancienne droite au cap vrai.
+- B : en simulation, ligne « Déclinaison » à la position de l'avion simulé
+  (« avion simulé ») ; après retour au GPS : « avion, GPS » + dernière valeur
+  en simulation ; caps inchangés (Brest 152,8°, Paris 170,2°, Nice 232,2°).
+- C : à 5 NM avec HT + Routes, bordures 0 -> 128 et noms 0 -> 26 (carte en
+  ligne et Carte NPF-Q400 de test) ; voiles P / D identiques à toutes les
+  échelles ; 2 NM et 1 NM identiques ; rien sur l'OACI hors ligne ni zones
+  masquées ; contours présents pendant un glisser ; sélection au doigt OK.
+- cdp_map, cdp_nr (FdS / GAAR, GLR, caps des feux 329,3° / 029,2°),
+  cdp_btn : identiques à v17.57 ; retour sur l'avion 10 s ; dixième de degré
+  et saisie du cap de simulation ; mise à jour v17.57 -> v17.58, hors ligne,
+  caches de la pérenne intacts : OK.
+
+RETOUR ARRIÈRE
+- git revert du commit v17.58 : redonne v17.57.
+
+FICHIERS MODIFIÉS
+src/030, src/260, src/350, src/010 (version), donc script.js ; index.html,
+manifest.json, style.css, sw.js (version). sia.js et src/100 : inchangés.
+
+VERSION
+- App : v17.58
+- Service Worker : `sw-v17-58_vecteur_bordures_5nm`
+
+STATUT : À MESURER sur iPad.
+
+
 VERSION TEST v17.57 — CAP CONSTANT GO TO / FEUX ; COMMUNES ALLÉGÉES ; COUCHE
 ROUTES SUR UN SEUL CALQUE
 Date : 05/10/2026
@@ -2230,7 +2315,7 @@ SIA, HT ; tuiles non comptées) : avant ≈ 313 Mo (128 + 71 + 83 + 18 + 13 ;
 la ligne DIAG v17.56 affichait 242 Mo car elle ne comptait pas les contours
 et sous-estimait les communes) ; après ≈ 190 Mo (102,4 + 17 + 39 + 18 + 13).
 
-TESTS COURTS (Chrome, bloquants, 05/10/2026)
+TESTS COURTS v17.57 (Chrome, bloquants, 05/10/2026)
 - A, vol simulé au cap Go To affiché (au dixième) depuis LFML :
   - LFMT 55 NM : 276,5° -> 276,6° à 25 NM ; arrivée à 0,04 NM : OK ;
   - LFBO 168 NM : 271,7° puis 271,8° à 48 NM ; arrivée à 0,05 NM : OK ;

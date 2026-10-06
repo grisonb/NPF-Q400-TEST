@@ -1459,8 +1459,8 @@ function isSiaInnerBandDisplayAllowed() {
     if (!Array.isArray(siaRenderedAirspaceFeatures) || !siaRenderedAirspaceFeatures.length) return false;
     const scaleNm = getCurrentNpfScaleNm();
     if (!Number.isFinite(scaleNm) || scaleNm >= SIA_DECORATION_LIGHTWEIGHT_SCALE_NM) return false;
-    const combinedHeavyDecorationLoad = !!(siaMapAirspacesVisible && showRoadOverlayLayer && showHighVoltageLinesLayer);
-    if (combinedHeavyDecorationLoad && scaleNm >= 5) return false;
+    /* v17.58 — C (essai) : bordures dès 5 NM, même avec HT + Routes (avant :
+     * à partir de 2 NM avec HT + Routes). Toujours rien à 10 NM et au-dessus. */
     return true;
 }
 
@@ -2811,7 +2811,8 @@ function renderSiaZoomDependentDecorations(features) {
      */
     const scaleNm = getCurrentNpfScaleNm();
     const combinedHeavyDecorationLoad = !!(siaMapAirspacesVisible && showRoadOverlayLayer && showHighVoltageLinesLayer);
-    const combinedHeavyLightweight = combinedHeavyDecorationLoad && Number.isFinite(scaleNm) && scaleNm >= 5;
+    /* v17.58 — C (essai) : noms et bordures dès 5 NM avec HT + Routes. */
+    const combinedHeavyLightweight = combinedHeavyDecorationLoad && Number.isFinite(scaleNm) && scaleNm > 5.000001;
     if (scaleNm >= SIA_DECORATION_LIGHTWEIGHT_SCALE_NM || combinedHeavyLightweight) {
         npfDiagSiaInteraction(
             'SIA DÉCORATIONS',
@@ -2869,7 +2870,8 @@ async function renderSiaZoomDependentDecorationsProgressive(features, refreshGen
      */
     const scaleNm = getCurrentNpfScaleNm();
     const combinedHeavyDecorationLoad = !!(siaMapAirspacesVisible && showRoadOverlayLayer && showHighVoltageLinesLayer);
-    const combinedHeavyLightweight = combinedHeavyDecorationLoad && Number.isFinite(scaleNm) && scaleNm >= 5;
+    /* v17.58 — C (essai) : noms et bordures dès 5 NM avec HT + Routes. */
+    const combinedHeavyLightweight = combinedHeavyDecorationLoad && Number.isFinite(scaleNm) && scaleNm > 5.000001;
     if (scaleNm >= SIA_DECORATION_LIGHTWEIGHT_SCALE_NM || combinedHeavyLightweight) {
         throwIfSiaRefreshObsolete(refreshGeneration);
         npfDiagSiaInteraction(
@@ -2926,6 +2928,12 @@ async function renderSiaZoomDependentDecorationsProgressive(features, refreshGen
             const error = new Error('Décorations SIA remplacées par une vue plus récente');
             error.name = SIA_REFRESH_ABORT_ERROR_NAME;
             throw error;
+        }
+        /* v17.58 — C : pas de calcul de nom pendant qu'un doigt est posé sur
+         * la carte (comme les bordures) ; reprise au relâchement. */
+        while (typeof isNpfMapFingerDown === 'function' && isNpfMapFingerDown()) {
+            await yieldSiaRefreshToMap(refreshGeneration);
+            phaseBudgetStartedAt = NPF_STARTUP_DIAGNOSTIC.now();
         }
         const feature = labelFeatures[index];
         const marker = addSiaAirspaceBoundaryLabel(

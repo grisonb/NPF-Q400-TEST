@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.57';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.58';
 
 
 /*
@@ -3239,7 +3239,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.57 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.58 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }

@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v17-57_cap_constant_memoire';
-const APP_VERSION = 'v17.57';
+const SW_VERSION = 'sw-v17-58_vecteur_bordures_5nm';
+const APP_VERSION = 'v17.58';
 const SIA_DATA_REVISION = '15.69-radio1026-1-maplite1';
 const SIA_DATA_URL = './sia.js';
 /*
