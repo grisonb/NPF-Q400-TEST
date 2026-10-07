@@ -878,7 +878,7 @@ const NPF_SOFIA_NOTAMS_FILE_TIMEOUT_MS = 30000;
 const NPF_SOFIA_NOTAMS_POLL_MS = 3000;                  // suivi avec session (réponse légère)
 const NPF_SOFIA_NOTAMS_REREAD_MS = 60000;               // suivi sans session : relecture du fichier
 const NPF_SOFIA_NOTAMS_FOLLOW_MAX_MS = 5 * 60 * 1000;   // suivi : 5 min au plus
-const NPF_SOFIA_NOTAMS_RECHECK_MS = 15 * 60 * 1000;     // copie du jour : relecture au plus tous les 15 min
+const NPF_SOFIA_NOTAMS_RECHECK_MS = 10 * 60 * 1000;     // copie du jour : mise à jour légère au plus toutes les 10 min
 const NPF_SOFIA_NOTAMS_SEARCH_STEPS = 24;
 const NPF_SOFIA_NOTAMS_LAST_CHECK_KEY = 'npfSofiaNotamsLastCheckV1';
 const NPF_SOFIA_NOTAMS_ALERT_DAY_KEY = 'npfSofiaNotamsAlertDayV1';
@@ -1031,6 +1031,8 @@ async function syncNpfBfgNotamsFromNas(options = {}) {
 function scheduleNpfBfgNotamsBackgroundSync(delayMs = 0) {
     setTimeout(() => {
         if (document.visibilityState === 'hidden' || !navigator.onLine) return;
+        // v17.59 — copie du jour : mise à jour légère (jamais de recherche) ;
+        // sinon règle de la première connexion du jour.
         ensureNpfSofiaNotamsOfToday('premier plan').catch(() => {});
     }, Math.max(0, Number(delayMs) || 0));
 }
@@ -1503,7 +1505,7 @@ function handleNpfNotamsAuthorizationMissing() {
     if (getStoredNpfBfgBridgeCredentials()) {
         if (typeof npfBfgBridgeLastStatus !== 'undefined' && npfBfgBridgeLastStatus === 'refusé') {
             openBriefingDocsPasswordModal('notams', { allowWhenPaired: true, reason: 'bfg-refused' });
-            setNpfNotamsRefreshStatus('Pont BFG refusé : saisis le mot de passe de session NPF-Q400.', { error: true });
+            setNpfNotamsRefreshStatus('Connexion BFG refusée : saisis le mot de passe de session NPF-Q400.', { error: true });
             return;
         }
         setNpfNotamsRefreshStatus(getBriefingDocsBfgAuthorizationUnavailableMessage(), { error: true });
@@ -1653,6 +1655,49 @@ function showNpfSofiaNotamsAlertOncePerDay(payload) {
     showNpfInfoBanner(text.startsWith('⚠️') ? text : `⚠️ ${text}`, { kind: 'error', durationMs: 12000 });
 }
 
+/* Attente de la fin d'un geste sur la carte (doigt posé + 0,8 s), 30 s au plus. */
+async function waitNpfMapIdleForNotams(maxMs = 30000) {
+    const end = Date.now() + maxMs;
+    while (typeof isNpfMapGesturePauseActive === 'function' && isNpfMapGesturePauseActive() && Date.now() < end) {
+        await npfSofiaNotamsWait(250);
+    }
+}
+
+/* v17.59 — MISE À JOUR LÉGÈRE (copie du jour déjà sur l'iPad ; démarrage,
+ * retour au premier plan, retour du réseau) : au plus une lecture toutes les
+ * 10 min du fichier complet du NAS ; enregistré seulement s'il est plus récent
+ * que la copie de l'iPad (ex. passage de 10:00). Jamais de recherche SOFIA,
+ * jamais de mot de passe, rien entre 23h50 et 06h00. Échec réseau : silencieux,
+ * la copie de l'iPad est gardée. Lecture et enregistrement hors des gestes sur
+ * la carte. Le NAS n'a pas d'état léger public : le « contrôle » lit le fichier
+ * (conversion et écriture seulement s'il est plus récent). */
+async function lightUpdateNpfSofiaNotams(reason = '') {
+    if (!navigator.onLine || isNpfNasOffHours() || npfNotamsManualRefreshInProgress) return false;
+    let lastCheck = 0;
+    try { lastCheck = Number(localStorage.getItem(NPF_SOFIA_NOTAMS_LAST_CHECK_KEY) || 0); } catch (_) {}
+    if (Number.isFinite(lastCheck) && Date.now() - lastCheck < NPF_SOFIA_NOTAMS_RECHECK_MS) return false;
+    try { localStorage.setItem(NPF_SOFIA_NOTAMS_LAST_CHECK_KEY, String(Date.now())); } catch (_) {}
+
+    await waitNpfMapIdleForNotams();
+    let file;
+    try {
+        file = await fetchNpfSofiaNotamsAllFile();
+    } catch (error) {
+        console.info(`[NPF-Q400 NOTAM] Mise à jour légère (${reason}) impossible, copie de l'iPad gardée :`, error?.message || error);
+        return false;
+    }
+    if (!file.data) return false;
+    const local = await readNpfSofiaNotamsLocalPayload();
+    const localTs = Date.parse(String(local?.generatedAt || local?.publishedAt || ''));
+    if (isNpfSofiaNotamsPayload(local) && Number.isFinite(localTs) && Date.parse(String(file.data.generatedAt)) <= localTs) {
+        return false;                               // même fichier (ou plus ancien) : rien à faire
+    }
+    await waitNpfMapIdleForNotams();
+    const stored = await storeNpfSofiaNotamsIfNewer(file.data).catch(() => false);
+    if (stored) await refreshOpenNpfNotamsViews();
+    return stored;
+}
+
 /* Première connexion du jour (démarrage, retour au premier plan, retour du
  * réseau) : fichier complet du jour -> rien d'autre ; recherche en cours (BFG,
  * passage planifié…) -> attente de son résultat ; sinon recherche commune
@@ -1664,11 +1709,8 @@ async function ensureNpfSofiaNotamsOfToday(reason = '') {
         if (!navigator.onLine || isNpfNasOffHours() || npfNotamsManualRefreshInProgress) return false;
         const local = await readNpfSofiaNotamsLocalPayload().catch(() => null);
         const localToday = isNpfSofiaNotamsPayload(local) && isNpfPelicNotamsPayloadCurrentToday(local);
-        if (localToday) {
-            let lastCheck = 0;
-            try { lastCheck = Number(localStorage.getItem(NPF_SOFIA_NOTAMS_LAST_CHECK_KEY) || 0); } catch (_) {}
-            if (Number.isFinite(lastCheck) && Date.now() - lastCheck < NPF_SOFIA_NOTAMS_RECHECK_MS) return false;
-        }
+        // Copie du jour déjà sur l'iPad : mise à jour légère seulement (jamais de recherche).
+        if (localToday) return await lightUpdateNpfSofiaNotams(reason);
 
         let result;
         try {

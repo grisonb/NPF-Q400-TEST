@@ -2214,8 +2214,8 @@ NOTE-INTERFACE-NPF-Q400.txt (fichiers PHP installés lus en lecture seule).
 
 2. PREMIÈRE CONNEXION DU JOUR (ensureNpfSofiaNotamsOfToday)
 - Démarrage (même moment qu'avant : après le pont BFG silencieux), retour au
-  premier plan, retour du réseau. Copie du jour déjà là : relecture au plus
-  toutes les 15 min (rattrape le passage de 10:00), sinon aucun appel.
+  premier plan, retour du réseau. Copie du jour déjà là : mise à jour
+  légère au plus toutes les 10 min (voir plus bas), sinon aucun appel.
 - Fichier du jour sur le NAS -> enregistré. Recherche en cours (BFG, passage
   planifié…) -> attente de son résultat, AUCUN nouveau déclenchement. Sinon
   -> npf-docs-api.php?action=sofia-notams-request { mode: first-connection },
@@ -2225,6 +2225,19 @@ NOTE-INTERFACE-NPF-Q400.txt (fichiers PHP installés lus en lecture seule).
   les 3 s avec session (sofia-notams-status), sinon relecture du fichier
   toutes les 60 s. NAS éteint 23h50-06h00 (heure de Paris) : aucun appel.
 - Toujours pas du jour à la fin : bandeau, une fois par jour.
+- MISE À JOUR LÉGÈRE (ajoutée avant le push, demande du 07/10/2026) : copie
+  du jour déjà sur l'iPad -> au démarrage, au retour au premier plan et au
+  retour du réseau, si le dernier contrôle date de plus de 10 min, lecture du
+  fichier complet du NAS ; enregistré seulement s'il est plus récent que la
+  copie de l'iPad (ex. passage de 10:00). Jamais de recherche SOFIA, jamais
+  de mot de passe, rien entre 23h50 et 06h00, échec réseau silencieux (copie
+  gardée), lecture et enregistrement hors des gestes sur la carte
+  (isNpfMapGesturePauseActive). Le NAS n'offre pas d'état léger public : le
+  « contrôle » télécharge le fichier (~65 à 250 Ko), la conversion et
+  l'écriture n'ont lieu que s'il est plus récent. La fenêtre NOTAMS déjà
+  ouverte n'est pas redessinée (lecture en cours) : les nouveaux NOTAM
+  s'affichent à la prochaine ouverture. Copie absente ou pas du jour : règle
+  de la première connexion du jour (ci-dessus).
 
 3. BOUTON « Rafraîchir les NOTAM » (Gestion des Cartes, bouton Cartes)
 - Fenêtre de confirmation interne (Annuler / Continuer), puis recherche SOFIA
@@ -2255,8 +2268,8 @@ NOTE-INTERFACE-NPF-Q400.txt (fichiers PHP installés lus en lecture seule).
   (délai dépassé). Les NOTAM de cet iPad restent affichés. » ; « Hors ligne :
   recherche NOTAM impossible. Les NOTAM de cet iPad restent affichés. » ;
   « NAS éteint de 23h50 à 06h00 : recherche NOTAM impossible. Les NOTAM de
-  cet iPad restent affichés. » ; « Pont BFG refusé : saisis le mot de passe
-  de session NPF-Q400. » ; « Autorisation expirée : saisis à nouveau le mot
+  cet iPad restent affichés. » ; « Connexion BFG refusée : saisis le mot de
+  passe de session NPF-Q400. » ; « Autorisation expirée : saisis à nouveau le mot
   de passe NPF-Q400. » (avant : « … NPF. ») ; « Aucun NOTAM SOFIA sur cet
   iPad. » ; « Copie locale : NOTAM SOFIA du … — 114 terrain(s) couvert(s). »
 - Alerte (bandeau et fenêtre NOTAMS) : « ⚠️ NOTAM du JJ/MM à HHhMM : ce ne
