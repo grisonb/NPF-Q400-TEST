@@ -1197,7 +1197,8 @@ function initializeBriefingDocsUi() {
             if (targetType === 'notams') {
                 // v17.29 — aucun document FdS / GAAR : on relance le rafraîchissement NOTAM.
                 closeBriefingDocsPasswordModal();
-                refreshNpfNotamsFromNasManually().catch(error => console.warn('[NPF NOTAMS] Rafraîchissement impossible:', error));
+                // v17.59 — la recherche a déjà été confirmée avant le mot de passe.
+                refreshNpfNotamsFromNasManually({ confirmed: true }).catch(error => console.warn('[NPF NOTAMS] Rafraîchissement impossible:', error));
                 return;
             }
             if (passwordStatus) passwordStatus.textContent = `Téléchargement ${getBriefingDocLabel(targetType)} du jour…`;

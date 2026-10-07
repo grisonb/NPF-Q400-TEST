@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v17-58_vecteur_bordures_5nm';
-const APP_VERSION = 'v17.58';
+const SW_VERSION = 'sw-v17-59_notam_sofia';
+const APP_VERSION = 'v17.59';
 const SIA_DATA_REVISION = '15.69-radio1026-1-maplite1';
 const SIA_DATA_URL = './sia.js';
 /*
@@ -625,8 +625,11 @@ function isGlobalLinkNasRequest(url) {
 function isBriefingDocsNasRequest(url) {
     try {
         const parsed = new URL(url);
+        // v17.59 — fichier NOTAM SOFIA complet : même passage direct au réseau
+        // que npf-docs-api.php (pas de délai de 8 s, pas de cache du SW).
         return parsed.hostname === 'grisonb.synology.me'
-            && parsed.pathname === '/briefing-api/npf-docs-api.php';
+            && (parsed.pathname === '/briefing-api/npf-docs-api.php'
+                || parsed.pathname === '/briefing-api/get-sofia-notams-all.php');
     } catch (_) {
         return false;
     }

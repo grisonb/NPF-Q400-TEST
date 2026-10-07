@@ -666,7 +666,9 @@ async function initializeApp() {
         tryAuthorizeBriefingDocsFromBfgBridge({ silent: true })
             .then(async () => {
                 await refreshBriefingDocMapButtons().catch(() => {});
-                await syncNpfBfgNotamsFromNas({ silent: true }).catch(() => false);
+                // v17.59 — NOTAM SOFIA : première connexion du jour (lecture, attente
+                // d'une recherche en cours ou recherche commune), sans mot de passe.
+                await ensureNpfSofiaNotamsOfToday('démarrage').catch(() => false);
             })
             .catch(() => {});
     };

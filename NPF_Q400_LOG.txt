@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
-Mise à jour : 05/10/2026
-Version de travail actuelle : TEST v17.58
+Mise à jour : 07/10/2026
+Version de travail actuelle : TEST v17.59
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,12 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.59 — NOTAM SOFIA : source = fichier complet commun BFG / NPF-Q400
+  (get-sofia-notams-all.php, 114 terrains) à la place des NOTAM SDVFR, sans
+  secours SDVFR ; première connexion du jour (lecture, attente d'une
+  recherche en cours ou recherche commune) ; « Rafraîchir les NOTAM » =
+  recherche SOFIA complète après confirmation (≈ 2 min 30) ; alerte avec la
+  date et l'heure des NOTAM affichés s'ils ne sont pas du jour ;
 - v17.58 — vecteur jaune au cap magnétique constant (superposé à la ligne
   rouge) ; DIAG « Déclinaison » (source avion simulé / GPS) ; ESSAI :
   bordures intérieures et noms des zones dès 5 NM même avec HT + Routes ;
@@ -363,6 +369,10 @@ NON IMPLÉMENTÉ / OUVERT :
   cours, créneau occupé par BFG (section 17) ;
 - transfert des sélections NOTAM BFG -> NPF : NON IMPLÉMENTÉ, en attente
   (décision utilisateur du 23/09/2026, section 17) ;
+- v17.59 : NPF-Q400 ne lit plus les NOTAM SDVFR du NAS (notams-snapshot,
+  notams-refresh, notams-refresh-status ne sont plus appelés). Les tâches NAS
+  NOTAM de 06:30 / 09:45 (SDVFR) NE SONT PAS TOUCHÉES : À DÉSACTIVER après
+  validation de v17.59 sur iPad (décision Bastien, 07/10/2026) ;
 
 À MESURER :
 - v17.22 : MESURÉ. Les OUT z12->z10 restent fluides via RAM principal, mais z8/20 NM
@@ -443,6 +453,9 @@ NON IMPLÉMENTÉ / OUVERT :
   10 et 5 NM ; fluidité du suivi GPS à 5 NM avec HT + Routes). Règle de
   travail du 02/10/2026 : à chaque version, seulement la non-régression
   rapide ; test complet une fois par jour, sur demande ;
+- v17.59 : À MESURER sur iPad (NOTAM SOFIA à la première connexion du jour,
+  bouton « Rafraîchir les NOTAM » ≈ 2 min 30, alerte « pas du jour »,
+  hors ligne) ;
 - v17.58 : À MESURER sur iPad (vecteur et ligne rouge superposés à 0,5 NM ;
   ESSAI bordures et noms à 5 NM avec HT + Routes : fluidité des gestes et
   zooms à surveiller, À DÉCIDER après essai) ;
@@ -606,44 +619,44 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.58
-Date : 06/10/2026
-Base : v17.57 (760be31, VALIDÉE sur iPad le 06/10/2026)
+Version : TEST v17.59
+Date : 07/10/2026
+Base : v17.58 (6757530, À MESURER sur iPad)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.58.txt
-2_Index_v17.58.txt
-3_Manifest_v17.58.txt
-4_Script_v17.58.txt
-5_SIA_v17.58.txt
-6_Style_v17.58.txt
-7_Sw_v17.58.txt
+1_Modifications_v17.59.txt
+2_Index_v17.59.txt
+3_Manifest_v17.59.txt
+4_Script_v17.59.txt
+5_SIA_v17.59.txt
+6_Style_v17.59.txt
+7_Sw_v17.59.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.58 (et texte « TEST v17.58 » de l'écran de
+- Index : APP_VERSION = v17.59 (et texte « TEST v17.59 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.58
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.58
-- Style : NPF_STYLE_BUILD_VERSION = v17.58
-- Service Worker : `sw-v17-58_vecteur_bordures_5nm` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-58_vecteur_bordures_5nm`, `npf-q400-test-app-data-v1`,
+- Manifest : start_url = ./index.html?appv=v17.59
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.59
+- Style : NPF_STYLE_BUILD_VERSION = v17.59
+- Service Worker : `sw-v17-59_notam_sofia` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-59_notam_sofia`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-15.69-radio1026-1-maplite1`
 - SIA_DATA_REVISION (SW / Index) : 15.69-radio1026-1-maplite1 (inchangée)
-- sia.js v17.58 : strictement identique à v17.52.
+- sia.js v17.59 : strictement identique à v17.52.
 - Images de lancement : icons/startup-ipad9-portrait.png (1620 × 2160) et
   icons/startup-ipad9-landscape.png (2160 × 1620).
 - Icônes des boutons (v17.48) : calculator-fms-icon, search-commune-icon,
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.58 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.59 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
 - `sia.js` et moteur tuiles (src/100) identiques à v17.52 ;
-- tests courts v17.58 : entrée v17.58 ;
+- tests courts v17.59 : entrée v17.59 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51 et v17.58 À MESURER ;
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 et v17.59 À MESURER ;
   v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE ;
   v17.56 VALIDÉE en vol ; v17.57 VALIDÉE sur iPad.
 
@@ -1811,6 +1824,11 @@ POINT D — Défaut constaté : `calculatorModal is not defined`
 
 17. CHAÎNE NOTAM CÔTÉ NAS — RÉSUMÉ (état au 23/09/2026)
 -------------------------------------------------------
+v17.59 (07/10/2026) : cette chaîne SDVFR N'EST PLUS LUE par NPF-Q400 TEST. La
+source est le fichier SOFIA complet commun BFG / NPF-Q400 (voir l'entrée
+v17.59 de l'historique et ~/nas-a-copier/a-installer-sofia-114-2026-10-06/
+NOTE-INTERFACE-NPF-Q400.txt). Le résumé ci-dessous reste valable pour la
+pérenne et pour l'historique.
 Source : fichiers installés sur le NAS, copiés par l'utilisateur dans
 ~/nas-a-copier/installes/ (npf-docs-api.php 66 052 octets,
 notams-sdvfr-shared.php 46 693 octets, notams-auto-refresh.php 4 466 octets),
@@ -2167,6 +2185,130 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.59 — NOTAM SOFIA COMMUNS BFG / NPF-Q400 (ÉTAPE 2)
+Date : 07/10/2026
+Base fonctionnelle : v17.58 (commit 6757530), À MESURER sur iPad.
+Contexte : étape 1 (NAS + programme VPS bfg-sofia-notams 1.1.0, BFG TEST
+v5.44) installée et validée le 07/10/2026. Une seule recherche SOFIA pour 114
+terrains (27 pélicandromes BFG d'abord, ~50 s ; fichier complet ~2 min 30),
+06:30, 10:00 et à la demande ; NOTAM « IFR seulement » écartés par le VPS.
+Interface : ~/nas-a-copier/a-installer-sofia-114-2026-10-06/
+NOTE-INTERFACE-NPF-Q400.txt (fichiers PHP installés lus en lecture seule).
+
+1. SOURCE NOTAM (src/210)
+- Lecture de get-sofia-notams-all.php (public, schéma bfg-sofia-notams-all-v1)
+  à la place de npf-docs-api.php?action=notams-snapshot (SDVFR). Aucun secours
+  SDVFR. notams-refresh / notams-refresh-status ne sont plus appelés.
+- Conversion UNE fois à la réception (buildNpfNotamsPayloadFromSofiaAll) vers
+  le format bfgNpfNotamsV1 déjà affiché : même texte que celui que fabriquait
+  le NAS depuis SDVFR (en-tête terrain, numéro, ligne Q, A) B) C) E)). Même
+  fenêtre NOTAMS, mêmes 32 filtres par mots-clés (mots entiers, sans accents
+  ni majuscules, NOTAM masqué en entier), mêmes sélections locales (id +
+  signature). sourceKind 'SOFIA', couverture = 114 terrains du fichier.
+  Une ancienne copie SDVFR est remplacée dès le premier fichier SOFIA.
+- Rien ne tourne à chaque image de la carte : conversion à la réception,
+  découpage par terrain à l'ouverture de la fenêtre NOTAMS (comme avant).
+- sw.js : get-sofia-notams-all.php passe directement au réseau, comme
+  npf-docs-api.php (pas de délai SW de 8 s, pas de cache SW).
+
+2. PREMIÈRE CONNEXION DU JOUR (ensureNpfSofiaNotamsOfToday)
+- Démarrage (même moment qu'avant : après le pont BFG silencieux), retour au
+  premier plan, retour du réseau. Copie du jour déjà là : relecture au plus
+  toutes les 15 min (rattrape le passage de 10:00), sinon aucun appel.
+- Fichier du jour sur le NAS -> enregistré. Recherche en cours (BFG, passage
+  planifié…) -> attente de son résultat, AUCUN nouveau déclenchement. Sinon
+  -> npf-docs-api.php?action=sofia-notams-request { mode: first-connection },
+  seulement avec une session obtenue sans mot de passe (session en cours ou
+  pont BFG = BFG TEST connecté). Jamais de fenêtre mot de passe au démarrage.
+- Suivi : seulement pendant une recherche, 5 min au plus ; état léger toutes
+  les 3 s avec session (sofia-notams-status), sinon relecture du fichier
+  toutes les 60 s. NAS éteint 23h50-06h00 (heure de Paris) : aucun appel.
+- Toujours pas du jour à la fin : bandeau, une fois par jour.
+
+3. BOUTON « Rafraîchir les NOTAM » (Gestion des Cartes, bouton Cartes)
+- Fenêtre de confirmation interne (Annuler / Continuer), puis recherche SOFIA
+  complète { mode: manual } ; progression « Recherche SOFIA : k/24 ».
+- Autorisation : session ou pont BFG silencieux ; BFG associé mais refusé
+  -> mot de passe de session (règle FdS / GAAR v17.40) ; sans BFG -> mot de
+  passe ; après le mot de passe, la recherche part sans seconde confirmation.
+
+4. MÉTÉO
+- NPF-Q400 n'affiche aucun METAR / TAF (vérifié dans src/ et index.html) :
+  rien ne dépendait du chargement NOTAM SDVFR, rien à garder ni à changer.
+
+5. TEXTES (affichés au pilote)
+- Section NOTAM de Gestion des Cartes : « NOTAM SOFIA des 114 terrains
+  NPF-Q400 (recherches automatiques à 06h30 et 10h00, et à la première
+  connexion du jour), stockés sur cet appareil pour une utilisation hors
+  ligne. »
+- Confirmation : titre « Confirmation », « La recherche complète des NOTAM
+  sur SOFIA prend environ 2 min 30. », boutons « Annuler » / « Continuer ».
+- État : « Recherche des NOTAM sur SOFIA : demande envoyée… » ; « Recherche
+  des NOTAM sur SOFIA en cours (environ 2 min 30)… » ; « Recherche SOFIA :
+  k/24 » ; « NOTAM SOFIA du JJ/MM/AAAA à HH:MM : enregistrés sur cet iPad
+  pour le hors ligne. » ; « Recherche des NOTAM sur SOFIA impossible : … .
+  Les NOTAM de cet iPad restent affichés. » ; « Connexion perdue : suivi de
+  la recherche interrompu. Les NOTAM de cet iPad restent affichés. » ; « La
+  recherche n’a pas abouti en 5 min. Les NOTAM de cet iPad restent
+  affichés ; réessaie dans quelques minutes. » ; « Le NAS ne répond pas
+  (délai dépassé). Les NOTAM de cet iPad restent affichés. » ; « Hors ligne :
+  recherche NOTAM impossible. Les NOTAM de cet iPad restent affichés. » ;
+  « NAS éteint de 23h50 à 06h00 : recherche NOTAM impossible. Les NOTAM de
+  cet iPad restent affichés. » ; « Pont BFG refusé : saisis le mot de passe
+  de session NPF-Q400. » ; « Autorisation expirée : saisis à nouveau le mot
+  de passe NPF-Q400. » (avant : « … NPF. ») ; « Aucun NOTAM SOFIA sur cet
+  iPad. » ; « Copie locale : NOTAM SOFIA du … — 114 terrain(s) couvert(s). »
+- Alerte (bandeau et fenêtre NOTAMS) : « ⚠️ NOTAM du JJ/MM à HHhMM : ce ne
+  sont pas les NOTAM du jour » (avant : « NOTAM du JJ/MM — pas à jour ») ;
+  bandeau : « ⚠️ Aucun NOTAM SOFIA sur cet iPad. » s'il n'y en a aucun.
+- Fenêtre NOTAMS : source « NOTAM SOFIA du JJ/MM/AAAA à HH:MM » (avant
+  « Source locale BFG ») ; « Lecture des NOTAM de cet iPad… » (avant
+  « Chargement des NOTAM locaux… ») ; sans copie : « Aucun NOTAM SOFIA sur
+  cet iPad ni sur le NAS. Utiliser « Rafraîchir les NOTAM » (bouton
+  Cartes). » ou « Aucun NOTAM SOFIA sur cet iPad (hors ligne). » (avant :
+  « … snapshot NOTAM BFG … NPF. »).
+- Erreurs internes : « Base NOTAM NPF-Q400 indisponible / bloquée ».
+
+6. TESTS (Chrome, 07/10/2026) — NAS simulé (fichiers PHP SOFIA installés et
+   npf-docs-api.php de test), programme VPS 1.1.0 réel, faux SOFIA ; vrai NAS
+   introuvable pour Chrome (DNS) ; aucune requête au vrai NAS.
+- outils_tests_NPF-Q400-TEST/cdp_sofia59.js : 33/33 OK — NAS sans fichier ni
+  session : aucune recherche, alerte « Aucun NOTAM SOFIA » ; fichier d'hier +
+  session : 1 seule demande first-connection, NOTAM du jour en 53 s, 114
+  terrains, suivi arrêté ensuite ; copie du jour récente : 0 appel ; passage
+  planifié en cours : 0 demande, résultat en 50 s ; bouton : confirmation
+  exacte, Annuler ne lance rien, Continuer : 1 demande, 55 s, progression
+  24/24 ; sans session : fenêtre « Accès NOTAM », puis recherche sans seconde
+  confirmation ; NOTAM d'hier : alerte avec date et heure, jamais « du jour »,
+  même affichage (ligne Q, A), validité, 32 filtres) ; hors ligne : NOTAM
+  lisibles avec leur date, bouton sans requête ; NAS injoignable : pas de
+  plantage, message, copie intacte ; plage 23h50-06h00 ; 0 exception.
+- Non-régression : cdp_map, cdp_nr (FdS / GAAR, GLR), cdp_btn (popup terrain
+  : bouton NOTAMS présent), cdp_simdbg, cdp_ret55 (retour sur l'avion,
+  caps) : identiques à v17.58 hors heure / date (seule différence attendue :
+  plus d'appel notams-snapshot au retour du réseau) ; mise à jour v17.58 ->
+  v17.59, hors ligne (carte, échelle 50 NM), caches de la pérenne intacts,
+  aucun nouveau cache.
+
+RETOUR ARRIÈRE
+- git revert du commit v17.59 : redonne v17.58 (lecture SDVFR, qui ne reçoit
+  plus rien depuis le 03/10/2026).
+
+FICHIERS MODIFIÉS
+src/210 (NOTAM), src/060 (démarrage), src/170 (retour du mot de passe),
+src/010 (version), donc script.js ; index.html (texte NOTAM, version) ;
+style.css (fenêtre de confirmation, version) ; sw.js (passage direct du
+fichier SOFIA, version) ; manifest.json (version). sia.js et src/100
+(moteur tuiles) : inchangés.
+
+VERSION
+- App : v17.59
+- Service Worker : `sw-v17-59_notam_sofia`
+
+STATUT : À MESURER sur iPad. Tâches NAS NOTAM 06:30 / 09:45 (SDVFR) : NON
+TOUCHÉES, à désactiver après validation.
+
 
 VERSION TEST v17.58 — VECTEUR AU CAP MAGNÉTIQUE CONSTANT ; DIAG DÉCLINAISON ;
 ESSAI BORDURES ET NOMS DES ZONES DÈS 5 NM

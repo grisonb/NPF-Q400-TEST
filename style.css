@@ -1,4 +1,4 @@
-/* NPF_STYLE_BUILD_VERSION: v17.58 */
+/* NPF_STYLE_BUILD_VERSION: v17.59 */
 /* v14.83 — nettoyage des références techniques et limitation des cartouches routiers. */
 /* v14.81 — recherche phonétique nationale élargie aux fragments sur deux lettres. */
 /* v14.80 — Brive conservé uniquement sous LFSL. */
@@ -18342,4 +18342,58 @@ body.npf-calculator-modal-open {
 .airport-popup .popup-pdf-buttons + div,
 .airport-popup .popup-notams-buttons + .popup-goto-buttons {
     margin-top: 22px !important;
+}
+
+/* v17.59 — fenêtre de confirmation interne (bouton « Rafraîchir les NOTAM »). */
+.npf-confirm-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 2147483640;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    padding: 16px;
+    background: rgba(6,24,43,.68);
+}
+.npf-confirm-card {
+    width: min(92vw, 420px);
+    box-sizing: border-box;
+    padding: 18px 18px 16px;
+    border: 1px solid #9db7d7;
+    border-radius: 12px;
+    background: #ffffff;
+    color: #102a43;
+    box-shadow: 0 12px 36px rgba(0,0,0,.32);
+}
+.npf-confirm-title {
+    font-size: 18px;
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+.npf-confirm-message {
+    font-size: 16px;
+    line-height: 1.4;
+    margin-bottom: 16px;
+}
+.npf-confirm-actions {
+    display: flex;
+    gap: 10px;
+}
+.npf-confirm-actions button {
+    flex: 1 1 0;
+    min-height: 44px;
+    border: 0;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+}
+.npf-confirm-cancel {
+    background: #e2e8f0;
+    color: #102a43;
+}
+.npf-confirm-ok {
+    background: var(--primary-color);
+    color: #ffffff;
 }
