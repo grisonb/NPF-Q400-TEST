@@ -37817,6 +37817,8 @@ function setNpfNotamsRefreshStatus(message, { error = false, success = false } =
     status.classList.toggle('notams-refresh-status-success', Boolean(success));
 }
 
+let npfNotamsRefreshLastPercent = 0;
+
 function setNpfNotamsRefreshProgress(stepIndex, stepCount) {
     const container = document.getElementById('notams-refresh-progress');
     const bar = document.getElementById('notams-refresh-progress-bar');
@@ -37825,13 +37827,18 @@ function setNpfNotamsRefreshProgress(stepIndex, stepCount) {
     const count = Number(stepCount) || 0;
     const index = Math.min(Number(stepIndex) || 0, count);
     if (count < 1 || index < 1) {
+        npfNotamsRefreshLastPercent = 0;
         container.style.display = 'none';
         return;
     }
     container.style.display = '';
-    if (bar) bar.style.width = `${Math.round((index / count) * 100)}%`;
-    // v17.60 — pourcentage (« 12/24 » se lisait comme un nombre de terrains).
-    if (text) text.textContent = `Recherche SOFIA : ${Math.round((index / count) * 100)} %`;
+    // v17.60 — pourcentage (« 12/24 » se lisait comme un nombre de terrains). En cas de
+    // secours du VPS (demandes jour par jour), le total augmente : l'affichage ne recule
+    // jamais, il attend que l'avancement réel dépasse la dernière valeur affichée.
+    const percent = Math.max(npfNotamsRefreshLastPercent, Math.min(100, Math.round((index / count) * 100)));
+    npfNotamsRefreshLastPercent = percent;
+    if (bar) bar.style.width = `${percent}%`;
+    if (text) text.textContent = `Recherche SOFIA : ${percent} %`;
 }
 
 /* Alerte « pas du jour » : date et heure des NOTAM affichés. */
@@ -38139,7 +38146,7 @@ async function refreshNpfNotamsFromNasManually(options = {}) {
         return;
     }
     if (options.confirmed !== true) {
-        const confirmed = await npfConfirmInApp('La recherche complète des NOTAM sur SOFIA prend environ 2 min 30.');
+        const confirmed = await npfConfirmInApp('La recherche complète des NOTAM sur SOFIA prend environ 1 minute.');
         if (!confirmed) return;
     }
 
@@ -38162,7 +38169,7 @@ async function refreshNpfNotamsFromNasManually(options = {}) {
             handleNpfNotamsAuthorizationMissing();
             return;
         }
-        setNpfNotamsRefreshStatus('Recherche des NOTAM sur SOFIA en cours (environ 2 min 30)…');
+        setNpfNotamsRefreshStatus('Recherche des NOTAM sur SOFIA en cours (environ 1 minute)…');
         const outcome = await followNpfSofiaNotamsSearch(session, answer, (step, total) => {
             setNpfNotamsRefreshProgress(step, total || NPF_SOFIA_NOTAMS_SEARCH_STEPS);
         });

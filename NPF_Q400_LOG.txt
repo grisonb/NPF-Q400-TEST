@@ -179,7 +179,8 @@ IMPLÉMENTÉ / INTÉGRÉ :
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
 - v17.60 — progression de « Rafraîchir les NOTAM » en pourcentage
-  (« Recherche SOFIA : 50 % ») au lieu de « 12/24 » ;
+  (« Recherche SOFIA : 50 % ») au lieu de « 12/24 », sans recul ; temps
+  annoncé « environ 1 minute » (programme VPS 1.2.0, demandes de 96 h) ;
 - v17.59 — NOTAM SOFIA : source = fichier complet commun BFG / NPF-Q400
   (get-sofia-notams-all.php, 114 terrains) à la place des NOTAM SDVFR, sans
   secours SDVFR ; première connexion du jour (lecture, attente d'une
@@ -456,7 +457,10 @@ NON IMPLÉMENTÉ / OUVERT :
   travail du 02/10/2026 : à chaque version, seulement la non-régression
   rapide ; test complet une fois par jour, sur demande ;
 - Recherche SOFIA en demandes de 96 h (programme VPS) : MESURÉ le
-  07/10/2026 en lecture seule (voir entrée v17.60), À DÉCIDER (Bastien) ;
+  07/10/2026 en lecture seule (voir entrée v17.60) ; DÉCIDÉ par Bastien le
+  07/10/2026 : programme VPS bfg-sofia-notams 1.2.0 PRÊT, NON INSTALLÉ
+  (~/vps-a-copier/). v17.60 à pousser APRÈS l'installation de la 1.2.0
+  (elle annonce « environ 1 minute ») ;
 - v17.60 : À MESURER sur iPad (pourcentage pendant « Rafraîchir les NOTAM ») ;
 - v17.59 : mode avion VALIDÉ sur iPad le 07/10/2026 (NOTAM lisibles avec leur
   date) ; reste À MESURER sur iPad (NOTAM SOFIA à la première connexion du jour,
@@ -2220,11 +2224,34 @@ avion VALIDÉ sur iPad : NOTAM lisibles avec leur date).
 - Conséquence possible : programme VPS 1.2.0 (BFG ≈ 12 s, complet ≈ 45 s au
   lieu de ≈ 50 s / ≈ 2 min 30). À DÉCIDER. BFG TEST affiche « jour d/8 »
   pendant sa recherche : texte à revoir dans BFG si les demandes changent.
+- DÉCIDÉ (Bastien, 07/10/2026) : passage en demandes de 96 h. Programme VPS
+  bfg-sofia-notams 1.2.0 préparé (~/vps-a-copier/bfg-sofia-notams-1.2.0.tar.gz,
+  scripts installer- / retour-arriere-bfg-sofia-notams-1.2.0.ps1), NON
+  INSTALLÉ. Même fenêtre exacte, 2 demandes de 96 h par groupe, contrôle de
+  chaque réponse (nombre annoncé = reçu, un terrain par section, fin
+  attendue), secours jour par jour, nombre réel d'étapes envoyé au NAS (aucun
+  fichier NAS à changer : il accepte jusqu'à 99 étapes). Essai réel en
+  lecture seule (07/10/2026 17:00, l'une juste après l'autre) : 1.2.0 6
+  demandes, BFG 12,6 s, complet 45,8 s ; 1.1.0 24 demandes, BFG 43,7 s,
+  complet 157,3 s ; 830 NOTAM des deux côtés, aucun écart sur les 114
+  terrains, 271 NOTAM IFR écartés des deux côtés, aucune réponse tronquée.
+  BFG TEST : changements à faire listés dans ~/vps-a-copier/
+  A-FAIRE-BFG-TEST-pour-bfg-sofia-notams-1.2.0.txt (session BFG TEST).
+
+3. TEMPS ANNONCÉ (même v17.60, demande du 07/10/2026)
+- Fenêtre de confirmation : « La recherche complète des NOTAM sur SOFIA
+  prend environ 1 minute. » (avant : « environ 2 min 30 ») ; état : « Recherche
+  des NOTAM sur SOFIA en cours (environ 1 minute)… ». Justes seulement avec la
+  1.2.0 installée : v17.60 poussée après l'installation.
+- Pourcentage sans recul : en cas de secours, le VPS augmente le nombre de
+  demandes ; l'affichage garde la plus haute valeur déjà montrée.
 
 TESTS (Chrome, NAS simulé, aucune requête au vrai NAS)
-- cdp_sofia60.js (= cdp_sofia59 + pourcentage) ; non-régression rapide
-  (cdp_map, cdp_nr, cdp_btn, cdp_simdbg, cdp_ret55) ; mise à jour v17.59 ->
-  v17.60 : voir compte rendu de la session.
+- cdp_sofia60.js avec le programme VPS 1.2.0 réel et un faux SOFIA : mode
+  normal (6 demandes, 33 / 50 / 67 / 83 / 100 %) et secours (toutes les
+  demandes de 96 h refusées : 30 demandes, 12 « Secours » au journal VPS,
+  pourcentage sans recul jusqu'à 100 %) ; non-régression rapide (cdp_map,
+  cdp_nr, cdp_btn, cdp_simdbg, cdp_ret55) ; mise à jour v17.59 -> v17.60.
 
 FICHIERS MODIFIÉS
 src/210, src/010 (version), donc script.js ; index.html, manifest.json,
