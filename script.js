@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.59';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.60';
 
 
 /*
@@ -3239,7 +3239,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.59 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.60 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -37830,7 +37830,8 @@ function setNpfNotamsRefreshProgress(stepIndex, stepCount) {
     }
     container.style.display = '';
     if (bar) bar.style.width = `${Math.round((index / count) * 100)}%`;
-    if (text) text.textContent = `Recherche SOFIA : ${index}/${count}`;
+    // v17.60 — pourcentage (« 12/24 » se lisait comme un nombre de terrains).
+    if (text) text.textContent = `Recherche SOFIA : ${Math.round((index / count) * 100)} %`;
 }
 
 /* Alerte « pas du jour » : date et heure des NOTAM affichés. */
@@ -37974,7 +37975,11 @@ async function followNpfSofiaNotamsSearch(session, initial, onProgress = null) {
             }
             const full = state.full && typeof state.full === 'object' ? state.full : {};
             if (typeof onProgress === 'function') {
-                onProgress(Number(full.step) > 0 ? Number(full.step) : Number(state.step) || 0);
+                // v17.60 — avancement en demandes SOFIA : partie BFG (premier groupe)
+                // puis fichier complet ; total annoncé par le NAS (3 groupes sinon).
+                const total = Number(full.steps) > 0 ? Number(full.steps)
+                    : (Number(state.steps) > 0 ? Number(state.steps) * 3 : NPF_SOFIA_NOTAMS_SEARCH_STEPS);
+                onProgress(Number(full.step) > 0 ? Number(full.step) : Number(state.step) || 0, total);
             }
             if (full.status === 'success') {
                 await fetchAndStoreNpfSofiaNotams();
@@ -38158,8 +38163,8 @@ async function refreshNpfNotamsFromNasManually(options = {}) {
             return;
         }
         setNpfNotamsRefreshStatus('Recherche des NOTAM sur SOFIA en cours (environ 2 min 30)…');
-        const outcome = await followNpfSofiaNotamsSearch(session, answer, step => {
-            setNpfNotamsRefreshProgress(step, NPF_SOFIA_NOTAMS_SEARCH_STEPS);
+        const outcome = await followNpfSofiaNotamsSearch(session, answer, (step, total) => {
+            setNpfNotamsRefreshProgress(step, total || NPF_SOFIA_NOTAMS_SEARCH_STEPS);
         });
         setNpfNotamsRefreshProgress(0, 0);
         if (outcome.kind === 'ready') {

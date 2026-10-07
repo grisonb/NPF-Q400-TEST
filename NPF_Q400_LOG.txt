@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 07/10/2026
-Version de travail actuelle : TEST v17.59
+Version de travail actuelle : TEST v17.60
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,8 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.60 — progression de « Rafraîchir les NOTAM » en pourcentage
+  (« Recherche SOFIA : 50 % ») au lieu de « 12/24 » ;
 - v17.59 — NOTAM SOFIA : source = fichier complet commun BFG / NPF-Q400
   (get-sofia-notams-all.php, 114 terrains) à la place des NOTAM SDVFR, sans
   secours SDVFR ; première connexion du jour (lecture, attente d'une
@@ -453,7 +455,11 @@ NON IMPLÉMENTÉ / OUVERT :
   10 et 5 NM ; fluidité du suivi GPS à 5 NM avec HT + Routes). Règle de
   travail du 02/10/2026 : à chaque version, seulement la non-régression
   rapide ; test complet une fois par jour, sur demande ;
-- v17.59 : À MESURER sur iPad (NOTAM SOFIA à la première connexion du jour,
+- Recherche SOFIA en demandes de 96 h (programme VPS) : MESURÉ le
+  07/10/2026 en lecture seule (voir entrée v17.60), À DÉCIDER (Bastien) ;
+- v17.60 : À MESURER sur iPad (pourcentage pendant « Rafraîchir les NOTAM ») ;
+- v17.59 : mode avion VALIDÉ sur iPad le 07/10/2026 (NOTAM lisibles avec leur
+  date) ; reste À MESURER sur iPad (NOTAM SOFIA à la première connexion du jour,
   bouton « Rafraîchir les NOTAM » ≈ 2 min 30, alerte « pas du jour »,
   hors ligne) ;
 - v17.58 : À MESURER sur iPad (vecteur et ligne rouge superposés à 0,5 NM ;
@@ -619,44 +625,44 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.59
+Version : TEST v17.60
 Date : 07/10/2026
-Base : v17.58 (6757530, À MESURER sur iPad)
+Base : v17.59 (b7488eb, poussée le 07/10/2026, en cours de mesure sur iPad)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.59.txt
-2_Index_v17.59.txt
-3_Manifest_v17.59.txt
-4_Script_v17.59.txt
-5_SIA_v17.59.txt
-6_Style_v17.59.txt
-7_Sw_v17.59.txt
+1_Modifications_v17.60.txt
+2_Index_v17.60.txt
+3_Manifest_v17.60.txt
+4_Script_v17.60.txt
+5_SIA_v17.60.txt
+6_Style_v17.60.txt
+7_Sw_v17.60.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.59 (et texte « TEST v17.59 » de l'écran de
+- Index : APP_VERSION = v17.60 (et texte « TEST v17.60 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.59
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.59
-- Style : NPF_STYLE_BUILD_VERSION = v17.59
-- Service Worker : `sw-v17-59_notam_sofia` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-59_notam_sofia`, `npf-q400-test-app-data-v1`,
+- Manifest : start_url = ./index.html?appv=v17.60
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.60
+- Style : NPF_STYLE_BUILD_VERSION = v17.60
+- Service Worker : `sw-v17-60_notam_pourcentage` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-60_notam_pourcentage`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-15.69-radio1026-1-maplite1`
 - SIA_DATA_REVISION (SW / Index) : 15.69-radio1026-1-maplite1 (inchangée)
-- sia.js v17.59 : strictement identique à v17.52.
+- sia.js v17.60 : strictement identique à v17.52.
 - Images de lancement : icons/startup-ipad9-portrait.png (1620 × 2160) et
   icons/startup-ipad9-landscape.png (2160 × 1620).
 - Icônes des boutons (v17.48) : calculator-fms-icon, search-commune-icon,
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.59 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.60 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
 - `sia.js` et moteur tuiles (src/100) identiques à v17.52 ;
-- tests courts v17.59 : entrée v17.59 ;
+- tests courts v17.60 : entrée v17.60 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 et v17.59 À MESURER ;
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.60 À MESURER ;
   v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE ;
   v17.56 VALIDÉE en vol ; v17.57 VALIDÉE sur iPad.
 
@@ -2185,6 +2191,51 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.60 — PROGRESSION NOTAM EN POURCENTAGE
+Date : 07/10/2026
+Base fonctionnelle : v17.59 (commit b7488eb, poussée le 07/10/2026 ; mode
+avion VALIDÉ sur iPad : NOTAM lisibles avec leur date).
+
+1. POURCENTAGE (demande de Bastien, 07/10/2026)
+- « Recherche SOFIA : 12/24 » se lisait comme « 12 terrains sur 24 ». Le 24
+  est le nombre de demandes envoyées à SOFIA (3 groupes de 38 terrains × 8
+  jours). Nouveau texte : « Recherche SOFIA : 50 % » (src/210,
+  setNpfNotamsRefreshProgress). Barre inchangée.
+- Le total vient du NAS (full.steps ; pendant la partie BFG : steps × 3 ;
+  sinon 24) : le pourcentage reste juste si le nombre de demandes change.
+
+2. MESURE SOFIA EN DEMANDES DE 96 H (lecture seule, 07/10/2026 16:33, aucun
+   dépôt, rien d'installé ; ~/mesure-sofia/mesure_96h.py et cible_96h.py)
+- Le formulaire SOFIA limite la durée d'une demande à 96 h (« HHMM entre
+  0001 et 9600 ») : 8 jours = 2 demandes par groupe, 6 au lieu de 24.
+- SOFIA accepte (HTTP 200, 6/6). Durées réelles : 6 demandes 41,5 s
+  (pauses de 2 s comprises) contre 24 demandes 157,9 s ; groupe des
+  pélicandromes (BFG) : 9,8 s de demandes (+ 1 pause) contre 28,1 s.
+- NOTAM : pélicandromes identiques ; 9 NOTAM en plus avec 96 h, tous
+  commençant après la fin de la fenêtre actuelle (J+7 23:59 UTC) car la
+  2e demande va jusqu'à maintenant + 192 h (réglable) ; 2 NOTAM « en moins »
+  (LFOI W2210/26, LFRO P3691/26) publiés PENDANT la mesure (P3691/26 commence
+  à 16:36) : l'essai ciblé les retrouve avec 96 h. Aucun écart de méthode.
+- Conséquence possible : programme VPS 1.2.0 (BFG ≈ 12 s, complet ≈ 45 s au
+  lieu de ≈ 50 s / ≈ 2 min 30). À DÉCIDER. BFG TEST affiche « jour d/8 »
+  pendant sa recherche : texte à revoir dans BFG si les demandes changent.
+
+TESTS (Chrome, NAS simulé, aucune requête au vrai NAS)
+- cdp_sofia60.js (= cdp_sofia59 + pourcentage) ; non-régression rapide
+  (cdp_map, cdp_nr, cdp_btn, cdp_simdbg, cdp_ret55) ; mise à jour v17.59 ->
+  v17.60 : voir compte rendu de la session.
+
+FICHIERS MODIFIÉS
+src/210, src/010 (version), donc script.js ; index.html, manifest.json,
+style.css, sw.js (version). sia.js et src/100 : inchangés.
+
+VERSION
+- App : v17.60
+- Service Worker : `sw-v17-60_notam_pourcentage`
+
+STATUT : À MESURER sur iPad.
+
 
 VERSION TEST v17.59 — NOTAM SOFIA COMMUNS BFG / NPF-Q400 (ÉTAPE 2)
 Date : 07/10/2026

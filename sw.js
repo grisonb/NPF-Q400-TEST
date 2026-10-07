@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v17-59_notam_sofia';
-const APP_VERSION = 'v17.59';
+const SW_VERSION = 'sw-v17-60_notam_pourcentage';
+const APP_VERSION = 'v17.60';
 const SIA_DATA_REVISION = '15.69-radio1026-1-maplite1';
 const SIA_DATA_URL = './sia.js';
 /*
