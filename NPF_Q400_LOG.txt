@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 08/10/2026
-Version de travail actuelle : TEST v17.63
+Version de travail actuelle : TEST v17.64
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,9 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.64 — nom affiché « Trafic Moyens Nationaux » partout à la place de
+  « GLR » / « Global Link (Rescue) » ; « Moyens » / « Nationaux » sous le logo
+  du bouton ;
 - v17.63 — bouton GLR : logo SVG « M2 » monochrome à la place du texte
   « GLR » ; fenêtre « Mise à jour installée » réduite à 2 lignes + Continuer ;
 - v17.62 — phrases de fraîcheur « NOTAM SOFIA du … » en VERT si NOTAM du jour,
@@ -469,7 +472,9 @@ NON IMPLÉMENTÉ / OUVERT :
   07/10/2026 : programme VPS bfg-sofia-notams 1.2.0 PRÊT, NON INSTALLÉ
   (~/vps-a-copier/). v17.60 à pousser APRÈS l'installation de la 1.2.0
   (elle annonce « environ 1 minute ») ;
-- v17.63 : À MESURER sur iPad (netteté du logo GLR, états lisibles par la
+- v17.64 : À MESURER sur iPad (« Moyens » / « Nationaux » sur une ligne
+  chacun avec la police de l'iPad, nouveaux textes) ;
+- v17.63 : poussée le 08/10/2026 ; À MESURER sur iPad (netteté du logo GLR, états lisibles par la
   bordure, fenêtre de mise à jour) ;
 - v17.62 : poussée le 08/10/2026 ; À MESURER sur iPad (vert / rouge lisibles au soleil, passage au
   rouge à minuit si l'app reste ouverte) ;
@@ -644,44 +649,44 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.63
+Version : TEST v17.64
 Date : 08/10/2026
-Base : v17.62 (94edf1e, poussée le 08/10/2026)
+Base : v17.63 (43e621b, poussée le 08/10/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.63.txt
-2_Index_v17.63.txt
-3_Manifest_v17.63.txt
-4_Script_v17.63.txt
-5_SIA_v17.63.txt
-6_Style_v17.63.txt
-7_Sw_v17.63.txt
+1_Modifications_v17.64.txt
+2_Index_v17.64.txt
+3_Manifest_v17.64.txt
+4_Script_v17.64.txt
+5_SIA_v17.64.txt
+6_Style_v17.64.txt
+7_Sw_v17.64.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.63 (et texte « TEST v17.63 » de l'écran de
+- Index : APP_VERSION = v17.64 (et texte « TEST v17.64 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.63
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.63
-- Style : NPF_STYLE_BUILD_VERSION = v17.63
-- Service Worker : `sw-v17-63_glr_logo` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-63_glr_logo`, `npf-q400-test-app-data-v1`,
+- Manifest : start_url = ./index.html?appv=v17.64
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.64
+- Style : NPF_STYLE_BUILD_VERSION = v17.64
+- Service Worker : `sw-v17-64_trafic_moyens_nationaux` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-64_trafic_moyens_nationaux`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-15.69-radio1026-1-maplite1`
 - SIA_DATA_REVISION (SW / Index) : 15.69-radio1026-1-maplite1 (inchangée)
-- sia.js v17.63 : strictement identique à v17.52.
+- sia.js v17.64 : strictement identique à v17.52.
 - Images de lancement : icons/startup-ipad9-portrait.png (1620 × 2160) et
   icons/startup-ipad9-landscape.png (2160 × 1620).
 - Icônes des boutons (v17.48) : calculator-fms-icon, search-commune-icon,
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.63 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.64 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
 - `sia.js` et moteur tuiles (src/100) identiques à v17.52 ;
-- tests courts v17.63 : entrée v17.63 ;
+- tests courts v17.64 : entrée v17.64 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.63 À MESURER ;
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64 À MESURER ;
   v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE ;
   v17.56 VALIDÉE en vol ; v17.57 VALIDÉE sur iPad.
 
@@ -2210,6 +2215,62 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.64 — « TRAFIC MOYENS NATIONAUX » À LA PLACE DE GLR / GLOBAL
+LINK ; « MOYENS / NATIONAUX » SOUS LE LOGO DU BOUTON
+Date : 08/10/2026
+Base fonctionnelle : v17.63 (commit 43e621b, poussée le 08/10/2026).
+Changements d'affichage uniquement (demande de Bastien, 08/10/2026), à partir
+du relevé en lecture seule du même jour.
+
+1. TEXTES (53 occurrences remplacées, textes exacts fournis par Bastien)
+- src/180_global_link.js (27) : infobulles du bouton et des pastilles,
+  titre de la fenêtre options, messages de la fenêtre code, étiquette d'un
+  appareil sans nom (« Appareil »), bulle « Source : Trafic Moyens
+  Nationaux », bandeaux d'erreur (« Trafic Moyens Nationaux : … »), messages
+  techniques du relais sans le nom de fichier serveur.
+- index.html (8) : infobulle de départ, nom accessible du bouton, titres des
+  fenêtres mot de passe et code, phrases d'explication, texte et nom lu du
+  champ mot de passe (« Mot de passe NPF-Q400 »), nom lu de l'image du code.
+- src/130_trafic_reglages_suivi.js (1) : « … dans SafeSky et le Trafic
+  Moyens Nationaux pour la session courante. »
+- src/010_entete_diagnostic_ipad.js (17) : lignes du DIAG et de l'historique
+  des lancements (« TRAFIC MOYENS NATIONAUX » dans le titre de section).
+  Le filtre RELATED_MESSAGE (messages gardés dans le DIAG) reçoit aussi
+  « Trafic Moyens Nationaux » (anciennes valeurs gardées) : sans cela, le
+  DIAG n'aurait plus enregistré les bandeaux renommés.
+- Inchangés : noms internes, classes, clés de stockage (npfGlobalLink…),
+  valeur « GLR » enregistrée comme source de « Mon avion », adresse du serveur.
+  Messages console.warn « [Global Link] » / « [GLR] » (console seulement).
+- Vu en plus, NON modifié (hors demande) : fenêtre FdS / GAAR, « Mot de passe
+  NPF » (texte du champ) et « … autorisé NPF … mot de passe NPF … » (aide),
+  « NPF » seul déjà présent avant cette version — À DÉCIDER.
+
+2. BOUTON
+- Sous le logo (réduit de 62 à 42 px ; 22 px sous 760 px) : « Moyens » puis
+  « Nationaux », gras 800, #1565c0, police système de l'application
+  (-apple-system…). Le mot « SafeSky » du bouton voisin est dessiné dans
+  l'image du logo SafeSky : pas de police à reprendre. Taille 14 px (8 px
+  sous 760 px), la plus grande qui tient sur une ligne mesurée sous Chrome
+  (« Nationaux » 72 px pour 76 px utiles) ; largeur exacte avec la police de
+  l'iPad À MESURER. Logo et texte centrés ensemble, hors bordure et
+  pastilles. Bouton, bordure par état, pastilles, toucher : inchangés.
+
+TESTS : voir compte rendu de la session (cdp_glr64, cdp_zero64, cdp_upd64 +
+non-régression rapide ; références de cdp_nr et cdp_glr63 mises à jour pour
+les nouveaux textes).
+
+FICHIERS MODIFIÉS
+index.html (bouton, fenêtres, version) ; style.css (bouton, version) ;
+src/180, src/130, src/010 (textes, version), donc script.js ; manifest.json,
+sw.js (version). sia.js et src/100 : inchangés.
+
+VERSION
+- App : v17.64
+- Service Worker : `sw-v17-64_trafic_moyens_nationaux`
+
+STATUT : À MESURER sur iPad.
+
 
 VERSION TEST v17.63 — LOGO DU BOUTON GLR ; FENÊTRE « MISE À JOUR INSTALLÉE »
 Date : 08/10/2026

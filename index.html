@@ -6,8 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>NPF-Q400</title>
     <link rel="stylesheet" href="leaflet.css">
-    <link rel="stylesheet" href="style.css?appv=v17.63">
-    <link rel="manifest" href="manifest.json?appv=v17.63">
+    <link rel="stylesheet" href="style.css?appv=v17.64">
+    <link rel="manifest" href="manifest.json?appv=v17.64">
     <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192x192.png?appv=v13.92">
     <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512x512.png?appv=v13.92">
     <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png?appv=v13.92">
@@ -65,7 +65,7 @@
     <div id="app-boot-screen" aria-live="polite">
         <div class="boot-card">
             <div>NPF-Q400 — démarrage…</div>
-            <div class="boot-version">TEST v17.63</div>
+            <div class="boot-version">TEST v17.64</div>
         </div>
     </div>
     <script>
@@ -164,15 +164,19 @@
         <button id="global-link-layer-button"
                 class="left-map-action-button global-link-map-button global-link-auth-needed"
                 type="button"
-                title="Global Link — connexion requise"
-                aria-label="GLR">
-            <!-- v17.63 — logo GLR « M2 » monochrome (#1565c0), intégré : aucun fichier, fonctionne hors ligne. -->
-            <svg class="global-link-map-label global-link-map-icon" viewBox="-70 -70 140 140" aria-hidden="true" focusable="false">
-                <path fill="#1565c0" d="M-22,-60 A64,64 0 0,0 -22,60 A70,70 0 0,1 -22,-60 Z"/>
-                <path fill="#1565c0" d="M22,-60 A64,64 0 0,1 22,60 A70,70 0 0,0 22,-60 Z"/>
-                <circle r="46" fill="#fff" stroke="#1565c0" stroke-width="7"/>
-                <path fill="#1565c0" d="M0,-32 L30,20 L-30,20 Z"/>
-            </svg>
+                title="Trafic Moyens Nationaux — connexion requise"
+                aria-label="Trafic Moyens Nationaux">
+            <!-- v17.63 — logo « M2 » monochrome (#1565c0), intégré : aucun fichier, fonctionne hors ligne.
+                 v17.64 — texte « Moyens » / « Nationaux » sous le logo (logo réduit). -->
+            <span class="global-link-map-content" aria-hidden="true">
+                <svg class="global-link-map-label global-link-map-icon" viewBox="-70 -70 140 140" aria-hidden="true" focusable="false">
+                    <path fill="#1565c0" d="M-22,-60 A64,64 0 0,0 -22,60 A70,70 0 0,1 -22,-60 Z"/>
+                    <path fill="#1565c0" d="M22,-60 A64,64 0 0,1 22,60 A70,70 0 0,0 22,-60 Z"/>
+                    <circle r="46" fill="#fff" stroke="#1565c0" stroke-width="7"/>
+                    <path fill="#1565c0" d="M0,-32 L30,20 L-30,20 Z"/>
+                </svg>
+                <span class="global-link-map-text"><span>Moyens</span><span>Nationaux</span></span>
+            </span>
             <span id="global-link-off-button-count" class="global-link-off-button-count" style="display:none;">0</span>
             <span id="global-link-button-count" class="global-link-button-count" style="display:none;">0</span>
         </button>
@@ -288,16 +292,16 @@
          aria-hidden="true">
         <div class="global-link-auth-dialog" role="dialog" aria-modal="true" aria-labelledby="global-link-password-title">
             <button id="global-link-password-close" class="global-link-auth-close" type="button" aria-label="Fermer">×</button>
-            <h3 id="global-link-password-title">Global Link Rescue</h3>
-            <p class="global-link-auth-explain">Saisis le mot de passe NPF pour accéder à Global Link.</p>
+            <h3 id="global-link-password-title">Trafic Moyens Nationaux</h3>
+            <p class="global-link-auth-explain">Saisis le mot de passe NPF-Q400 pour afficher le Trafic Moyens Nationaux.</p>
             <input id="global-link-password-input"
                    class="global-link-password-input"
                    type="password"
                    autocomplete="current-password"
                    autocapitalize="none"
                    spellcheck="false"
-                   placeholder="Mot de passe NPF"
-                   aria-label="Mot de passe NPF Global Link" />
+                   placeholder="Mot de passe NPF-Q400"
+                   aria-label="Mot de passe NPF-Q400" />
             <div id="global-link-password-status" class="global-link-auth-status" aria-live="polite"></div>
             <div class="global-link-auth-actions">
                 <button id="global-link-password-submit" type="button" class="global-link-primary-button">Continuer</button>
@@ -311,10 +315,10 @@
          aria-hidden="true">
         <div class="global-link-auth-dialog" role="dialog" aria-modal="true" aria-labelledby="global-link-auth-title">
             <button id="global-link-auth-close" class="global-link-auth-close" type="button" aria-label="Fermer">×</button>
-            <h3 id="global-link-auth-title">Global Link Rescue</h3>
-            <p class="global-link-auth-explain">Recopie le code de sécurité affiché ci-dessous pour autoriser le suivi Global Link.</p>
+            <h3 id="global-link-auth-title">Trafic Moyens Nationaux</h3>
+            <p class="global-link-auth-explain">Recopie le code de sécurité affiché ci-dessous.</p>
             <div class="global-link-captcha-frame">
-                <img id="global-link-captcha-image" alt="Code de sécurité Global Link" />
+                <img id="global-link-captcha-image" alt="Code de sécurité" />
             </div>
             <input id="global-link-captcha-input"
                    class="global-link-captcha-input"
@@ -625,7 +629,7 @@
             };
         } catch (_) {}
 
-        const APP_VERSION = 'v17.63';
+        const APP_VERSION = 'v17.64';
         const SERVICE_WORKER_URL = `./sw.js?appv=${encodeURIComponent(APP_VERSION)}`;
         const APP_VERSION_STORAGE_KEY = 'appVersion';
         const SW_CONTROLLER_RELOAD_GUARD_KEY = 'swControllerReloadGuard';
@@ -1468,7 +1472,7 @@
     <script src="suncalc.js"></script>
     <script src="jszip.min.js"></script>
     <script src="sia.js?siav=15.69-radio1026-1-maplite1"></script>
-    <script src="script.js?appv=v17.63"></script>
+    <script src="script.js?appv=v17.64"></script>
     
     <div id="fuel-split-modal" class="fuel-split-modal" style="display: none;">
         <div class="fuel-split-modal-content">

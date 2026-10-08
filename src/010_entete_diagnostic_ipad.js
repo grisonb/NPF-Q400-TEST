@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.63';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.64';
 
 
 /*
@@ -2389,7 +2389,7 @@ const NPF_DIAG_DETAIL = (() => {
             }
         });
         wrapGlobal('fetchGlobalLinkNas', {
-            after: ({ args, t0, tEnd, value, error }) => noteNasRequest('GLR', args[0], t0, tEnd, value, error)
+            after: ({ args, t0, tEnd, value, error }) => noteNasRequest('Trafic Moyens Nationaux', args[0], t0, tEnd, value, error)
         });
 
         /* v17.38 — temps ressenti : appui GLR -> code affiché, appui FdS ->
@@ -2405,9 +2405,9 @@ const NPF_DIAG_DETAIL = (() => {
             after: ({ t0, tEnd, error }) => {
                 if (state.glrClickCaptcha) return;
                 const enabled = safe(() => npfGlobalLinkEnabled, false);
-                noteFelt('GLR', error
+                noteFelt('Trafic Moyens Nationaux', error
                     ? 'erreur : ' + String(error.message || error)
-                    : (enabled ? 'GLR ON (positions demandées)' : 'GLR OFF'), tEnd - t0);
+                    : (enabled ? 'Trafic Moyens Nationaux ON (positions demandées)' : 'Trafic Moyens Nationaux OFF'), tEnd - t0);
             }
         });
         wrapGlobal('loadGlobalLinkCaptcha', {
@@ -2416,7 +2416,7 @@ const NPF_DIAG_DETAIL = (() => {
                 const fromClick = clickAt && t0 - clickAt < 120000;
                 if (fromClick) state.glrClickCaptcha = true;
                 state.glrClickAt = 0;
-                noteFelt('GLR', error ? 'code non affiché : ' + String(error.message || error) : 'code affiché',
+                noteFelt('Trafic Moyens Nationaux', error ? 'code non affiché : ' + String(error.message || error) : 'code affiché',
                     fromClick ? tEnd - clickAt : tEnd - t0,
                     { captchaMs: round(tEnd - t0), fromClick: !!fromClick });
             }
@@ -2444,7 +2444,7 @@ const NPF_DIAG_DETAIL = (() => {
             if (!clean) return;
             pushLimited(state.messages, { at: Date.now(), source, text: clean.slice(0, 300) }, 30);
         };
-        const RELATED_MESSAGE = /FdS|GAAR|BFG|NAS|Global Link|GLR|associ|autorisation|captcha|code de sécurité/i;
+        const RELATED_MESSAGE = /FdS|GAAR|BFG|NAS|Global Link|GLR|Trafic Moyens Nationaux|associ|autorisation|captcha|code de sécurité/i;
         safe(() => {
             const previousAlert = window.alert;
             if (typeof previousAlert !== 'function' || previousAlert.__npfDiagMessages) return;
@@ -2459,10 +2459,10 @@ const NPF_DIAG_DETAIL = (() => {
             before: args => { if (args[1] && args[1].error) noteMessage('lecteur FdS / GAAR', args[0]); }
         });
         wrapGlobal('setGlobalLinkAuthStatus', {
-            before: args => { if (args[1] === 'error') noteMessage('fenêtre code GLR', args[0]); }
+            before: args => { if (args[1] === 'error') noteMessage('fenêtre code Trafic Moyens Nationaux', args[0]); }
         });
         wrapGlobal('setGlobalLinkPasswordStatus', {
-            before: args => { if (args[1] === 'error') noteMessage('fenêtre mot de passe GLR', args[0]); }
+            before: args => { if (args[1] === 'error') noteMessage('fenêtre mot de passe Trafic Moyens Nationaux', args[0]); }
         });
 
         /* v17.35 — périodes de simulation et réglages (vitesse, route, altitude). */
@@ -3239,7 +3239,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.63 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.64 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -3301,7 +3301,7 @@ function appendNpfDiagV1733ExportSections(lines) {
         ));
 
     lines.push('');
-    lines.push('FONCTIONS SUIVIES — 30 PLUS COÛTEUSES (durée synchrone cumulée ; I4 instantanés, I5 trafic / GLR compris)');
+    lines.push('FONCTIONS SUIVIES — 30 PLUS COÛTEUSES (durée synchrone cumulée ; I4 instantanés, I5 trafic / Trafic Moyens Nationaux compris)');
     stats
         .filter(([name]) => !name.startsWith('canvas '))
         .sort((a, b) => b[1].total - a[1].total)
@@ -3705,7 +3705,7 @@ function appendNpfDiagNasSection(lines) {
     const s = NPF_DIAG_DETAIL.state;
     const firstOfDay = isNpfDiagFirstLaunchOfDay();
     lines.push('');
-    lines.push('FdS / BFG / GLR — PONT BFG, TEMPS RESSENTI, MESSAGES, REQUÊTES NAS (v17.38, mesure seule)');
+    lines.push('FdS / BFG / TRAFIC MOYENS NATIONAUX — PONT BFG, TEMPS RESSENTI, MESSAGES, REQUÊTES NAS (v17.38, mesure seule)');
     lines.push('Premier lancement de la journée : ' + (firstOfDay === null ? 'inconnu' : (firstOfDay ? 'OUI' : 'NON'))
         + ' | pont BFG : ' + (typeof npfBfgBridgeLastStatus !== 'undefined' ? npfBfgBridgeLastStatus : '—'));
     const block = (title, list, formatter, empty) => {
@@ -3714,8 +3714,8 @@ function appendNpfDiagNasSection(lines) {
         list.forEach(item => { try { lines.push(formatter(item)); } catch (_) {} });
     };
     block('Pont BFG (tentatives) :', s.bfgAttempts, formatNpfDiagBfgAttemptLine, 'Aucune tentative dans cette session.');
-    block('Temps ressenti (appui -> affichage) :', s.felt, formatNpfDiagFeltLine, 'Aucun appui FdS / GAAR / GLR.');
-    block('Messages FdS / BFG / GLR affichés :', s.messages, formatNpfDiagMessageLine, 'Aucun message.');
+    block('Temps ressenti (appui -> affichage) :', s.felt, formatNpfDiagFeltLine, 'Aucun appui FdS / GAAR / Trafic Moyens Nationaux.');
+    block('Messages FdS / BFG / Trafic Moyens Nationaux affichés :', s.messages, formatNpfDiagMessageLine, 'Aucun message.');
     block('Requêtes NAS (30 dernières) :', s.nasRequests, formatNpfDiagNasRequestLine, 'Aucune requête.');
 }
 
@@ -3788,7 +3788,7 @@ function appendNpfDiagLaunchStorageHeader(lines) {
         + ' | valeur actuelle : ' + JSON.stringify(readRaw('showTrafficLayer'))
     );
     lines.push(
-        'GLR échéance locale (expiresAt) : ' + describeNpfDiagGlrExpiry(glrToken, glrExp, Date.now())
+        'Trafic Moyens Nationaux échéance locale (expiresAt) : ' + describeNpfDiagGlrExpiry(glrToken, glrExp, Date.now())
         + ' | heure iPad ' + formatNpfDiagDateTime(Date.now())
         + ' | au lancement : ' + describeNpfDiagGlrExpiry(current.glrAtLaunch?.token, current.glrAtLaunch?.exp, current.at)
     );
@@ -3819,7 +3819,7 @@ function appendNpfDiagLaunchSection(lines) {
         lines.push(
             '   SafeSky (showTrafficLayer) relu au lancement ' + JSON.stringify(item.safeSkyAtLaunch)
             + (item.safeSkyAtWrite !== undefined ? ' · à l’écriture ' + JSON.stringify(item.safeSkyAtWrite) : '')
-            + ' | GLR au lancement : ' + describeNpfDiagGlrExpiry(item.glrAtLaunch?.token, item.glrAtLaunch?.exp, item.at)
+            + ' | Trafic Moyens Nationaux au lancement : ' + describeNpfDiagGlrExpiry(item.glrAtLaunch?.token, item.glrAtLaunch?.exp, item.at)
         );
         if (item.firstReads !== undefined || item.layersAtLaunch) {
             const first = item.firstReads;
@@ -4002,8 +4002,8 @@ function appendNpfDiagDetailRestoredSections(lines, detail) {
     section('Sondes après un paquet de lectures lent :', detail.packProbes, formatNpfDiagPackProbeLine);
     section('Activité de stockage :', detail.storage, formatNpfDiagStorageEventLine);
     section('Pont BFG (tentatives) :', detail.bfgAttempts, formatNpfDiagBfgAttemptLine);
-    section('Temps ressenti FdS / GLR :', detail.felt, formatNpfDiagFeltLine);
-    section('Messages FdS / BFG / GLR affichés :', detail.messages, formatNpfDiagMessageLine);
+    section('Temps ressenti FdS / Trafic Moyens Nationaux :', detail.felt, formatNpfDiagFeltLine);
+    section('Messages FdS / BFG / Trafic Moyens Nationaux affichés :', detail.messages, formatNpfDiagMessageLine);
     section('Requêtes NAS (dernières) :', detail.nasRequests, formatNpfDiagNasRequestLine);
     section('Repères :', detail.markers, formatNpfDiagMarkerLine);
     section('Blocages JS > 100 ms (premiers) :', detail.firstBlocks, formatNpfDiagBlockLine);
@@ -4698,8 +4698,8 @@ function buildNpfStartupDiagnosticExportText() {
         + ' | session FdS/GAAR ' + (runtime.briefingSessionActive ? 'ACTIVE' : 'ABSENTE/EXPIRÉE')
         + ' | pont BFG ' + (runtime.bfgBridgeLastStatus || '—')
         + (runtime.bfgBridgeLastError ? ' (' + runtime.bfgBridgeLastError + ')' : '')
-        + ' | session GLR ' + (runtime.glrSessionActive ? 'ACTIVE' : 'ABSENTE/EXPIRÉE')
-        + ' | état GLR ' + (runtime.glrLastAuthState || '—')
+        + ' | session Trafic Moyens Nationaux ' + (runtime.glrSessionActive ? 'ACTIVE' : 'ABSENTE/EXPIRÉE')
+        + ' | état Trafic Moyens Nationaux ' + (runtime.glrLastAuthState || '—')
         + ' | action ' + (runtime.glrLastAction || '—')
         + (runtime.glrLastHttpStatus ? ' HTTP ' + runtime.glrLastHttpStatus : '')
         + (runtime.glrLastError ? ' (' + runtime.glrLastError + ')' : '')

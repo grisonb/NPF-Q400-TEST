@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v17-63_glr_logo';
-const APP_VERSION = 'v17.63';
+const SW_VERSION = 'sw-v17-64_trafic_moyens_nationaux';
+const APP_VERSION = 'v17.64';
 const SIA_DATA_REVISION = '15.69-radio1026-1-maplite1';
 const SIA_DATA_URL = './sia.js';
 /*

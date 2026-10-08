@@ -1,4 +1,4 @@
-/* NPF_STYLE_BUILD_VERSION: v17.63 */
+/* NPF_STYLE_BUILD_VERSION: v17.64 */
 /* v14.83 — nettoyage des références techniques et limitation des cartouches routiers. */
 /* v14.81 — recherche phonétique nationale élargie aux fragments sur deux lettres. */
 /* v14.80 — Brive conservé uniquement sous LFSL. */
@@ -18469,4 +18469,45 @@ body.npf-calculator-modal-open {
         height: 36px !important;
         flex-basis: 36px !important;
     }
+}
+
+/* v17.64 — bouton « Trafic Moyens Nationaux » : logo réduit + « Moyens » / « Nationaux » en gras
+   #1565c0 dessous, centrés ensemble (comme le logo SafeSky au-dessus de « SafeSky »).
+   Bouton, bordure par état, pastilles, toucher : inchangés. */
+#global-link-layer-button .global-link-map-content {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 2px !important;
+    width: 100% !important;
+    height: 100% !important;
+    pointer-events: none !important;
+}
+#global-link-layer-button .global-link-map-content .global-link-map-icon {
+    width: 42px !important;
+    height: 42px !important;
+    flex: 0 0 42px !important;
+}
+#global-link-layer-button .global-link-map-text {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    color: #1565c0 !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+    font-weight: 800 !important;
+    font-size: 14px !important;
+    line-height: 1.02 !important;
+    letter-spacing: 0 !important;
+    white-space: nowrap !important;
+    pointer-events: none !important;
+}
+@media (max-width: 760px) {
+    #global-link-layer-button .global-link-map-content { gap: 1px !important; }
+    #global-link-layer-button .global-link-map-content .global-link-map-icon {
+        width: 22px !important;
+        height: 22px !important;
+        flex-basis: 22px !important;
+    }
+    #global-link-layer-button .global-link-map-text { font-size: 8px !important; }
 }

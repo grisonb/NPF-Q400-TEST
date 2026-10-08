@@ -1348,7 +1348,7 @@ function ensureTrafficSettingsModal() {
                     </button>
                 </div>
                 <div class="traffic-tools-note">
-                    L'indicatif saisi sert à masquer « Mon avion » dans SafeSky et GLR pour la session courante.
+                    L'indicatif saisi sert à masquer « Mon avion » dans SafeSky et le Trafic Moyens Nationaux pour la session courante.
                 </div>
             </div>
 

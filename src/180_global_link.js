@@ -284,7 +284,7 @@ async function requestGlobalLinkNpfAuthorization() {
         const closeButton = document.getElementById('global-link-password-close');
 
         if (!modal || !input || !submitButton) {
-            reject(new Error('Fenêtre de mot de passe Global Link indisponible.'));
+            reject(new Error('Fenêtre de mot de passe indisponible.'));
             return;
         }
 
@@ -400,13 +400,13 @@ async function loadGlobalLinkCaptcha() {
             headers: globalLinkAuthHeaders(docsSession)
         }, 45000);
         const payload = await response.json().catch(() => null);
-        const captchaError = payload?.message || payload?.error || (!response.ok ? `Captcha Global Link impossible (${response.status})` : '');
+        const captchaError = payload?.message || payload?.error || (!response.ok ? `Code de sécurité impossible (${response.status})` : '');
         rememberGlobalLinkRequestState('captcha', response, captchaError);
 
         if (!response.ok || !payload || payload.ok !== true || !payload.attempt || !payload.imageDataUrl) {
             if (response.status === 401) clearBriefingDocsSession();
             if (isGlobalLinkTemporaryLoadFail(captchaError)) npfGlobalLinkLastAuthState = 'captcha-load-fail-temporaire';
-            throw new Error(captchaError || `Captcha Global Link impossible (${response.status})`);
+            throw new Error(captchaError || `Code de sécurité impossible (${response.status})`);
         }
         rememberGlobalLinkRequestState('captcha', response, '');
 
@@ -443,7 +443,7 @@ async function submitGlobalLinkCaptcha() {
     if (!captcha) throw new Error('Saisis le code de sécurité.');
     const docsSession = await ensureGlobalLinkNpfAuthorization();
     npfGlobalLinkLastAuthState = 'connexion-en-cours';
-    setGlobalLinkAuthStatus('Connexion à Global Link…');
+    setGlobalLinkAuthStatus('Connexion…');
 
     let response;
     try {
@@ -458,29 +458,29 @@ async function submitGlobalLinkCaptcha() {
     } catch (error) {
         if (isGlobalLinkAbortError(error)) {
             npfGlobalLinkLastAuthState = 'timeout-login';
-            throw new Error('Global Link ne répond pas (délai 15 s dépassé). Appuie sur Nouveau code puis réessaie.');
+            throw new Error('Le serveur ne répond pas (délai 15 s dépassé). Appuie sur Nouveau code puis réessaie.');
         }
         npfGlobalLinkLastAuthState = 'erreur-réseau';
         throw error;
     }
 
     const payload = await response.json().catch(() => null);
-    const loginError = payload?.message || payload?.error || (!response.ok ? `Connexion Global Link refusée (${response.status})` : '');
+    const loginError = payload?.message || payload?.error || (!response.ok ? `Connexion refusée (${response.status})` : '');
     rememberGlobalLinkRequestState('login', response, loginError);
     if (!response.ok || !payload || payload.ok !== true || !payload.session || !payload.expiresAt) {
         if (response.status === 401 && payload?.error === 'npf_authorization_required') clearBriefingDocsSession();
         npfGlobalLinkLastAuthState = isGlobalLinkTemporaryLoadFail(loginError)
             ? 'login-load-fail-temporaire'
             : `refusé:${String(payload?.error || response.status)}`;
-        throw new Error(loginError || `Connexion Global Link refusée (${response.status})`);
+        throw new Error(loginError || `Connexion refusée (${response.status})`);
     }
     rememberGlobalLinkRequestState('login', response, '');
     if (!storeGlobalLinkSession(payload.session, payload.expiresAt)) {
-        throw new Error('Session Global Link reçue mais impossible à enregistrer.');
+        throw new Error('Connexion reçue mais impossible à enregistrer.');
     }
     npfGlobalLinkAttempt = '';
     npfGlobalLinkLastAuthState = 'connecté';
-    setGlobalLinkAuthStatus('Connexion Global Link établie.', 'success');
+    setGlobalLinkAuthStatus('Connexion établie.', 'success');
     setTimeout(closeGlobalLinkAuthModal, 250);
     return getStoredGlobalLinkSession();
 }
@@ -1000,15 +1000,15 @@ function updateGlobalLinkButton(options = {}) {
      */
     if (!hasSession) {
         button.classList.add('global-link-auth-needed');
-        button.title = 'GLR — connexion requise';
+        button.title = 'Trafic Moyens Nationaux — connexion requise';
     } else if (npfGlobalLinkEnabled && detected.length) {
         button.classList.add('global-link-active');
-        button.title = `GLR — ${detected.length} trafic(s) détecté(s) au total — appuyer pour masquer · appui long : options`;
+        button.title = `Trafic Moyens Nationaux — ${detected.length} appareil(s) détecté(s) — appuyer pour masquer · appui long : options`;
     } else {
         button.classList.add('global-link-ready');
         button.title = npfGlobalLinkEnabled
-            ? 'GLR — aucun trafic détecté · appui long : options'
-            : 'GLR — appuyer pour afficher · appui long : options';
+            ? 'Trafic Moyens Nationaux — aucun appareil détecté · appui long : options'
+            : 'Trafic Moyens Nationaux — appuyer pour afficher · appui long : options';
     }
 
     const activeCount = Math.max(0, Math.round(Number(npfGlobalLinkActiveTotalCount) || 0));
@@ -1017,12 +1017,12 @@ function updateGlobalLinkButton(options = {}) {
     if (activeCountEl) {
         activeCountEl.textContent = String(activeCount);
         activeCountEl.style.display = npfGlobalLinkEnabled && activeCount > 0 ? 'inline-flex' : 'none';
-        activeCountEl.title = `${activeCount} trafic(s) GLR actif(s) — total national`;
+        activeCountEl.title = `${activeCount} appareil(s) actif(s) — total national`;
     }
     if (offCountEl) {
         offCountEl.textContent = String(offCount);
         offCountEl.style.display = npfGlobalLinkEnabled && offCount > 0 ? 'inline-flex' : 'none';
-        offCountEl.title = `${offCount} trafic(s) GLR Off — total national`;
+        offCountEl.title = `${offCount} appareil(s) non actif(s) — total national`;
     }
 }
 
@@ -1201,7 +1201,7 @@ function renderGlobalLinkPositions(positions) {
 
             const ts = Date.parse(String(item.updatedAt || ''));
             const ageSeconds = Number.isFinite(ts) ? Math.max(0, (now - ts) / 1000) : Infinity;
-            const name = String(item.name || 'Global Link').trim();
+            const name = String(item.name || 'Appareil').trim();
             const off = isGlobalLinkOffTraffic(item, ageSeconds);
             return {
                 ...item, lat, lon, ageSeconds, name,
@@ -1350,7 +1350,7 @@ function renderGlobalLinkPositions(positions) {
             keyboard: false,
             title: item.name
         });
-        marker.bindPopup(`<div class="global-link-popup"><strong>${safeName}</strong><br>Source : Global Link Rescue<br>Position : ${item.lat.toFixed(5)}, ${item.lon.toFixed(5)}<br>Âge : ${escapeGlobalLinkHtml(formatGlobalLinkAge(item.ageSeconds))}<button type="button" class="traffic-popup-own-button global-link-popup-own-button">Définir comme mon avion et masquer</button></div>`);
+        marker.bindPopup(`<div class="global-link-popup"><strong>${safeName}</strong><br>Source : Trafic Moyens Nationaux<br>Position : ${item.lat.toFixed(5)}, ${item.lon.toFixed(5)}<br>Âge : ${escapeGlobalLinkHtml(formatGlobalLinkAge(item.ageSeconds))}<button type="button" class="traffic-popup-own-button global-link-popup-own-button">Définir comme mon avion et masquer</button></div>`);
         marker.on('popupopen', () => {
             const popupElement = marker.getPopup()?.getElement?.();
             const ownButton = popupElement?.querySelector?.('.global-link-popup-own-button');
@@ -1465,7 +1465,7 @@ async function refreshGlobalLinkPositions(options = {}) {
             throw requestError;
         }
         const payload = await response.json().catch(() => null);
-        lastMessage = payload?.message || payload?.error || (!response.ok ? `Positions Global Link indisponibles (${response.status})` : '');
+        lastMessage = payload?.message || payload?.error || (!response.ok ? `Trafic Moyens Nationaux : positions indisponibles (${response.status})` : '');
         rememberGlobalLinkRequestState('positions', response, lastMessage);
 
         if (!response.ok || !payload || payload.ok !== true) {
@@ -1481,7 +1481,7 @@ async function refreshGlobalLinkPositions(options = {}) {
             if (isGlobalLinkTemporaryLoadFail(lastMessage)) {
                 npfGlobalLinkLastAuthState = 'positions-load-fail-temporaire';
             }
-            throw new Error(lastMessage || `Positions Global Link indisponibles (${response.status || 0})`);
+            throw new Error(lastMessage || `Trafic Moyens Nationaux : positions indisponibles (${response.status || 0})`);
         }
 
         rememberGlobalLinkRequestState('positions', response, '');
@@ -1496,19 +1496,19 @@ async function refreshGlobalLinkPositions(options = {}) {
         npfGlobalLinkConsecutiveFailures += 1;
         const firstFailureOfSeries = npfGlobalLinkConsecutiveFailures === 1;
         const temporaryNetworkError = isGlobalLinkTemporaryNetworkError(error);
-        let userMessage = String(error?.message || error || 'Erreur Global Link');
+        let userMessage = String(error?.message || error || 'Erreur Trafic Moyens Nationaux');
         if (temporaryNetworkError) {
             if (firstFailureOfSeries || !npfGlobalLinkSeriesDiagnosticMessage) {
                 const diagnostic = await diagnoseGlobalLinkLoadFailure();
                 npfGlobalLinkLastAuthState = diagnostic.state;
                 if (diagnostic.state === 'positions-cors-fail') {
-                    userMessage = 'Load failed — relais GLR joignable sans CORS : blocage CORS probable sur npf-global-link-api.php.';
+                    userMessage = 'Load failed — relais Trafic Moyens Nationaux joignable sans CORS : blocage CORS probable.';
                 } else if (diagnostic.state === 'positions-endpoint-glr-fail') {
-                    userMessage = 'Load failed — NAS joignable via FDS/GAAR, mais endpoint npf-global-link-api.php inaccessible.';
+                    userMessage = 'Load failed — NAS joignable via FDS/GAAR, mais relais Trafic Moyens Nationaux inaccessible.';
                 } else if (diagnostic.state === 'positions-nas-reseau-fail') {
                     userMessage = 'Load failed — NAS non joignable depuis Safari, y compris via le relais FDS/GAAR.';
                 } else {
-                    userMessage = `Load failed — relais GLR joignable en CORS (HTTP ${diagnostic.glrCors?.status || 'réponse'}), requête authentifiée/en-têtes à contrôler.`;
+                    userMessage = `Load failed — relais Trafic Moyens Nationaux joignable en CORS (HTTP ${diagnostic.glrCors?.status || 'réponse'}), requête authentifiée/en-têtes à contrôler.`;
                 }
                 npfGlobalLinkSeriesDiagnosticMessage = userMessage;
             } else {
@@ -1529,8 +1529,8 @@ async function refreshGlobalLinkPositions(options = {}) {
             /* v17.40 — bandeau discret, jamais de fenêtre bloquante ; la
              * session valide est conservée. */
             showNpfInfoBanner(temporaryNetworkError
-                ? 'GLR : positions indisponibles (réseau). Session conservée, nouvel essai automatique.'
-                : `Global Link : ${userMessage}`, { kind: temporaryNetworkError ? 'info' : 'error' });
+                ? 'Trafic Moyens Nationaux : positions indisponibles (réseau). Connexion conservée, nouvel essai automatique.'
+                : `Trafic Moyens Nationaux : ${userMessage}`, { kind: temporaryNetworkError ? 'info' : 'error' });
         }
         return false;
     } finally {
@@ -1609,7 +1609,7 @@ function ensureGlobalLinkOptionsMenu() {
     modal.innerHTML = `
         <div class="global-link-options-card" role="dialog" aria-modal="true" aria-labelledby="global-link-options-title">
             <div class="global-link-options-header">
-                <strong id="global-link-options-title">Global Link Rescue</strong>
+                <strong id="global-link-options-title">Trafic Moyens Nationaux</strong>
                 <button type="button" class="global-link-options-close" aria-label="Fermer">×</button>
             </div>
             <label class="global-link-options-check-row">
@@ -1701,7 +1701,7 @@ function installGlobalLinkButtonInteractions(button) {
                 && error.message !== 'Autorisation annulée.'
                 && !isGlobalLinkAbortError(error)
             ) {
-                showNpfInfoBanner(`Global Link : ${error.message}`, { kind: 'error' });
+                showNpfInfoBanner(`Trafic Moyens Nationaux : ${error.message}`, { kind: 'error' });
             }
             updateGlobalLinkButton();
         });
