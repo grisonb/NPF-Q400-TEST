@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
-Mise à jour : 07/10/2026
-Version de travail actuelle : TEST v17.60
+Mise à jour : 08/10/2026
+Version de travail actuelle : TEST v17.61
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,9 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.61 — « Rafraîchir les NOTAM » : ligne d'état et pourcentage bien
+  visibles pendant la recherche (plus gros, gras, bleu foncé, indicateur qui
+  tourne), pourcentage des demandes terminées (100 % seulement à la fin) ;
 - v17.60 — progression de « Rafraîchir les NOTAM » en pourcentage
   (« Recherche SOFIA : 50 % ») au lieu de « 12/24 », sans recul ; temps
   annoncé « environ 1 minute » (programme VPS 1.2.0, demandes de 96 h) ;
@@ -461,7 +464,10 @@ NON IMPLÉMENTÉ / OUVERT :
   07/10/2026 : programme VPS bfg-sofia-notams 1.2.0 PRÊT, NON INSTALLÉ
   (~/vps-a-copier/). v17.60 à pousser APRÈS l'installation de la 1.2.0
   (elle annonce « environ 1 minute ») ;
-- v17.60 : À MESURER sur iPad (pourcentage pendant « Rafraîchir les NOTAM ») ;
+- v17.61 : À MESURER sur iPad (lisibilité au soleil de la ligne d'état
+  pendant « Rafraîchir les NOTAM », 100 % seulement à la fin) ;
+- v17.60 : poussée le 07/10/2026 après l'installation de la 1.2.0 ; À MESURER
+  sur iPad (pourcentage pendant « Rafraîchir les NOTAM ») ;
 - v17.59 : mode avion VALIDÉ sur iPad le 07/10/2026 (NOTAM lisibles avec leur
   date) ; reste À MESURER sur iPad (NOTAM SOFIA à la première connexion du jour,
   bouton « Rafraîchir les NOTAM » ≈ 2 min 30, alerte « pas du jour »,
@@ -629,44 +635,44 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.60
-Date : 07/10/2026
-Base : v17.59 (b7488eb, poussée le 07/10/2026, en cours de mesure sur iPad)
+Version : TEST v17.61
+Date : 08/10/2026
+Base : v17.60 (4996eca, poussée le 07/10/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.60.txt
-2_Index_v17.60.txt
-3_Manifest_v17.60.txt
-4_Script_v17.60.txt
-5_SIA_v17.60.txt
-6_Style_v17.60.txt
-7_Sw_v17.60.txt
+1_Modifications_v17.61.txt
+2_Index_v17.61.txt
+3_Manifest_v17.61.txt
+4_Script_v17.61.txt
+5_SIA_v17.61.txt
+6_Style_v17.61.txt
+7_Sw_v17.61.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.60 (et texte « TEST v17.60 » de l'écran de
+- Index : APP_VERSION = v17.61 (et texte « TEST v17.61 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.60
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.60
-- Style : NPF_STYLE_BUILD_VERSION = v17.60
-- Service Worker : `sw-v17-60_notam_pourcentage` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-60_notam_pourcentage`, `npf-q400-test-app-data-v1`,
+- Manifest : start_url = ./index.html?appv=v17.61
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.61
+- Style : NPF_STYLE_BUILD_VERSION = v17.61
+- Service Worker : `sw-v17-61_notam_visible` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-61_notam_visible`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-15.69-radio1026-1-maplite1`
 - SIA_DATA_REVISION (SW / Index) : 15.69-radio1026-1-maplite1 (inchangée)
-- sia.js v17.60 : strictement identique à v17.52.
+- sia.js v17.61 : strictement identique à v17.52.
 - Images de lancement : icons/startup-ipad9-portrait.png (1620 × 2160) et
   icons/startup-ipad9-landscape.png (2160 × 1620).
 - Icônes des boutons (v17.48) : calculator-fms-icon, search-commune-icon,
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.60 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.61 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
 - `sia.js` et moteur tuiles (src/100) identiques à v17.52 ;
-- tests courts v17.60 : entrée v17.60 ;
+- tests courts v17.61 : entrée v17.61 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.60 À MESURER ;
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.61 À MESURER ;
   v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE ;
   v17.56 VALIDÉE en vol ; v17.57 VALIDÉE sur iPad.
 
@@ -2195,6 +2201,51 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.61 — « RAFRAÎCHIR LES NOTAM » : ÉTAT BIEN VISIBLE, POURCENTAGE
+DES DEMANDES TERMINÉES
+Date : 08/10/2026
+Base fonctionnelle : v17.60 (commit 4996eca, poussée le 07/10/2026 après
+l'installation du programme VPS bfg-sofia-notams 1.2.0).
+
+1. VISIBILITÉ (demande de Bastien, 08/10/2026)
+- Pendant une recherche lancée par « Rafraîchir les NOTAM » (Gestion des
+  Cartes), la ligne d'état existante (#notams-refresh-status : « Recherche des
+  NOTAM sur SOFIA : demande envoyée… », « … en cours (environ 1 minute)… ») et
+  le pourcentage existant (« Recherche SOFIA : 50 % ») passent en 18 px, gras,
+  bleu foncé #062f73 (bordure 2 px de la même couleur), avec un petit
+  indicateur qui tourne devant la ligne d'état (pseudo-élément ::before,
+  animation CSS de rotation). Classe notams-refresh-busy posée au début de la
+  recherche et retirée à la fin, quel que soit le résultat.
+- À la fin : style normal ; « Recherche SOFIA : 100 % » affiché puis la barre
+  est masquée 4 s plus tard (sauf nouvelle recherche).
+- Échec : message habituel, en rouge, 17 px, gras, bordure rouge 2 px.
+- Pas de bandeau ni de nouvelle fenêtre ; textes inchangés.
+- Fluidité : animation CSS seule (rotation, gérée par le navigateur), présente
+  uniquement pendant une recherche ; aucun calcul ajouté pendant les gestes.
+
+2. POURCENTAGE
+- Avant : « demande en cours ÷ total » (100 % dès le début de la dernière
+  demande). Maintenant, comme BFG TEST v5.45 : (demande en cours − 1) ÷ total,
+  99 % au plus pendant la recherche, jamais de recul (secours jour par jour),
+  100 % seulement quand le NAS annonce le fichier complet
+  (setNpfNotamsRefreshProgressDone).
+
+TESTS (Chrome, NAS simulé, programme VPS 1.2.0 réel, faux SOFIA ; aucune
+requête au vrai NAS ni au VPS) : voir compte rendu de la session ; captures
+pendant la recherche : outils_tests_NPF-Q400-TEST/out/sofia61-capture-*.png.
+
+FICHIERS MODIFIÉS
+src/210, src/010 (version), donc script.js ; style.css (style « en cours »,
+échec, version) ; index.html, manifest.json, sw.js (version). sia.js et
+src/100 : inchangés.
+
+VERSION
+- App : v17.61
+- Service Worker : `sw-v17-61_notam_visible`
+
+STATUT : À MESURER sur iPad.
+
 
 VERSION TEST v17.60 — PROGRESSION NOTAM EN POURCENTAGE
 Date : 07/10/2026

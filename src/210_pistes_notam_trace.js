@@ -1470,10 +1470,40 @@ function setNpfNotamsRefreshProgress(stepIndex, stepCount) {
     // v17.60 — pourcentage (« 12/24 » se lisait comme un nombre de terrains). En cas de
     // secours du VPS (demandes jour par jour), le total augmente : l'affichage ne recule
     // jamais, il attend que l'avancement réel dépasse la dernière valeur affichée.
-    const percent = Math.max(npfNotamsRefreshLastPercent, Math.min(100, Math.round((index / count) * 100)));
+    // v17.61 — demandes TERMINÉES, comme BFG TEST v5.45 : (demande en cours − 1) ÷ total,
+    // 99 % au plus pendant la recherche ; 100 % seulement à la fin
+    // (setNpfNotamsRefreshProgressDone).
+    const percent = Math.max(npfNotamsRefreshLastPercent, Math.min(99, Math.round(((index - 1) / count) * 100)));
     npfNotamsRefreshLastPercent = percent;
     if (bar) bar.style.width = `${percent}%`;
     if (text) text.textContent = `Recherche SOFIA : ${percent} %`;
+}
+
+/* v17.61 — recherche terminée : 100 %, affichage normal. */
+function setNpfNotamsRefreshProgressDone() {
+    const container = document.getElementById('notams-refresh-progress');
+    const bar = document.getElementById('notams-refresh-progress-bar');
+    const text = document.getElementById('notams-refresh-progress-text');
+    if (!container) return;
+    npfNotamsRefreshLastPercent = 0;
+    container.style.display = '';
+    if (bar) bar.style.width = '100%';
+    if (text) text.textContent = 'Recherche SOFIA : 100 %';
+    // Retour à l'affichage normal (barre masquée) 4 s plus tard, sauf nouvelle recherche.
+    setTimeout(() => {
+        if (!npfNotamsManualRefreshInProgress && text && text.textContent === 'Recherche SOFIA : 100 %') {
+            container.style.display = 'none';
+        }
+    }, 4000);
+}
+
+/* v17.61 — style « recherche en cours » sur la ligne d'état et la barre existantes
+ * (texte plus gros, gras, contrasté, indicateur qui tourne). Animation CSS seule,
+ * présente uniquement pendant une recherche ; rien n'est calculé pendant les gestes. */
+function setNpfNotamsRefreshBusy(active) {
+    const on = Boolean(active);
+    document.getElementById('notams-refresh-status')?.classList.toggle('notams-refresh-busy', on);
+    document.getElementById('notams-refresh-progress')?.classList.toggle('notams-refresh-busy', on);
 }
 
 /* Alerte « pas du jour » : date et heure des NOTAM affichés. */
@@ -1798,9 +1828,11 @@ async function refreshNpfNotamsFromNasManually(options = {}) {
             return;
         }
 
+        setNpfNotamsRefreshBusy(true);
         setNpfNotamsRefreshStatus('Recherche des NOTAM sur SOFIA : demande envoyée…');
         const answer = await requestNpfSofiaNotamsSearch(session, 'manual');
         if (answer.unauthorized) {
+            setNpfNotamsRefreshBusy(false);
             handleNpfNotamsAuthorizationMissing();
             return;
         }
@@ -1808,14 +1840,16 @@ async function refreshNpfNotamsFromNasManually(options = {}) {
         const outcome = await followNpfSofiaNotamsSearch(session, answer, (step, total) => {
             setNpfNotamsRefreshProgress(step, total || NPF_SOFIA_NOTAMS_SEARCH_STEPS);
         });
-        setNpfNotamsRefreshProgress(0, 0);
+        setNpfNotamsRefreshBusy(false);
         if (outcome.kind === 'ready') {
+            setNpfNotamsRefreshProgressDone();
             const payload = await readNpfSofiaNotamsLocalPayload().catch(() => null);
             const source = String(payload?.notamsAutoPdfStatus?.timestampText || 'NOTAM SOFIA');
             setNpfNotamsRefreshStatus(`${source} : enregistrés sur cet iPad pour le hors ligne.`, { success: true });
             await refreshOpenNpfNotamsViews();
             return;
         }
+        setNpfNotamsRefreshProgress(0, 0);
         if (outcome.kind === 'error') {
             setNpfNotamsRefreshStatus(
                 `Recherche des NOTAM sur SOFIA impossible${outcome.message ? ` : ${outcome.message}` : ''}. Les NOTAM de cet iPad restent affichés.`,
@@ -1829,6 +1863,7 @@ async function refreshNpfNotamsFromNasManually(options = {}) {
         }
         setNpfNotamsRefreshStatus('La recherche n’a pas abouti en 5 min. Les NOTAM de cet iPad restent affichés ; réessaie dans quelques minutes.', { error: true });
     } catch (error) {
+        setNpfNotamsRefreshBusy(false);
         setNpfNotamsRefreshProgress(0, 0);
         if (!getStoredBriefingDocsSession()) {
             handleNpfNotamsAuthorizationMissing();
@@ -1838,6 +1873,7 @@ async function refreshNpfNotamsFromNasManually(options = {}) {
             setNpfNotamsRefreshStatus(`Recherche des NOTAM sur SOFIA impossible : ${error?.message || String(error)}. Les NOTAM de cet iPad restent affichés.`, { error: true });
         }
     } finally {
+        setNpfNotamsRefreshBusy(false);
         npfNotamsManualRefreshInProgress = false;
         if (button) button.disabled = false;
     }

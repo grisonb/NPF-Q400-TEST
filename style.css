@@ -1,4 +1,4 @@
-/* NPF_STYLE_BUILD_VERSION: v17.60 */
+/* NPF_STYLE_BUILD_VERSION: v17.61 */
 /* v14.83 — nettoyage des références techniques et limitation des cartouches routiers. */
 /* v14.81 — recherche phonétique nationale élargie aux fragments sur deux lettres. */
 /* v14.80 — Brive conservé uniquement sous LFSL. */
@@ -18396,4 +18396,44 @@ body.npf-calculator-modal-open {
 .npf-confirm-ok {
     background: var(--primary-color);
     color: #ffffff;
+}
+
+/* v17.61 — « Rafraîchir les NOTAM » : ligne d'état et pourcentage bien visibles pendant une
+   recherche (iPad au soleil), indicateur qui tourne. Animation CSS seule (rotation), active
+   uniquement avec la classe notams-refresh-busy, retirée à la fin de la recherche. */
+.notams-refresh-status.notams-refresh-busy {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 18px;
+    font-weight: 800;
+    color: #062f73;
+    border-color: #062f73;
+    border-width: 2px;
+}
+.notams-refresh-status.notams-refresh-busy::before {
+    content: '';
+    flex: 0 0 auto;
+    width: 18px;
+    height: 18px;
+    box-sizing: border-box;
+    border: 3px solid rgba(6, 47, 115, 0.25);
+    border-top-color: #062f73;
+    border-radius: 50%;
+    animation: npf-notams-refresh-spin 0.9s linear infinite;
+}
+#notams-refresh-progress.notams-refresh-busy .vac-download-progress-text {
+    font-size: 18px;
+    font-weight: 800;
+    color: #062f73;
+}
+@keyframes npf-notams-refresh-spin {
+    to { transform: rotate(360deg); }
+}
+/* Échec : message habituel, plus visible. */
+.notams-refresh-status.notams-refresh-status-error {
+    font-size: 17px;
+    font-weight: 800;
+    border-color: #a61b1b;
+    border-width: 2px;
 }
