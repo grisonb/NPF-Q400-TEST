@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v17-61_notam_visible';
-const APP_VERSION = 'v17.61';
+const SW_VERSION = 'sw-v17-62_notam_couleur';
+const APP_VERSION = 'v17.62';
 const SIA_DATA_REVISION = '15.69-radio1026-1-maplite1';
 const SIA_DATA_URL = './sia.js';
 /*

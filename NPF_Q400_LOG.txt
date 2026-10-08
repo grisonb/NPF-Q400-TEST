@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 08/10/2026
-Version de travail actuelle : TEST v17.61
+Version de travail actuelle : TEST v17.62
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,9 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.62 — phrases de fraîcheur « NOTAM SOFIA du … » en VERT si NOTAM du jour,
+  en ROUGE sinon (fenêtre NOTAMS, Gestion des Cartes), mise à jour à minuit
+  et au retour au premier plan ;
 - v17.61 — « Rafraîchir les NOTAM » : ligne d'état et pourcentage bien
   visibles pendant la recherche (plus gros, gras, bleu foncé, indicateur qui
   tourne), pourcentage des demandes terminées (100 % seulement à la fin) ;
@@ -464,7 +467,9 @@ NON IMPLÉMENTÉ / OUVERT :
   07/10/2026 : programme VPS bfg-sofia-notams 1.2.0 PRÊT, NON INSTALLÉ
   (~/vps-a-copier/). v17.60 à pousser APRÈS l'installation de la 1.2.0
   (elle annonce « environ 1 minute ») ;
-- v17.61 : À MESURER sur iPad (lisibilité au soleil de la ligne d'état
+- v17.62 : À MESURER sur iPad (vert / rouge lisibles au soleil, passage au
+  rouge à minuit si l'app reste ouverte) ;
+- v17.61 : poussée le 08/10/2026 ; À MESURER sur iPad (lisibilité au soleil de la ligne d'état
   pendant « Rafraîchir les NOTAM », 100 % seulement à la fin) ;
 - v17.60 : poussée le 07/10/2026 après l'installation de la 1.2.0 ; À MESURER
   sur iPad (pourcentage pendant « Rafraîchir les NOTAM ») ;
@@ -635,44 +640,44 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.61
+Version : TEST v17.62
 Date : 08/10/2026
-Base : v17.60 (4996eca, poussée le 07/10/2026)
+Base : v17.61 (19dbce0, poussée le 08/10/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.61.txt
-2_Index_v17.61.txt
-3_Manifest_v17.61.txt
-4_Script_v17.61.txt
-5_SIA_v17.61.txt
-6_Style_v17.61.txt
-7_Sw_v17.61.txt
+1_Modifications_v17.62.txt
+2_Index_v17.62.txt
+3_Manifest_v17.62.txt
+4_Script_v17.62.txt
+5_SIA_v17.62.txt
+6_Style_v17.62.txt
+7_Sw_v17.62.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.61 (et texte « TEST v17.61 » de l'écran de
+- Index : APP_VERSION = v17.62 (et texte « TEST v17.62 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.61
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.61
-- Style : NPF_STYLE_BUILD_VERSION = v17.61
-- Service Worker : `sw-v17-61_notam_visible` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-61_notam_visible`, `npf-q400-test-app-data-v1`,
+- Manifest : start_url = ./index.html?appv=v17.62
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.62
+- Style : NPF_STYLE_BUILD_VERSION = v17.62
+- Service Worker : `sw-v17-62_notam_couleur` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-62_notam_couleur`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-15.69-radio1026-1-maplite1`
 - SIA_DATA_REVISION (SW / Index) : 15.69-radio1026-1-maplite1 (inchangée)
-- sia.js v17.61 : strictement identique à v17.52.
+- sia.js v17.62 : strictement identique à v17.52.
 - Images de lancement : icons/startup-ipad9-portrait.png (1620 × 2160) et
   icons/startup-ipad9-landscape.png (2160 × 1620).
 - Icônes des boutons (v17.48) : calculator-fms-icon, search-commune-icon,
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.61 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.62 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
 - `sia.js` et moteur tuiles (src/100) identiques à v17.52 ;
-- tests courts v17.61 : entrée v17.61 ;
+- tests courts v17.62 : entrée v17.62 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.61 À MESURER ;
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.62 À MESURER ;
   v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE ;
   v17.56 VALIDÉE en vol ; v17.57 VALIDÉE sur iPad.
 
@@ -2201,6 +2206,54 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.62 — FRAÎCHEUR DES NOTAM EN COULEUR (VERT / ROUGE)
+Date : 08/10/2026
+Base fonctionnelle : v17.61 (commit 19dbce0, poussée le 08/10/2026).
+
+1. DEMANDE (Bastien, 08/10/2026)
+- Phrases de fraîcheur des NOTAM : VERT si les NOTAM sont du jour (date de
+  Paris), ROUGE sinon. Pas de fond, textes inchangés, lisibles au soleil.
+
+2. TEXTES CONCERNÉS (inchangés, seule la couleur change)
+- Fenêtre NOTAMS, ligne sous le titre (#pelic-notams-modal-source) :
+  « NOTAM SOFIA du JJ/MM/AAAA à HH:MM » (fabriquée dans
+  buildNpfNotamsPayloadFromSofiaAll, affichée par renderNpfPelicNotams).
+- Gestion des Cartes, ligne d'état (#notams-refresh-status) : « Copie locale :
+  NOTAM SOFIA du … — 114 terrain(s) couvert(s). » (displayNpfNotamsLocalStatus,
+  avec l'avertissement habituel s'ils ne sont pas du jour) et, après une
+  recherche, « NOTAM SOFIA du … : enregistrés sur cet iPad pour le hors
+  ligne. ». Autres messages de cette ligne (attente, échec…) : sans couleur de
+  fraîcheur. Avant : copie qui n'est pas du jour en style « erreur » (v17.61 :
+  rouge, 17 px, bordure rouge) ; maintenant simple texte rouge foncé.
+
+3. CODE (src/210, style.css)
+- applyNpfNotamsFreshnessClass(élément, date) : classe npf-notams-du-jour
+  (#0a6b2a, gras) ou npf-notams-pas-du-jour (#b0141e, gras) ; la date des
+  NOTAM est gardée sur l'élément (data-npf-notams-iso).
+- Pendant une recherche, la ligne d'état n'a pas ces classes : le style
+  « recherche visible » de la v17.61 s'applique ; à la fin, couleur des
+  nouveaux NOTAM.
+- Minuit : vérification du jour de Paris une fois par minute au plus
+  (setInterval 60 s), sautée si la page est cachée ou si un doigt est sur la
+  carte (isNpfMapGesturePauseActive), reprise la minute suivante ; retour au
+  premier plan (visibilitychange) : couleur recalculée aussitôt. Seul le
+  changement de jour déclenche une recoloration (quelques éléments).
+
+TESTS (Chrome, NAS simulé, programme VPS 1.2.0 réel, faux SOFIA ; aucune
+requête au vrai NAS ni au VPS) : voir compte rendu de la session ; captures :
+outils_tests_NPF-Q400-TEST/out/sofia62/*.png.
+
+FICHIERS MODIFIÉS
+src/210, src/010 (version), donc script.js ; style.css (couleurs, version) ;
+index.html, manifest.json, sw.js (version). sia.js et src/100 : inchangés.
+
+VERSION
+- App : v17.62
+- Service Worker : `sw-v17-62_notam_couleur`
+
+STATUT : À MESURER sur iPad.
+
 
 VERSION TEST v17.61 — « RAFRAÎCHIR LES NOTAM » : ÉTAT BIEN VISIBLE, POURCENTAGE
 DES DEMANDES TERMINÉES

@@ -1,4 +1,4 @@
-/* NPF_STYLE_BUILD_VERSION: v17.61 */
+/* NPF_STYLE_BUILD_VERSION: v17.62 */
 /* v14.83 — nettoyage des références techniques et limitation des cartouches routiers. */
 /* v14.81 — recherche phonétique nationale élargie aux fragments sur deux lettres. */
 /* v14.80 — Brive conservé uniquement sous LFSL. */
@@ -18436,4 +18436,19 @@ body.npf-calculator-modal-open {
     font-weight: 800;
     border-color: #a61b1b;
     border-width: 2px;
+}
+
+/* v17.62 — phrases de fraîcheur « NOTAM SOFIA du … » (fenêtre NOTAMS, Gestion des Cartes) :
+   vert foncé si les NOTAM sont du jour (date de Paris), rouge foncé sinon. Pas de fond ;
+   couleurs foncées et gras pour rester lisibles sur iPad au soleil. Pendant une recherche,
+   la ligne d'état n'a pas ces classes : le style « recherche visible » (v17.61) s'applique. */
+.pelic-notams-modal-source.npf-notams-du-jour,
+.notams-refresh-status.npf-notams-du-jour {
+    color: #0a6b2a;
+    font-weight: 800;
+}
+.pelic-notams-modal-source.npf-notams-pas-du-jour,
+.notams-refresh-status.npf-notams-pas-du-jour {
+    color: #b0141e;
+    font-weight: 800;
 }

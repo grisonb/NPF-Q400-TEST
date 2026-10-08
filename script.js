@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.61';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.62';
 
 
 /*
@@ -3239,7 +3239,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.61 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.62 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -37625,6 +37625,7 @@ function renderNpfPelicNotams(payload, oaci) {
 
     if (title) title.textContent = `NOTAMS ${oaci}`;
     if (source) source.textContent = String(payload?.notamsAutoPdfStatus?.timestampText || 'NOTAM');
+    applyNpfNotamsFreshnessClass(source, getNpfNotamsSourceIso(payload));
     if (status) status.textContent = '';
     if (list) list.innerHTML = '';
     if (prefilters) prefilters.hidden = true;
@@ -37739,6 +37740,7 @@ async function openNpfPelicNotams(oaci) {
     const list = modal.querySelector('#pelic-notams-modal-list');
     if (title) title.textContent = `NOTAMS ${normalizedOaci}`;
     if (source) source.textContent = 'NOTAM SOFIA';
+    applyNpfNotamsFreshnessClass(source, '');
     if (status) {
         status.classList.remove('pelic-notams-modal-status-warning');
         status.textContent = 'Lecture des NOTAM de cet iPad…';
@@ -37809,13 +37811,56 @@ async function readNpfSofiaNotamsLocalPayload() {
     return record?.payload || null;
 }
 
-function setNpfNotamsRefreshStatus(message, { error = false, success = false } = {}) {
+function setNpfNotamsRefreshStatus(message, { error = false, success = false, notamsIso = '' } = {}) {
     const status = document.getElementById('notams-refresh-status');
     if (!status) return;
     status.textContent = String(message || '');
     status.classList.toggle('notams-refresh-status-error', Boolean(error));
     status.classList.toggle('notams-refresh-status-success', Boolean(success));
+    // v17.62 — phrase de fraîcheur : vert si NOTAM du jour, rouge sinon ; autres messages : aucune.
+    applyNpfNotamsFreshnessClass(status, notamsIso);
 }
+
+/* v17.62 — COULEUR DE FRAÎCHEUR des phrases « NOTAM SOFIA du … » : vert si les NOTAM
+ * sont du jour (date de Paris), rouge sinon ; textes inchangés, pas de fond. La date
+ * des NOTAM est gardée sur l'élément (data-npf-notams-iso) pour recolorer sans relire. */
+function applyNpfNotamsFreshnessClass(element, iso) {
+    if (!element) return;
+    const value = String(iso || '').trim();
+    const sourceDay = value ? npfPelicNotamsParisDateKey(value) : '';
+    if (!sourceDay) {
+        delete element.dataset.npfNotamsIso;
+        element.classList.remove('npf-notams-du-jour', 'npf-notams-pas-du-jour');
+        return;
+    }
+    element.dataset.npfNotamsIso = value;
+    const today = sourceDay === npfPelicNotamsParisDateKey(new Date());
+    element.classList.toggle('npf-notams-du-jour', today);
+    element.classList.toggle('npf-notams-pas-du-jour', !today);
+}
+
+function refreshNpfNotamsFreshnessColors() {
+    document.querySelectorAll('[data-npf-notams-iso]').forEach(element => {
+        applyNpfNotamsFreshnessClass(element, element.dataset.npfNotamsIso);
+    });
+}
+
+/* Passage de minuit : une vérification par minute au plus (jour de Paris), sautée si un
+ * doigt est sur la carte (reprise à la minute suivante) ; retour au premier plan : aussitôt. */
+let npfNotamsFreshnessDay = npfPelicNotamsParisDateKey(new Date());
+setInterval(() => {
+    if (document.visibilityState === 'hidden') return;
+    if (typeof isNpfMapGesturePauseActive === 'function' && isNpfMapGesturePauseActive()) return;
+    const day = npfPelicNotamsParisDateKey(new Date());
+    if (day === npfNotamsFreshnessDay) return;
+    npfNotamsFreshnessDay = day;
+    refreshNpfNotamsFreshnessColors();
+}, 60000);
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    npfNotamsFreshnessDay = npfPelicNotamsParisDateKey(new Date());
+    refreshNpfNotamsFreshnessColors();
+});
 
 let npfNotamsRefreshLastPercent = 0;
 
@@ -37898,7 +37943,7 @@ async function displayNpfNotamsLocalStatus() {
     const coverageCount = getNpfNotamsCoverageFromPayload(payload).length;
     setNpfNotamsRefreshStatus(
         `Copie locale : ${source} — ${coverageCount} terrain(s) couvert(s).${staleText ? ` ${staleText}.` : ''}`,
-        { error: Boolean(staleText) }
+        { notamsIso: getNpfNotamsSourceIso(payload) }
     );
 }
 
@@ -38210,7 +38255,7 @@ async function refreshNpfNotamsFromNasManually(options = {}) {
             setNpfNotamsRefreshProgressDone();
             const payload = await readNpfSofiaNotamsLocalPayload().catch(() => null);
             const source = String(payload?.notamsAutoPdfStatus?.timestampText || 'NOTAM SOFIA');
-            setNpfNotamsRefreshStatus(`${source} : enregistrés sur cet iPad pour le hors ligne.`, { success: true });
+            setNpfNotamsRefreshStatus(`${source} : enregistrés sur cet iPad pour le hors ligne.`, { notamsIso: getNpfNotamsSourceIso(payload) });
             await refreshOpenNpfNotamsViews();
             return;
         }
