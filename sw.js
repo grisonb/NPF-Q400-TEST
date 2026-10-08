@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v17-64_trafic_moyens_nationaux';
-const APP_VERSION = 'v17.64';
+const SW_VERSION = 'sw-v17-65_telechargement_carte_npf_q400';
+const APP_VERSION = 'v17.65';
 const SIA_DATA_REVISION = '15.69-radio1026-1-maplite1';
 const SIA_DATA_URL = './sia.js';
 /*
@@ -574,6 +574,12 @@ self.addEventListener('fetch', event => {
         return;
     }
 
+    // v17.65 — serveur des cartes NPF-Q400 (VPS) : passage direct au réseau,
+    // sans délai de 8 s ni copie dans le cache du SW (morceaux de ~50 Mo).
+    if (isNpfMapServerRequest(request.url)) {
+        return;
+    }
+
  // v14.93 — le dépôt VAC GitHub Pages reste une source réseau pure.
  // Les PDF sont ensuite conservés par script.js dans IndexedDB, pas dans Cache Storage.
     if (isVacRepositoryRequest(request.url)) {
@@ -611,6 +617,14 @@ self.addEventListener('fetch', event => {
 
 
 
+
+function isNpfMapServerRequest(url) {
+    try {
+        return new URL(url).hostname === 'vps-3c305ff2.vps.ovh.net';
+    } catch (_) {
+        return false;
+    }
+}
 
 function isGlobalLinkNasRequest(url) {
     try {

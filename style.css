@@ -1,4 +1,4 @@
-/* NPF_STYLE_BUILD_VERSION: v17.64 */
+/* NPF_STYLE_BUILD_VERSION: v17.65 */
 /* v14.83 — nettoyage des références techniques et limitation des cartouches routiers. */
 /* v14.81 — recherche phonétique nationale élargie aux fragments sur deux lettres. */
 /* v14.80 — Brive conservé uniquement sous LFSL. */
@@ -18510,4 +18510,35 @@ body.npf-calculator-modal-open {
         flex-basis: 22px !important;
     }
     #global-link-layer-button .global-link-map-text { font-size: 8px !important; }
+}
+
+/* v17.65 — téléchargement de la carte NPF-Q400 depuis le serveur (Gestion des Cartes). */
+/* Même rangée que « Importer Cartes Offline » ; le « ? » invisible garde la même largeur de bouton. */
+#offline-map-modal .npf-map-download-row {
+    margin: 0 0 10px !important;
+}
+#offline-map-modal .npf-map-download-row .npf-map-download-help-spacer {
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
+#offline-map-modal .npf-map-download-row .import-button {
+    border: none !important;
+    box-shadow: none !important;
+}
+#offline-map-modal .npf-map-download-row .import-button:disabled {
+    opacity: .65;
+    cursor: default;
+}
+#offline-map-modal .npf-map-download-progress {
+    margin: 0 0 12px !important;
+}
+.npf-map-download-advice {
+    margin-bottom: 7px;
+    color: #b45309;
+    font-size: 13px;
+    font-weight: 800;
+    text-align: center;
+}
+.npf-map-download-progress.npf-map-download-error .vac-download-progress-text {
+    color: #b91c1c;
 }

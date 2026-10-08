@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 08/10/2026
-Version de travail actuelle : TEST v17.64
+Version de travail actuelle : TEST v17.65
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,10 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.65 — « Télécharger la carte NPF-Q400 » (Gestion des Cartes) : carte
+  NPF-Q400 téléchargée depuis le serveur NPF-Q400 (VPS) en 55 morceaux
+  vérifiés, ancienne carte NPF-Q400 effacée d'abord, place vérifiée, reprise
+  au morceau en cours ; import manuel conservé en secours, inchangé ;
 - v17.64 — nom affiché « Trafic Moyens Nationaux » partout à la place de
   « GLR » / « Global Link (Rescue) » ; « Moyens » / « Nationaux » sous le logo
   du bouton ;
@@ -472,6 +476,18 @@ NON IMPLÉMENTÉ / OUVERT :
   07/10/2026 : programme VPS bfg-sofia-notams 1.2.0 PRÊT, NON INSTALLÉ
   (~/vps-a-copier/). v17.60 à pousser APRÈS l'installation de la 1.2.0
   (elle annonce « environ 1 minute ») ;
+- v17.65 : À MESURER sur iPad (téléchargement réel de 2,7 Go en Wi-Fi :
+  durée, écran allumé obtenu ou non, mémoire, reprise après mise en arrière-
+  plan ; carte affichée ensuite comme l'import manuel) ;
+- Serveur des cartes sur le VPS : INSTALLÉ et VALIDÉ par Bastien le
+  08/10/2026 (Caddy 2.11.7 du dépôt officiel + mises à jour automatiques,
+  pare-feu 22/80/443, carte rangée le même jour dans /srv/npf-cartes/npf-q400/,
+  https://vps-3c305ff2.vps.ovh.net/npf-q400/manifest.json) ;
+  dossier d'arrivée /home/ubuntu/npf-cartes-arrivee/ à supprimer APRÈS
+  validation sur l'iPad ;
+- Cartes du serveur dans des sous-dossiers (une carte = un dossier) :
+  DÉCIDÉ et FAIT le 08/10/2026 (carte NPF-Q400 sous /npf-q400/, l'ancienne
+  adresse à la racine répond 404) ;
 - v17.64 : À MESURER sur iPad (« Moyens » / « Nationaux » sur une ligne
   chacun avec la police de l'iPad, nouveaux textes) ;
 - v17.63 : poussée le 08/10/2026 ; À MESURER sur iPad (netteté du logo GLR, états lisibles par la
@@ -649,44 +665,44 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.64
+Version : TEST v17.65
 Date : 08/10/2026
-Base : v17.63 (43e621b, poussée le 08/10/2026)
+Base : v17.64 (4f1cb6b, poussée le 08/10/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.64.txt
-2_Index_v17.64.txt
-3_Manifest_v17.64.txt
-4_Script_v17.64.txt
-5_SIA_v17.64.txt
-6_Style_v17.64.txt
-7_Sw_v17.64.txt
+1_Modifications_v17.65.txt
+2_Index_v17.65.txt
+3_Manifest_v17.65.txt
+4_Script_v17.65.txt
+5_SIA_v17.65.txt
+6_Style_v17.65.txt
+7_Sw_v17.65.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.64 (et texte « TEST v17.64 » de l'écran de
+- Index : APP_VERSION = v17.65 (et texte « TEST v17.65 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.64
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.64
-- Style : NPF_STYLE_BUILD_VERSION = v17.64
-- Service Worker : `sw-v17-64_trafic_moyens_nationaux` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-64_trafic_moyens_nationaux`, `npf-q400-test-app-data-v1`,
+- Manifest : start_url = ./index.html?appv=v17.65
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.65
+- Style : NPF_STYLE_BUILD_VERSION = v17.65
+- Service Worker : `sw-v17-65_telechargement_carte_npf_q400` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-65_telechargement_carte_npf_q400`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-15.69-radio1026-1-maplite1`
 - SIA_DATA_REVISION (SW / Index) : 15.69-radio1026-1-maplite1 (inchangée)
-- sia.js v17.64 : strictement identique à v17.52.
+- sia.js v17.65 : strictement identique à v17.52.
 - Images de lancement : icons/startup-ipad9-portrait.png (1620 × 2160) et
   icons/startup-ipad9-landscape.png (2160 × 1620).
 - Icônes des boutons (v17.48) : calculator-fms-icon, search-commune-icon,
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.64 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.65 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
 - `sia.js` et moteur tuiles (src/100) identiques à v17.52 ;
-- tests courts v17.64 : entrée v17.64 ;
+- tests v17.65 (téléchargement + non-régression rapide) : entrée v17.65 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64 À MESURER ;
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.65 À MESURER ;
   v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE ;
   v17.56 VALIDÉE en vol ; v17.57 VALIDÉE sur iPad.
 
@@ -2215,6 +2231,140 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.65 — « TÉLÉCHARGER LA CARTE NPF-Q400 » DEPUIS LE SERVEUR
+NPF-Q400 (VPS)
+Date : 08/10/2026
+Base fonctionnelle : v17.64 (commit 4f1cb6b, poussée le 08/10/2026).
+Demande de Bastien (08/10/2026, décisions 1 à 11), après installation et
+validation du serveur des cartes sur le VPS le même jour.
+
+0. SERVEUR (hors dépôt, rien dans l'application)
+- Carte NPF-Q400 V9 (10 ZIP, 2,7 Go) découpée en 55 morceaux d'environ 50 Mo
+  (format npf-q400-tiles-v1 : « NPFQ400T », longueur d'en-tête, en-tête JSON
+  [chemin z/x/y, décalage, taille], puis les images telles quelles) +
+  manifest.json (nom, versionCarte, creeLe, totalTuiles 164 406, totalOctets
+  2 845 541 630, liste des morceaux avec octets / sha256 / tuiles) +
+  SHA256SUMS. Total des tuiles identique avant / après découpage (164 406),
+  0 doublon. Outils : ~/projects/npf-cartes-vps/ (hors dépôt Git).
+- VPS : Caddy 2.11.7 (dépôt officiel, mises à jour automatiques
+  « origin=cloudsmith/caddy/stable » prouvées par unattended-upgrade
+  --dry-run), /srv/npf-cartes en lecture seule (root, 0644), CORS limité à
+  https://grisonb.github.io, pas de liste des fichiers, pare-feu 22 puis 80
+  et 443. Services bfg-* inchangés. Retour arrière prêt (.ps1).
+- Une carte = un dossier (décision de Bastien, 08/10/2026) : carte rangée
+  dans /srv/npf-cartes/npf-q400/ (carte-vps.sh « ranger », empreintes
+  revérifiées, Caddyfile « */manifest.json ») ; vérifié depuis le PC :
+  /npf-q400/manifest.json 200 + CORS, Range 206, /manifest.json (ancienne
+  adresse) 404, /npf-q400/ 404 (pas de liste), services bfg-* identiques.
+
+1. GESTION DES CARTES > CARTES OFFLINE
+- Nouveau bouton « Télécharger la carte NPF-Q400 » au-dessus de « Importer
+  Cartes Offline » (même largeur, même rangée avec un « ? » invisible).
+- Confirmation unique (fenêtre interne Annuler / Continuer) : « Carte de
+  2,7 Go : utilise le Wi-Fi. L'ancienne carte NPF-Q400 sera d'abord
+  effacée. Pas de carte hors ligne pendant le téléchargement. » ; dans ce
+  texte et celui de la reprise, « NPF-Q400 » avec un trait d'union
+  insécable (U+2011) pour ne jamais être coupé en fin de ligne ; fenêtre
+  commune npfConfirmInApp inchangée.
+- Ordre : lecture du manifeste (serveur injoignable => message, RIEN
+  effacé) -> place vérifiée AVANT tout effacement (demande de Bastien) :
+  place libre (navigator.storage.estimate) + place de l'ancienne carte
+  NPF-Q400 (taille des fichiers × 1,15 ; 0 si inconnue) comparée au besoin
+  (2,7 Go × 1,15 + 300 Mo ≈ 3,3 Go) ; pas assez => message clair, RIEN
+  effacé ni téléchargé -> effacement de TOUTES les cartes NPF-Q400 en une
+  seule opération (bases entières, fonction de suppression v17.46 ; base
+  cible restée d'un essai inachevé aussi effacée ; place après effacement
+  notée au DIAG) -> morceaux un par un. Les autres cartes et toutes les autres données
+  (NOTAM, FdS/GAAR, réglages) ne sont pas touchées.
+- Chaque morceau : téléchargement entier (arrêt si plus rien n'arrive
+  pendant 30 s), empreinte SHA-256 comparée au manifeste, nombre de tuiles
+  contrôlé, écriture en lots de 40 (comme l'import), chaque image copiée
+  (slice) pour ne pas garder le morceau de 50 Mo en mémoire. Erreur
+  d'écriture : base rouverte et même lot en petits lots (comme l'import).
+- Barre de progression + « NN % — morceau X sur N — téléchargement… » puis
+  « — écriture des tuiles… » (la barre avance aussi pendant l'écriture :
+  60 % de la part d'un morceau au téléchargement, 40 % à l'écriture).
+  Message pendant le téléchargement : « Garde l'app ouverte au premier plan
+  et l'écran allumé. » Écran allumé : Screen Wake Lock demandé au début et
+  au retour au premier plan, résultat noté dans le DIAG.
+- Coupure réseau : nouvel essai du morceau en cours après 3, 6, 12, 24, 30
+  et 30 s ; ensuite arrêt avec « Reprendre le téléchargement de la carte
+  NPF-Q400 ». Fermeture de l'app : au lancement suivant, le bouton devient
+  « Reprendre le téléchargement de la carte NPF-Q400 » avec « Téléchargement
+  interrompu au morceau X sur N » ; confirmation de reprise, reprise au
+  morceau en cours (les morceaux déjà écrits sont gardés). Carte changée sur
+  le serveur entre-temps (creeLe différent) ou base disparue : reprise
+  depuis le début, noté dans le DIAG.
+- La carte n'est ni listée ni affichée avant la fin : à la fin, comptage
+  des tuiles de la base = totalTuiles du manifeste, sinon « Vérification
+  échouée » et carte non utilisable. Puis une seule carte « Carte
+  NPF-Q400 » dans la liste et le sélecteur, activée, retour au mode carte
+  d'avant (comme l'import), rechargement de la carte.
+- Rangement identique à l'import manuel (base OfflineMap_NPF_France,
+  adresse logique npffrance.tile.openstreetmap.org, clé url::pack, données
+  brutes) : fichier « NPF_France_00 » (sourceName identique ; un premier
+  essai avec un sourceName différent faisait chercher une 2e base
+  inexistante : erreurs d'ouverture dans le DIAG, corrigé avant livraison).
+  Champs en plus : origin « serveur », versionCarte, serverCreeLe.
+- Réutilisable : NPF_SERVER_MAPS (une carte = un manifeste ; les morceaux
+  sont lus à côté du manifeste). Rien d'autre codé pour l'OACI.
+- Import manuel « Importer Cartes Offline » : inchangé (secours). Pendant le
+  téléchargement, un import est refusé (même verrou isZipImportRunning).
+
+2. DIAG
+- Section « Téléchargement carte NPF-Q400 (serveur) » : état (morceau X sur
+  N), heure de début, version de carte, écran allumé (obtenu / refusé /
+  indisponible) ; 14 derniers événements (début, effacement, place,
+  erreurs avec numéro d'essai, reprises, interruption par fermeture,
+  arrière-plan / premier plan, fin vérifiée) ; total téléchargement /
+  écriture / nouveaux essais ; une ligne par morceau : taille, tuiles,
+  durée de téléchargement, durée d'écriture, essais.
+
+3. SERVICE WORKER
+- vps-3c305ff2.vps.ovh.net : passage direct au réseau (pas de délai de 8 s,
+  pas de copie des morceaux dans le cache du SW), comme le NAS FdS / NOTAM.
+
+TESTS (desktop, Chrome, faux serveur local avec les 55 vrais morceaux ; vrai
+VPS et vrai NAS bloqués au DNS) :
+- Téléchargement complet : OK (55 morceaux, 2 min 49 sur le PC ; 164 406
+  tuiles en base = manifeste ; une tuile relue identique octet pour octet ;
+  lecteur de tuiles : tuile trouvée, aucune erreur d'ouverture ; ancienne
+  carte NPF-Q400 effacée, carte OACI et réglages intacts ; une seule « Carte
+  NPF-Q400 » dans la liste et le sélecteur ; 55 lignes de morceaux au DIAG).
+- Coupure réseau en plein morceau 21 pendant 25 s : OK (4 nouveaux essais,
+  reprise automatique au morceau 21, carte complète et vérifiée).
+- Fermeture de l'app en plein morceau 31 : OK (bouton « Reprendre… »,
+  « interrompu au morceau 31 sur 55 », reprise au morceau 31, carte complète
+  et vérifiée ; DIAG : interruption + reprise).
+- Place insuffisante avec ancienne carte présente (2,0 Go libres + 329 Mo
+  < 3,3 Go) : OK (message, RIEN effacé, aucun morceau demandé, ancienne
+  carte NPF-Q400 et OACI intactes). Place suffisante grâce à l'ancienne
+  carte (1,0 Go + 3,0 Go) : OK (effacement puis morceau 1 demandé).
+  Serveur injoignable : OK (« Rien n'a été effacé »).
+- Non-régression rapide (carte avec import manuel, DIAG, boutons,
+  simulation, retour automatique, mise à jour v17.64 -> v17.65, bouton et
+  textes Trafic Moyens Nationaux) : OK, écarts = heures, numéros de version
+  et compteurs qui varient d'une exécution à l'autre.
+- « PAN CARTE SACCADÉ » (test cdp_nr, fichiers finaux, PC sans écran) : 1
+  geste signalé (trou max 138 ms) puis 2 au passage suivant (111 et 776 ms),
+  file de tuiles vide à chaque fois ; même ordre que v17.61-v17.63 (2
+  gestes, jusqu'à 1 093 ms) et v17.64 (0) : variation du PC de test.
+  Aucun code du téléchargement n'agit pendant un déplacement de carte.
+
+FICHIERS MODIFIÉS
+index.html (bouton, progression, version) ; style.css (bouton, progression,
+version) ; src/280 (téléchargement), src/010 (DIAG, version), donc
+script.js ; sw.js (passage direct, version) ; manifest.json (version).
+sia.js et src/100 (moteur de tuiles) : inchangés.
+
+VERSION
+- App : v17.65
+- Service Worker : `sw-v17-65_telechargement_carte_npf_q400`
+
+STATUT : À MESURER sur iPad (vrai téléchargement de 2,7 Go en Wi-Fi).
+Sous-dossiers sur le serveur (une carte = un dossier) : FAIT (/npf-q400/).
+
 
 VERSION TEST v17.64 — « TRAFIC MOYENS NATIONAUX » À LA PLACE DE GLR / GLOBAL
 LINK ; « MOYENS / NATIONAUX » SOUS LE LOGO DU BOUTON
