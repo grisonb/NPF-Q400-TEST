@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v17-62_notam_couleur';
-const APP_VERSION = 'v17.62';
+const SW_VERSION = 'sw-v17-63_glr_logo';
+const APP_VERSION = 'v17.63';
 const SIA_DATA_REVISION = '15.69-radio1026-1-maplite1';
 const SIA_DATA_URL = './sia.js';
 /*

@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 08/10/2026
-Version de travail actuelle : TEST v17.62
+Version de travail actuelle : TEST v17.63
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,8 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.63 — bouton GLR : logo SVG « M2 » monochrome à la place du texte
+  « GLR » ; fenêtre « Mise à jour installée » réduite à 2 lignes + Continuer ;
 - v17.62 — phrases de fraîcheur « NOTAM SOFIA du … » en VERT si NOTAM du jour,
   en ROUGE sinon (fenêtre NOTAMS, Gestion des Cartes), mise à jour à minuit
   et au retour au premier plan ;
@@ -467,7 +469,9 @@ NON IMPLÉMENTÉ / OUVERT :
   07/10/2026 : programme VPS bfg-sofia-notams 1.2.0 PRÊT, NON INSTALLÉ
   (~/vps-a-copier/). v17.60 à pousser APRÈS l'installation de la 1.2.0
   (elle annonce « environ 1 minute ») ;
-- v17.62 : À MESURER sur iPad (vert / rouge lisibles au soleil, passage au
+- v17.63 : À MESURER sur iPad (netteté du logo GLR, états lisibles par la
+  bordure, fenêtre de mise à jour) ;
+- v17.62 : poussée le 08/10/2026 ; À MESURER sur iPad (vert / rouge lisibles au soleil, passage au
   rouge à minuit si l'app reste ouverte) ;
 - v17.61 : poussée le 08/10/2026 ; À MESURER sur iPad (lisibilité au soleil de la ligne d'état
   pendant « Rafraîchir les NOTAM », 100 % seulement à la fin) ;
@@ -640,44 +644,44 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.62
+Version : TEST v17.63
 Date : 08/10/2026
-Base : v17.61 (19dbce0, poussée le 08/10/2026)
+Base : v17.62 (94edf1e, poussée le 08/10/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.62.txt
-2_Index_v17.62.txt
-3_Manifest_v17.62.txt
-4_Script_v17.62.txt
-5_SIA_v17.62.txt
-6_Style_v17.62.txt
-7_Sw_v17.62.txt
+1_Modifications_v17.63.txt
+2_Index_v17.63.txt
+3_Manifest_v17.63.txt
+4_Script_v17.63.txt
+5_SIA_v17.63.txt
+6_Style_v17.63.txt
+7_Sw_v17.63.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.62 (et texte « TEST v17.62 » de l'écran de
+- Index : APP_VERSION = v17.63 (et texte « TEST v17.63 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.62
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.62
-- Style : NPF_STYLE_BUILD_VERSION = v17.62
-- Service Worker : `sw-v17-62_notam_couleur` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-62_notam_couleur`, `npf-q400-test-app-data-v1`,
+- Manifest : start_url = ./index.html?appv=v17.63
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.63
+- Style : NPF_STYLE_BUILD_VERSION = v17.63
+- Service Worker : `sw-v17-63_glr_logo` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-63_glr_logo`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-15.69-radio1026-1-maplite1`
 - SIA_DATA_REVISION (SW / Index) : 15.69-radio1026-1-maplite1 (inchangée)
-- sia.js v17.62 : strictement identique à v17.52.
+- sia.js v17.63 : strictement identique à v17.52.
 - Images de lancement : icons/startup-ipad9-portrait.png (1620 × 2160) et
   icons/startup-ipad9-landscape.png (2160 × 1620).
 - Icônes des boutons (v17.48) : calculator-fms-icon, search-commune-icon,
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.62 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.63 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
 - `sia.js` et moteur tuiles (src/100) identiques à v17.52 ;
-- tests courts v17.62 : entrée v17.62 ;
+- tests courts v17.63 : entrée v17.63 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.62 À MESURER ;
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.63 À MESURER ;
   v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE ;
   v17.56 VALIDÉE en vol ; v17.57 VALIDÉE sur iPad.
 
@@ -2206,6 +2210,62 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.63 — LOGO DU BOUTON GLR ; FENÊTRE « MISE À JOUR INSTALLÉE »
+Date : 08/10/2026
+Base fonctionnelle : v17.62 (commit 94edf1e, poussée le 08/10/2026).
+Changements d'affichage uniquement (demande de Bastien, choix « M2 »).
+
+1. RELEVÉ AVANT CODAGE (v17.62)
+- Bouton GLR : index.html:164-172 (#global-link-layer-button) ; contenu
+  <span class="global-link-map-label">GLR</span> (texte 23 px, gras 950,
+  couleur var(--primary-color) #005a9c dans TOUS les états : style.css
+  14078-14114, qui remplace les couleurs par état de 13211-13238) ; bordure
+  4 px (3 px sous 760 px) ROUGE #dc2626 (non connecté, OFF, ON sans trafic,
+  chargement) ou VERTE #16a34a (ON avec trafics détectés) — l'état se lit par
+  la BORDURE, pas par la couleur du texte. Classes posées par
+  updateGlobalLinkButton, src/180_global_link.js:982-1028 : non connecté
+  (code demandé) = global-link-auth-needed ; ON + trafics = global-link-active ;
+  sinon global-link-ready (OFF ou aucun trafic) ; « loading » pendant une
+  lecture ; global-link-stale n'est plus jamais posée. Pastilles : verte en haut
+  à droite (#global-link-button-count, actifs, total national) et marron en
+  haut à gauche (#global-link-off-button-count, Off), affichées seulement si ON
+  et nombre > 0 (style.css 16677-16716). Nom accessible : « Global Link —
+  afficher ou masquer les appareils suivis » ; infobulle (title) selon l'état.
+- Fenêtre « Mise à jour installée » : index.html:983-1060
+  (showNpfPostUpdateNoticeOnce, appelée ligne 1450) ; affichait « Mise à jour
+  installée », « NPF-Q400 v17.62 est prête. », « La mise à jour est terminée.
+  Il n’est plus nécessaire de fermer puis relancer plusieurs fois
+  l’application. » et le bouton « Continuer », qui ferme la fenêtre (rien
+  d'autre ; marqueur de version consommé avant l'affichage : une seule fois).
+
+2. MODIFICATIONS
+- Bouton GLR : texte « GLR » retiré, remplacé par le logo SVG intégré (aucun
+  fichier, hors ligne), dessin exact demandé (viewBox -70 -70 140 140, deux
+  arcs, anneau épais, triangle ; une seule couleur #1565c0 sur fond blanc),
+  62 × 62 px comme le logo SafeSky (36 × 36 sous 760 px), centré. Bordures,
+  pastilles, taille, toucher, mémorisation ON/OFF inchangés ; la couleur du
+  texte ne variait pas selon l'état, le logo garde donc sa couleur unique.
+  aria-label = « GLR » (non affiché) ; infobulles inchangées.
+- Fenêtre de mise à jour : « Mise à jour installée », « NPF-Q400 v17.63 »
+  (APP_VERSION, calculée comme avant), bouton « Continuer » (même action :
+  fermer). Moment d'apparition inchangé.
+
+TESTS : voir compte rendu de la session (captures avant / après dans
+outils_tests_NPF-Q400-TEST/out/glr-glr62-*.png, glr-glr63-*.png,
+maj-maj62.png, maj-maj63.png).
+
+FICHIERS MODIFIÉS
+index.html (bouton GLR, fenêtre, version) ; style.css (taille du logo,
+version) ; src/010 (version), donc script.js ; manifest.json, sw.js
+(version). sia.js et src/100 : inchangés.
+
+VERSION
+- App : v17.63
+- Service Worker : `sw-v17-63_glr_logo`
+
+STATUT : À MESURER sur iPad.
+
 
 VERSION TEST v17.62 — FRAÎCHEUR DES NOTAM EN COULEUR (VERT / ROUGE)
 Date : 08/10/2026

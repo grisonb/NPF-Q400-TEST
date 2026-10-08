@@ -1,4 +1,4 @@
-/* NPF_STYLE_BUILD_VERSION: v17.62 */
+/* NPF_STYLE_BUILD_VERSION: v17.63 */
 /* v14.83 — nettoyage des références techniques et limitation des cartouches routiers. */
 /* v14.81 — recherche phonétique nationale élargie aux fragments sur deux lettres. */
 /* v14.80 — Brive conservé uniquement sous LFSL. */
@@ -18451,4 +18451,22 @@ body.npf-calculator-modal-open {
 .notams-refresh-status.npf-notams-pas-du-jour {
     color: #b0141e;
     font-weight: 800;
+}
+
+/* v17.63 — bouton GLR : logo SVG « M2 » monochrome (#1565c0) à la place du texte « GLR »,
+   même taille que le logo SafeSky dans son bouton (62 px ; 36 px sur petit écran).
+   Bouton, bordure (rouge / verte selon l'état), pastilles et toucher inchangés. */
+#global-link-layer-button .global-link-map-icon {
+    display: block !important;
+    width: 62px !important;
+    height: 62px !important;
+    flex: 0 0 62px !important;
+    pointer-events: none !important;
+}
+@media (max-width: 760px) {
+    #global-link-layer-button .global-link-map-icon {
+        width: 36px !important;
+        height: 36px !important;
+        flex-basis: 36px !important;
+    }
 }
