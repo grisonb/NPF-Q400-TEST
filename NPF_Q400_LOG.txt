@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 08/10/2026
-Version de travail actuelle : TEST v17.65
+Version de travail actuelle : TEST v17.66
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,12 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.66 — téléchargement depuis le serveur NPF-Q400 étendu à 4 sections :
+  Carte OACI 1/500 000, Carte OACI, Calque Routier, Doc FdF Réduite / Carte
+  Fréquences (protégée par un code) ; Carte OACI 1/500 000 au zoom 11 natif
+  (limite de zoom propre à chaque carte) ; fenêtre Gestion des Cartes ouverte
+  pendant tout téléchargement ; « Continuer » centré ; « NPF-Q400 » dans la
+  fenêtre FdS/GAAR et le bouton BFG ; DIAG « 0 Mo » ;
 - v17.65 — « Télécharger la carte NPF-Q400 » (Gestion des Cartes) : carte
   NPF-Q400 téléchargée depuis le serveur NPF-Q400 (VPS) en 55 morceaux
   vérifiés, ancienne carte NPF-Q400 effacée d'abord, place vérifiée, reprise
@@ -476,7 +482,18 @@ NON IMPLÉMENTÉ / OUVERT :
   07/10/2026 : programme VPS bfg-sofia-notams 1.2.0 PRÊT, NON INSTALLÉ
   (~/vps-a-copier/). v17.60 à pousser APRÈS l'installation de la 1.2.0
   (elle annonce « environ 1 minute ») ;
-- v17.65 : À MESURER sur iPad (téléchargement réel de 2,7 Go en Wi-Fi :
+- v17.66 : À MESURER sur iPad (les 4 sections en Wi-Fi ; code Doc FdF saisi
+  une fois ; pas de fenêtre de connexion Safari ; zoom 11 de la Carte OACI
+  1/500 000 : netteté, mémoire, fluidité, ligne DIAG « Zoom hors ligne » ;
+  fenêtre Gestion des Cartes ouverte pendant tout téléchargement) ;
+- Sections sur le VPS (09/10/2026) : INSTALLÉES et VALIDÉES par Bastien
+  (/srv/npf-cartes/oaci-500000, oaci, calque-routier, doc-fdf ; doc-fdf
+  protégée par code, seule l'empreinte bcrypt est sur le VPS) ; dossier
+  d'arrivée /home/ubuntu/npf-cartes-arrivee/sections/ à supprimer APRÈS
+  validation sur l'iPad ;
+- v17.65 : VALIDÉE sur iPad le 08/10/2026 (164 406 tuiles en 2 min 12,
+  écran allumé obtenu, aucune erreur) ;
+- v17.65 (avant validation) : À MESURER sur iPad (téléchargement réel de 2,7 Go en Wi-Fi :
   durée, écran allumé obtenu ou non, mémoire, reprise après mise en arrière-
   plan ; carte affichée ensuite comme l'import manuel) ;
 - Serveur des cartes sur le VPS : INSTALLÉ et VALIDÉ par Bastien le
@@ -665,44 +682,45 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.65
-Date : 08/10/2026
-Base : v17.64 (4f1cb6b, poussée le 08/10/2026)
+Version : TEST v17.66
+Date : 09/10/2026
+Base : v17.65 (5ccd247, poussée le 08/10/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.65.txt
-2_Index_v17.65.txt
-3_Manifest_v17.65.txt
-4_Script_v17.65.txt
-5_SIA_v17.65.txt
-6_Style_v17.65.txt
-7_Sw_v17.65.txt
+1_Modifications_v17.66.txt
+2_Index_v17.66.txt
+3_Manifest_v17.66.txt
+4_Script_v17.66.txt
+5_SIA_v17.66.txt
+6_Style_v17.66.txt
+7_Sw_v17.66.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.65 (et texte « TEST v17.65 » de l'écran de
+- Index : APP_VERSION = v17.66 (et texte « TEST v17.66 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.65
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.65
-- Style : NPF_STYLE_BUILD_VERSION = v17.65
-- Service Worker : `sw-v17-65_telechargement_carte_npf_q400` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-65_telechargement_carte_npf_q400`, `npf-q400-test-app-data-v1`,
+- Manifest : start_url = ./index.html?appv=v17.66
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.66
+- Style : NPF_STYLE_BUILD_VERSION = v17.66
+- Service Worker : `sw-v17-66_telechargement_sections` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-66_telechargement_sections`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-15.69-radio1026-1-maplite1`
 - SIA_DATA_REVISION (SW / Index) : 15.69-radio1026-1-maplite1 (inchangée)
-- sia.js v17.65 : strictement identique à v17.52.
+- sia.js v17.66 : strictement identique à v17.52.
 - Images de lancement : icons/startup-ipad9-portrait.png (1620 × 2160) et
   icons/startup-ipad9-landscape.png (2160 × 1620).
 - Icônes des boutons (v17.48) : calculator-fms-icon, search-commune-icon,
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.65 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.66 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
-- `sia.js` et moteur tuiles (src/100) identiques à v17.52 ;
-- tests v17.65 (téléchargement + non-régression rapide) : entrée v17.65 ;
+- `sia.js` identique à v17.52 ; moteur tuiles (src/100) modifié en v17.66 sur demande
+  explicite (limite de zoom propre à chaque carte, zoom 11 OACI 1/500 000) ;
+- tests v17.66 (sections + non-régression bloquante) : entrée v17.66 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.65 À MESURER ;
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64 et v17.66 À MESURER ; v17.65 VALIDÉE ;
   v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE ;
   v17.56 VALIDÉE en vol ; v17.57 VALIDÉE sur iPad.
 
@@ -2231,6 +2249,159 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.66 — SECTIONS TÉLÉCHARGÉES DEPUIS LE SERVEUR NPF-Q400 :
+CARTE OACI 1/500 000, CARTE OACI, CALQUE ROUTIER, DOC FDF ; ZOOM 11 DE L'OACI
+1/500 000 ; FENÊTRE GESTION DES CARTES OUVERTE ; CORRECTIONS D'AFFICHAGE
+Date : 09/10/2026
+Base fonctionnelle : v17.65 (commit 5ccd247, poussée le 08/10/2026, VALIDÉE
+sur iPad le 08/10/2026).
+Demande de Bastien (09/10/2026, parties A, B et C), décisions : une section
+par dossier sur le VPS ; sections 1 à 3 publiques, Doc FdF protégée par un
+code ; un bouton par section avec sa taille ; télécharger une section
+remplace TOUT ce que l'iPad contient de cette section, et rien d'autre ;
+import manuel conservé ; carte NPF-Q400 et son téléchargement inchangés.
+
+0. SERVEUR (hors dépôt)
+- Découpage (outils/decouper_section.py) : OACI 1/500 000 = 14 morceaux
+  (11 293 tuiles, zooms 6 à 11, zoom 11 gardé) ; Carte OACI = 5 morceaux
+  (3 347 tuiles, zooms 6 à 10) ; Calque Routier = ZIP d'origine en 5
+  morceaux de 5 Mo ; Doc FdF = ZIP des 29 PDF en 5 morceaux. Contenu
+  identique avant / après pour chaque section.
+- VPS : /srv/npf-cartes/<section>/ en lecture seule ; Caddyfile sauvegardé
+  avant chaque modification et validé avant rechargement ; Doc FdF protégée
+  par basic_auth (seule l'empreinte bcrypt du code est sur le VPS, le code
+  n'est écrit nulle part) ; refus = 401 avec CORS et sans WWW-Authenticate
+  (pas de fenêtre de connexion du navigateur) ; pré-vérification CORS (OPTIONS)
+  sans code. Vérifié depuis le PC (manifestes 200 + CORS, Range 206, Doc FdF
+  401 sans code / code faux et 200 avec le bon code, npf-q400 200, listes et
+  reste du VPS 404, http -> https, 12 unités bfg-* identiques). Scripts :
+  carte-vps.sh (ajout-sections, code-doc-fdf, config-caddy, retour-sections),
+  installer-sections-vps.ps1, definir-code-doc-fdf.ps1, retour arrière
+  -SectionsSeulement.
+
+1. GESTION DES CARTES — UN BOUTON PAR SECTION (avec sa taille)
+- « Télécharger la carte OACI 1/500 000 (670 Mo) », « Télécharger la carte
+  OACI (245 Mo) » (Cartes Offline), « Télécharger le Calque Routier
+  (23 Mo) » (Calque Routier), « Télécharger Doc FdF Réduite / Carte
+  Fréquences (23 Mo) » (Doc FdF). Même fonctionnement que la carte NPF-Q400
+  v17.65 : confirmation (taille + « utilise le Wi-Fi »), place vérifiée AVANT
+  tout effacement (place libre + ancienne version), serveur interrogé avant
+  tout effacement, barre + « NN % — morceau X sur N », reprise après coupure
+  ou fermeture, section utilisable seulement complète et vérifiée, DIAG par
+  morceau. Un seul téléchargement à la fois.
+- Cartes OACI (tuiles) : ancienne version effacée d'abord (comme NPF-Q400).
+  OACI 1/500 000 : groupes « OACI 1-500 000 » ; Carte OACI : groupes « OACI »
+  et ancienne « Carte OACI », effacés seulement après contrôle du contenu
+  (aucune tuile au-delà du zoom 10, ~3 347 tuiles, ~2 478 au zoom 10, zone
+  large) ; dans le doute : gardée, raison au DIAG, affichée « Carte OACI
+  (ancienne) ». L'une ne touche jamais l'autre. Noms affichés « Carte OACI
+  1/500 000 » et « Carte OACI » (aussi pour les cartes importées à la main).
+- Rangement identique à l'import manuel : fichier « OACI 1-500 000_00 »
+  (base OfflineMap_OACI_1_500_000) et « OACI » (base OfflineMap_OACI, même
+  nom que l'import de OACI.zip). Un premier essai avec « OACI_00 » n'était pas
+  reconnu comme carte OACI (zoom d'affichage limité à 10) : corrigé avant
+  livraison.
+- Calque Routier et Doc FdF (ZIP coupé en morceaux) : morceaux gardés dans
+  un cache dédié (npf-section-telechargement-v1, jamais nettoyé par le SW),
+  recollés, empreinte vérifiée, puis installés comme l'import manuel ;
+  l'ancienne version est remplacée en entier à ce moment-là seulement (Doc
+  FdF : tous les PDF, Carte Fréquences comprise, dans une seule transaction).
+  Contrôles : 53 parties de routes, 29 PDF.
+- Doc FdF : code demandé une seule fois (fenêtre interne, champ masqué),
+  vérifié par le serveur AVANT tout effacement, gardé sur l'iPad seulement
+  (npfDocFdfCodeV1) ; code faux => « Code refusé », nouvelle saisie, rien
+  effacé ; code changé sur le serveur => redemandé, PDF installés gardés.
+  Jamais dans le code de l'app, le dépôt, le journal ni le DIAG (le DIAG
+  dit seulement « code mémorisé : oui/non »).
+- Besoin de place : cartes = taille × 1,15 + 300 Mo ; Calque Routier
+  450 Mo (mesuré ~112 Mo sur desktop avant l'index par zone, marge
+  prudente) ; Doc FdF 160 Mo.
+
+2. FENÊTRE GESTION DES CARTES QUI SE FERMAIT (bug vu sur iPad en v17.65)
+- Cause : quand la carte effacée est celle qui est affichée,
+  deleteOfflineMapGroupDatabase bascule sur une autre carte via
+  selectQuickOfflineMapGroup -> applyOfflineMapGroupSelectionInPlace, qui
+  ferme la fenêtre 120 ms après (closeOfflineMapModalSoon, voulu pour le
+  sélecteur de cartes).
+- Correction : option keepModalOpen, passée seulement par les
+  téléchargements. Sélecteur de cartes et bouton « Supprimer » : inchangés
+  (la fenêtre se ferme toujours après « Supprimer » d'une carte affichée —
+  non demandé, NON MODIFIÉ).
+
+3. CARTE OACI 1/500 000 AU ZOOM 11 NATIF (src/030, src/100, demande explicite)
+- Pourquoi la limite au zoom 10 : v13.58, des cartes OACI importées sans
+  zoom 11 faisaient demander des tuiles inexistantes ; v15.43 : un niveau de
+  sur-zoom (tuiles du zoom 10 agrandies au zoom 11).
+- Limite propre à chaque carte : OACI 1/500 000 = zoom 11 natif ; Carte
+  OACI = zoom 10 natif, agrandi au zoom 11 (inchangé). Zoom d'affichage max
+  11 pour les deux. Tuile du zoom 11 absente : remplacée par le quart de sa
+  tuile du zoom 10, agrandi (pas de tuile grise), seulement si la carte
+  affichée est l'OACI 1/500 000. Carte NPF-Q400 : aucun changement de chemin.
+- DIAG : ligne « Zoom hors ligne » (carte, zoom natif max, affichage max,
+  zoom actuel, tuiles du zoom 11 demandées / trouvées / remplacées par le
+  zoom 10 / absentes).
+- Mesure desktop : OACI 1/500 000 au zoom 11 : 25 tuiles visibles, 0 grise,
+  mémoire estimée 32,4 Mo (31,1 Mo au zoom 10), images/s pendant les gestes
+  identiques (~140 sur PC) ; Carte OACI au zoom 11 : agrandie depuis le zoom 10
+  (zoom natif 10), 0 grise ; une tuile du zoom 11 retirée de la base :
+  remplacée par le zoom 10, 0 grise.
+
+4. CORRECTIONS D'AFFICHAGE
+- « Mise à jour installée » : bouton « Continuer » centré (style écrit dans
+  la fenêtre elle-même, index.html, propre à cette fenêtre ; textes, taille,
+  action et moment d'apparition inchangés).
+- « NPF » -> « NPF-Q400 » : fenêtre FdS/GAAR (texte du champ, aide
+  d'origine, séparateur, bouton « Utiliser le mot de passe NPF-Q400 »,
+  titre et aide d'association, messages « Association BFG / NPF-Q400 en
+  cours… / réussie. », erreur « session NPF-Q400 »), bouton BFG du sélecteur
+  (infobulle et nom lu « Associer BFG à NPF-Q400 ») et message du lecteur de
+  documents (« …mot de passe NPF-Q400. »). « NPF Trace » gardé (nom du
+  raccourci iPad).
+- DIAG : « place avant effacement … + 0 Mo occupés par … » quand il n'y a
+  pas d'ancienne version (affichait « 1 Mo »).
+
+TESTS (desktop, Chrome, faux serveur local avec les vrais morceaux ; vrai VPS
+et vrai NAS bloqués au DNS ; code Doc FdF d'ESSAI) :
+- Sections, 22 cas OK / 0 KO : pour OACI 1/500 000, Carte OACI, Calque
+  Routier, Doc FdF : téléchargement complet, coupure réseau au milieu puis
+  reprise automatique, fermeture de l'app au milieu puis reprise au morceau en
+  cours, place insuffisante avec ancienne version présente (rien effacé,
+  aucun morceau demandé), serveur injoignable (rien effacé) ; Carte OACI :
+  ancienne « Carte OACI » réaliste reconnue et effacée, « Carte OACI »
+  contenant du zoom 11 gardée (raison au DIAG) ; Doc FdF : sans code
+  (annulé, rien effacé), code faux (refusé, non mémorisé), bon code (29 PDF,
+  code mémorisé, absent du DIAG) ; à chaque fois : fenêtre Gestion des Cartes
+  restée ouverte, autre section intacte, réglages intacts, lignes DIAG par
+  morceau, aucune erreur JavaScript.
+- Carte NPF-Q400 : téléchargement complet comme en v17.65 (164 406 tuiles),
+  avec une ancienne carte NPF-Q400 affichée (bascule sur la Carte OACI) :
+  fenêtre restée ouverte du début à la fin (cas du bug iPad).
+- Non-régression bloquante (v17.65 contre v17.66) : OK — mise à jour
+  (fenêtre une seule fois, « Continuer » centré : écart 0 px contre 210 px,
+  même taille 150 × 43, même action), FdS/GAAR (BFG connecté sans question ;
+  sinon mot de passe puis NAS ; NAS coupé / délai), Trafic Moyens Nationaux
+  (bouton, connexion conservée après mise à jour, « zéro GLR » : 0 texte
+  affiché), démarrage sans erreur, carte et échelle, SafeSky, fenêtre
+  terrain et retour automatique (10 s), suivi GPS, simulation, hors ligne
+  complet et mise à jour rejoués après la dernière retouche (caches
+  npf-q400-test-* seulement, caches de la pérenne intacts) ; recherche
+  automatique « NPF » seul dans 9 états + DIAG : 0 (contre 6 en v17.65).
+  Écarts = heures, version, coucher du soleil du jour, compteurs du DIAG.
+
+FICHIERS MODIFIÉS
+index.html (boutons, Continuer, textes NPF-Q400, version) ; style.css
+(champ du code, version) ; src/280 (sections, fenêtre ouverte, noms OACI),
+src/100 (zoom propre à chaque carte, zoom 11 OACI 1/500 000), src/030
+(limite zoom 11), src/170 (textes NPF-Q400), src/010 (DIAG, version), donc
+script.js ; sw.js et manifest.json (version). sia.js : inchangé.
+
+VERSION
+- App : v17.66
+- Service Worker : `sw-v17-66_telechargement_sections`
+
+STATUT : À MESURER sur iPad.
+
 
 VERSION TEST v17.65 — « TÉLÉCHARGER LA CARTE NPF-Q400 » DEPUIS LE SERVEUR
 NPF-Q400 (VPS)

@@ -1163,6 +1163,14 @@ function getOfflineGroupTileFormat(groupName) {
 /* Nom affiché à l'utilisateur ; le nom réel du groupe (et de sa base) ne change pas. */
 function getOfflineMapGroupDisplayName(groupName) {
     const name = String(groupName || '');
+    /* v17.66 — noms validés par Bastien : « Carte OACI 1/500 000 » et « Carte OACI ». */
+    if (name && isOaci500000GroupName(name)) return 'Carte OACI 1/500 000';
+    if (/^(carte[\s_-]*)?oaci$/i.test(name.trim())) {
+        /* Ancienne « Carte OACI » gardée (contrôle du contenu) à côté de la nouvelle « OACI ». */
+        const nouvelleInstallee = name.trim().toUpperCase() !== 'OACI'
+            && getInstalledMapPacksSafe().some(pack => pack && String(getOfflinePackGroupName(pack.name)).trim().toUpperCase() === 'OACI');
+        return nouvelleInstallee ? 'Carte OACI (ancienne)' : 'Carte OACI';
+    }
     if (!name || !isNpfOfflinePackSelection([name])) return name;
     if (getOfflineGroupTileFormat(name) !== NPF_OFFLINE_TILE_FORMAT_RAW) {
         return 'Carte NPF-Q400 (ancienne, lente)';
@@ -1331,7 +1339,7 @@ function pickFallbackOfflineMapGroup(excludedGroupName) {
  * d'abord ; si Safari refuse quand même, la carte est retirée de la liste et
  * sa base est effacée au lancement suivant.
  */
-async function deleteOfflineMapGroupDatabase(groupName) {
+async function deleteOfflineMapGroupDatabase(groupName, options = {}) {
     const packNames = getInstalledPackNamesForGroup(groupName);
     const dbName = getOfflineMapDatabaseNameForGroup(groupName);
     const wasActive = mapSourceMode === 'offline'
@@ -1342,7 +1350,8 @@ async function deleteOfflineMapGroupDatabase(groupName) {
         const fallback = pickFallbackOfflineMapGroup(groupName);
         try {
             if (fallback) {
-                await selectQuickOfflineMapGroup(fallback);
+                /* v17.66 — téléchargement : la fenêtre Gestion des Cartes reste ouverte. */
+                await selectQuickOfflineMapGroup(fallback, { keepModalOpen: !!options.keepModalOpen });
             } else {
                 await setMapSourceMode('online');
             }
@@ -2471,7 +2480,7 @@ async function forceQuickOfflineMapGroupReload(groupName, packNames) {
     }
 }
 
-async function selectQuickOfflineMapGroup(groupName) {
+async function selectQuickOfflineMapGroup(groupName, options = {}) {
     const packNames = getInstalledPackNamesForGroup(groupName);
     if (!packNames.length) {
         alert(`Aucun pack trouvé pour ${groupName}.`);
@@ -2496,7 +2505,7 @@ async function selectQuickOfflineMapGroup(groupName) {
 
     if (isAlreadyActive) return forceQuickOfflineMapGroupReload(groupName, packNames);
 
-    const changed = await applyOfflineMapGroupSelectionInPlace(groupName, true, packNames);
+    const changed = await applyOfflineMapGroupSelectionInPlace(groupName, true, packNames, options);
     refreshQuickOfflineMapButtonState();
     return changed;
 }
@@ -2558,7 +2567,7 @@ function displayInstalledMaps() {
     updateOfflineStatus();
 }
 
-async function applyOfflineMapGroupSelectionInPlace(groupName, checked, packNames) {
+async function applyOfflineMapGroupSelectionInPlace(groupName, checked, packNames, options = {}) {
     const token = ++offlineMapSwitchToken;
     const nextPacks = checked ? packNames : [];
     const nextMode = checked ? 'offline' : 'online';
@@ -2570,7 +2579,9 @@ async function applyOfflineMapGroupSelectionInPlace(groupName, checked, packName
             ? `Carte ${groupName} sélectionnée — chargement des tuiles…`
             : 'Carte offline désactivée. Retour online…'
     );
-    closeOfflineMapModalSoon(120);
+    /* v17.66 — pendant un téléchargement (effacement de l'ancienne version), la
+     * fenêtre Gestion des Cartes reste ouverte : la barre de progression y est. */
+    if (!options.keepModalOpen) closeOfflineMapModalSoon(120);
 
     try {
         await persistSimpleActiveOfflinePacks(nextPacks);
@@ -3267,29 +3278,114 @@ async function deleteTilesForPackName(packName, onProgress = null) {
 
 /*
  * v17.65 — Carte NPF-Q400 téléchargée depuis le serveur NPF-Q400 (VPS).
+ * v17.66 — même fonctionnement pour quatre autres SECTIONS : Carte OACI
+ * 1/500 000, Carte OACI, Calque Routier, Doc FdF (PDF, protégée par un code).
  *
- * Une carte = un dossier sur le serveur, décrit par son manifeste ; les
- * morceaux (format npf-q400-tiles-v1, ~50 Mo) sont lus à côté du manifeste.
- * D'autres cartes pourront être ajoutées à NPF_SERVER_MAPS sans autre code.
- *
- * Déroulé : confirmation (Annuler / Continuer) -> manifeste -> place libre
- * (en comptant la place de l'ancienne carte NPF-Q400 ; rien n'est effacé si
- * la carte ne peut pas tenir) -> effacement de toutes les cartes NPF-Q400 en
- * une seule opération -> morceaux un par un (téléchargement, empreinte SHA-256, écriture des tuiles
- * en lots de 40) -> comptage des tuiles -> la carte apparaît dans la liste.
+ * Une section = un dossier sur le serveur, décrit par son manifeste ; les
+ * morceaux sont lus à côté du manifeste. Deux formats :
+ * - « tuiles » (npf-q400-tiles-v1, ~50 Mo) : cartes NPF-Q400 et OACI. Déroulé :
+ *   confirmation -> manifeste -> place (place libre + ancienne version ; rien
+ *   n'est effacé si la carte ne peut pas tenir) -> effacement de TOUTE
+ *   l'ancienne version de la section, en une seule opération -> morceaux un
+ *   par un (téléchargement, SHA-256, écriture des tuiles en lots de 40) ->
+ *   comptage des tuiles -> la carte apparaît dans la liste.
+ * - « fichier » (npf-q400-fichier-v1, ~5 Mo) : un ZIP coupé en morceaux,
+ *   gardés au fur et à mesure (reprise), recollés puis vérifiés (SHA-256),
+ *   puis installés comme l'import manuel. L'ancienne version de la section
+ *   n'est remplacée qu'une fois la nouvelle complète et vérifiée.
  *
  * Les tuiles sont rangées comme celles de l'import manuel (même base, même
- * adresse logique) : le lecteur de tuiles n'est pas modifié. Tant que la
- * carte n'est pas complète et vérifiée, elle n'est ni listée ni affichée.
- * Après une coupure ou une fermeture de l'app : reprise au morceau en cours.
+ * adresse logique). Tant qu'une section n'est pas complète et vérifiée, elle
+ * n'est ni listée ni utilisée. Après une coupure ou une fermeture de l'app :
+ * reprise au morceau en cours. La fenêtre Gestion des Cartes reste ouverte
+ * pendant tout le téléchargement (v17.66).
  */
+const NPF_SERVER_BASE_URL = 'https://vps-3c305ff2.vps.ovh.net/';
 const NPF_SERVER_MAPS = {
     'npf-q400': {
+        type: 'tuiles',
         nom: 'Carte NPF-Q400',
-        manifestUrl: 'https://vps-3c305ff2.vps.ovh.net/npf-q400/manifest.json',
+        manifestUrl: `${NPF_SERVER_BASE_URL}npf-q400/manifest.json`,
         format: 'npf-q400-tiles-v1',
         groupName: 'NPF_France',
-        packName: 'NPF_France_00'
+        packName: 'NPF_France_00',
+        stateKey: 'npfServerMapDownloadV1',
+        logKey: 'npfServerMapDownloadLogV1',
+        ui: 'npf-map-download',
+        libelle: 'Télécharger la carte NPF-Q400',
+        libelleReprise: 'Reprendre le téléchargement de la carte NPF-Q400',
+        ancienne: 'l\'ancienne carte NPF-Q400',
+        /* ‑ : trait d'union insécable, « NPF-Q400 » jamais coupé en fin de ligne. */
+        confirmation: 'Carte de 2,7 Go : utilise le Wi-Fi. L\'ancienne carte NPF‑Q400 sera d\'abord effacée. Pas de carte hors ligne pendant le téléchargement.',
+        estAncienGroupe: name => isNpfOfflinePackSelection([name])
+    },
+    'oaci-500000': {
+        type: 'tuiles',
+        nom: 'Carte OACI 1/500 000',
+        manifestUrl: `${NPF_SERVER_BASE_URL}oaci-500000/manifest.json`,
+        format: 'npf-q400-tiles-v1',
+        groupName: 'OACI 1-500 000',
+        packName: 'OACI 1-500 000_00',
+        stateKey: 'npfServerSectionDownloadV1:oaci-500000',
+        logKey: 'npfServerSectionLogV1:oaci-500000',
+        ui: 'oaci500-download',
+        libelle: 'Télécharger la carte OACI 1/500 000 (670 Mo)',
+        libelleReprise: 'Reprendre le téléchargement de la carte OACI 1/500 000',
+        ancienne: 'l\'ancienne Carte OACI 1/500 000',
+        confirmation: 'Carte OACI 1/500 000 de 670 Mo : utilise le Wi-Fi. L\'ancienne Carte OACI 1/500 000 sera d\'abord effacée. Pas de Carte OACI 1/500 000 hors ligne pendant le téléchargement.',
+        estAncienGroupe: name => isOaci500000GroupName(name)
+    },
+    'oaci': {
+        type: 'tuiles',
+        nom: 'Carte OACI',
+        manifestUrl: `${NPF_SERVER_BASE_URL}oaci/manifest.json`,
+        format: 'npf-q400-tiles-v1',
+        groupName: 'OACI',
+        /* Même nom que l'import manuel de OACI.zip : reconnu comme carte OACI (zoom 10 natif, affichage jusqu'au zoom 11). */
+        packName: 'OACI',
+        stateKey: 'npfServerSectionDownloadV1:oaci',
+        logKey: 'npfServerSectionLogV1:oaci',
+        ui: 'oaci-download',
+        libelle: 'Télécharger la carte OACI (245 Mo)',
+        libelleReprise: 'Reprendre le téléchargement de la carte OACI',
+        ancienne: 'l\'ancienne Carte OACI',
+        confirmation: 'Carte OACI de 245 Mo : utilise le Wi-Fi. L\'ancienne Carte OACI sera d\'abord effacée. Pas de Carte OACI hors ligne pendant le téléchargement.',
+        /* « OACI » (OACI.zip) et l'ancienne « Carte OACI » ; jamais l'OACI 1/500 000. */
+        estAncienGroupe: name => !isOaci500000GroupName(name) && /^(carte[\s_-]*)?oaci$/i.test(String(name || '').trim()),
+        /* Contrôle par le contenu avant d'effacer (demande de Bastien, 09/10/2026) :
+         * aucune tuile au-delà du zoom 10, ~3 347 tuiles, ~2 478 au zoom 10, zone
+         * large au zoom 10 (l'OACI 1/500 000 : zoom 11, 2 160 au zoom 10). */
+        controleContenu: { zoomMax: 10, tuiles: 3347, ecartTuiles: 0.15, z10: 2478, ecartZ10: 0.08, largeurZ10Min: 55 }
+    },
+    'calque-routier': {
+        type: 'fichier',
+        nom: 'Calque Routier',
+        manifestUrl: `${NPF_SERVER_BASE_URL}calque-routier/manifest.json`,
+        format: 'npf-q400-fichier-v1',
+        stateKey: 'npfServerSectionDownloadV1:calque-routier',
+        logKey: 'npfServerSectionLogV1:calque-routier',
+        ui: 'routes-download',
+        libelle: 'Télécharger le Calque Routier (23 Mo)',
+        libelleReprise: 'Reprendre le téléchargement du Calque Routier',
+        ancienne: 'l\'ancien Calque Routier',
+        confirmation: 'Calque Routier de 23 Mo : utilise le Wi-Fi. L\'ancien Calque Routier sera remplacé en entier, seulement une fois le nouveau complet et vérifié.',
+        /* Place une fois installé (routes + index par zone), mesurée sur desktop le 09/10/2026. */
+        besoinOctets: 450 * 1024 * 1024
+    },
+    'doc-fdf': {
+        type: 'fichier',
+        protege: true,
+        nom: 'Doc FdF Réduite / Carte Fréquences',
+        manifestUrl: `${NPF_SERVER_BASE_URL}doc-fdf/manifest.json`,
+        format: 'npf-q400-fichier-v1',
+        stateKey: 'npfServerSectionDownloadV1:doc-fdf',
+        logKey: 'npfServerSectionLogV1:doc-fdf',
+        ui: 'docfdf-download',
+        libelle: 'Télécharger Doc FdF Réduite / Carte Fréquences (23 Mo)',
+        libelleReprise: 'Reprendre le téléchargement Doc FdF Réduite / Carte Fréquences',
+        ancienne: 'les anciens PDF Doc FdF',
+        confirmation: 'Doc FdF Réduite / Carte Fréquences, 23 Mo : utilise le Wi-Fi. Tous les PDF Doc FdF de l\'iPad (Carte Fréquences comprise) seront remplacés, seulement une fois les nouveaux complets et vérifiés.',
+        besoinOctets: 160 * 1024 * 1024
     }
 };
 const NPF_SERVER_MAP_STATE_KEY = 'npfServerMapDownloadV1';
@@ -3298,52 +3394,71 @@ const NPF_SERVER_MAP_SPACE_FACTOR = 1.15;
 const NPF_SERVER_MAP_SPACE_MARGIN_BYTES = 300 * 1024 * 1024;
 const NPF_SERVER_MAP_STALL_TIMEOUT_MS = 30000;
 const NPF_SERVER_MAP_RETRY_DELAYS_MS = [3000, 6000, 12000, 24000, 30000, 30000];
+const NPF_SERVER_SECTION_CHUNK_CACHE = 'npf-section-telechargement-v1';
+/* Code Doc FdF : saisi une fois, gardé sur cet iPad seulement ; jamais écrit au DIAG. */
+const NPF_DOC_FDF_CODE_KEY = 'npfDocFdfCodeV1';
 let npfServerMapDownloadRunning = false;
+let npfServerSectionRunningId = '';
 let npfServerMapWakeLock = null;
 
-function readNpfServerMapState() {
-    const state = readNpfJsonStorage(NPF_SERVER_MAP_STATE_KEY, null);
+function getNpfServerSection(mapId) {
+    const cfg = NPF_SERVER_MAPS[mapId];
+    return cfg ? { id: mapId, ...cfg } : null;
+}
+
+function isOaci500000GroupName(name) {
+    const simplified = String(name || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    return /oaci/.test(simplified) && /1\s*[-_/:]\s*500[\s_.]*000/.test(simplified);
+}
+
+function readNpfServerMapState(cfg = getNpfServerSection('npf-q400')) {
+    const state = readNpfJsonStorage(cfg.stateKey, null);
     return state && typeof state === 'object' && state.mapId ? state : null;
 }
 
-function writeNpfServerMapState(state) {
-    if (state) writeNpfJsonStorage(NPF_SERVER_MAP_STATE_KEY, { ...state, updatedAt: Date.now() });
+function writeNpfServerMapState(state, cfg = getNpfServerSection('npf-q400')) {
+    if (state) writeNpfJsonStorage(cfg.stateKey, { ...state, updatedAt: Date.now() });
     else {
-        try { localStorage.removeItem(NPF_SERVER_MAP_STATE_KEY); } catch (_) {}
+        try { localStorage.removeItem(cfg.stateKey); } catch (_) {}
     }
 }
 
-/* DIAG : événements et durées par morceau du dernier téléchargement. */
-function readNpfServerMapLog() {
-    const log = readNpfJsonStorage(NPF_SERVER_MAP_LOG_KEY, null);
+/* DIAG : événements et durées par morceau du dernier téléchargement de la section. */
+function readNpfServerMapLog(cfg = getNpfServerSection('npf-q400')) {
+    const log = readNpfJsonStorage(cfg.logKey, null);
     return log && typeof log === 'object' && Array.isArray(log.events) && Array.isArray(log.chunks)
         ? log
         : { events: [], chunks: [] };
 }
 
-function addNpfServerMapLogEvent(text, extra = {}) {
-    const log = readNpfServerMapLog();
+function addNpfServerMapLogEvent(text, extra = {}, cfg = getNpfServerSection('npf-q400')) {
+    const log = readNpfServerMapLog(cfg);
     log.events.push({ at: Date.now(), text: String(text || '').slice(0, 160), ...extra });
     while (log.events.length > 80) log.events.shift();
-    writeNpfJsonStorage(NPF_SERVER_MAP_LOG_KEY, log);
+    writeNpfJsonStorage(cfg.logKey, log);
 }
 
-function setNpfServerMapLogChunk(entry) {
-    const log = readNpfServerMapLog();
+function setNpfServerMapLogChunk(entry, cfg = getNpfServerSection('npf-q400')) {
+    const log = readNpfServerMapLog(cfg);
     const index = log.chunks.findIndex(item => item && item.i === entry.i);
     if (index >= 0) log.chunks[index] = { ...log.chunks[index], ...entry };
     else log.chunks.push(entry);
     log.chunks.sort((a, b) => a.i - b.i);
-    writeNpfJsonStorage(NPF_SERVER_MAP_LOG_KEY, log);
+    writeNpfJsonStorage(cfg.logKey, log);
 }
 
-function setNpfServerMapLogInfo(info) {
-    const log = readNpfServerMapLog();
-    writeNpfJsonStorage(NPF_SERVER_MAP_LOG_KEY, { ...log, ...info });
+function setNpfServerMapLogInfo(info, cfg = getNpfServerSection('npf-q400')) {
+    const log = readNpfServerMapLog(cfg);
+    writeNpfJsonStorage(cfg.logKey, { ...log, ...info });
 }
 
 function npfServerMapWait(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/* Taille pour le DIAG : « 0 Mo » quand il n'y a rien (v17.66). */
+function formatNpfServerMapBytes(bytes) {
+    return Number(bytes) > 0 ? formatNpfStorageSizeForUser(bytes) : '0 Mo';
 }
 
 /* Écran allumé pendant le téléchargement (si Safari le permet). */
@@ -3367,28 +3482,30 @@ function releaseNpfServerMapWakeLock() {
 
 document.addEventListener('visibilitychange', () => {
     if (!npfServerMapDownloadRunning) return;
+    const cfg = getNpfServerSection(npfServerSectionRunningId);
+    if (!cfg) return;
     if (document.visibilityState === 'visible') {
         requestNpfServerMapWakeLock().then(result => {
-            addNpfServerMapLogEvent(`retour au premier plan — écran allumé : ${result}`);
-            setNpfServerMapLogInfo({ wakeLock: result });
+            addNpfServerMapLogEvent(`retour au premier plan — écran allumé : ${result}`, {}, cfg);
+            setNpfServerMapLogInfo({ wakeLock: result }, cfg);
         });
     } else {
-        addNpfServerMapLogEvent('app passée en arrière-plan');
+        addNpfServerMapLogEvent('app passée en arrière-plan', {}, cfg);
     }
 });
 
-function getNpfServerMapUi() {
+function getNpfServerMapUi(cfg = getNpfServerSection('npf-q400')) {
     return {
-        button: document.getElementById('npf-map-download-button'),
-        box: document.getElementById('npf-map-download-progress'),
-        bar: document.getElementById('npf-map-download-progress-bar'),
-        text: document.getElementById('npf-map-download-progress-text'),
-        advice: document.getElementById('npf-map-download-advice')
+        button: document.getElementById(`${cfg.ui}-button`),
+        box: document.getElementById(`${cfg.ui}-progress`),
+        bar: document.getElementById(`${cfg.ui}-progress-bar`),
+        text: document.getElementById(`${cfg.ui}-progress-text`),
+        advice: document.getElementById(`${cfg.ui}-advice`)
     };
 }
 
-function showNpfServerMapProgress(message, percent = null, { advice = true, error = false } = {}) {
-    const ui = getNpfServerMapUi();
+function showNpfServerMapProgress(message, percent = null, { advice = true, error = false } = {}, cfg = getNpfServerSection(npfServerSectionRunningId || 'npf-q400')) {
+    const ui = getNpfServerMapUi(cfg);
     if (!ui.box) return;
     ui.box.style.display = 'block';
     ui.box.classList.toggle('npf-map-download-error', !!error);
@@ -3399,58 +3516,227 @@ function showNpfServerMapProgress(message, percent = null, { advice = true, erro
     if (ui.text) ui.text.textContent = message;
 }
 
-/* Bouton : « Télécharger… » ou « Reprendre… » si un téléchargement est inachevé. */
-function refreshNpfServerMapDownloadButton() {
-    const ui = getNpfServerMapUi();
+/* Bouton de chaque section : « Télécharger… » ou « Reprendre… » si un téléchargement est inachevé. */
+function refreshNpfServerMapDownloadButton(mapId = null) {
+    if (!mapId) {
+        Object.keys(NPF_SERVER_MAPS).forEach(id => refreshNpfServerMapDownloadButton(id));
+        return;
+    }
+    const cfg = getNpfServerSection(mapId);
+    const ui = getNpfServerMapUi(cfg);
     if (!ui.button) return;
     if (npfServerMapDownloadRunning) {
         ui.button.disabled = true;
-        ui.button.textContent = 'Téléchargement en cours…';
+        ui.button.textContent = npfServerSectionRunningId === mapId ? 'Téléchargement en cours…' : cfg.libelle;
         return;
     }
     ui.button.disabled = false;
-    const state = readNpfServerMapState();
+    const state = readNpfServerMapState(cfg);
     if (state && state.status !== 'terminé') {
-        ui.button.textContent = 'Reprendre le téléchargement de la carte NPF-Q400';
+        ui.button.textContent = cfg.libelleReprise;
         const total = Number(state.total) || 0;
         const next = Math.min(total, (Number(state.next) || 0) + 1);
         const percent = Number(state.totalOctets) > 0
             ? Math.floor((Number(state.doneOctets) || 0) / Number(state.totalOctets) * 100)
             : 0;
+        const absent = cfg.type === 'tuiles'
+            ? `Pas de ${cfg.nom} hors ligne tant qu'il n'est pas terminé.`
+            : `${cfg.nom} : la version déjà installée reste utilisée tant qu'il n'est pas terminé.`;
         showNpfServerMapProgress(
-            `Téléchargement interrompu au morceau ${next} sur ${total} (${percent} %). Pas de carte NPF-Q400 hors ligne tant qu'il n'est pas terminé.`,
+            cfg.id === 'npf-q400'
+                ? `Téléchargement interrompu au morceau ${next} sur ${total} (${percent} %). Pas de carte NPF-Q400 hors ligne tant qu'il n'est pas terminé.`
+                : `Téléchargement interrompu au morceau ${next} sur ${total} (${percent} %). ${absent}`,
             percent,
-            { advice: false, error: true }
+            { advice: false, error: true },
+            cfg
         );
     } else {
-        ui.button.textContent = 'Télécharger la carte NPF-Q400';
+        ui.button.textContent = cfg.libelle;
     }
 }
 
-/* Effacement de toutes les cartes NPF-Q400 (et seulement elles), en une seule opération. */
-async function deleteAllNpfQ400OfflineMapsForDownload(targetGroupName) {
-    const results = [];
-    const npfGroups = groupInstalledMapPacks(getInstalledMapPacksSafe())
-        .map(group => String(group.name))
-        .filter(name => name && isNpfOfflinePackSelection([name]));
-    for (const groupName of npfGroups) {
-        const packs = getInstalledMapPacksSafe().filter(pack => pack && getOfflinePackGroupName(pack.name) === groupName);
+/* --- Doc FdF : code de téléchargement ------------------------------------ */
+
+function readNpfDocFdfCode() {
+    try { return localStorage.getItem(NPF_DOC_FDF_CODE_KEY) || ''; } catch (_) { return ''; }
+}
+
+function forgetNpfDocFdfCode() {
+    try { localStorage.removeItem(NPF_DOC_FDF_CODE_KEY); } catch (_) {}
+}
+
+function buildNpfServerAuthHeaders(cfg, code) {
+    if (!cfg.protege || !code) return {};
+    const bytes = new TextEncoder().encode(`npf-q400:${code}`);
+    let binary = '';
+    bytes.forEach(value => { binary += String.fromCharCode(value); });
+    return { Authorization: `Basic ${btoa(binary)}` };
+}
+
+/* Fenêtre interne de saisie du code (Annuler / Continuer). Renvoie le code ou null. */
+function npfAskDocFdfCode(message) {
+    return new Promise(resolve => {
+        let overlay = document.getElementById('npf-code-modal');
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = 'npf-code-modal';
+            overlay.className = 'npf-confirm-modal';
+            overlay.innerHTML = `
+                <div class="npf-confirm-card" role="dialog" aria-modal="true" aria-labelledby="npf-code-title">
+                    <div id="npf-code-title" class="npf-confirm-title">Code Doc FdF</div>
+                    <div class="npf-confirm-message"></div>
+                    <input type="password" class="npf-code-input" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Code Doc FdF" aria-label="Code Doc FdF">
+                    <div class="npf-confirm-actions">
+                        <button type="button" class="npf-confirm-cancel">Annuler</button>
+                        <button type="button" class="npf-confirm-ok">Continuer</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(overlay);
+        }
+        const input = overlay.querySelector('.npf-code-input');
+        overlay.querySelector('.npf-confirm-message').textContent = String(message || '');
+        input.value = '';
+        const done = value => {
+            overlay.style.display = 'none';
+            input.value = '';
+            overlay.querySelector('.npf-confirm-ok').onclick = null;
+            overlay.querySelector('.npf-confirm-cancel').onclick = null;
+            input.onkeydown = null;
+            overlay.onclick = null;
+            resolve(value);
+        };
+        overlay.querySelector('.npf-confirm-ok').onclick = event => {
+            event.stopPropagation();
+            const value = String(input.value || '').trim();
+            done(value || null);
+        };
+        overlay.querySelector('.npf-confirm-cancel').onclick = event => { event.stopPropagation(); done(null); };
+        input.onkeydown = event => { if (event.key === 'Enter') overlay.querySelector('.npf-confirm-ok').click(); };
+        overlay.onclick = event => { if (event.target === overlay) done(null); };
+        overlay.style.display = 'flex';
+        setTimeout(() => { try { input.focus(); } catch (_) {} }, 60);
+    });
+}
+
+/* --- Effacement de l'ancienne version (sections « tuiles ») ---------------- */
+
+/* Zooms d'une base de tuiles, sans lire les images (clés de l'index tileUrl). */
+function inspectNpfOfflineDatabaseZooms(dbName, timeoutMs = 20000) {
+    return new Promise(resolve => {
+        let done = false;
+        let openedDb = null;
+        const finish = value => {
+            if (done) return;
+            done = true;
+            clearTimeout(timer);
+            try { if (openedDb) openedDb.close(); } catch (_) {}
+            resolve(value);
+        };
+        const timer = setTimeout(() => finish(null), timeoutMs);
+        try {
+            const request = indexedDB.open(dbName);
+            request.onupgradeneeded = () => { try { request.transaction.abort(); } catch (_) {} finish(null); };
+            request.onerror = () => finish(null);
+            request.onsuccess = () => {
+                openedDb = request.result;
+                try {
+                    const store = openedDb.transaction('tiles', 'readonly').objectStore('tiles');
+                    if (!store.indexNames.contains('tileUrl')) { finish(null); return; }
+                    const result = { total: 0, parZoom: {}, z10MinX: Infinity, z10MaxX: -Infinity };
+                    const cursorRequest = store.index('tileUrl').openKeyCursor();
+                    cursorRequest.onsuccess = () => {
+                        const cursor = cursorRequest.result;
+                        if (!cursor) { finish(result); return; }
+                        const match = String(cursor.key || '').match(/\/(\d+)\/(\d+)\/(\d+)\.(png|jpe?g)/i);
+                        if (match) {
+                            const zoom = Number(match[1]);
+                            result.total += 1;
+                            result.parZoom[zoom] = (result.parZoom[zoom] || 0) + 1;
+                            if (zoom === 10) {
+                                result.z10MinX = Math.min(result.z10MinX, Number(match[2]));
+                                result.z10MaxX = Math.max(result.z10MaxX, Number(match[2]));
+                            }
+                        }
+                        cursor.continue();
+                    };
+                    cursorRequest.onerror = () => finish(null);
+                } catch (_) {
+                    finish(null);
+                }
+            };
+        } catch (_) {
+            finish(null);
+        }
+    });
+}
+
+/* Groupes installés de la section : à effacer, ou gardés (avec la raison). */
+async function findNpfServerSectionOldGroups(cfg) {
+    const aEffacer = [];
+    const gardes = [];
+    const groups = groupInstalledMapPacks(getInstalledMapPacksSafe());
+    for (const group of groups) {
+        const groupName = String(group.name || '');
+        if (!groupName || !cfg.estAncienGroupe(groupName)) continue;
+        const packs = group.packs || [];
         const isolated = packs.length > 0
             && packs.every(pack => pack.dbName && String(pack.storageMode || '').startsWith('isolated'));
-        if (isolated) {
-            const result = await deleteOfflineMapGroupDatabase(groupName);
-            results.push({ groupName, dbName: result.dbName, status: result.status || 'inconnu' });
+        const sizeBytes = packs.reduce((total, pack) => total + (Number(pack.sizeBytes) > 0 ? Number(pack.sizeBytes) * NPF_SERVER_MAP_SPACE_FACTOR : 0), 0);
+        const controle = cfg.controleContenu;
+        if (controle) {
+            if (!isolated) {
+                gardes.push({ groupName, raison: 'ancienne base commune : contenu impossible à contrôler' });
+                continue;
+            }
+            const dbName = packs[0].dbName || getOfflineMapDatabaseNameForGroup(groupName);
+            const zooms = await inspectNpfOfflineDatabaseZooms(dbName);
+            if (!zooms) {
+                gardes.push({ groupName, raison: 'contenu illisible' });
+                continue;
+            }
+            const zoomMax = Math.max(-1, ...Object.keys(zooms.parZoom).map(Number));
+            const z10 = Number(zooms.parZoom[10]) || 0;
+            const largeur = zooms.z10MaxX >= zooms.z10MinX ? zooms.z10MaxX - zooms.z10MinX : 0;
+            const resume = `${zooms.total} tuiles, zooms ${Object.keys(zooms.parZoom).sort((a, b) => a - b).join('-') || '—'}, ${z10} au zoom 10`;
+            let raison = '';
+            if (zoomMax > controle.zoomMax) raison = `zoom ${zoomMax} présent (OACI 1/500 000 ?)`;
+            else if (Math.abs(zooms.total - controle.tuiles) > controle.tuiles * controle.ecartTuiles) raison = 'nombre de tuiles trop différent';
+            else if (Math.abs(z10 - controle.z10) > controle.z10 * controle.ecartZ10) raison = 'nombre de tuiles du zoom 10 trop différent';
+            else if (largeur < controle.largeurZ10Min) raison = 'zone couverte trop petite';
+            if (raison) {
+                gardes.push({ groupName, raison: `${raison} — ${resume}` });
+                continue;
+            }
+            aEffacer.push({ groupName, isolated, sizeBytes, controle: resume });
+            continue;
+        }
+        aEffacer.push({ groupName, isolated, sizeBytes });
+    }
+    return { aEffacer, gardes };
+}
+
+/* Effacement de toute l'ancienne version de la section (et seulement elle), en une seule opération.
+ * La fenêtre Gestion des Cartes reste ouverte (v17.66). */
+async function deleteNpfServerSectionOldGroups(cfg, aEffacer) {
+    const results = [];
+    for (const item of aEffacer) {
+        if (item.isolated) {
+            const result = await deleteOfflineMapGroupDatabase(item.groupName, { keepModalOpen: true });
+            results.push({ groupName: item.groupName, dbName: result.dbName, status: result.status || 'inconnu' });
         } else {
-            removeInstalledOfflinePacksLogically(packs.map(pack => pack.name));
-            results.push({ groupName, dbName: '', status: 'retirée de la liste (ancienne base commune)' });
+            const packNames = getInstalledMapPacksSafe()
+                .filter(pack => pack && getOfflinePackGroupName(pack.name) === item.groupName)
+                .map(pack => pack.name);
+            removeInstalledOfflinePacksLogically(packNames);
+            results.push({ groupName: item.groupName, dbName: '', status: 'retirée de la liste (ancienne base commune)' });
         }
     }
     /* Base cible restée d'un import ou d'un téléchargement inachevé. */
-    const targetDbName = getOfflineMapDatabaseNameForGroup(targetGroupName);
+    const targetDbName = getOfflineMapDatabaseNameForGroup(cfg.groupName);
     if (!results.some(item => item.dbName === targetDbName)
         && await doesNpfIndexedDatabaseExist(targetDbName) !== false) {
         const result = await deleteIndexedDatabaseWithTimeoutForNpf(targetDbName, 15000);
-        results.push({ groupName: targetGroupName, dbName: targetDbName, status: result.status });
+        results.push({ groupName: cfg.groupName, dbName: targetDbName, status: result.status });
         if (result.status !== 'deleted') addPendingOfflineDatabaseDeletion(targetDbName);
     }
     const progress = readNpfJsonStorage(NPF_OFFLINE_IMPORT_PROGRESS_KEY, null);
@@ -3462,34 +3748,29 @@ async function deleteAllNpfQ400OfflineMapsForDownload(targetGroupName) {
     return results;
 }
 
-/* Place libre d'après le navigateur (quota - utilisé), null si inconnue. */
-async function estimateNpfServerMapFreeBytes() {
-    try {
-        const estimate = navigator.storage && typeof navigator.storage.estimate === 'function'
-            ? await navigator.storage.estimate()
-            : null;
-        return estimate && Number.isFinite(Number(estimate.quota)) && Number.isFinite(Number(estimate.usage))
-            ? Number(estimate.quota) - Number(estimate.usage)
-            : null;
-    } catch (_) {
-        return null;
-    }
-}
+/* --- Réseau ------------------------------------------------------------------ */
 
-async function fetchNpfServerMapManifest(mapConfig) {
-    const response = await fetch(`${mapConfig.manifestUrl}?t=${Date.now()}`, { cache: 'no-store' });
+async function fetchNpfServerMapManifest(cfg, code = '') {
+    const response = await fetch(`${cfg.manifestUrl}?t=${Date.now()}`, { cache: 'no-store', headers: buildNpfServerAuthHeaders(cfg, code) });
+    if (response.status === 401) {
+        const error = new Error('code refusé');
+        error.codeRefuse = true;
+        throw error;
+    }
     if (!response.ok) throw new Error(`serveur : code ${response.status}`);
     const manifest = await response.json();
-    if (!manifest || manifest.format !== mapConfig.format
+    const okTuiles = cfg.type !== 'tuiles' || Number(manifest.totalTuiles) > 0;
+    const okFichier = cfg.type !== 'fichier' || (manifest.fichier && manifest.fichier.sha256 && Number(manifest.nombreFichiers) > 0);
+    if (!manifest || manifest.format !== cfg.format
         || !Array.isArray(manifest.morceaux) || !manifest.morceaux.length
-        || !(Number(manifest.totalOctets) > 0) || !(Number(manifest.totalTuiles) > 0)) {
-        throw new Error('manifeste de la carte illisible');
+        || !(Number(manifest.totalOctets) > 0) || !okTuiles || !okFichier) {
+        throw new Error('manifeste illisible');
     }
     return manifest;
 }
 
 /* Un morceau entier en mémoire ; arrêt si plus rien n'arrive pendant 30 s. */
-async function fetchNpfServerMapChunk(url, expectedBytes, onBytes) {
+async function fetchNpfServerMapChunk(url, expectedBytes, onBytes, headers = {}) {
     const controller = new AbortController();
     let stallTimer = null;
     const arm = () => {
@@ -3498,7 +3779,12 @@ async function fetchNpfServerMapChunk(url, expectedBytes, onBytes) {
     };
     arm();
     try {
-        const response = await fetch(url, { cache: 'no-store', signal: controller.signal });
+        const response = await fetch(url, { cache: 'no-store', signal: controller.signal, headers });
+        if (response.status === 401) {
+            const error = new Error('code refusé');
+            error.codeRefuse = true;
+            throw error;
+        }
         if (!response.ok) throw new Error(`serveur : code ${response.status}`);
         const bytes = new Uint8Array(expectedBytes);
         let received = 0;
@@ -3534,7 +3820,7 @@ async function sha256HexForNpfServerMap(buffer) {
     return Array.from(new Uint8Array(digest)).map(value => value.toString(16).padStart(2, '0')).join('');
 }
 
-/* En-tête d'un morceau : « NPFQ400T », longueur (uint32 LE), JSON {v, tuiles}. */
+/* En-tête d'un morceau de tuiles : « NPFQ400T », longueur (uint32 LE), JSON {v, tuiles}. */
 function parseNpfServerMapChunk(buffer) {
     const view = new DataView(buffer);
     const magic = new TextDecoder('ascii').decode(new Uint8Array(buffer, 0, 8));
@@ -3599,7 +3885,7 @@ async function writeNpfServerMapChunkTiles(context, buffer, parsed, onTiles) {
             await putNpfServerMapTileBatch(context.tileDb, records);
         } catch (error) {
             /* Comme l'import manuel : base rouverte, même lot en petits lots. */
-            addNpfServerMapLogEvent(`écriture : nouvel essai en petits lots (${error && error.message || error})`);
+            addNpfServerMapLogEvent(`écriture : nouvel essai en petits lots (${error && error.message || error})`, {}, mapConfig);
             try { context.tileDb.close(); } catch (_) {}
             await npfServerMapWait(180);
             context.tileDb = await openOfflineTileDatabaseByName(context.dbName, 3);
@@ -3613,208 +3899,390 @@ async function writeNpfServerMapChunkTiles(context, buffer, parsed, onTiles) {
     }
 }
 
+/* Morceaux d'une section « fichier » : gardés dans un cache dédié jusqu'au recollage. */
+function buildNpfServerSectionChunkRequest(cfg, fileName) {
+    return new Request(`./__npf_section__/${encodeURIComponent(cfg.id)}/${encodeURIComponent(fileName)}`);
+}
+
+async function clearNpfServerSectionChunks(cfg) {
+    try {
+        const cache = await caches.open(NPF_SERVER_SECTION_CHUNK_CACHE);
+        const keys = await cache.keys();
+        const prefix = `/__npf_section__/${encodeURIComponent(cfg.id)}/`;
+        await Promise.all(keys.filter(request => new URL(request.url).pathname.includes(prefix)).map(request => cache.delete(request)));
+    } catch (_) {}
+}
+
 function formatNpfServerMapPercent(state, chunkBytes, fraction) {
     const total = Number(state.totalOctets) || 1;
     const value = ((Number(state.doneOctets) || 0) + chunkBytes * fraction) / total * 100;
     return Math.min(99, Math.floor(value));
 }
 
-/* Un morceau : téléchargement (60 % de sa part), écriture des tuiles (40 %). */
+/* Un morceau. Tuiles : téléchargement (60 % de sa part), écriture des tuiles (40 %).
+ * Fichier : téléchargement (90 %), mise de côté (10 %). */
 async function downloadAndStoreNpfServerMapChunk(context, index) {
-    const { state, manifest } = context;
+    const { state, manifest, mapConfig: cfg } = context;
     const chunk = manifest.morceaux[index];
     const total = manifest.morceaux.length;
     const label = `morceau ${index + 1} sur ${total}`;
-    const url = new URL(chunk.fichier, context.mapConfig.manifestUrl).toString();
+    const url = new URL(chunk.fichier, cfg.manifestUrl).toString();
     const octets = Number(chunk.octets);
+    const downloadShare = cfg.type === 'tuiles' ? 0.6 : 0.9;
     let lastUi = 0;
     for (let attempt = 1; ; attempt += 1) {
         const startedAt = Date.now();
         try {
-            showNpfServerMapProgress(`${formatNpfServerMapPercent(state, octets, 0)} % — ${label} — téléchargement…`);
+            showNpfServerMapProgress(`${formatNpfServerMapPercent(state, octets, 0)} % — ${label} — téléchargement…`, null, {}, cfg);
             const buffer = await fetchNpfServerMapChunk(url, octets, received => {
                 const now = Date.now();
                 if (now - lastUi < 250) return;
                 lastUi = now;
-                const percent = formatNpfServerMapPercent(state, octets, 0.6 * received / octets);
-                showNpfServerMapProgress(`${percent} % — ${label} — téléchargement…`, percent);
-            });
+                const percent = formatNpfServerMapPercent(state, octets, downloadShare * received / octets);
+                showNpfServerMapProgress(`${percent} % — ${label} — téléchargement…`, percent, {}, cfg);
+            }, buildNpfServerAuthHeaders(cfg, context.code));
             const downloadMs = Date.now() - startedAt;
             const hash = await sha256HexForNpfServerMap(buffer);
             if (hash !== String(chunk.sha256)) throw new Error('empreinte différente (morceau abîmé)');
-            const parsed = parseNpfServerMapChunk(buffer);
-            if (parsed.tiles.length !== Number(chunk.tuiles)) throw new Error('nombre de tuiles différent');
             const writeStartedAt = Date.now();
-            await writeNpfServerMapChunkTiles(context, buffer, parsed, written => {
-                const now = Date.now();
-                if (now - lastUi < 250 && written < parsed.tiles.length) return;
-                lastUi = now;
-                const percent = formatNpfServerMapPercent(state, octets, 0.6 + 0.4 * written / parsed.tiles.length);
-                showNpfServerMapProgress(`${percent} % — ${label} — écriture des tuiles…`, percent);
-            });
-            setNpfServerMapLogChunk({
-                i: index + 1, octets, tuiles: parsed.tiles.length,
-                dlMs: downloadMs, wMs: Date.now() - writeStartedAt, essais: attempt, at: Date.now()
-            });
+            if (cfg.type === 'tuiles') {
+                const parsed = parseNpfServerMapChunk(buffer);
+                if (parsed.tiles.length !== Number(chunk.tuiles)) throw new Error('nombre de tuiles différent');
+                await writeNpfServerMapChunkTiles(context, buffer, parsed, written => {
+                    const now = Date.now();
+                    if (now - lastUi < 250 && written < parsed.tiles.length) return;
+                    lastUi = now;
+                    const percent = formatNpfServerMapPercent(state, octets, 0.6 + 0.4 * written / parsed.tiles.length);
+                    showNpfServerMapProgress(`${percent} % — ${label} — écriture des tuiles…`, percent, {}, cfg);
+                });
+                setNpfServerMapLogChunk({
+                    i: index + 1, octets, tuiles: parsed.tiles.length,
+                    dlMs: downloadMs, wMs: Date.now() - writeStartedAt, essais: attempt, at: Date.now()
+                }, cfg);
+            } else {
+                const cache = await caches.open(NPF_SERVER_SECTION_CHUNK_CACHE);
+                await cache.put(buildNpfServerSectionChunkRequest(cfg, chunk.fichier), new Response(buffer, { headers: { 'Content-Type': 'application/octet-stream' } }));
+                setNpfServerMapLogChunk({
+                    i: index + 1, octets, tuiles: 0,
+                    dlMs: downloadMs, wMs: Date.now() - writeStartedAt, essais: attempt, at: Date.now()
+                }, cfg);
+            }
             return;
         } catch (error) {
             const message = error && error.message ? error.message : String(error);
-            const delay = NPF_SERVER_MAP_RETRY_DELAYS_MS[attempt - 1];
-            addNpfServerMapLogEvent(`erreur ${label}, essai ${attempt} : ${message}`);
+            addNpfServerMapLogEvent(`erreur ${label}, essai ${attempt} : ${message}`, {}, cfg);
+            if (error && error.codeRefuse) throw error;
             if (/QuotaExceeded|quota/i.test(`${error && error.name} ${message}`)) {
                 throw new Error('place insuffisante sur l\'appareil pendant l\'écriture');
             }
+            const delay = NPF_SERVER_MAP_RETRY_DELAYS_MS[attempt - 1];
             if (delay === undefined) throw new Error(`${label} : ${message}`);
             showNpfServerMapProgress(
                 `${formatNpfServerMapPercent(state, octets, 0)} % — ${label} — réseau coupé ou lent, nouvel essai dans ${Math.round(delay / 1000)} s…`,
-                null, { error: true }
+                null, { error: true }, cfg
             );
             await npfServerMapWait(delay);
-            addNpfServerMapLogEvent(`reprise du ${label} (essai ${attempt + 1})`);
+            addNpfServerMapLogEvent(`reprise du ${label} (essai ${attempt + 1})`, {}, cfg);
         }
     }
 }
 
+/* --- Installation des sections « fichier » --------------------------------- */
+
+async function assembleNpfServerSectionFile(cfg, manifest) {
+    const cache = await caches.open(NPF_SERVER_SECTION_CHUNK_CACHE);
+    const parts = [];
+    for (const chunk of manifest.morceaux) {
+        const response = await cache.match(buildNpfServerSectionChunkRequest(cfg, chunk.fichier));
+        if (!response) throw new Error(`morceau ${chunk.fichier} introuvable sur l'appareil`);
+        parts.push(await response.blob());
+    }
+    const blob = new Blob(parts, { type: 'application/zip' });
+    if (blob.size !== Number(manifest.fichier.octets)) throw new Error('fichier recollé : taille différente');
+    const hash = await sha256HexForNpfServerMap(await blob.arrayBuffer());
+    if (hash !== String(manifest.fichier.sha256)) throw new Error('fichier recollé : empreinte différente');
+    return blob;
+}
+
+/* Calque Routier : import manuel existant, puis contrôle du nombre de parties. */
+async function installNpfServerRoadOverlay(cfg, manifest, blob) {
+    const attendues = (manifest.contenu || []).filter(item => (
+        /\.(geojson|json)$/i.test(String(item.nom || ''))
+        && !/(^|\/)(manifest|index)\.json$/i.test(String(item.nom || ''))
+    )).length;
+    await importRoadOverlayFile(new File([blob], manifest.fichier.nom || 'calque-routier.zip', { type: 'application/zip' }));
+    const installees = getRoadOverlayManifest().parts.length;
+    if (installees !== attendues) throw new Error(`vérification : ${installees} parties installées au lieu de ${attendues}`);
+    return `${installees} parties`;
+}
+
+/* Doc FdF : tous les PDF de la section remplacés en une seule opération
+ * (comme l'import manuel pour les noms ; anciens PDF effacés dans la même transaction). */
+async function installNpfServerDocFdf(cfg, manifest, blob) {
+    if (typeof JSZip === 'undefined') throw new Error('JSZip non chargé');
+    const zip = await JSZip.loadAsync(blob);
+    const entries = Object.values(zip.files || {}).filter(entry => !entry.dir && /\.pdf$/i.test(entry.name));
+    const records = [];
+    for (const entry of entries) {
+        const name = entry.name.split('/').pop();
+        const oaci = normalizeAirportPdfOaciFromFilename(name);
+        if (!oaci) throw new Error(`PDF au nom inattendu : ${name}`);
+        const data = await entry.async('blob');
+        records.push({
+            oaci,
+            filename: oaci === FDF_REDUCED_PDF_KEY ? FDF_REDUCED_PDF_FILENAME : (oaci === OPS_FREQUENCIES_PDF_KEY ? OPS_FREQUENCIES_PDF_FILENAME : `${oaci}.pdf`),
+            blob: new Blob([data], { type: 'application/pdf' }),
+            size: data.size || 0,
+            updatedAt: Date.now()
+        });
+    }
+    if (records.length !== Number(manifest.nombreFichiers)) throw new Error(`${records.length} PDF au lieu de ${manifest.nombreFichiers}`);
+    const pdfDb = await initAirportPdfDB();
+    await new Promise((resolve, reject) => {
+        const tx = pdfDb.transaction(AIRPORT_PDF_STORE_NAME, 'readwrite');
+        const store = tx.objectStore(AIRPORT_PDF_STORE_NAME);
+        store.clear();
+        records.forEach(record => store.put(record));
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error || new Error('écriture des PDF impossible'));
+        tx.onabort = () => reject(tx.error || new Error('écriture des PDF annulée'));
+    });
+    const installed = await getInstalledAirportPdfRecords();
+    if (installed.length !== records.length) throw new Error(`vérification : ${installed.length} PDF au lieu de ${records.length}`);
+    try { displayInstalledAirportPdfs(); } catch (_) {}
+    return `${installed.length} PDF`;
+}
+
+async function getNpfServerSectionOldBytes(cfg) {
+    if (cfg.id === 'doc-fdf') {
+        try {
+            const records = await getInstalledAirportPdfRecords();
+            return records.reduce((total, record) => total + (Number(record.size) || 0), 0);
+        } catch (_) {
+            return 0;
+        }
+    }
+    return 0;
+}
+
+async function estimateNpfServerMapFreeBytes() {
+    try {
+        const estimate = navigator.storage && typeof navigator.storage.estimate === 'function'
+            ? await navigator.storage.estimate()
+            : null;
+        return estimate && Number.isFinite(Number(estimate.quota)) && Number.isFinite(Number(estimate.usage))
+            ? Number(estimate.quota) - Number(estimate.usage)
+            : null;
+    } catch (_) {
+        return null;
+    }
+}
+
+/* --- Déroulé commun ------------------------------------------------------------ */
+
 async function runNpfServerMapDownload(mapId) {
-    const mapConfig = NPF_SERVER_MAPS[mapId];
-    if (!mapConfig) return;
+    const cfg = getNpfServerSection(mapId);
+    if (!cfg) return;
     if (npfServerMapDownloadRunning) return;
     if (isZipImportRunning) {
-        alert('Un import de carte est déjà en cours. Attends la fin avant de télécharger la carte NPF-Q400.');
+        alert(`Un import est déjà en cours. Attends la fin avant de télécharger ${cfg.nom}.`);
         return;
     }
-    const targetDbName = getOfflineMapDatabaseNameForGroup(mapConfig.groupName);
-    let state = readNpfServerMapState();
+    const targetDbName = cfg.type === 'tuiles' ? getOfflineMapDatabaseNameForGroup(cfg.groupName) : '';
+    let state = readNpfServerMapState(cfg);
     const resuming = !!(state && state.mapId === mapId && state.status !== 'terminé');
 
     if (resuming) {
+        const nomReprise = cfg.id === 'npf-q400' ? 'la carte NPF‑Q400' : cfg.nom;
         const ok = await npfConfirmInApp([
-            `Reprendre le téléchargement de la carte NPF\u2011Q400 au morceau ${(Number(state.next) || 0) + 1} sur ${state.total} ?`,
+            `Reprendre le téléchargement de ${nomReprise} au morceau ${(Number(state.next) || 0) + 1} sur ${state.total} ?`,
             'Utilise le Wi-Fi.'
         ].join('\n\n'));
         if (!ok) return;
     } else {
-        /* \u2011 : trait d'union insécable, « NPF-Q400 » jamais coupé en fin de ligne. */
-        const ok = await npfConfirmInApp('Carte de 2,7 Go : utilise le Wi-Fi. L\'ancienne carte NPF\u2011Q400 sera d\'abord effacée. Pas de carte hors ligne pendant le téléchargement.');
+        const ok = await npfConfirmInApp(cfg.confirmation);
         if (!ok) return;
     }
 
     npfServerMapDownloadRunning = true;
+    npfServerSectionRunningId = mapId;
     isZipImportRunning = true;
     refreshNpfServerMapDownloadButton();
-    const context = { mapConfig, dbName: targetDbName, tileDb: null, state: null, manifest: null };
+    const context = { mapConfig: cfg, dbName: targetDbName, tileDb: null, state: null, manifest: null, code: '' };
     try {
-        showNpfServerMapProgress('Lecture du manifeste de la carte…', resuming ? null : 0, { error: false });
-        let manifest;
-        try {
-            manifest = await fetchNpfServerMapManifest(mapConfig);
-        } catch (error) {
-            const message = error && error.message ? error.message : String(error);
-            if (!resuming) addNpfServerMapLogEvent(`serveur injoignable avant tout effacement : ${message}`);
-            else addNpfServerMapLogEvent(`reprise impossible, serveur injoignable : ${message}`);
+        /* Doc FdF : le code est vérifié par le serveur AVANT tout effacement. */
+        let manifest = null;
+        let message = '';
+        let code = cfg.protege ? readNpfDocFdfCode() : '';
+        for (let essai = 0; essai < 5 && !manifest; essai += 1) {
+            if (cfg.protege && !code) {
+                addNpfServerMapLogEvent(essai ? 'code refusé : nouvelle saisie demandée' : 'code Doc FdF demandé (aucun code mémorisé)', {}, cfg);
+                code = await npfAskDocFdfCode(essai
+                    ? 'Code refusé. Saisis à nouveau le code de téléchargement Doc FdF.'
+                    : 'Saisis le code de téléchargement Doc FdF. Il est demandé une seule fois sur cet iPad.');
+                if (!code) {
+                    showNpfServerMapProgress('Téléchargement annulé : aucun code saisi. Rien n\'a été effacé.', null, { advice: false, error: true }, cfg);
+                    addNpfServerMapLogEvent('annulé : aucun code saisi', {}, cfg);
+                    return;
+                }
+            }
+            showNpfServerMapProgress(cfg.id === 'npf-q400' ? 'Lecture du manifeste de la carte…' : 'Lecture du manifeste…', resuming ? null : 0, { error: false }, cfg);
+            try {
+                manifest = await fetchNpfServerMapManifest(cfg, code);
+            } catch (error) {
+                if (error && error.codeRefuse) {
+                    forgetNpfDocFdfCode();
+                    code = '';
+                    addNpfServerMapLogEvent('code refusé par le serveur (401)', {}, cfg);
+                    continue;
+                }
+                message = error && error.message ? error.message : String(error);
+                break;
+            }
+        }
+        if (!manifest) {
+            if (!message) message = 'code refusé';
+            addNpfServerMapLogEvent(resuming ? `reprise impossible, serveur injoignable : ${message}` : `serveur injoignable avant tout effacement : ${message}`, {}, cfg);
             showNpfServerMapProgress(
                 resuming
-                    ? `Serveur de la carte injoignable (${message}). Vérifie le Wi-Fi puis appuie sur « Reprendre ».`
-                    : `Serveur de la carte injoignable (${message}). Rien n'a été effacé.`,
-                null, { advice: false, error: true }
+                    ? `${cfg.id === 'npf-q400' ? 'Serveur de la carte injoignable' : 'Serveur injoignable'} (${message}). Vérifie le Wi-Fi puis appuie sur « Reprendre ».`
+                    : `${cfg.id === 'npf-q400' ? 'Serveur de la carte injoignable' : 'Serveur injoignable'} (${message}). Rien n'a été effacé.`,
+                null, { advice: false, error: true }, cfg
             );
             return;
         }
+        if (cfg.protege) {
+            try { localStorage.setItem(NPF_DOC_FDF_CODE_KEY, code); } catch (_) {}
+            context.code = code;
+            setNpfServerMapLogInfo({ codeMemorise: 'oui' }, cfg);
+        }
 
         if (resuming && (state.creeLe !== manifest.creeLe || Number(state.total) !== manifest.morceaux.length)) {
-            addNpfServerMapLogEvent('la carte du serveur a changé depuis le début : téléchargement repris depuis le début');
+            addNpfServerMapLogEvent('le contenu du serveur a changé depuis le début : téléchargement repris depuis le début', {}, cfg);
             state = null;
         }
-        if (resuming && state && Number(state.next) > 0 && await doesNpfIndexedDatabaseExist(targetDbName) === false) {
-            addNpfServerMapLogEvent('base de la carte introuvable : téléchargement repris depuis le début');
+        if (resuming && state && cfg.type === 'tuiles' && Number(state.next) > 0 && await doesNpfIndexedDatabaseExist(targetDbName) === false) {
+            addNpfServerMapLogEvent('base de la carte introuvable : téléchargement repris depuis le début', {}, cfg);
             state = null;
         }
 
         if (!state) {
             const previousOffline = mapSourceMode === 'offline' || !!offlineTilesMode;
-            writeNpfJsonStorage(NPF_SERVER_MAP_LOG_KEY, {
-                mapId, version: APP_VERSION, startedAt: Date.now(), versionCarte: manifest.versionCarte,
-                creeLe: manifest.creeLe, total: manifest.morceaux.length, events: [], chunks: []
+            writeNpfJsonStorage(cfg.logKey, {
+                mapId, version: APP_VERSION, startedAt: Date.now(),
+                versionCarte: manifest.versionCarte || manifest.versionContenu,
+                creeLe: manifest.creeLe, total: manifest.morceaux.length, events: [], chunks: [],
+                codeMemorise: cfg.protege ? 'oui' : undefined
             });
-            addNpfServerMapLogEvent(`début : ${manifest.morceaux.length} morceaux, ${formatNpfStorageSizeForUser(manifest.totalOctets)}, ${manifest.totalTuiles} tuiles (carte ${manifest.versionCarte || '?'})`);
+            addNpfServerMapLogEvent(cfg.type === 'tuiles'
+                ? `début : ${manifest.morceaux.length} morceaux, ${formatNpfStorageSizeForUser(manifest.totalOctets)}, ${manifest.totalTuiles} tuiles (carte ${manifest.versionCarte || '?'})`
+                : `début : ${manifest.morceaux.length} morceaux, ${formatNpfStorageSizeForUser(manifest.totalOctets)}, ${manifest.nombreFichiers} fichiers (version ${manifest.versionContenu || '?'})`, {}, cfg);
 
             /* Place vérifiée AVANT tout effacement : place libre + place de
-             * l'ancienne carte NPF-Q400 (taille connue des fichiers × 1,15,
-             * comme la taille estimée de la liste). Pas assez : rien n'est effacé. */
-            const needed = Math.round(Number(manifest.totalOctets) * NPF_SERVER_MAP_SPACE_FACTOR + NPF_SERVER_MAP_SPACE_MARGIN_BYTES);
+             * l'ancienne version de la section. Pas assez : rien n'est effacé. */
+            let oldGroups = { aEffacer: [], gardes: [] };
+            let oldBytes = 0;
+            let needed = 0;
+            if (cfg.type === 'tuiles') {
+                oldGroups = await findNpfServerSectionOldGroups(cfg);
+                oldGroups.gardes.forEach(item => addNpfServerMapLogEvent(`gardée (pas effacée) : ${item.groupName} — ${item.raison}`, {}, cfg));
+                oldGroups.aEffacer.filter(item => item.controle).forEach(item => addNpfServerMapLogEvent(`contrôle du contenu : ${item.groupName} — ${item.controle} — ancienne version reconnue`, {}, cfg));
+                oldBytes = oldGroups.aEffacer.reduce((total, item) => total + item.sizeBytes, 0);
+                needed = Math.round(Number(manifest.totalOctets) * NPF_SERVER_MAP_SPACE_FACTOR + NPF_SERVER_MAP_SPACE_MARGIN_BYTES);
+            } else {
+                oldBytes = await getNpfServerSectionOldBytes(cfg);
+                needed = Math.round(cfg.besoinOctets);
+            }
             const free = await estimateNpfServerMapFreeBytes();
-            const oldBytes = getInstalledMapPacksSafe()
-                .filter(pack => pack && isNpfOfflinePackSelection([getOfflinePackGroupName(pack.name)]))
-                .reduce((total, pack) => total + (Number(pack.sizeBytes) > 0 ? Number(pack.sizeBytes) * NPF_SERVER_MAP_SPACE_FACTOR : 0), 0);
-            addNpfServerMapLogEvent(`place avant effacement : ${free === null ? 'inconnue (le navigateur ne la donne pas)' : `${formatNpfStorageSizeForUser(free)} libres`} + ${formatNpfStorageSizeForUser(oldBytes)} de l'ancienne carte NPF-Q400, ${formatNpfStorageSizeForUser(needed)} nécessaires`);
+            addNpfServerMapLogEvent(`place avant effacement : ${free === null ? 'inconnue (le navigateur ne la donne pas)' : `${formatNpfStorageSizeForUser(free)} libres`} + ${formatNpfServerMapBytes(oldBytes)} occupés par ${cfg.ancienne}, ${formatNpfStorageSizeForUser(needed)} nécessaires`, {}, cfg);
             if (free !== null && free + oldBytes < needed) {
-                const oldText = oldBytes > 0 ? ` + ${formatNpfStorageSizeForUser(oldBytes)} libérés par l'ancienne carte NPF-Q400` : '';
+                const oldText = oldBytes > 0 ? ` + ${formatNpfStorageSizeForUser(oldBytes)} libérés par ${cfg.ancienne}` : '';
                 showNpfServerMapProgress(
                     `Place insuffisante : ${formatNpfStorageSizeForUser(free)} disponibles${oldText}, ${formatNpfStorageSizeForUser(needed)} nécessaires. Rien n'a été effacé ni téléchargé. Libère de la place sur l'iPad puis réessaie.`,
-                    0, { advice: false, error: true }
+                    0, { advice: false, error: true }, cfg
                 );
-                addNpfServerMapLogEvent('arrêt : place insuffisante, rien effacé ni téléchargé');
+                addNpfServerMapLogEvent('arrêt : place insuffisante, rien effacé ni téléchargé', {}, cfg);
                 return;
             }
 
-            showNpfServerMapProgress('Effacement de l\'ancienne carte NPF-Q400…', 0);
-            const deletions = await deleteAllNpfQ400OfflineMapsForDownload(mapConfig.groupName);
-            const statusText = { deleted: 'effacée', blocked: 'bloquée par Safari (effacée au prochain lancement)', timeout: 'effacement trop long (effacée au prochain lancement)' };
-            addNpfServerMapLogEvent(`effacement : ${deletions.length ? deletions.map(item => `${item.groupName} ${statusText[item.status] || item.status}`).join(', ') : 'aucune carte NPF-Q400 installée'}`);
-            if (deletions.some(item => item.dbName === targetDbName && item.status !== 'deleted')) {
-                showNpfServerMapProgress('L\'ancienne carte NPF-Q400 a été retirée de la liste, mais Safari ne l\'a pas encore effacée. Relance NPF-Q400 puis appuie de nouveau sur « Télécharger la carte NPF-Q400 ».', null, { advice: false, error: true });
-                return;
+            if (cfg.type === 'tuiles') {
+                showNpfServerMapProgress(`Effacement de ${cfg.ancienne}…`, 0, {}, cfg);
+                const deletions = await deleteNpfServerSectionOldGroups(cfg, oldGroups.aEffacer);
+                const statusText = { deleted: 'effacée', blocked: 'bloquée par Safari (effacée au prochain lancement)', timeout: 'effacement trop long (effacée au prochain lancement)' };
+                addNpfServerMapLogEvent(`effacement : ${deletions.length ? deletions.map(item => `${item.groupName} ${statusText[item.status] || item.status}`).join(', ') : (cfg.id === 'npf-q400' ? 'aucune carte NPF-Q400 installée' : 'aucune ancienne version installée')}`, {}, cfg);
+                if (deletions.some(item => item.dbName === targetDbName && item.status !== 'deleted')) {
+                    showNpfServerMapProgress(`${cfg.ancienne.charAt(0).toUpperCase()}${cfg.ancienne.slice(1)} a été retirée de la liste, mais Safari ne l'a pas encore effacée. Relance NPF-Q400 puis appuie de nouveau sur « ${cfg.libelle} ».`, null, { advice: false, error: true }, cfg);
+                    return;
+                }
+                const freeAfter = await estimateNpfServerMapFreeBytes();
+                addNpfServerMapLogEvent(`place après effacement : ${freeAfter === null ? 'inconnue' : `${formatNpfStorageSizeForUser(freeAfter)} libres`}`, {}, cfg);
+            } else {
+                await clearNpfServerSectionChunks(cfg);
             }
-
-            const freeAfter = await estimateNpfServerMapFreeBytes();
-            addNpfServerMapLogEvent(`place après effacement : ${freeAfter === null ? 'inconnue' : `${formatNpfStorageSizeForUser(freeAfter)} libres`}`);
 
             state = {
-                mapId, status: 'en cours', creeLe: manifest.creeLe, versionCarte: manifest.versionCarte,
+                mapId, status: 'en cours', creeLe: manifest.creeLe,
+                versionCarte: manifest.versionCarte || manifest.versionContenu,
                 total: manifest.morceaux.length, totalOctets: Number(manifest.totalOctets),
-                totalTuiles: Number(manifest.totalTuiles), next: 0, doneOctets: 0,
+                totalTuiles: Number(manifest.totalTuiles) || 0, next: 0, doneOctets: 0,
                 dbName: targetDbName, previousOffline, startedAt: Date.now()
             };
-            writeNpfServerMapState(state);
+            writeNpfServerMapState(state, cfg);
         } else {
-            addNpfServerMapLogEvent(`reprise au morceau ${Number(state.next) + 1} sur ${state.total}`);
+            addNpfServerMapLogEvent(`reprise au morceau ${Number(state.next) + 1} sur ${state.total}`, {}, cfg);
         }
 
         const wakeLock = await requestNpfServerMapWakeLock();
-        addNpfServerMapLogEvent(`écran allumé (Screen Wake Lock) : ${wakeLock}`);
-        setNpfServerMapLogInfo({ wakeLock });
+        addNpfServerMapLogEvent(`écran allumé (Screen Wake Lock) : ${wakeLock}`, {}, cfg);
+        setNpfServerMapLogInfo({ wakeLock }, cfg);
 
         context.state = state;
         context.manifest = manifest;
         state.status = 'en cours';
-        writeNpfServerMapState(state);
-        context.tileDb = await openOfflineTileDatabaseByName(targetDbName, 3);
+        writeNpfServerMapState(state, cfg);
+        if (cfg.type === 'tuiles') context.tileDb = await openOfflineTileDatabaseByName(targetDbName, 3);
         for (let index = Number(state.next) || 0; index < manifest.morceaux.length; index += 1) {
             await downloadAndStoreNpfServerMapChunk(context, index);
             state.next = index + 1;
             state.doneOctets = (Number(state.doneOctets) || 0) + Number(manifest.morceaux[index].octets);
-            writeNpfServerMapState(state);
+            writeNpfServerMapState(state, cfg);
         }
+
+        if (cfg.type === 'fichier') {
+            showNpfServerMapProgress('99 % — vérification et installation…', 99, {}, cfg);
+            const blob = await assembleNpfServerSectionFile(cfg, manifest);
+            const detail = cfg.id === 'doc-fdf'
+                ? await installNpfServerDocFdf(cfg, manifest, blob)
+                : await installNpfServerRoadOverlay(cfg, manifest, blob);
+            await clearNpfServerSectionChunks(cfg);
+            const minutes = Math.max(1, Math.round((Date.now() - Number(state.startedAt || Date.now())) / 60000));
+            addNpfServerMapLogEvent(`terminé et vérifié : ${detail}, ${minutes} min depuis le début`, {}, cfg);
+            writeNpfServerMapState(null, cfg);
+            releaseNpfServerMapWakeLock();
+            showNpfServerMapProgress(`100 % — ${cfg.nom} installé et vérifié (${detail}).`, 100, { advice: false }, cfg);
+            return;
+        }
+
         try { context.tileDb.close(); } catch (_) {}
         context.tileDb = null;
 
-        showNpfServerMapProgress('99 % — vérification de la carte…', 99);
+        showNpfServerMapProgress('99 % — vérification de la carte…', 99, {}, cfg);
         const count = await countTilesInOfflineDatabase(targetDbName, 120000);
         if (count !== Number(manifest.totalTuiles)) {
-            addNpfServerMapLogEvent(`vérification ÉCHOUÉE : ${count === null ? 'comptage impossible' : count} tuiles au lieu de ${manifest.totalTuiles}`);
-            writeNpfServerMapState(null);
-            showNpfServerMapProgress(`Vérification échouée (${count === null ? 'comptage impossible' : `${count} tuiles au lieu de ${manifest.totalTuiles}`}). La carte n'est pas utilisable : appuie de nouveau sur « Télécharger la carte NPF-Q400 ».`, null, { advice: false, error: true });
+            addNpfServerMapLogEvent(`vérification ÉCHOUÉE : ${count === null ? 'comptage impossible' : count} tuiles au lieu de ${manifest.totalTuiles}`, {}, cfg);
+            writeNpfServerMapState(null, cfg);
+            showNpfServerMapProgress(`Vérification échouée (${count === null ? 'comptage impossible' : `${count} tuiles au lieu de ${manifest.totalTuiles}`}). La carte n'est pas utilisable : appuie de nouveau sur « ${cfg.libelle} ».`, null, { advice: false, error: true }, cfg);
             return;
         }
 
         const installed = getInstalledMapPacksSafe()
-            .filter(pack => pack && getOfflinePackGroupName(pack.name) !== mapConfig.groupName);
+            .filter(pack => pack && getOfflinePackGroupName(pack.name) !== cfg.groupName);
         installed.push({
-            name: mapConfig.packName,
+            name: cfg.packName,
             /* Même nom que le fichier : le lecteur en déduit la même base (comme l'import manuel). */
-            sourceName: mapConfig.packName,
+            sourceName: cfg.packName,
             date: new Date().toLocaleDateString(),
-            groupName: mapConfig.groupName,
+            groupName: cfg.groupName,
             dbName: targetDbName,
             storageMode: 'isolated-v13.73',
             tileFormat: NPF_OFFLINE_TILE_FORMAT_RAW,
@@ -3824,51 +4292,61 @@ async function runNpfServerMapDownload(mapId) {
             serverCreeLe: manifest.creeLe
         });
         localStorage.setItem('installedMapPacks', JSON.stringify(installed));
-        await persistSimpleActiveOfflinePacks([mapConfig.packName]);
+        await persistSimpleActiveOfflinePacks([cfg.packName]);
         mapSourceMode = state.previousOffline ? 'offline' : 'online';
         localStorage.setItem(MAP_SOURCE_MODE_KEY, mapSourceMode);
         await setOfflineTilesEnabled(!!state.previousOffline);
         notifyServiceWorkerActivePacks(activeOfflinePacks);
 
         const minutes = Math.max(1, Math.round((Date.now() - Number(state.startedAt || Date.now())) / 60000));
-        addNpfServerMapLogEvent(`terminé et vérifié : ${count} tuiles, ${minutes} min depuis le début`);
-        writeNpfServerMapState(null);
+        addNpfServerMapLogEvent(`terminé et vérifié : ${count} tuiles, ${minutes} min depuis le début`, {}, cfg);
+        writeNpfServerMapState(null, cfg);
         releaseNpfServerMapWakeLock();
-        showNpfServerMapProgress(`100 % — Carte NPF-Q400 installée et vérifiée (${count.toLocaleString('fr-FR')} tuiles).`, 100, { advice: false });
+        showNpfServerMapProgress(`100 % — ${cfg.nom} installée et vérifiée (${count.toLocaleString('fr-FR')} tuiles).`, 100, { advice: false }, cfg);
         npfServerMapDownloadRunning = false;
+        npfServerSectionRunningId = '';
         isZipImportRunning = false;
-        reloadAfterOfflinePackChange('Carte NPF-Q400 installée. Rechargement de la carte…');
+        reloadAfterOfflinePackChange(`${cfg.nom} installée. Rechargement de la carte…`);
     } catch (error) {
-        const message = error && error.message ? error.message : String(error);
-        addNpfServerMapLogEvent(`arrêt : ${message}`);
-        const current = readNpfServerMapState();
-        if (current) writeNpfServerMapState({ ...current, status: 'interrompu' });
-        showNpfServerMapProgress(`Téléchargement arrêté : ${message}. Appuie sur « Reprendre le téléchargement de la carte NPF-Q400 » (reprise au morceau en cours).`, null, { advice: false, error: true });
+        const message = error && error.codeRefuse
+            ? 'code refusé par le serveur (il a peut-être changé) ; il sera redemandé'
+            : (error && error.message ? error.message : String(error));
+        if (error && error.codeRefuse) forgetNpfDocFdfCode();
+        addNpfServerMapLogEvent(`arrêt : ${message}`, {}, cfg);
+        const current = readNpfServerMapState(cfg);
+        if (current) writeNpfServerMapState({ ...current, status: 'interrompu' }, cfg);
+        showNpfServerMapProgress(`Téléchargement arrêté : ${message}. Appuie sur « ${cfg.libelleReprise} » (reprise au morceau en cours).`, null, { advice: false, error: true }, cfg);
     } finally {
         try { if (context.tileDb) context.tileDb.close(); } catch (_) {}
         if (npfServerMapDownloadRunning) {
             npfServerMapDownloadRunning = false;
+            npfServerSectionRunningId = '';
             isZipImportRunning = false;
             releaseNpfServerMapWakeLock();
-            const ui = getNpfServerMapUi();
+            const ui = getNpfServerMapUi(cfg);
             const message = ui.text ? ui.text.textContent : '';
+            const isError = ui.box ? ui.box.classList.contains('npf-map-download-error') : false;
             refreshNpfServerMapDownloadButton();
             if (ui.text && message) ui.text.textContent = message;
+            if (ui.box) ui.box.classList.toggle('npf-map-download-error', isError);
         }
     }
 }
 
 function initNpfServerMapDownloadUi() {
-    const ui = getNpfServerMapUi();
-    if (!ui.button || ui.button.dataset.bound === '1') return;
-    ui.button.dataset.bound = '1';
-    ui.button.addEventListener('click', () => { runNpfServerMapDownload('npf-q400'); });
-    /* Téléchargement en cours au moment d'une fermeture ou d'un rechargement de l'app. */
-    const state = readNpfServerMapState();
-    if (state && state.status === 'en cours') {
-        addNpfServerMapLogEvent(`interrompu (fermeture ou rechargement de l'app) au morceau ${(Number(state.next) || 0) + 1} sur ${state.total}`);
-        writeNpfServerMapState({ ...state, status: 'interrompu' });
-    }
+    Object.keys(NPF_SERVER_MAPS).forEach(mapId => {
+        const cfg = getNpfServerSection(mapId);
+        const ui = getNpfServerMapUi(cfg);
+        if (!ui.button || ui.button.dataset.bound === '1') return;
+        ui.button.dataset.bound = '1';
+        ui.button.addEventListener('click', () => { runNpfServerMapDownload(mapId); });
+        /* Téléchargement en cours au moment d'une fermeture ou d'un rechargement de l'app. */
+        const state = readNpfServerMapState(cfg);
+        if (state && state.status === 'en cours') {
+            addNpfServerMapLogEvent(`interrompu (fermeture ou rechargement de l'app) au morceau ${(Number(state.next) || 0) + 1} sur ${state.total}`, {}, cfg);
+            writeNpfServerMapState({ ...state, status: 'interrompu' }, cfg);
+        }
+    });
     refreshNpfServerMapDownloadButton();
 }
 

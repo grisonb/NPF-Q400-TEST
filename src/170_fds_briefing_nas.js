@@ -110,7 +110,7 @@ function updateBriefingDocsBfgPairButton() {
     button.textContent = paired ? 'BFG ✓' : 'BFG';
     const label = paired
         ? 'BFG associé à cet iPad — appuyer pour réassocier'
-        : 'Associer BFG à NPF';
+        : 'Associer BFG à NPF-Q400';
     button.title = label;
     button.setAttribute('aria-label', label);
 }
@@ -260,7 +260,7 @@ async function claimBfgBridgePairingCode(code) {
         throw new Error('Association reçue mais impossible à enregistrer sur cet iPad.');
     }
     if (!storeBriefingDocsSession(payload.token, payload.expiresAt)) {
-        throw new Error('Association réussie mais session NPF impossible à enregistrer.');
+        throw new Error('Association réussie mais session NPF-Q400 impossible à enregistrer.');
     }
     npfBfgBridgeLastError = '';
     npfBfgBridgeLastStatus = 'associé';
@@ -668,10 +668,10 @@ function openBriefingDocsBfgPairingModal(targetType = null) {
     npfBriefingDocsBfgPairingOnly = !safeTargetType;
     npfBriefingDocsPendingType = safeTargetType;
     if (title) title.textContent = safeTargetType
-        ? `Association BFG ↔ NPF — ${getBriefingDocLabel(safeTargetType)}`
-        : 'Association BFG ↔ NPF';
+        ? `Association BFG ↔ NPF-Q400 — ${getBriefingDocLabel(safeTargetType)}`
+        : 'Association BFG ↔ NPF-Q400';
     if (help) help.textContent = safeTargetType
-        ? `BFG n’est pas encore associé à NPF sur cet iPad. Saisis le code à 8 chiffres affiché dans BFG ; cette association n’est nécessaire qu’une seule fois.`
+        ? `BFG n’est pas encore associé à NPF-Q400 sur cet iPad. Saisis le code à 8 chiffres affiché dans BFG ; cette association n’est nécessaire qu’une seule fois.`
         : 'Saisis le code à 8 chiffres affiché dans BFG. Cette association n’est nécessaire qu’une seule fois sur cet iPad.';
     if (input) { input.value = ''; input.style.display = 'none'; }
     if (authorizeButton) authorizeButton.style.display = 'none';
@@ -1099,7 +1099,7 @@ function initializeBriefingDocsUi() {
                     setBriefingDocViewerStatus(getBriefingDocsBfgAuthorizationUnavailableMessage(), { error: true });
                 } else if (!getStoredBriefingDocsSession()) {
                     openBriefingDocsPasswordModal(type);
-                    setBriefingDocViewerStatus('Autorisation expirée : saisis à nouveau le mot de passe NPF.', { error: true });
+                    setBriefingDocViewerStatus('Autorisation expirée : saisis à nouveau le mot de passe NPF-Q400.', { error: true });
                 } else {
                     setBriefingDocViewerStatus(error.message || String(error), { error: true });
                 }
@@ -1147,11 +1147,11 @@ function initializeBriefingDocsUi() {
                 bfgCodeButton.textContent = 'Association…';
             }
             if (authorizeButton) authorizeButton.disabled = true;
-            if (passwordStatus) passwordStatus.textContent = 'Association BFG / NPF en cours…';
+            if (passwordStatus) passwordStatus.textContent = 'Association BFG / NPF-Q400 en cours…';
             await claimBfgBridgePairingCode(code);
             updateBriefingDocsBfgPairButton();
             if (pairingOnly) {
-                if (passwordStatus) passwordStatus.textContent = 'Association BFG / NPF réussie.';
+                if (passwordStatus) passwordStatus.textContent = 'Association BFG / NPF-Q400 réussie.';
                 closeBriefingDocsPasswordModal();
                 openBriefingDocSelectorModal();
                 return;

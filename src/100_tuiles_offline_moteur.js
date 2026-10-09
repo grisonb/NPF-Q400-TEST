@@ -470,6 +470,13 @@ function isIgnOfflinePackName(packName) {
     return /\bign\b|scan25|scan\s*25|oaci\s*ign/.test(simplified);
 }
 
+/* v17.66 — Carte OACI 1/500 000 (groupe « OACI 1-500 000 ») : zoom 11 natif. */
+function isOaci500000PackName(packName) {
+    const groupName = typeof getOfflinePackGroupName === 'function' ? getOfflinePackGroupName(packName) : packName;
+    const simplified = String(groupName || '').normalize("NFD").replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    return /oaci/.test(simplified) && /1\s*[-_/:]\s*500[\s_.]*000/.test(simplified);
+}
+
 function isOaciOfflinePackName(packName) {
     const simplified = String(packName || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, '');
     return /\boaci\b|carte\s*oaci/.test(simplified);
@@ -490,7 +497,13 @@ function getOfflinePackMaxNativeZoomLimitForPacks(packs = activeOfflinePacks) {
             || /oaci|sia|scan\s*oaci|carte\s*oaci|\bign\b|scan\s*25|scan25/.test(simplified);
     });
     if (hasOaciOrIgnPack) {
-        return Math.min(OFFLINE_HARD_MAX_NATIVE_ZOOM, OACI_OFFLINE_MAX_NATIVE_ZOOM);
+        /* v17.66 — limite propre à chaque carte : zoom 11 natif seulement si la
+         * carte affichée est la Carte OACI 1/500 000. */
+        const onlyOaci500000 = packList.length > 0 && packList.every(name => isOaci500000PackName(name));
+        return Math.min(
+            OFFLINE_HARD_MAX_NATIVE_ZOOM,
+            onlyOaci500000 ? OACI_500000_OFFLINE_MAX_NATIVE_ZOOM : OACI_OFFLINE_MAX_NATIVE_ZOOM
+        );
     }
     return OFFLINE_HARD_MAX_NATIVE_ZOOM;
 }
@@ -1147,6 +1160,62 @@ let directOfflineNpfLastSuccessfulLookup = null;
 function markDirectOfflineNpfViewportPriority(reason = 'view-change') {
     directOfflineTileViewPriorityEpoch += 1;
     return directOfflineTileViewPriorityEpoch;
+}
+
+/*
+ * v17.66 — Carte OACI 1/500 000 au zoom 11 natif : une tuile du zoom 11 absente
+ * est remplacée par le quart correspondant de sa tuile du zoom 10, agrandi
+ * (pas d'écran blanc). Uniquement quand la carte affichée est l'OACI 1/500 000.
+ * Compteurs pour le DIAG (ligne « Zoom hors ligne »).
+ */
+const npfOaci500000TileStats = { demandees: 0, trouvees: 0, remplacees: 0, absentes: 0 };
+
+function isOaci500000SelectionActive() {
+    return !!offlineTilesMode
+        && Array.isArray(activeOfflinePacks)
+        && activeOfflinePacks.length > 0
+        && activeOfflinePacks.every(name => isOaci500000PackName(name));
+}
+
+async function resolveOaci500000MissingTile(coords, blob) {
+    if (blob === DIRECT_OFFLINE_TILE_ABORTED) return blob;
+    if (Number(coords?.z) < OACI_500000_OFFLINE_MAX_NATIVE_ZOOM || !isOaci500000SelectionActive()) return blob;
+    npfOaci500000TileStats.demandees += 1;
+    if (blob) {
+        npfOaci500000TileStats.trouvees += 1;
+        return blob;
+    }
+    try {
+        const parentCoords = { x: Math.floor(coords.x / 2), y: Math.floor(coords.y / 2), z: coords.z - 1 };
+        const parentBlob = await findDirectOfflineTileBlob(parentCoords);
+        if (!parentBlob || parentBlob === DIRECT_OFFLINE_TILE_ABORTED || typeof createImageBitmap !== 'function') {
+            npfOaci500000TileStats.absentes += 1;
+            return null;
+        }
+        const bitmap = await createImageBitmap(parentBlob);
+        const size = 256;
+        const half = bitmap.width / 2;
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const context = canvas.getContext('2d');
+        context.imageSmoothingEnabled = true;
+        context.drawImage(bitmap, (coords.x % 2) * half, (coords.y % 2) * half, half, half, 0, 0, size, size);
+        try { bitmap.close(); } catch (_) {}
+        const fallbackBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+        canvas.width = 0;
+        canvas.height = 0;
+        if (!fallbackBlob) {
+            npfOaci500000TileStats.absentes += 1;
+            return null;
+        }
+        npfOaci500000TileStats.remplacees += 1;
+        rememberDirectOfflineTileBlob(buildDirectOfflineTileBlobCacheKey(coords), fallbackBlob);
+        return fallbackBlob;
+    } catch (_) {
+        npfOaci500000TileStats.absentes += 1;
+        return null;
+    }
 }
 
 function buildDirectOfflineTileBlobCacheKey(coords) {
@@ -2572,7 +2641,9 @@ function buildDirectOfflineLeafletLayer(options = {}) {
                     return;
                 }
 
-                findDirectOfflineTileBlob(coords).then(blob => {
+                findDirectOfflineTileBlob(coords)
+                    .then(blob => resolveOaci500000MissingTile(coords, blob))
+                    .then(blob => {
                     if (tile.__npfDisposed) {
                         finish(null);
                         return;

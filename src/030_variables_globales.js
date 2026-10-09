@@ -1337,6 +1337,9 @@ const OFFLINE_TILE_UPDATE_INTERVAL_MS = 80;
 const OFFLINE_TILE_PLACEHOLDER_DATA_URL = 'data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%22256%22%20height%3D%22256%22%3E%3Crect%20width%3D%22256%22%20height%3D%22256%22%20fill%3D%22%23d8e2e8%22/%3E%3C/svg%3E';
 // Carte OACI/IGN : plafond plus strict pour éviter de demander des tuiles inexistantes.
 const OACI_OFFLINE_MAX_NATIVE_ZOOM = 10;
+/* v17.66 — limite propre à chaque carte : la Carte OACI 1/500 000 a ses tuiles du
+ * zoom 11 (affichées en natif) ; la Carte OACI reste au zoom 10 (agrandi au-delà). */
+const OACI_500000_OFFLINE_MAX_NATIVE_ZOOM = 11;
 /* v15.43 — OACI : un seul niveau de sur-zoom entier, sans nouvelle tuile. */
 const OACI_OFFLINE_MAX_DISPLAY_ZOOM = 11;
 const OFFLINE_TILE_WAKE_DELAYS_MS = [250, 900, 1800, 3500, 6500, 10000];

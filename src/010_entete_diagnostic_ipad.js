@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.65';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.66';
 
 
 /*
@@ -2907,20 +2907,31 @@ function appendNpfDiagV1746HeaderLines(lines) {
         });
     }
 
-    /* v17.65 — téléchargement de la carte NPF-Q400 depuis le serveur. */
-    let serverMapLog = null;
-    let serverMapState = null;
-    try { serverMapLog = JSON.parse(localStorage.getItem('npfServerMapDownloadLogV1') || 'null'); } catch (_) {}
-    try { serverMapState = JSON.parse(localStorage.getItem('npfServerMapDownloadV1') || 'null'); } catch (_) {}
-    if (serverMapLog && Array.isArray(serverMapLog.events)) {
-        const running = typeof npfServerMapDownloadRunning !== 'undefined' && !!npfServerMapDownloadRunning;
+    /* v17.65 — téléchargement de la carte NPF-Q400 depuis le serveur ; v17.66 : toutes les sections. */
+    const serverSections = typeof NPF_SERVER_MAPS !== 'undefined'
+        ? Object.keys(NPF_SERVER_MAPS).map(id => ({ id, ...NPF_SERVER_MAPS[id] }))
+        : [{ id: 'npf-q400', nom: 'Carte NPF-Q400', stateKey: 'npfServerMapDownloadV1', logKey: 'npfServerMapDownloadLogV1' }];
+    serverSections.forEach(section => {
+        let serverMapLog = null;
+        let serverMapState = null;
+        try { serverMapLog = JSON.parse(localStorage.getItem(section.logKey) || 'null'); } catch (_) {}
+        try { serverMapState = JSON.parse(localStorage.getItem(section.stateKey) || 'null'); } catch (_) {}
+        if (!serverMapLog || !Array.isArray(serverMapLog.events)) return;
+        const running = typeof npfServerMapDownloadRunning !== 'undefined' && !!npfServerMapDownloadRunning
+            && (typeof npfServerSectionRunningId === 'undefined' || npfServerSectionRunningId === section.id);
         const stateText = serverMapState
             ? (running ? 'en cours' : (serverMapState.status || '?')) + ', morceau ' + Math.min(Number(serverMapState.total) || 0, (Number(serverMapState.next) || 0) + 1) + ' sur ' + (serverMapState.total || '?')
             : 'aucun téléchargement inachevé';
-        lines.push('Téléchargement carte NPF-Q400 (serveur) : ' + stateText
+        let codeText = '';
+        if (section.protege) {
+            let memorise = false;
+            try { memorise = !!localStorage.getItem('npfDocFdfCodeV1'); } catch (_) {}
+            codeText = ' · code mémorisé : ' + (memorise ? 'oui' : 'non');
+        }
+        lines.push('Téléchargement ' + (section.id === 'npf-q400' ? 'carte NPF-Q400' : section.nom) + ' (serveur) : ' + stateText
             + ' · commencé ' + formatNpfDiagClock(serverMapLog.startedAt)
-            + ' · carte ' + (serverMapLog.versionCarte || '?')
-            + ' · écran allumé : ' + (serverMapLog.wakeLock || '—'));
+            + ' · ' + (section.type === 'fichier' ? 'version ' : 'carte ') + (serverMapLog.versionCarte || '?')
+            + ' · écran allumé : ' + (serverMapLog.wakeLock || '—') + codeText);
         serverMapLog.events.slice(-14).forEach(item => {
             if (item) lines.push('   ' + formatNpfDiagClock(item.at) + ' | ' + item.text);
         });
@@ -2932,11 +2943,28 @@ function appendNpfDiagV1746HeaderLines(lines) {
             chunks.forEach(item => {
                 if (!item) return;
                 lines.push('   ' + String(item.i).padStart(3, '0') + ' | ' + (Number(item.octets) / 1048576).toFixed(1).replace('.', ',') + ' Mo | '
-                    + (Number(item.tuiles) || 0) + ' tuiles | téléchargé ' + seconds(Number(item.dlMs)) + ' s | écrit ' + seconds(Number(item.wMs)) + ' s'
+                    + (section.type === 'fichier' ? '' : (Number(item.tuiles) || 0) + ' tuiles | ') + 'téléchargé ' + seconds(Number(item.dlMs)) + ' s | écrit ' + seconds(Number(item.wMs)) + ' s'
                     + ((Number(item.essais) || 1) > 1 ? ' | ' + item.essais + ' essais' : ''));
             });
         }
-    }
+    });
+
+    /* v17.66 — zoom de la carte hors ligne affichée (Carte OACI 1/500 000 : zoom 11 natif). */
+    try {
+        if (typeof getOfflinePackMaxNativeZoomLimitForPacks === 'function' && Array.isArray(activeOfflinePacks) && activeOfflinePacks.length) {
+            const nativeMax = getOfflinePackMaxNativeZoomLimitForPacks(activeOfflinePacks);
+            const displayMax = getOfflinePackMaxDisplayZoomForPacks(activeOfflinePacks, nativeMax);
+            const groupLabel = typeof getOfflineMapGroupDisplayName === 'function'
+                ? getOfflineMapGroupDisplayName(getOfflinePackGroupName(activeOfflinePacks[0]))
+                : activeOfflinePacks[0];
+            const st = typeof npfOaci500000TileStats !== 'undefined' ? npfOaci500000TileStats : null;
+            lines.push('Zoom hors ligne : carte « ' + groupLabel + ' » · zoom natif max ' + nativeMax + ' · affichage max ' + displayMax
+                + ' · zoom actuel ' + (typeof map !== 'undefined' && map ? map.getZoom() : '—')
+                + (st && (st.demandees || isOaci500000PackName(activeOfflinePacks[0]))
+                    ? ' · zoom 11 (OACI 1/500 000) : tuiles demandées ' + st.demandees + ' · trouvées ' + st.trouvees + ' · remplacées par le zoom 10 ' + st.remplacees + ' · absentes ' + st.absentes
+                    : ''));
+        }
+    } catch (_) {}
 }
 
 /* v17.41 — délai de restitution dépassé (appelé par le séquenceur, src/080). */
@@ -3270,7 +3298,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.65 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.66 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }

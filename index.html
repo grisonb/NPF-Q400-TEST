@@ -6,8 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>NPF-Q400</title>
     <link rel="stylesheet" href="leaflet.css">
-    <link rel="stylesheet" href="style.css?appv=v17.65">
-    <link rel="manifest" href="manifest.json?appv=v17.65">
+    <link rel="stylesheet" href="style.css?appv=v17.66">
+    <link rel="manifest" href="manifest.json?appv=v17.66">
     <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192x192.png?appv=v13.92">
     <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512x512.png?appv=v13.92">
     <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png?appv=v13.92">
@@ -65,7 +65,7 @@
     <div id="app-boot-screen" aria-live="polite">
         <div class="boot-card">
             <div>NPF-Q400 — démarrage…</div>
-            <div class="boot-version">TEST v17.65</div>
+            <div class="boot-version">TEST v17.66</div>
         </div>
     </div>
     <script>
@@ -280,8 +280,8 @@
                 <button id="briefing-docs-bfg-pair-button"
                         class="briefing-doc-selector-bfg-button"
                         type="button"
-                        title="Associer BFG à NPF"
-                        aria-label="Associer BFG à NPF">BFG</button>
+                        title="Associer BFG à NPF-Q400"
+                        aria-label="Associer BFG à NPF-Q400">BFG</button>
             </div>
         </div>
     </div>
@@ -348,16 +348,16 @@
                     type="button"
                     aria-label="Fermer">&times;</button>
             <h2 id="briefing-docs-password-title">Accès FdS / GAAR</h2>
-            <p id="briefing-docs-password-help">Si BFG a déjà autorisé NPF aujourd’hui, l’accès est automatique. Sinon utilise le mot de passe NPF ou, pour la première association seulement, le code BFG.</p>
+            <p id="briefing-docs-password-help">Si BFG a déjà autorisé NPF-Q400 aujourd’hui, l’accès est automatique. Sinon utilise le mot de passe NPF-Q400 ou, pour la première association seulement, le code BFG.</p>
             <input id="briefing-docs-password-input"
                    type="password"
                    autocomplete="current-password"
-                   placeholder="Mot de passe NPF"
+                   placeholder="Mot de passe NPF-Q400"
                    aria-label="Mot de passe FdS et GAAR">
             <button id="briefing-docs-authorize-button"
                     type="button"
                     class="briefing-docs-password-submit">Autoriser jusqu’à minuit</button>
-            <div class="briefing-docs-bfg-pairing-separator">Première association BFG ↔ NPF</div>
+            <div class="briefing-docs-bfg-pairing-separator">Première association BFG ↔ NPF-Q400</div>
             <input id="briefing-docs-bfg-code-input"
                    type="text"
                    inputmode="numeric"
@@ -371,7 +371,7 @@
             <button id="briefing-docs-password-fallback-button"
                     type="button"
                     class="briefing-docs-password-fallback-button"
-                    style="display:none;">Utiliser le mot de passe NPF</button>
+                    style="display:none;">Utiliser le mot de passe NPF-Q400</button>
             <div id="briefing-docs-password-status"
                  class="briefing-docs-password-status"
                  aria-live="polite"></div>
@@ -629,7 +629,7 @@
             };
         } catch (_) {}
 
-        const APP_VERSION = 'v17.65';
+        const APP_VERSION = 'v17.66';
         const SERVICE_WORKER_URL = `./sw.js?appv=${encodeURIComponent(APP_VERSION)}`;
         const APP_VERSION_STORAGE_KEY = 'appVersion';
         const SW_CONTROLLER_RELOAD_GUARD_KEY = 'swControllerReloadGuard';
@@ -1027,7 +1027,7 @@
                 <div class="update-reminder-modal-content post-update-restart-modal-content" role="dialog" aria-modal="true" aria-labelledby="post-update-restart-title">
                     <h3 id="post-update-restart-title">Mise à jour installée</h3>
                     <p>NPF-Q400 ${APP_VERSION}</p>
-                    <div style="display:flex;justify-content:flex-end;margin-top:18px">
+                    <div style="display:flex;justify-content:center;margin-top:18px">
                         <button id="post-update-continue-button" type="button" style="min-width:150px;padding:11px 18px;border:0;border-radius:10px;background:#0b5ed7;color:#fff;font:700 16px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">Continuer</button>
                     </div>
                 </div>
@@ -1472,7 +1472,7 @@
     <script src="suncalc.js"></script>
     <script src="jszip.min.js"></script>
     <script src="sia.js?siav=15.69-radio1026-1-maplite1"></script>
-    <script src="script.js?appv=v17.65"></script>
+    <script src="script.js?appv=v17.66"></script>
     
     <div id="fuel-split-modal" class="fuel-split-modal" style="display: none;">
         <div class="fuel-split-modal-content">
@@ -1759,6 +1759,28 @@
                         </div>
                         <div id="npf-map-download-progress-text" class="vac-download-progress-text" aria-live="polite"></div>
                     </div>
+                    <div class="import-help-row npf-map-download-row">
+                        <button type="button" id="oaci500-download-button" class="import-button">Télécharger la carte OACI 1/500 000 (670 Mo)</button>
+                        <button type="button" class="import-help-button npf-map-download-help-spacer" tabindex="-1" aria-hidden="true">?</button>
+                    </div>
+                    <div id="oaci500-download-progress" class="vac-download-progress npf-map-download-progress" style="display: none;">
+                        <div id="oaci500-download-advice" class="npf-map-download-advice">Garde l'app ouverte au premier plan et l'écran allumé.</div>
+                        <div class="vac-download-progress-track">
+                            <div id="oaci500-download-progress-bar" class="vac-download-progress-bar"></div>
+                        </div>
+                        <div id="oaci500-download-progress-text" class="vac-download-progress-text" aria-live="polite"></div>
+                    </div>
+                    <div class="import-help-row npf-map-download-row">
+                        <button type="button" id="oaci-download-button" class="import-button">Télécharger la carte OACI (245 Mo)</button>
+                        <button type="button" class="import-help-button npf-map-download-help-spacer" tabindex="-1" aria-hidden="true">?</button>
+                    </div>
+                    <div id="oaci-download-progress" class="vac-download-progress npf-map-download-progress" style="display: none;">
+                        <div id="oaci-download-advice" class="npf-map-download-advice">Garde l'app ouverte au premier plan et l'écran allumé.</div>
+                        <div class="vac-download-progress-track">
+                            <div id="oaci-download-progress-bar" class="vac-download-progress-bar"></div>
+                        </div>
+                        <div id="oaci-download-progress-text" class="vac-download-progress-text" aria-live="polite"></div>
+                    </div>
                     <div class="import-help-row">
                         <label for="zip-importer-input" class="import-button">Importer Cartes Offline</label>
                         <button type="button" class="import-help-button" data-import-help="offline-maps" aria-label="Aide Importer Cartes Offline" title="Aide">?</button>
@@ -1773,6 +1795,17 @@
 
                 <div class="road-overlay-import-block">
                     <h3 class="maps-management-title">Calque Routier</h3>
+                    <div class="import-help-row npf-map-download-row">
+                        <button type="button" id="routes-download-button" class="import-button">Télécharger le Calque Routier (23 Mo)</button>
+                        <button type="button" class="import-help-button npf-map-download-help-spacer" tabindex="-1" aria-hidden="true">?</button>
+                    </div>
+                    <div id="routes-download-progress" class="vac-download-progress npf-map-download-progress" style="display: none;">
+                        <div id="routes-download-advice" class="npf-map-download-advice">Garde l'app ouverte au premier plan et l'écran allumé.</div>
+                        <div class="vac-download-progress-track">
+                            <div id="routes-download-progress-bar" class="vac-download-progress-bar"></div>
+                        </div>
+                        <div id="routes-download-progress-text" class="vac-download-progress-text" aria-live="polite"></div>
+                    </div>
                     <div class="import-help-row">
                         <label for="road-overlay-importer-input" class="import-button road-overlay-import-button">
                             Importer Calque Routier
@@ -1851,6 +1884,19 @@
                 <div class="airport-pdf-section">
                     <h3>Doc FdF Réduite / Carte Fréquences</h3>
                     <p>Importe un ou plusieurs PDF nommés avec leur code OACI, par exemple <b>LFTW.pdf</b>, <b>LFKJ.pdf</b> ou <b>LFAQ.pdf</b>, ou les documents communs <b>Doc Fdf Réduité.pdf</b> et <b>Carte Fréquences OPS.pdf</b>. Ils seront stockés sur l’iPad pour ouverture hors ligne.</p>
+                    <div class="npf-docfdf-download-block">
+                        <div class="import-help-row npf-map-download-row">
+                            <button type="button" id="docfdf-download-button" class="import-button">Télécharger Doc FdF Réduite / Carte Fréquences (23 Mo)</button>
+                            <button type="button" class="import-help-button npf-map-download-help-spacer" tabindex="-1" aria-hidden="true">?</button>
+                        </div>
+                        <div id="docfdf-download-progress" class="vac-download-progress npf-map-download-progress" style="display: none;">
+                            <div id="docfdf-download-advice" class="npf-map-download-advice">Garde l'app ouverte au premier plan et l'écran allumé.</div>
+                            <div class="vac-download-progress-track">
+                                <div id="docfdf-download-progress-bar" class="vac-download-progress-bar"></div>
+                            </div>
+                            <div id="docfdf-download-progress-text" class="vac-download-progress-text" aria-live="polite"></div>
+                        </div>
+                    </div>
                     <div class="airport-pdf-toolbar">
                         <div class="import-help-row airport-pdf-import-help-row">
                             <label for="airport-pdf-importer-input" class="import-button pdf-import-button">Importer Doc FdF Réduite / Carte Fréquences</label>

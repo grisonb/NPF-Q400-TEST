@@ -1,4 +1,4 @@
-/* NPF_STYLE_BUILD_VERSION: v17.65 */
+/* NPF_STYLE_BUILD_VERSION: v17.66 */
 /* v14.83 — nettoyage des références techniques et limitation des cartouches routiers. */
 /* v14.81 — recherche phonétique nationale élargie aux fragments sur deux lettres. */
 /* v14.80 — Brive conservé uniquement sous LFSL. */
@@ -18541,4 +18541,19 @@ body.npf-calculator-modal-open {
 }
 .npf-map-download-progress.npf-map-download-error .vac-download-progress-text {
     color: #b91c1c;
+}
+
+/* v17.66 — sections téléchargées depuis le serveur NPF-Q400 : champ du code Doc FdF, bloc Doc FdF. */
+.npf-code-input {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    margin: 12px 0 4px;
+    padding: 11px 12px;
+    font-size: 17px;
+    border: 1px solid #9fb3c8;
+    border-radius: 10px;
+}
+#offline-map-modal .npf-docfdf-download-block {
+    margin: 0 0 10px;
 }
