@@ -1,4 +1,4 @@
-/* NPF_STYLE_BUILD_VERSION: v17.66 */
+/* NPF_STYLE_BUILD_VERSION: v17.67 */
 /* v14.83 — nettoyage des références techniques et limitation des cartouches routiers. */
 /* v14.81 — recherche phonétique nationale élargie aux fragments sur deux lettres. */
 /* v14.80 — Brive conservé uniquement sous LFSL. */
@@ -18556,4 +18556,33 @@ body.npf-calculator-modal-open {
 }
 #offline-map-modal .npf-docfdf-download-block {
     margin: 0 0 10px;
+}
+
+/* v17.67 — Gestion des Cartes : titres de rubrique sur fond jaune pastel (même police, même taille et
+ * même trait bleu à gauche pour tous, Doc FdF compris) ; boutons d'import manuel « Importer… » sur fond
+ * bleu pastel, texte bleu foncé. Les boutons de téléchargement depuis le serveur ne changent pas. */
+#offline-map-modal .modal-content h3.maps-management-title {
+    margin: 0 0 11px !important;
+    padding: 8px 10px !important;
+    border-left: 5px solid var(--primary-color) !important;
+    border-radius: 8px !important;
+    background: #fff4c4 !important;
+    color: var(--primary-color) !important;
+    font-size: 20px !important;
+    line-height: 1.15 !important;
+    font-weight: 950 !important;
+    letter-spacing: .01em !important;
+}
+#offline-map-modal .modal-content label.import-button {
+    background: #d4e8fb !important;
+    background-color: #d4e8fb !important;
+    border: 1px solid #9ec6ec !important;
+    color: #0b3a66 !important;
+}
+#offline-map-modal .modal-content label.import-button:hover,
+#offline-map-modal .modal-content label.import-button:active {
+    background: #bcdaf6 !important;
+    background-color: #bcdaf6 !important;
+    border-color: #7fb2e3 !important;
+    color: #0b3a66 !important;
 }

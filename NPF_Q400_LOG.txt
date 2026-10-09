@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 08/10/2026
-Version de travail actuelle : TEST v17.66
+Version de travail actuelle : TEST v17.67
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,10 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.67 — Gestion des Cartes : titres de rubrique sur fond jaune pastel, tous
+  au même format (Doc FdF compris), « Type Carte », « Données Aéronautiques
+  SIA » ; boutons « Importer… » sur fond bleu pastel ; derniers « NPF » seuls
+  remplacés par « NPF-Q400 » ; DIAG « taille inconnue » ;
 - v17.66 — téléchargement depuis le serveur NPF-Q400 étendu à 4 sections :
   Carte OACI 1/500 000, Carte OACI, Calque Routier, Doc FdF Réduite / Carte
   Fréquences (protégée par un code) ; Carte OACI 1/500 000 au zoom 11 natif
@@ -482,7 +486,12 @@ NON IMPLÉMENTÉ / OUVERT :
   07/10/2026 : programme VPS bfg-sofia-notams 1.2.0 PRÊT, NON INSTALLÉ
   (~/vps-a-copier/). v17.60 à pousser APRÈS l'installation de la 1.2.0
   (elle annonce « environ 1 minute ») ;
-- v17.66 : À MESURER sur iPad (les 4 sections en Wi-Fi ; code Doc FdF saisi
+- v17.67 : À MESURER sur iPad (couleurs et titres de Gestion des Cartes) ;
+- v17.66 : VALIDÉE sur iPad le 09/10/2026 (4 sections terminées et vérifiées,
+  écran allumé, aucune reprise, pas de fenêtre de connexion Safari, zoom 11 :
+  588 tuiles trouvées) ; dossier d'arrivée sections/ supprimé du VPS le
+  09/10/2026 (55 Go libres) ;
+- v17.66 (avant validation) : À MESURER sur iPad (les 4 sections en Wi-Fi ; code Doc FdF saisi
   une fois ; pas de fenêtre de connexion Safari ; zoom 11 de la Carte OACI
   1/500 000 : netteté, mémoire, fluidité, ligne DIAG « Zoom hors ligne » ;
   fenêtre Gestion des Cartes ouverte pendant tout téléchargement) ;
@@ -682,45 +691,45 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.66
+Version : TEST v17.67
 Date : 09/10/2026
-Base : v17.65 (5ccd247, poussée le 08/10/2026)
+Base : v17.66 (25060cf, poussée le 09/10/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.66.txt
-2_Index_v17.66.txt
-3_Manifest_v17.66.txt
-4_Script_v17.66.txt
-5_SIA_v17.66.txt
-6_Style_v17.66.txt
-7_Sw_v17.66.txt
+1_Modifications_v17.67.txt
+2_Index_v17.67.txt
+3_Manifest_v17.67.txt
+4_Script_v17.67.txt
+5_SIA_v17.67.txt
+6_Style_v17.67.txt
+7_Sw_v17.67.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.66 (et texte « TEST v17.66 » de l'écran de
+- Index : APP_VERSION = v17.67 (et texte « TEST v17.67 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.66
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.66
-- Style : NPF_STYLE_BUILD_VERSION = v17.66
-- Service Worker : `sw-v17-66_telechargement_sections` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-66_telechargement_sections`, `npf-q400-test-app-data-v1`,
+- Manifest : start_url = ./index.html?appv=v17.67
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.67
+- Style : NPF_STYLE_BUILD_VERSION = v17.67
+- Service Worker : `sw-v17-67_couleurs_gestion_cartes` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-67_couleurs_gestion_cartes`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-15.69-radio1026-1-maplite1`
 - SIA_DATA_REVISION (SW / Index) : 15.69-radio1026-1-maplite1 (inchangée)
-- sia.js v17.66 : strictement identique à v17.52.
+- sia.js v17.67 : strictement identique à v17.52.
 - Images de lancement : icons/startup-ipad9-portrait.png (1620 × 2160) et
   icons/startup-ipad9-landscape.png (2160 × 1620).
 - Icônes des boutons (v17.48) : calculator-fms-icon, search-commune-icon,
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.66 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.67 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
 - `sia.js` identique à v17.52 ; moteur tuiles (src/100) modifié en v17.66 sur demande
   explicite (limite de zoom propre à chaque carte, zoom 11 OACI 1/500 000) ;
-- tests v17.66 (sections + non-régression bloquante) : entrée v17.66 ;
+- tests v17.67 (test court bloquant) : entrée v17.67 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64 et v17.66 À MESURER ; v17.65 VALIDÉE ;
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64 et v17.67 À MESURER ; v17.65 et v17.66 VALIDÉES ;
   v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE ;
   v17.56 VALIDÉE en vol ; v17.57 VALIDÉE sur iPad.
 
@@ -2249,6 +2258,70 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.67 — GESTION DES CARTES : COULEURS PASTEL, TITRES DE RUBRIQUE
+UNIFORMES ; DERNIERS « NPF » SEULS ; DIAG « TAILLE INCONNUE »
+Date : 09/10/2026
+Base fonctionnelle : v17.66 (commit 25060cf, VALIDÉE sur iPad le 09/10/2026).
+Demande de Bastien (09/10/2026). Avant : dossier d'arrivée
+/home/ubuntu/npf-cartes-arrivee/sections/ supprimé du VPS (958 Mo ;
+/srv/npf-cartes intact, empreintes OK ; manifestes 200, doc-fdf 401 sans code
+et 200 avec ; 55 Go libres).
+
+1. GESTION DES CARTES (style.css, index.html)
+- Titres de rubrique (NOTAM, Type Carte, Cartes Offline, Calque Routier,
+  Cartes VAC, Données Aéronautiques SIA, Doc FdF Réduite / Carte
+  Fréquences) : fond jaune pastel #fff4c4, trait bleu à gauche 5 px, texte bleu
+  foncé gras 20 px (contraste 6,5). Avant : fond bleu très clair, tailles
+  différentes (18 ou 20 px selon des règles anciennes) et titre Doc FdF sans
+  fond ni trait (h3 sans la classe des autres) ; maintenant une seule règle
+  pour tous.
+- Textes : « Type de carte » -> « Type Carte », « Données aéronautiques SIA »
+  -> « Données Aéronautiques SIA ».
+- Boutons d'import manuel (« Importer Cartes Offline », « Importer Calque
+  Routier », « Importer Doc FdF Réduite / Carte Fréquences ») : fond bleu
+  pastel #d4e8fb, bordure #9ec6ec, texte #0b3a66 (contraste 9,2 contre 7,1
+  avant). Texte et fonctionnement inchangés. Boutons de téléchargement depuis
+  le serveur et autres boutons : inchangés.
+
+2. « NPF » -> « NPF-Q400 » (textes visibles et DIAG)
+- « carte NPF-Q400 en cours de réveil » (src/100, texte seul), « Indicatif
+  permanent intégré à NPF-Q400 » (src/130, src/140), « Autorisation NPF-Q400
+  impossible. » (src/180), « autres données NPF-Q400 » (src/340), « recharge
+  NPF-Q400 » (src/280), « terrains NPF-Q400 » (src/160), « dossier Cartes
+  NPF-Q400 v… » (src/110), « Équivalence locale NPF-Q400 » (src/030), « base
+  locale NPF-Q400 » (src/070), « Lectures NPF-Q400 », « NPF-Q400
+  interrompues/reprises » (panneau DIAG, src/010). Gardés : « NPF Trace »
+  (raccourci iPad), clés internes, messages de console et commentaires.
+
+3. DIAG
+- « place avant effacement » : « taille inconnue pour l'ancienne … » quand
+  une ancienne version existe sans taille connue (cartes importées sans
+  taille, Calque Routier) ; « 0 Mo » seulement s'il n'y a rien.
+
+TESTS : test court bloquant OK (v17.66 contre v17.67) — styles
+  mesurés (7 titres identiques 20 px fond #fff4c4 trait bleu, 3 boutons
+  « Importer… » bleu pastel contraste 9,2, téléchargements inchangés) ;
+  Calque Routier téléchargé avec ancien calque présent (DIAG « taille inconnue
+  pour l'ancien Calque Routier », fenêtre restée ouverte) ; démarrage sans
+  erreur, carte, FdS/GAAR, boutons, Trafic Moyens Nationaux (bouton, « zéro
+  GLR » : 0 texte affiché), mise à jour v17.66 -> v17.67 + hors ligne (caches
+  npf-q400-test-* seulement, pérenne intacte) ; recherche « NPF » seul : 0.
+  Écart vu : centre de la carte après choix d'un feu dans la liste (46.002 ->
+  46.005) — identique en v17.66 relancée le même jour : environnement de test,
+  pas la v17.67.
+
+FICHIERS MODIFIÉS
+index.html, style.css, manifest.json, sw.js (version) ; src/010, src/030,
+src/070, src/100 (texte seul), src/110, src/130, src/140, src/160, src/180,
+src/280, src/340, donc script.js. sia.js : inchangé.
+
+VERSION
+- App : v17.67
+- Service Worker : `sw-v17-67_couleurs_gestion_cartes`
+
+STATUT : À MESURER sur iPad.
+
 
 VERSION TEST v17.66 — SECTIONS TÉLÉCHARGÉES DEPUIS LE SERVEUR NPF-Q400 :
 CARTE OACI 1/500 000, CARTE OACI, CALQUE ROUTIER, DOC FDF ; ZOOM 11 DE L'OACI

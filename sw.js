@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v17-66_telechargement_sections';
-const APP_VERSION = 'v17.66';
+const SW_VERSION = 'sw-v17-67_couleurs_gestion_cartes';
+const APP_VERSION = 'v17.67';
 const SIA_DATA_REVISION = '15.69-radio1026-1-maplite1';
 const SIA_DATA_URL = './sia.js';
 /*

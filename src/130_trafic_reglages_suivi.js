@@ -858,7 +858,7 @@ function refreshTrackedTrafficListUi() {
         removeButton.textContent = permanentEntry ? 'Permanent' : 'Retirer';
         removeButton.disabled = permanentEntry;
         if (permanentEntry) {
-            removeButton.title = 'Indicatif permanent intégré à NPF';
+            removeButton.title = 'Indicatif permanent intégré à NPF-Q400';
             removeButton.setAttribute('aria-label', 'Indicatif permanent');
         } else {
             removeButton.addEventListener('click', event => {

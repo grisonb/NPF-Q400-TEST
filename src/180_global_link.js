@@ -335,7 +335,7 @@ async function requestGlobalLinkNpfAuthorization() {
             setGlobalLinkPasswordStatus('Vérification du mot de passe…');
             try {
                 const docsSession = await authorizeBriefingDocs(password);
-                if (!docsSession) throw new Error('Autorisation NPF impossible.');
+                if (!docsSession) throw new Error('Autorisation NPF-Q400 impossible.');
                 setGlobalLinkPasswordStatus('Autorisation acceptée.', 'success');
                 finishResolve(docsSession);
             } catch (error) {
@@ -377,7 +377,7 @@ async function ensureGlobalLinkNpfAuthorization() {
     docsSession = await tryAuthorizeBriefingDocsFromBfgBridge({ silent: true });
     if (docsSession) return docsSession;
     docsSession = await requestGlobalLinkNpfAuthorization();
-    if (!docsSession) throw new Error('Autorisation NPF impossible.');
+    if (!docsSession) throw new Error('Autorisation NPF-Q400 impossible.');
     return docsSession;
 }
 

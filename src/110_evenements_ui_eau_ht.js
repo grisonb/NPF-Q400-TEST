@@ -493,7 +493,7 @@ function setupEventListeners() {
                 'Clique sur Drive.',
                 'Il faut être connecté au Drive Dash 8.',
                 'Ouvre le dossier Cartes NPF-Q400, puis Cartes OACI, et clique sur le fichier ZIP.',
-                'Une fois le téléchargement terminé, recommence la procédure et ouvre le dossier Cartes NPF v....',
+                'Une fois le téléchargement terminé, recommence la procédure et ouvre le dossier Cartes NPF-Q400 v....',
                 'Il faut télécharger les fichiers ZIP un par un, les uns après les autres et dans l\'ordre en répétant l’opération décrite pour chaque fichier.'
             ].join('\n')
         },

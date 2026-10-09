@@ -6,8 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>NPF-Q400</title>
     <link rel="stylesheet" href="leaflet.css">
-    <link rel="stylesheet" href="style.css?appv=v17.66">
-    <link rel="manifest" href="manifest.json?appv=v17.66">
+    <link rel="stylesheet" href="style.css?appv=v17.67">
+    <link rel="manifest" href="manifest.json?appv=v17.67">
     <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192x192.png?appv=v13.92">
     <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512x512.png?appv=v13.92">
     <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png?appv=v13.92">
@@ -65,7 +65,7 @@
     <div id="app-boot-screen" aria-live="polite">
         <div class="boot-card">
             <div>NPF-Q400 — démarrage…</div>
-            <div class="boot-version">TEST v17.66</div>
+            <div class="boot-version">TEST v17.67</div>
         </div>
     </div>
     <script>
@@ -629,7 +629,7 @@
             };
         } catch (_) {}
 
-        const APP_VERSION = 'v17.66';
+        const APP_VERSION = 'v17.67';
         const SERVICE_WORKER_URL = `./sw.js?appv=${encodeURIComponent(APP_VERSION)}`;
         const APP_VERSION_STORAGE_KEY = 'appVersion';
         const SW_CONTROLLER_RELOAD_GUARD_KEY = 'swControllerReloadGuard';
@@ -1472,7 +1472,7 @@
     <script src="suncalc.js"></script>
     <script src="jszip.min.js"></script>
     <script src="sia.js?siav=15.69-radio1026-1-maplite1"></script>
-    <script src="script.js?appv=v17.66"></script>
+    <script src="script.js?appv=v17.67"></script>
     
     <div id="fuel-split-modal" class="fuel-split-modal" style="display: none;">
         <div class="fuel-split-modal-content">
@@ -1732,7 +1732,7 @@
                 </div>
 
                 <div class="map-source-management-section">
-                    <h3 class="maps-management-title">Type de carte</h3>
+                    <h3 class="maps-management-title">Type Carte</h3>
                     <div class="map-source-buttons">
                         <button type="button" id="map-source-online-btn" class="map-source-btn map-source-btn-online active">ONLINE</button>
                         <button type="button" id="map-source-offline-btn" class="map-source-btn map-source-btn-offline">OFFLINE</button>
@@ -1855,7 +1855,7 @@
 
 
                 <div class="sia-management-section">
-                    <h3 class="maps-management-title">Données aéronautiques SIA</h3>
+                    <h3 class="maps-management-title">Données Aéronautiques SIA</h3>
                     <p>
                         Données aéronautiques officielles SIA utilisées comme calques indépendants du fond de carte.
                         Cette version TEST embarque l'AIRAC 08/26 pour validation hors ligne sur iPad.
@@ -1882,7 +1882,7 @@
                 </div>
 
                 <div class="airport-pdf-section">
-                    <h3>Doc FdF Réduite / Carte Fréquences</h3>
+                    <h3 class="maps-management-title">Doc FdF Réduite / Carte Fréquences</h3>
                     <p>Importe un ou plusieurs PDF nommés avec leur code OACI, par exemple <b>LFTW.pdf</b>, <b>LFKJ.pdf</b> ou <b>LFAQ.pdf</b>, ou les documents communs <b>Doc Fdf Réduité.pdf</b> et <b>Carte Fréquences OPS.pdf</b>. Ils seront stockés sur l’iPad pour ouverture hors ligne.</p>
                     <div class="npf-docfdf-download-block">
                         <div class="import-help-row npf-map-download-row">

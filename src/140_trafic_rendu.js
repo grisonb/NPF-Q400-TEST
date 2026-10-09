@@ -2566,7 +2566,7 @@ function buildTrafficAircraftPopupHtml(
             <div>Âge position : <b>${escapeHtml(formatTrafficAge(ac.seenPos))}</b></div>
             ${useAroundAltitude ? `<div>Filtre altitude : <b>${Math.round(relativeMinAltitudeFt)} / ${Math.round(relativeMaxAltitudeFt)} ft</b></div>` : ''}
             ${useGroundToAboveAltitude ? `<div>Filtre altitude : <b>sol / ${Math.round(groundToAboveMaxAltitudeFt)} ft</b></div>` : ''}
-            ${ac.hex ? `<button type="button" class="traffic-popup-track-button"${permanentTrackedTraffic ? ' disabled title="Indicatif permanent intégré à NPF"' : ''}>${permanentTrackedTraffic ? 'Suivi permanent' : (trackedTrafficEntry ? 'Retirer de la liste suivie' : 'Ajouter à la liste suivie')}</button>` : ''}
+            ${ac.hex ? `<button type="button" class="traffic-popup-track-button"${permanentTrackedTraffic ? ' disabled title="Indicatif permanent intégré à NPF-Q400"' : ''}>${permanentTrackedTraffic ? 'Suivi permanent' : (trackedTrafficEntry ? 'Retirer de la liste suivie' : 'Ajouter à la liste suivie')}</button>` : ''}
             ${ac.hex ? `<button type="button" class="traffic-popup-own-button">${isOwnTrafficAircraft(ac) ? 'Mon avion masqué' : 'Définir comme mon avion et masquer'}</button>` : ''}
             <div class="traffic-popup-warning">Trafic SafeSky/ADS-B indicatif — non certifié</div>
         </div>`;
@@ -2603,7 +2603,7 @@ function wireTrafficMarkerPopupButtons(marker) {
                     ? 'Retirer de la liste suivie'
                     : 'Ajouter à la liste suivie');
             trackButton.title = permanentEntry
-                ? 'Indicatif permanent intégré à NPF'
+                ? 'Indicatif permanent intégré à NPF-Q400'
                 : '';
         };
 

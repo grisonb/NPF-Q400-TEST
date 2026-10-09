@@ -412,7 +412,7 @@ async function displayVacManagementStatus() {
             `Téléchargées : ${count}${expected ? ` / ${expected}` : ''}`,
             missing !== null ? `Non téléchargées : ${missing}` : '',
             remoteAirportCount && displayedAirportCount
-                ? `Périmètre dépôt : ${remoteAirportCount} / ${displayedAirportCount} terrains NPF`
+                ? `Périmètre dépôt : ${remoteAirportCount} / ${displayedAirportCount} terrains NPF-Q400`
                 : '',
             manifestGap ? `À ajouter au manifest : ${manifestGap}` : '',
             cycle ? `Cycle SIA : ${cycle}` : '',

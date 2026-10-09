@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.66';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.67';
 
 
 /*
@@ -3298,7 +3298,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.66 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.67 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -5049,8 +5049,8 @@ function renderNpfStartupDiagnosticPanel() {
                 <span>Tronçons HT : <b>${runtime.highVoltageFeatureCount}</b></span>
                 <span>HT rendues : <b>${runtime.highVoltageRenderedFeatureCount}</b></span>
                 <span>Tuiles : <b>${runtime.retainedTileCount}</b> Leaflet / <b>${runtime.tileDomCount}</b> DOM</span>
-                <span>Lectures NPF : <b>${runtime.npfReadsActive}</b> actives / <b>${runtime.npfReadsQueued}</b> file</span>
-                <span>NPF interrompues/reprises : <b>${runtime.npfReadsAborted}</b> / <b>${runtime.npfTileRetries}</b></span>
+                <span>Lectures NPF-Q400 : <b>${runtime.npfReadsActive}</b> actives / <b>${runtime.npfReadsQueued}</b> file</span>
+                <span>NPF-Q400 interrompues/reprises : <b>${runtime.npfReadsAborted}</b> / <b>${runtime.npfTileRetries}</b></span>
                 <span>Priorité viewport : <b>${runtime.npfViewEpoch}</b></span>
                 <span>Cache tuiles : <b>${runtime.tileBlobCacheSize}</b></span>
                 <span>Réparation GPS : <b>${runtime.gpsTileRepairChecks}</b> contrôles / <b>${runtime.gpsTileRepairTriggers}</b> déclenchements / <b>${runtime.gpsTileRepairRecovered}</b> récupérées</span>

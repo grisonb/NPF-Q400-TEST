@@ -2844,7 +2844,7 @@ async function getNpfOfflineDatabaseNamesForReset() {
 window.resetAllOfflineMapsStorage = async function() {
     const confirmed = confirm(
         'Réinitialisation profonde des cartes offline ?\n\n' +
-        'Cette action désactive la carte offline, ferme IndexedDB, nettoie les bases de tuiles et recharge NPF.\n' +
+        'Cette action désactive la carte offline, ferme IndexedDB, nettoie les bases de tuiles et recharge NPF-Q400.\n' +
         'Elle remplace la suppression complète de la PWA dans la plupart des cas.'
     );
     if (!confirmed) return;
@@ -4182,19 +4182,23 @@ async function runNpfServerMapDownload(mapId) {
              * l'ancienne version de la section. Pas assez : rien n'est effacé. */
             let oldGroups = { aEffacer: [], gardes: [] };
             let oldBytes = 0;
+            /* v17.67 — DIAG : « taille inconnue » quand une ancienne version existe sans taille connue. */
+            let oldUnknown = false;
             let needed = 0;
             if (cfg.type === 'tuiles') {
                 oldGroups = await findNpfServerSectionOldGroups(cfg);
                 oldGroups.gardes.forEach(item => addNpfServerMapLogEvent(`gardée (pas effacée) : ${item.groupName} — ${item.raison}`, {}, cfg));
                 oldGroups.aEffacer.filter(item => item.controle).forEach(item => addNpfServerMapLogEvent(`contrôle du contenu : ${item.groupName} — ${item.controle} — ancienne version reconnue`, {}, cfg));
                 oldBytes = oldGroups.aEffacer.reduce((total, item) => total + item.sizeBytes, 0);
+                oldUnknown = oldGroups.aEffacer.some(item => !(item.sizeBytes > 0));
                 needed = Math.round(Number(manifest.totalOctets) * NPF_SERVER_MAP_SPACE_FACTOR + NPF_SERVER_MAP_SPACE_MARGIN_BYTES);
             } else {
                 oldBytes = await getNpfServerSectionOldBytes(cfg);
+                oldUnknown = cfg.id === 'calque-routier' && getRoadOverlayManifest().parts.length > 0;
                 needed = Math.round(cfg.besoinOctets);
             }
             const free = await estimateNpfServerMapFreeBytes();
-            addNpfServerMapLogEvent(`place avant effacement : ${free === null ? 'inconnue (le navigateur ne la donne pas)' : `${formatNpfStorageSizeForUser(free)} libres`} + ${formatNpfServerMapBytes(oldBytes)} occupés par ${cfg.ancienne}, ${formatNpfStorageSizeForUser(needed)} nécessaires`, {}, cfg);
+            addNpfServerMapLogEvent(`place avant effacement : ${free === null ? 'inconnue (le navigateur ne la donne pas)' : `${formatNpfStorageSizeForUser(free)} libres`} + ${oldUnknown ? `taille inconnue pour ${cfg.ancienne}` : `${formatNpfServerMapBytes(oldBytes)} occupés par ${cfg.ancienne}`}, ${formatNpfStorageSizeForUser(needed)} nécessaires`, {}, cfg);
             if (free !== null && free + oldBytes < needed) {
                 const oldText = oldBytes > 0 ? ` + ${formatNpfStorageSizeForUser(oldBytes)} libérés par ${cfg.ancienne}` : '';
                 showNpfServerMapProgress(

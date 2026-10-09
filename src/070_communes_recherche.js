@@ -478,7 +478,7 @@ function buildOfflineNamedPlaceCandidate(record) {
         locality_type:
             'village, hameau ou lieu-dit',
         locality_source:
-            'Base Adresse Nationale — base locale NPF',
+            'Base Adresse Nationale — base locale NPF-Q400',
         locality_offline: true,
         locality_linked_commune: !!commune
     };

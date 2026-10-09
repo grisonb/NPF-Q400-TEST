@@ -215,7 +215,7 @@ function searchNpfKnownLocalityEquivalents(searchTerm, departmentFilter = null) 
                 locality_match: true,
                 locality_commune_name: entry.municipalityName,
                 locality_type: 'village, hameau ou lieu-dit',
-                locality_source: 'Équivalence locale NPF — rattachement commune INSEE',
+                locality_source: 'Équivalence locale NPF-Q400 — rattachement commune INSEE',
                 locality_offline: true,
                 locality_linked_commune: !!commune,
                 search_exact_locality: exactUsageName,

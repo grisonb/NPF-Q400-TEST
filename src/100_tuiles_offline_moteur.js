@@ -927,7 +927,7 @@ function scheduleRememberedOfflineMapStartupRecovery(
         if (nextIndex >= retryWaits.length) {
             setOfflineMapSwitchBusy(
                 readyDatabase
-                    ? 'Mode OFFLINE actif — carte NPF en cours de réveil.'
+                    ? 'Mode OFFLINE actif — carte NPF-Q400 en cours de réveil.'
                     : 'Mode OFFLINE actif — stockage local encore indisponible.'
             );
             return;

@@ -2319,7 +2319,7 @@ function bindSiaManagementButtons() {
     if (deleteButton && deleteButton.dataset.bound !== '1') {
         deleteButton.dataset.bound = '1';
         deleteButton.addEventListener('click', async () => {
-            if (!confirm('Supprimer les données aéronautiques SIA stockées sur cet appareil ? Les autres données NPF ne seront pas touchées.')) {
+            if (!confirm('Supprimer les données aéronautiques SIA stockées sur cet appareil ? Les autres données NPF-Q400 ne seront pas touchées.')) {
                 return;
             }
             try {

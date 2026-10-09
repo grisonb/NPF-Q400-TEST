@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.66';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.67';
 
 
 /*
@@ -3298,7 +3298,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.66 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.67 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -5049,8 +5049,8 @@ function renderNpfStartupDiagnosticPanel() {
                 <span>Tronçons HT : <b>${runtime.highVoltageFeatureCount}</b></span>
                 <span>HT rendues : <b>${runtime.highVoltageRenderedFeatureCount}</b></span>
                 <span>Tuiles : <b>${runtime.retainedTileCount}</b> Leaflet / <b>${runtime.tileDomCount}</b> DOM</span>
-                <span>Lectures NPF : <b>${runtime.npfReadsActive}</b> actives / <b>${runtime.npfReadsQueued}</b> file</span>
-                <span>NPF interrompues/reprises : <b>${runtime.npfReadsAborted}</b> / <b>${runtime.npfTileRetries}</b></span>
+                <span>Lectures NPF-Q400 : <b>${runtime.npfReadsActive}</b> actives / <b>${runtime.npfReadsQueued}</b> file</span>
+                <span>NPF-Q400 interrompues/reprises : <b>${runtime.npfReadsAborted}</b> / <b>${runtime.npfTileRetries}</b></span>
                 <span>Priorité viewport : <b>${runtime.npfViewEpoch}</b></span>
                 <span>Cache tuiles : <b>${runtime.tileBlobCacheSize}</b></span>
                 <span>Réparation GPS : <b>${runtime.gpsTileRepairChecks}</b> contrôles / <b>${runtime.gpsTileRepairTriggers}</b> déclenchements / <b>${runtime.gpsTileRepairRecovered}</b> récupérées</span>
@@ -6097,7 +6097,7 @@ function searchNpfKnownLocalityEquivalents(searchTerm, departmentFilter = null) 
                 locality_match: true,
                 locality_commune_name: entry.municipalityName,
                 locality_type: 'village, hameau ou lieu-dit',
-                locality_source: 'Équivalence locale NPF — rattachement commune INSEE',
+                locality_source: 'Équivalence locale NPF-Q400 — rattachement commune INSEE',
                 locality_offline: true,
                 locality_linked_commune: !!commune,
                 search_exact_locality: exactUsageName,
@@ -11034,7 +11034,7 @@ function buildOfflineNamedPlaceCandidate(record) {
         locality_type:
             'village, hameau ou lieu-dit',
         locality_source:
-            'Base Adresse Nationale — base locale NPF',
+            'Base Adresse Nationale — base locale NPF-Q400',
         locality_offline: true,
         locality_linked_commune: !!commune
     };
@@ -15414,7 +15414,7 @@ function scheduleRememberedOfflineMapStartupRecovery(
         if (nextIndex >= retryWaits.length) {
             setOfflineMapSwitchBusy(
                 readyDatabase
-                    ? 'Mode OFFLINE actif — carte NPF en cours de réveil.'
+                    ? 'Mode OFFLINE actif — carte NPF-Q400 en cours de réveil.'
                     : 'Mode OFFLINE actif — stockage local encore indisponible.'
             );
             return;
@@ -17995,7 +17995,7 @@ function setupEventListeners() {
                 'Clique sur Drive.',
                 'Il faut être connecté au Drive Dash 8.',
                 'Ouvre le dossier Cartes NPF-Q400, puis Cartes OACI, et clique sur le fichier ZIP.',
-                'Une fois le téléchargement terminé, recommence la procédure et ouvre le dossier Cartes NPF v....',
+                'Une fois le téléchargement terminé, recommence la procédure et ouvre le dossier Cartes NPF-Q400 v....',
                 'Il faut télécharger les fichiers ZIP un par un, les uns après les autres et dans l\'ordre en répétant l’opération décrite pour chaque fichier.'
             ].join('\n')
         },
@@ -23546,7 +23546,7 @@ function refreshTrackedTrafficListUi() {
         removeButton.textContent = permanentEntry ? 'Permanent' : 'Retirer';
         removeButton.disabled = permanentEntry;
         if (permanentEntry) {
-            removeButton.title = 'Indicatif permanent intégré à NPF';
+            removeButton.title = 'Indicatif permanent intégré à NPF-Q400';
             removeButton.setAttribute('aria-label', 'Indicatif permanent');
         } else {
             removeButton.addEventListener('click', event => {
@@ -28200,7 +28200,7 @@ function buildTrafficAircraftPopupHtml(
             <div>Âge position : <b>${escapeHtml(formatTrafficAge(ac.seenPos))}</b></div>
             ${useAroundAltitude ? `<div>Filtre altitude : <b>${Math.round(relativeMinAltitudeFt)} / ${Math.round(relativeMaxAltitudeFt)} ft</b></div>` : ''}
             ${useGroundToAboveAltitude ? `<div>Filtre altitude : <b>sol / ${Math.round(groundToAboveMaxAltitudeFt)} ft</b></div>` : ''}
-            ${ac.hex ? `<button type="button" class="traffic-popup-track-button"${permanentTrackedTraffic ? ' disabled title="Indicatif permanent intégré à NPF"' : ''}>${permanentTrackedTraffic ? 'Suivi permanent' : (trackedTrafficEntry ? 'Retirer de la liste suivie' : 'Ajouter à la liste suivie')}</button>` : ''}
+            ${ac.hex ? `<button type="button" class="traffic-popup-track-button"${permanentTrackedTraffic ? ' disabled title="Indicatif permanent intégré à NPF-Q400"' : ''}>${permanentTrackedTraffic ? 'Suivi permanent' : (trackedTrafficEntry ? 'Retirer de la liste suivie' : 'Ajouter à la liste suivie')}</button>` : ''}
             ${ac.hex ? `<button type="button" class="traffic-popup-own-button">${isOwnTrafficAircraft(ac) ? 'Mon avion masqué' : 'Définir comme mon avion et masquer'}</button>` : ''}
             <div class="traffic-popup-warning">Trafic SafeSky/ADS-B indicatif — non certifié</div>
         </div>`;
@@ -28237,7 +28237,7 @@ function wireTrafficMarkerPopupButtons(marker) {
                     ? 'Retirer de la liste suivie'
                     : 'Ajouter à la liste suivie');
             trackButton.title = permanentEntry
-                ? 'Indicatif permanent intégré à NPF'
+                ? 'Indicatif permanent intégré à NPF-Q400'
                 : '';
         };
 
@@ -30638,7 +30638,7 @@ async function displayVacManagementStatus() {
             `Téléchargées : ${count}${expected ? ` / ${expected}` : ''}`,
             missing !== null ? `Non téléchargées : ${missing}` : '',
             remoteAirportCount && displayedAirportCount
-                ? `Périmètre dépôt : ${remoteAirportCount} / ${displayedAirportCount} terrains NPF`
+                ? `Périmètre dépôt : ${remoteAirportCount} / ${displayedAirportCount} terrains NPF-Q400`
                 : '',
             manifestGap ? `À ajouter au manifest : ${manifestGap}` : '',
             cycle ? `Cycle SIA : ${cycle}` : '',
@@ -32835,7 +32835,7 @@ async function requestGlobalLinkNpfAuthorization() {
             setGlobalLinkPasswordStatus('Vérification du mot de passe…');
             try {
                 const docsSession = await authorizeBriefingDocs(password);
-                if (!docsSession) throw new Error('Autorisation NPF impossible.');
+                if (!docsSession) throw new Error('Autorisation NPF-Q400 impossible.');
                 setGlobalLinkPasswordStatus('Autorisation acceptée.', 'success');
                 finishResolve(docsSession);
             } catch (error) {
@@ -32877,7 +32877,7 @@ async function ensureGlobalLinkNpfAuthorization() {
     docsSession = await tryAuthorizeBriefingDocsFromBfgBridge({ silent: true });
     if (docsSession) return docsSession;
     docsSession = await requestGlobalLinkNpfAuthorization();
-    if (!docsSession) throw new Error('Autorisation NPF impossible.');
+    if (!docsSession) throw new Error('Autorisation NPF-Q400 impossible.');
     return docsSession;
 }
 
@@ -47432,7 +47432,7 @@ async function getNpfOfflineDatabaseNamesForReset() {
 window.resetAllOfflineMapsStorage = async function() {
     const confirmed = confirm(
         'Réinitialisation profonde des cartes offline ?\n\n' +
-        'Cette action désactive la carte offline, ferme IndexedDB, nettoie les bases de tuiles et recharge NPF.\n' +
+        'Cette action désactive la carte offline, ferme IndexedDB, nettoie les bases de tuiles et recharge NPF-Q400.\n' +
         'Elle remplace la suppression complète de la PWA dans la plupart des cas.'
     );
     if (!confirmed) return;
@@ -48770,19 +48770,23 @@ async function runNpfServerMapDownload(mapId) {
              * l'ancienne version de la section. Pas assez : rien n'est effacé. */
             let oldGroups = { aEffacer: [], gardes: [] };
             let oldBytes = 0;
+            /* v17.67 — DIAG : « taille inconnue » quand une ancienne version existe sans taille connue. */
+            let oldUnknown = false;
             let needed = 0;
             if (cfg.type === 'tuiles') {
                 oldGroups = await findNpfServerSectionOldGroups(cfg);
                 oldGroups.gardes.forEach(item => addNpfServerMapLogEvent(`gardée (pas effacée) : ${item.groupName} — ${item.raison}`, {}, cfg));
                 oldGroups.aEffacer.filter(item => item.controle).forEach(item => addNpfServerMapLogEvent(`contrôle du contenu : ${item.groupName} — ${item.controle} — ancienne version reconnue`, {}, cfg));
                 oldBytes = oldGroups.aEffacer.reduce((total, item) => total + item.sizeBytes, 0);
+                oldUnknown = oldGroups.aEffacer.some(item => !(item.sizeBytes > 0));
                 needed = Math.round(Number(manifest.totalOctets) * NPF_SERVER_MAP_SPACE_FACTOR + NPF_SERVER_MAP_SPACE_MARGIN_BYTES);
             } else {
                 oldBytes = await getNpfServerSectionOldBytes(cfg);
+                oldUnknown = cfg.id === 'calque-routier' && getRoadOverlayManifest().parts.length > 0;
                 needed = Math.round(cfg.besoinOctets);
             }
             const free = await estimateNpfServerMapFreeBytes();
-            addNpfServerMapLogEvent(`place avant effacement : ${free === null ? 'inconnue (le navigateur ne la donne pas)' : `${formatNpfStorageSizeForUser(free)} libres`} + ${formatNpfServerMapBytes(oldBytes)} occupés par ${cfg.ancienne}, ${formatNpfStorageSizeForUser(needed)} nécessaires`, {}, cfg);
+            addNpfServerMapLogEvent(`place avant effacement : ${free === null ? 'inconnue (le navigateur ne la donne pas)' : `${formatNpfStorageSizeForUser(free)} libres`} + ${oldUnknown ? `taille inconnue pour ${cfg.ancienne}` : `${formatNpfServerMapBytes(oldBytes)} occupés par ${cfg.ancienne}`}, ${formatNpfStorageSizeForUser(needed)} nécessaires`, {}, cfg);
             if (free !== null && free + oldBytes < needed) {
                 const oldText = oldBytes > 0 ? ` + ${formatNpfStorageSizeForUser(oldBytes)} libérés par ${cfg.ancienne}` : '';
                 showNpfServerMapProgress(
@@ -58426,7 +58430,7 @@ function bindSiaManagementButtons() {
     if (deleteButton && deleteButton.dataset.bound !== '1') {
         deleteButton.dataset.bound = '1';
         deleteButton.addEventListener('click', async () => {
-            if (!confirm('Supprimer les données aéronautiques SIA stockées sur cet appareil ? Les autres données NPF ne seront pas touchées.')) {
+            if (!confirm('Supprimer les données aéronautiques SIA stockées sur cet appareil ? Les autres données NPF-Q400 ne seront pas touchées.')) {
                 return;
             }
             try {
