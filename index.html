@@ -6,8 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>NPF-Q400</title>
     <link rel="stylesheet" href="leaflet.css">
-    <link rel="stylesheet" href="style.css?appv=v17.68">
-    <link rel="manifest" href="manifest.json?appv=v17.68">
+    <link rel="stylesheet" href="style.css?appv=v17.69">
+    <link rel="manifest" href="manifest.json?appv=v17.69">
     <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192x192.png?appv=v13.92">
     <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512x512.png?appv=v13.92">
     <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png?appv=v13.92">
@@ -65,7 +65,7 @@
     <div id="app-boot-screen" aria-live="polite">
         <div class="boot-card">
             <div>NPF-Q400 — démarrage…</div>
-            <div class="boot-version">TEST v17.68</div>
+            <div class="boot-version">TEST v17.69</div>
         </div>
     </div>
     <script>
@@ -629,7 +629,7 @@
             };
         } catch (_) {}
 
-        const APP_VERSION = 'v17.68';
+        const APP_VERSION = 'v17.69';
         const SERVICE_WORKER_URL = `./sw.js?appv=${encodeURIComponent(APP_VERSION)}`;
         const APP_VERSION_STORAGE_KEY = 'appVersion';
         const SW_CONTROLLER_RELOAD_GUARD_KEY = 'swControllerReloadGuard';
@@ -1471,8 +1471,8 @@
     <script src="leaflet.min.js"></script>
     <script src="suncalc.js"></script>
     <script src="jszip.min.js"></script>
-    <script src="sia.js?siav=15.69-radio1026-1-maplite1"></script>
-    <script src="script.js?appv=v17.68"></script>
+    <script src="sia.js?siav=sia-2026-10-01-v02-g3"></script>
+    <script src="script.js?appv=v17.69"></script>
     
     <div id="fuel-split-modal" class="fuel-split-modal" style="display: none;">
         <div class="fuel-split-modal-content">
@@ -1858,12 +1858,12 @@
                     <h3 class="maps-management-title">Données Aéronautiques SIA</h3>
                     <p>
                         Données aéronautiques officielles SIA utilisées comme calques indépendants du fond de carte.
-                        Cette version TEST embarque l'AIRAC 08/26 pour validation hors ligne sur iPad.
+                        Cette version TEST embarque l'AIRAC <span id="sia-embedded-airac-text">10/26 du 01/10/2026</span> pour validation hors ligne sur iPad.
                     </p>
                     <div class="sia-management-meta" aria-live="polite">
-                        <div><strong>AIRAC :</strong> <span id="sia-airac-value">08/26</span></div>
-                        <div><strong>Date d'effet :</strong> <span id="sia-effective-date-value">06/08/2026</span></div>
-                        <div><strong>Révision :</strong> <span id="sia-revision-value">v04</span></div>
+                        <div><strong>AIRAC :</strong> <span id="sia-airac-value">10/26</span></div>
+                        <div><strong>Date d'effet :</strong> <span id="sia-effective-date-value">01/10/2026</span></div>
+                        <div><strong>Révision :</strong> <span id="sia-revision-value">v02</span></div>
                         <div><strong>État :</strong> <span id="sia-installed-status">Vérification du stockage local…</span></div>
                     </div>
                     <div class="sia-management-actions">

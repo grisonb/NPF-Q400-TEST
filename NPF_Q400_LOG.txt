@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 10/10/2026
-Version de travail actuelle : TEST v17.68
+Version de travail actuelle : TEST v17.69
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,11 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.69 — sia.js ENTIÈREMENT régénéré depuis l'export du SIA du 01/10/2026
+  (AIXM 4.5 + XML-SIA, AIRAC 10/26) par generateur-sia (outils de test) :
+  zones, arcs exacts, frontières, unions, fréquences, SIV, noms des P,
+  terrains, VRP, tables radio ; table de corrections v17.68 RETIRÉE ;
+  cycle SIA affiché depuis sia.js ; DIAG « Données SIA : AIRAC 01/10/2026 » ;
 - v17.68 — arcs SIA : table de corrections TEMPORAIRE (src/340) qui redessine
   les vrais arcs de 9 CTR dont l'arc avait été remplacé par une ligne droite
   dans les données (SAINT-YAN 1, 2 et contour, BRICY, SAINT ETIENNE, CANNES,
@@ -491,7 +496,11 @@ NON IMPLÉMENTÉ / OUVERT :
   07/10/2026 : programme VPS bfg-sofia-notams 1.2.0 PRÊT, NON INSTALLÉ
   (~/vps-a-copier/). v17.60 à pousser APRÈS l'installation de la 1.2.0
   (elle annonce « environ 1 minute ») ;
-- v17.68 : À MESURER sur iPad (arcs SIA, en commençant par SAINT-YAN) ; table
+- v17.69 : À MESURER sur iPad (zones SIA du 01/10 : arcs, frontières, fréquences,
+  terrains, VRP) ;
+- v17.68 : REMPLACÉE par v17.69 (sia.js régénéré ; la table temporaire laissait
+  des morceaux d'arc parasites sur BRICY, POITIERS BIARD 1, SAINT ETIENNE, NICE,
+  CANNES) ; À MESURER sur iPad (arcs SIA, en commençant par SAINT-YAN) ; table
   de corrections d'arcs TEMPORAIRE, À REVOIR à la régénération de sia.js ;
 - v17.67 : À MESURER sur iPad (couleurs et titres de Gestion des Cartes) ;
 - v17.66 : VALIDÉE sur iPad le 09/10/2026 (4 sections terminées et vérifiées,
@@ -698,46 +707,48 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.68
+Version : TEST v17.69
 Date : 10/10/2026
-Base : v17.67 (442fb77, poussée le 09/10/2026)
+Base : v17.68 (498685c, poussée le 10/10/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.68.txt
-2_Index_v17.68.txt
-3_Manifest_v17.68.txt
-4_Script_v17.68.txt
-5_SIA_v17.68.txt
-6_Style_v17.68.txt
-7_Sw_v17.68.txt
+1_Modifications_v17.69.txt
+2_Index_v17.69.txt
+3_Manifest_v17.69.txt
+4_Script_v17.69.txt
+5_SIA_v17.69.txt
+6_Style_v17.69.txt
+7_Sw_v17.69.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.68 (et texte « TEST v17.68 » de l'écran de
+- Index : APP_VERSION = v17.69 (et texte « TEST v17.69 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.68
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.68
-- Style : NPF_STYLE_BUILD_VERSION = v17.68
-- Service Worker : `sw-v17-68_arcs_sia` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-68_arcs_sia`, `npf-q400-test-app-data-v1`,
-  `npf-q400-test-sia-data-15.69-radio1026-1-maplite1`
-- SIA_DATA_REVISION (SW / Index) : 15.69-radio1026-1-maplite1 (inchangée)
-- sia.js v17.68 : strictement identique à v17.52 (les arcs sont corrigés en
-  mémoire au chargement, par la table temporaire de src/340).
+- Manifest : start_url = ./index.html?appv=v17.69
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.69
+- Style : NPF_STYLE_BUILD_VERSION = v17.69
+- Service Worker : `sw-v17-69_sia_airac_1026` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-69_sia_airac_1026`, `npf-q400-test-app-data-v1`,
+  `npf-q400-test-sia-data-sia-2026-10-01-v02-g3`
+- SIA_DATA_REVISION (SW / Index sia.js?siav=) : sia-2026-10-01-v02-g3 (= NPF_SIA_DATA_REVISION
+  de sia.js ; à changer à chaque nouveau sia.js)
+- sia.js v17.69 : RÉGÉNÉRÉ (AIRAC 10/26 du 01/10/2026, paquet SIA v02) par
+  ~/projects/outils_tests_NPF-Q400-TEST/generateur-sia/generer_sia.py (une commande
+  par cycle, voir son LISEZMOI.txt) ; npfDatasetRevision 2026-10-01-v02-g3.
 - Images de lancement : icons/startup-ipad9-portrait.png (1620 × 2160) et
   icons/startup-ipad9-landscape.png (2160 × 1620).
 - Icônes des boutons (v17.48) : calculator-fms-icon, search-commune-icon,
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.68 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.69 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
 - `sia.js` identique à v17.52 ; moteur tuiles (src/100) modifié en v17.66 sur demande
   explicite (limite de zoom propre à chaque carte, zoom 11 OACI 1/500 000) ;
-- tests v17.68 (arcs SIA + non-régression bloquante) : entrée v17.68 ;
+- tests v17.69 (sia.js régénéré + non-régression bloquante) : entrée v17.69 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67 et v17.68 À MESURER ; v17.65 et v17.66 VALIDÉES ;
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68 et v17.69 À MESURER ; v17.65 et v17.66 VALIDÉES ;
   v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE ;
   v17.56 VALIDÉE en vol ; v17.57 VALIDÉE sur iPad.
 
@@ -2266,6 +2277,99 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.69 — sia.js ENTIÈREMENT RÉGÉNÉRÉ DEPUIS L'EXPORT DU SIA DU
+01/10/2026 (AIRAC 10/26) ; TABLE DE CORRECTIONS D'ARCS v17.68 RETIRÉE ; ZONES À
+PLANCHER ≥ FL195 NON EMBARQUÉES ; CYCLE SIA AFFICHÉ DEPUIS sia.js
+Date : 10/10/2026
+Base fonctionnelle : v17.68 (commit 498685c, poussée le 10/10/2026).
+Demandes de Bastien (10/10/2026) : sia.js entièrement régénéré à partir du
+fichier du SIA (export_xml_bd_sia_2026-10-01-v02.zip : AIXM 4.5 + XML-SIA), une
+seule commande par cycle ; puis décision : ne pas embarquer les zones dont le
+PLANCHER est au FL195 ou au-dessus.
+
+1. GÉNÉRATEUR (hors dépôt) : ~/projects/outils_tests_NPF-Q400-TEST/generateur-sia/
+- python3 generer_sia.py <export_xml_bd_sia_AAAA-MM-JJ-vNN.zip> → sortie/sia.js
+  complet + rapport de contrôle (LISEZMOI.txt : mode d'emploi par cycle).
+- Tout vient du SIA, aucun complément manuel (complements_manuels.json vide) :
+  zones (attributs AIXM ; arcs CWA/CCA recalculés depuis centre, rayon, sens,
+  y compris l'arc qui referme la zone ; cercles ; frontières et côtes
+  simplifiées à 0,05 NM (zones basses) / 0,5 NM (grands espaces) ; sommets
+  officiels et arcs jamais simplifiés ; unions recalculées) ; fréquences des
+  zones (AIXM Sae/Ser/Fqy + supplétives XML-SIA) ; SIV (XML-SIA FIS) ; noms
+  d'usage des P (XML-SIA) ; terrains (Ahp) ; points / VRP (Dpn non IFR,
+  descriptions françaises XML-SIA) ; tables radio des aérodromes ; méta.
+- Règle d'embarquement : zones à plancher ≥ FL195 retirées (416 : SECTOR 184,
+  RAS 124, TRA 45, R 22, D 21, UIR 5, UTA 5, TMA 4, OCA 3, CTA 1, FIR 1,
+  UIR-P 1) ; plancher < FL195 : zone gardée entière ; sans plancher : gardée.
+  Les filtres sans zone (UIR, UIR-P, TRA) se masquent d'eux-mêmes.
+- Révision des données : sia-2026-10-01-v02-g3 (sia.js, sw.js
+  SIA_DATA_REVISION, index.html sia.js?siav=) ; npfDatasetRevision
+  2026-10-01-v02-g3 (force le rechargement des zones sur l'iPad).
+
+2. APP
+- sia.js remplacé (4 645 zones, 874 terrains, 1 897 points dont 1 094 VRP,
+  482 lignes radio, 326 groupes radio ; 1,38 Mo contre 1,40 Mo).
+- src/340 : table temporaire de corrections d'arcs v17.68 et ses appels RETIRÉS ;
+  SIA_SIV_VOLUME_FREQUENCIES au cycle 10/26 (eAIP ENR 2.2) : BIARRITZ 119.180,
+  CHAMBERY 1 et 2 123.700, BEAUVAIS 1 123.985 ; Gestion des Cartes « Données
+  Aéronautiques SIA » : AIRAC, date d'effet et révision lus dans sia.js
+  (« 10/26 du 01/10/2026 », v02) ; états et alertes avec la date.
+- src/010 : ligne DIAG « Corrections d'arcs SIA » retirée ; nouvelle ligne
+  « Données SIA : AIRAC 01/10/2026 » (lue dans sia.js).
+- src/330 : métadonnées de secours au cycle 10/26.
+- index.html : textes figés « 08/26 / 06/08/2026 / v04 » remplacés (et remplis
+  depuis sia.js à l'ouverture) ; sia.js?siav= nouvelle révision.
+- sw.js : SIA_DATA_REVISION = sia-2026-10-01-v02-g3 (cache TEST
+  npf-q400-test-sia-data-… ; caches de la pérenne jamais touchés).
+
+3. COMPARAISON AVEC L'ANCIEN sia.js (08/26)
+- Zones communes 4 645 : identiques (≤ 0,05 NM) 4 131 ; arcs corrigés 9 CTR ;
+  défauts de l'ancien outil corrigés (frontières en ligne droite, arcs faux,
+  unions qui ne correspondaient pas à leurs parties) ; 61 changements du cycle
+  confirmés dans l'eAIP du 01/10 ; voir generateur-sia/sortie/comparaison/.
+- Fréquences des zones : 75 zones changées, toutes des changements du cycle
+  (8,33 kHz : TOULOUSE, ORLY, MERIGNAC, BIARRITZ, SAINT NAZAIRE, RODEZ, AIX,
+  PONTOISE, QUIMPER, LE TOUQUET, LOURDES, SAINT EXUPERY, VATRY, MERVILLE ;
+  BEAUVAIS 121.4 → 121.405 et FIS 123.985).
+- Terrains : 869 identiques, 5 changés (élévation / position : LF04, LF06,
+  LF07, LF20, LF272), 3 supprimés (LF02, LFXQ, LF041) ; points : 1 897
+  identiques, 2 supprimés ; tables radio : identiques.
+- Constat sur v17.68 : la table temporaire laissait des morceaux d'arc
+  parasites (BRICY 1,95 NM, POITIERS BIARD 1 2,0, SAINT ETIENNE 3,4, NICE 0,35,
+  CANNES 0,2) ; corrigé par la régénération.
+- Vu, non modifié (hors périmètre) : apostrophe des descriptions VRP affichée
+  « &39; » dans la bulle (déjà en v17.68). Statut : NON IMPLÉMENTÉ.
+
+TESTS (Chrome sans fenêtre, iPad simulé ; vrai NAS et vrai VPS bloqués au DNS)
+- Mesures, 3 passages alternés v17.68 / v17.69 : chargement des zones médiane
+  206 / 163 ms (CPU ×4) ; jeu embarqué 521 / 502 ms ; mémoire 34,1 / 33,7 Mo ;
+  taille 1,40 / 1,38 Mo ; décorations en suivi 2 NM (médianes) Saint-Yan
+  193-165-163 / 127-188-124 ms, Marseille 272-237-349 / 267-214-121 ms : au
+  niveau de la v17.68 ou mieux. Avant le retrait des zones ≥ FL195 :
+  décorations ~70 % plus lentes (UIR / UTA FRANCE suivant les côtes) — d'où la
+  décision.
+- Ciblés : arcs sans bosse (SAINT-YAN, BRICY, POITIERS BIARD, SAINT ETIENNE,
+  NICE, CANNES, PROVENCE) ; frontières suivies (Strasbourg / Rhin, Bâle,
+  Genève) ; bulles des zones (classe, plancher, plafond, fréquences ; SIV
+  BIARRITZ 119.180, BEAUVAIS 1 121.405) ; bulles terrains et VRP ; Gestion des
+  Cartes « 10/26 du 01/10/2026 », v02 ; DIAG « Données SIA : AIRAC 01/10/2026 ».
+- Non-régression bloquante (v17.68 contre v17.69) : carte et échelle NM, nr
+  (FdS/GAAR, feux, bandeaux), boutons, retour sur l'avion en suivi, Trafic
+  Moyens Nationaux, « zéro GLR », textes « NPF-Q400 », bulle terrain : OK ;
+  mise à jour v17.68 -> v17.69 + hors ligne + fenêtre « Mise à jour
+  installée » : OK, caches npf-q400-test-* seulement, pérenne intacte ; aucune
+  erreur JS. Écarts vus : heures et taille du DIAG seulement.
+
+FICHIERS MODIFIÉS
+sia.js ; src/010, src/330, src/340, donc script.js ; index.html, sw.js,
+manifest.json, style.css (version, révision SIA).
+
+VERSION
+- App : v17.69
+- Service Worker : `sw-v17-69_sia_airac_1026`
+
+STATUT : À MESURER sur iPad.
 
 VERSION TEST v17.68 — ARCS SIA : TABLE TEMPORAIRE DE CORRECTIONS (VRAIS ARCS DE
 9 CTR DONT L'ARC ÉTAIT UNE LIGNE DROITE) ; DIAG « CORRECTIONS D'ARCS SIA »

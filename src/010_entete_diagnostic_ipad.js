@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.68';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.69';
 
 
 /*
@@ -2966,14 +2966,11 @@ function appendNpfDiagV1746HeaderLines(lines) {
         }
     } catch (_) {}
 
-    /* v17.68 — table temporaire de corrections d'arcs SIA (src/340), appliquée au chargement des zones. */
+    /* v17.69 — cycle des données SIA embarquées (sia.js régénéré depuis l'export du SIA). */
     try {
-        const arcs = typeof npfSiaArcCorrectionStats !== 'undefined' ? npfSiaArcCorrectionStats : null;
-        lines.push(arcs
-            ? 'Corrections d\'arcs SIA : ' + arcs.appliquees + ' appliquées, ' + arcs.ignorees + ' ignorées'
-                + (arcs.ignoreesNoms && arcs.ignoreesNoms.length ? ' (' + arcs.ignoreesNoms.join(', ') + ')' : '')
-                + (arcs.noms && arcs.noms.length ? ' · corrigées : ' + arcs.noms.join(', ') : '')
-            : 'Corrections d\'arcs SIA : zones SIA pas encore chargées');
+        const siaMeta = typeof SIA_EMBEDDED_META !== 'undefined' ? SIA_EMBEDDED_META : null;
+        const dateSia = String(siaMeta?.effectiveDate || '').split('-').reverse().join('/');
+        lines.push('Données SIA : AIRAC ' + (dateSia || '—'));
     } catch (_) {}
 }
 
@@ -3308,7 +3305,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.68 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.69 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
