@@ -299,6 +299,235 @@ async function decodeEmbeddedSiaGzipBase64(gzipBase64, invalidMessage) {
     return parsed;
 }
 
+/*
+ * v17.68 — TABLE TEMPORAIRE DE CORRECTIONS D'ARCS SIA.
+ *
+ * Dans le jeu SIA embarqué (sia.js, AIRAC 08/26), quelques zones ont un arc
+ * remplacé par une ligne droite entre ses deux extrémités (ex. CTR SAINT-YAN
+ * 1 et 2). sia.js n'est pas modifié : les arcs sont recalculés ici, une seule
+ * fois après chaque chargement des zones (jeu décompressé ou copie locale),
+ * avant l'index par cases et tout calcul de bordure, libellé ou voile, depuis
+ * le centre, le rayon et le sens publiés dans l'eAIP (01/10/2026).
+ * Sécurité : une zone n'est corrigée que si elle est trouvée (type, nom,
+ * code) ET que toutes ses extrémités d'arc (ou tous ses points, pour une
+ * zone reconstruite) sont dans les données à moins de 0,05 NM ; sinon elle
+ * est ignorée, sans erreur. À RETIRER quand sia.js sera régénéré sur un cycle
+ * AIP récent.
+ * Laissés volontairement : TMA LYON / MONTPELLIER / LIMOGES / LUXEUIL et SIV
+ * GENEVE / BALE / LYON (regroupements techniques jamais affichés).
+ */
+const NPF_SIA_ARC_CORRECTIONS = Object.freeze([
+    /* CTR SAINT-YAN 1 — FR-AD-2.LFLN : zone reconstruite (points officiels + arc de 9 NM centré sur l'ARP). */
+    { t: 'CTR', n: 'SAINT-YAN 1', c: 'LFLN1', ring: [
+        [4.04444, 46.55556],
+        [4.03583, 46.50139],
+        [4.05528, 46.46861],
+        [4.08222, 46.46417],
+        [4.12694, 46.44333],
+        [4.15306, 46.44194],
+        [4.16111, 46.45056],
+        [4.23028, 46.4475],
+        { ce: [4.021111, 46.406389], r: 9, s: 'cw' }
+    ] },
+    /* CTR SAINT-YAN — FR-AD-2.LFLN : zone reconstruite (points officiels + arc de 9 NM centré sur l'ARP). */
+    { t: 'CTR', n: 'SAINT-YAN', c: 'LFLN', ring: [
+        [4.04444, 46.55556],
+        { ce: [4.021111, 46.406389], r: 9, s: 'cw' },
+        [4.23028, 46.4475],
+        { ce: [4.021111, 46.406389], r: 9, s: 'cw' }
+    ] },
+    /* CTR SAINT-YAN 2 — FR-AD-2.LFLN */
+    { t: 'CTR', n: 'SAINT-YAN 2', c: 'LFLN2', arcs: [
+        { d: [4.044444, 46.555556], f: [4.230278, 46.4475], ce: [4.021111, 46.406389], r: 9.0, s: 'cw' }
+    ] },
+    /* CTR BRICY — FR-AD-2.LFOJ */
+    { t: 'CTR', n: 'BRICY', c: 'LFOJ', arcs: [
+        { d: [1.824722, 48.091944], f: [1.908889, 47.935278], ce: [1.866667, 48.013611], r: 5.0, s: 'cw' },
+        { d: [1.7275, 47.891111], f: [1.561389, 47.961944], ce: [1.685278, 47.969444], r: 5.0, s: 'cw' },
+        { d: [1.609167, 48.035278], f: [1.643333, 48.047778], ce: [1.685278, 47.969444], r: 5.0, s: 'cw' }
+    ] },
+    /* CTR SAINT ETIENNE — FR-AD-2.LFMH */
+    { t: 'CTR', n: 'SAINT ETIENNE', c: 'LFMH', arcs: [
+        { d: [4.094722, 45.610833], f: [4.3775, 45.685556], ce: [4.297222, 45.534167], r: 9.7, s: 'cw' },
+        { d: [4.411111, 45.4275], f: [4.197778, 45.420833], ce: [4.297222, 45.534167], r: 8.0, s: 'cw' }
+    ] },
+    /* CTR CANNES — FR-AD-2.LFMD */
+    { t: 'CTR', n: 'CANNES', c: 'LFMD', arcs: [
+        { d: [6.842778, 43.526944], f: [6.923333, 43.626667], ce: [6.953889, 43.546667], r: 5.0, s: 'cw' }
+    ] },
+    /* CTR POITIERS BIARD 1 — FR-AD-2.LFBI */
+    { t: 'CTR', n: 'POITIERS BIARD 1', c: 'LFBI1', arcs: [
+        { d: [0.331944, 46.745], f: [0.519444, 46.648333], ce: [0.306667, 46.5875], r: 9.5, s: 'cw' },
+        { d: [0.289444, 46.423056], f: [0.100556, 46.500278], ce: [0.298056, 46.581389], r: 9.5, s: 'cw' }
+    ] },
+    /* CTR PROVENCE — FR-AD-2.LFML */
+    { t: 'CTR', n: 'PROVENCE', c: 'LFML', arcs: [
+        { d: [5.120556, 43.5225], f: [5.216944, 43.584167], ce: [5.108056, 43.602778], r: 4.86, s: 'ccw' }
+    ] },
+    /* CTR NICE — FR-AD-2.LFMN */
+    { t: 'CTR', n: 'NICE', c: 'LFMN', arcs: [
+        { d: [7.114722, 43.548056], f: [7.077222, 43.561667], ce: [7.094722, 43.553056], r: 0.92, s: 'ccw' }
+    ] }
+]);
+const NPF_SIA_ARC_MAX_SAGITTA_NM = 0.01;
+const NPF_SIA_ARC_MATCH_NM = 0.05;
+const NPF_SIA_ARC_NEAR_DUPLICATE_NM = 0.1;
+const NPF_EARTH_RADIUS_NM = 3440.065;
+let npfSiaArcCorrectionStats = null;
+
+function npfSiaDistanceNm(a, b) {
+    const rad = Math.PI / 180;
+    const la1 = a[1] * rad; const la2 = b[1] * rad;
+    const h = Math.sin((la2 - la1) / 2) ** 2
+        + Math.cos(la1) * Math.cos(la2) * Math.sin((b[0] - a[0]) * rad / 2) ** 2;
+    return 2 * NPF_EARTH_RADIUS_NM * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+function npfSiaBearingRad(c, p) {
+    const rad = Math.PI / 180;
+    const la1 = c[1] * rad; const la2 = p[1] * rad; const dl = (p[0] - c[0]) * rad;
+    return Math.atan2(Math.sin(dl) * Math.cos(la2),
+        Math.cos(la1) * Math.sin(la2) - Math.sin(la1) * Math.cos(la2) * Math.cos(dl));
+}
+
+function npfSiaDestination(c, bearing, distNm) {
+    const rad = Math.PI / 180;
+    const d = distNm / NPF_EARTH_RADIUS_NM; const la1 = c[1] * rad; const lo1 = c[0] * rad;
+    const la2 = Math.asin(Math.sin(la1) * Math.cos(d) + Math.cos(la1) * Math.sin(d) * Math.cos(bearing));
+    const lo2 = lo1 + Math.atan2(Math.sin(bearing) * Math.sin(d) * Math.cos(la1), Math.cos(d) - Math.sin(la1) * Math.sin(la2));
+    return [Math.round(lo2 / rad * 1e6) / 1e6, Math.round(la2 / rad * 1e6) / 1e6];
+}
+
+/* Points intermédiaires d'un arc publié, de « from » vers « to » (extrémités exclues). */
+function npfSiaArcPoints(from, to, arc) {
+    const twoPi = 2 * Math.PI;
+    const b0 = npfSiaBearingRad(arc.ce, from);
+    const b1 = npfSiaBearingRad(arc.ce, to);
+    const clockwise = arc.s === 'cw';
+    let sweep = clockwise ? (b1 - b0) % twoPi : (b0 - b1) % twoPi;
+    if (sweep <= 1e-9) sweep += twoPi;
+    const step = 2 * Math.acos(Math.max(-1, 1 - NPF_SIA_ARC_MAX_SAGITTA_NM / arc.r));
+    const n = Math.max(2, Math.ceil(sweep / step));
+    const points = [];
+    for (let i = 1; i < n; i += 1) {
+        const bearing = b0 + (clockwise ? 1 : -1) * sweep * i / n;
+        points.push(npfSiaDestination(arc.ce, bearing, arc.r));
+    }
+    return points;
+}
+
+function collectNpfSiaRings(geometry) {
+    const rings = [];
+    const walk = node => {
+        if (!Array.isArray(node)) return;
+        if (node.length && Array.isArray(node[0]) && typeof node[0][0] === 'number') { rings.push(node); return; }
+        node.forEach(walk);
+    };
+    if (Array.isArray(geometry) && geometry.length >= 2) walk(geometry[1]);
+    return rings;
+}
+
+/* Remplace, dans un anneau fermé, la droite entre les extrémités d'un arc par l'arc publié. Renvoie le nouvel anneau ou null. */
+function replaceNpfSiaChordByArc(ring, arc) {
+    const open = ring.slice(0, -1);
+    const n = open.length;
+    if (n < 3) return null;
+    const near = (p, q) => npfSiaDistanceNm(p, q) < NPF_SIA_ARC_MATCH_NM;
+    const starts = []; const ends = [];
+    open.forEach((p, i) => { if (near(p, arc.d)) starts.push(i); if (near(p, arc.f)) ends.push(i); });
+    for (const i of starts) {
+        for (const j of ends) {
+            for (const step of [1, -1]) {
+                let k = i; let ok = true;
+                for (let guard = 0; guard < n; guard += 1) {
+                    const k2 = (k + step + n) % n;
+                    if (k2 === j) break;
+                    if (npfSiaDistanceNm(open[k2], open[k]) > NPF_SIA_ARC_NEAR_DUPLICATE_NM
+                        && !starts.includes(k2) && !ends.includes(k2)) { ok = false; break; }
+                    k = k2;
+                    if (guard === n - 1) ok = false;
+                }
+                if (!ok) continue;
+                const first = step === 1 ? i : j;
+                const last = step === 1 ? j : i;
+                const rotated = open.slice(first).concat(open.slice(0, first));
+                const endIndex = (last - first + n) % n;
+                const samples = step === 1
+                    ? npfSiaArcPoints(arc.d, arc.f, arc)
+                    : npfSiaArcPoints(arc.d, arc.f, arc).reverse();
+                const rebuilt = [rotated[0], ...samples, ...rotated.slice(endIndex)];
+                rebuilt.push(rebuilt[0]);
+                return rebuilt;
+            }
+        }
+    }
+    return null;
+}
+
+/* Zone reconstruite : points officiels (déjà présents dans les données) et arcs publiés entre eux. */
+function buildNpfSiaCorrectedRing(item, spec) {
+    const existing = collectNpfSiaRings(item.g).flat();
+    const vertices = spec.ring.filter(entry => Array.isArray(entry));
+    const allFound = vertices.every(p => existing.some(q => npfSiaDistanceNm(p, q) < NPF_SIA_ARC_MATCH_NM));
+    if (!allFound) return null;
+    const ring = [];
+    spec.ring.forEach((entry, index) => {
+        if (Array.isArray(entry)) { ring.push(entry); return; }
+        const from = spec.ring[index - 1];
+        const to = index + 1 < spec.ring.length ? spec.ring[index + 1] : spec.ring[0];
+        ring.push(...npfSiaArcPoints(from, to, entry));
+    });
+    ring.push(ring[0]);
+    return ring;
+}
+
+function computeNpfSiaBounds(geometry) {
+    const all = collectNpfSiaRings(geometry).flat();
+    if (!all.length) return null;
+    const lons = all.map(p => p[0]); const lats = all.map(p => p[1]);
+    const r5 = v => Math.round(v * 1e5) / 1e5;
+    return [r5(Math.min(...lons)), r5(Math.min(...lats)), r5(Math.max(...lons)), r5(Math.max(...lats))];
+}
+
+/* Appliquée une seule fois par chargement des zones ; renvoie { appliquees, ignorees, noms }. */
+function applyNpfSiaArcCorrections(dataset) {
+    const stats = { appliquees: 0, ignorees: 0, noms: [], ignoreesNoms: [] };
+    const airspaces = Array.isArray(dataset?.airspaces) ? dataset.airspaces : [];
+    NPF_SIA_ARC_CORRECTIONS.forEach(spec => {
+        const label = `${spec.t} ${spec.n}`;
+        const item = airspaces.find(entry => entry && entry.t === spec.t && entry.n === spec.n && entry.c === spec.c);
+        if (!item || !Array.isArray(item.g)) { stats.ignorees += 1; stats.ignoreesNoms.push(label); return; }
+        let geometry = null;
+        if (Array.isArray(spec.ring)) {
+            const ring = buildNpfSiaCorrectedRing(item, spec);
+            if (ring) geometry = ['G', [ring]];
+        } else {
+            const copy = JSON.parse(JSON.stringify(item.g));
+            const rings = collectNpfSiaRings(copy);
+            let allApplied = true;
+            spec.arcs.forEach(arc => {
+                let done = false;
+                for (const ring of rings) {
+                    const rebuilt = replaceNpfSiaChordByArc(ring, arc);
+                    if (rebuilt) { ring.splice(0, ring.length, ...rebuilt); done = true; break; }
+                }
+                if (!done) allApplied = false;
+            });
+            if (allApplied) geometry = copy;
+        }
+        if (!geometry) { stats.ignorees += 1; stats.ignoreesNoms.push(label); return; }
+        /* Copie JSON : tableaux de même forme interne que le jeu décodé (sinon le moteur JavaScript
+         * passe les calculs partagés des zones, dont le liseré, en mode lent : mesuré 2 à 2,5× plus lent). */
+        item.g = JSON.parse(JSON.stringify(geometry));
+        const bounds = computeNpfSiaBounds(geometry);
+        if (bounds) item.b = bounds;
+        stats.appliquees += 1;
+        stats.noms.push(label);
+    });
+    npfSiaArcCorrectionStats = stats;
+    return stats;
+}
+
 async function decodeEmbeddedSiaDataset() {
     if (!SIA_EMBEDDED_AVAILABLE) {
         throw new Error("Données SIA intégrées indisponibles : le fichier sia.js est absent ou invalide.");
@@ -416,6 +645,8 @@ async function ensureSiaDatasetLoaded(options = {}) {
                     const stored = await siaDbGet(SIA_DATASET_KEY);
                     if (stored && Array.isArray(stored.airspaces)
                         && Array.isArray(stored.terrain) && Array.isArray(stored.points)) {
+                        /* v17.68 — corrections d'arcs (temporaires) appliquées à la copie en mémoire. */
+                        applyNpfSiaArcCorrections(stored);
                         siaDataset = stored;
                         return siaDataset;
                     }
@@ -428,6 +659,8 @@ async function ensureSiaDatasetLoaded(options = {}) {
         const embedded = await decodeEmbeddedSiaDataset();
         await siaDbPut(SIA_DATASET_KEY, embedded);
         await siaDbPut(SIA_META_KEY, embedded.meta || SIA_EMBEDDED_META);
+        /* v17.68 — corrections d'arcs (temporaires) : après l'enregistrement local, qui garde le jeu d'origine. */
+        applyNpfSiaArcCorrections(embedded);
         siaDataset = embedded;
         return siaDataset;
     })();

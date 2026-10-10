@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
-Mise à jour : 08/10/2026
-Version de travail actuelle : TEST v17.67
+Mise à jour : 10/10/2026
+Version de travail actuelle : TEST v17.68
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,11 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.68 — arcs SIA : table de corrections TEMPORAIRE (src/340) qui redessine
+  les vrais arcs de 9 CTR dont l'arc avait été remplacé par une ligne droite
+  dans les données (SAINT-YAN 1, 2 et contour, BRICY, SAINT ETIENNE, CANNES,
+  POITIERS BIARD 1, PROVENCE, NICE) ; sia.js inchangé ; À RETIRER quand sia.js
+  sera régénéré sur un cycle AIP récent ;
 - v17.67 — Gestion des Cartes : titres de rubrique sur fond jaune pastel, tous
   au même format (Doc FdF compris), « Type Carte », « Données Aéronautiques
   SIA » ; boutons « Importer… » sur fond bleu pastel ; derniers « NPF » seuls
@@ -486,6 +491,8 @@ NON IMPLÉMENTÉ / OUVERT :
   07/10/2026 : programme VPS bfg-sofia-notams 1.2.0 PRÊT, NON INSTALLÉ
   (~/vps-a-copier/). v17.60 à pousser APRÈS l'installation de la 1.2.0
   (elle annonce « environ 1 minute ») ;
+- v17.68 : À MESURER sur iPad (arcs SIA, en commençant par SAINT-YAN) ; table
+  de corrections d'arcs TEMPORAIRE, À REVOIR à la régénération de sia.js ;
 - v17.67 : À MESURER sur iPad (couleurs et titres de Gestion des Cartes) ;
 - v17.66 : VALIDÉE sur iPad le 09/10/2026 (4 sections terminées et vérifiées,
   écran allumé, aucune reprise, pas de fenêtre de connexion Safari, zoom 11 :
@@ -691,45 +698,46 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.67
-Date : 09/10/2026
-Base : v17.66 (25060cf, poussée le 09/10/2026)
+Version : TEST v17.68
+Date : 10/10/2026
+Base : v17.67 (442fb77, poussée le 09/10/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.67.txt
-2_Index_v17.67.txt
-3_Manifest_v17.67.txt
-4_Script_v17.67.txt
-5_SIA_v17.67.txt
-6_Style_v17.67.txt
-7_Sw_v17.67.txt
+1_Modifications_v17.68.txt
+2_Index_v17.68.txt
+3_Manifest_v17.68.txt
+4_Script_v17.68.txt
+5_SIA_v17.68.txt
+6_Style_v17.68.txt
+7_Sw_v17.68.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.67 (et texte « TEST v17.67 » de l'écran de
+- Index : APP_VERSION = v17.68 (et texte « TEST v17.68 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.67
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.67
-- Style : NPF_STYLE_BUILD_VERSION = v17.67
-- Service Worker : `sw-v17-67_couleurs_gestion_cartes` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-67_couleurs_gestion_cartes`, `npf-q400-test-app-data-v1`,
+- Manifest : start_url = ./index.html?appv=v17.68
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.68
+- Style : NPF_STYLE_BUILD_VERSION = v17.68
+- Service Worker : `sw-v17-68_arcs_sia` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-68_arcs_sia`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-15.69-radio1026-1-maplite1`
 - SIA_DATA_REVISION (SW / Index) : 15.69-radio1026-1-maplite1 (inchangée)
-- sia.js v17.67 : strictement identique à v17.52.
+- sia.js v17.68 : strictement identique à v17.52 (les arcs sont corrigés en
+  mémoire au chargement, par la table temporaire de src/340).
 - Images de lancement : icons/startup-ipad9-portrait.png (1620 × 2160) et
   icons/startup-ipad9-landscape.png (2160 × 1620).
 - Icônes des boutons (v17.48) : calculator-fms-icon, search-commune-icon,
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.67 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.68 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
 - `sia.js` identique à v17.52 ; moteur tuiles (src/100) modifié en v17.66 sur demande
   explicite (limite de zoom propre à chaque carte, zoom 11 OACI 1/500 000) ;
-- tests v17.67 (test court bloquant) : entrée v17.67 ;
+- tests v17.68 (arcs SIA + non-régression bloquante) : entrée v17.68 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64 et v17.67 À MESURER ; v17.65 et v17.66 VALIDÉES ;
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67 et v17.68 À MESURER ; v17.65 et v17.66 VALIDÉES ;
   v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE ;
   v17.56 VALIDÉE en vol ; v17.57 VALIDÉE sur iPad.
 
@@ -2258,6 +2266,106 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.68 — ARCS SIA : TABLE TEMPORAIRE DE CORRECTIONS (VRAIS ARCS DE
+9 CTR DONT L'ARC ÉTAIT UNE LIGNE DROITE) ; DIAG « CORRECTIONS D'ARCS SIA »
+Date : 09-10/10/2026
+Base fonctionnelle : v17.67 (commit 442fb77, poussée le 09/10/2026).
+Demande de Bastien (09/10/2026), après l'analyse en lecture seule de la CTR
+SAINT-YAN 2 mal dessinée. Choix du pilote : table de corrections, sia.js NE
+CHANGE PAS.
+
+1. DÉFAUT CONSTATÉ (analyse v17.67)
+- Dans le jeu SIA embarqué (sia.js, AIRAC 08/26), certains arcs publiés
+  (« arc horaire / anti-horaire de R NM centré sur … ») ont été remplacés par
+  une ligne droite entre leurs extrémités. Comparaison avec les 530 arcs de
+  l'eAIP du 01/10/2026 (352 descriptions) : écart maximal avant correction
+  CTR SAINT-YAN 1 13,0 NM (zone réduite à une lamelle + un anneau parasite
+  de 3 points), contour CTR SAINT-YAN 13,0, BRICY 4,99, SAINT ETIENNE 2,38,
+  SAINT-YAN 2 1,54, CANNES 1,42, POITIERS BIARD 1 1,32, PROVENCE 0,89,
+  NICE 0,80 NM.
+
+2. CORRECTION (src/340_sia_moteur.js)
+- Table NPF_SIA_ARC_CORRECTIONS + applyNpfSiaArcCorrections(dataset),
+  appliquée une seule fois à chaque chargement des zones (jeu décompressé ou
+  copie locale IndexedDB), juste avant l'affectation de siaDataset, donc avant
+  l'index, les bordures, libellés, voiles et la sélection. La copie locale
+  IndexedDB garde le jeu d'origine (la correction est faite en mémoire).
+- Chaque arc est recalculé depuis le centre, le rayon et le sens publiés dans
+  l'eAIP (flèche maximale 0,01 NM entre deux points). SAINT-YAN 1 et le
+  contour SAINT-YAN sont reconstruits depuis les points officiels (anneau
+  parasite retiré ; contour = cercle complet de 9 NM).
+- Sécurité : une zone n'est corrigée que si elle est trouvée (type, nom, code)
+  ET que toutes ses extrémités d'arc (ou tous ses points pour une zone
+  reconstruite) sont dans les données à moins de 0,05 NM ; sinon elle est
+  ignorée, sans erreur (tout ou rien par zone). Emprise (b) recalculée.
+- La géométrie corrigée est recopiée par JSON avant d'être affectée : sans
+  cela, les tableaux de points fabriqués pour les arcs n'ont pas la même forme
+  interne que ceux du jeu décodé et le moteur JavaScript passe les calculs
+  partagés des zones en mode lent. MESURÉ : liseré 2 à 2,5 fois plus lent pour
+  TOUTES les zones à l'écran dès qu'une zone corrigée est visible (Marseille :
+  ~170 -> ~400 ms), même géométrie d'origine remise ; copie sans correction et
+  copie JSON : vitesse v17.67 retrouvée.
+- TEMPORAIRE : table À RETIRER quand sia.js sera régénéré sur un cycle AIP
+  récent (statut À REVOIR).
+
+3. ZONES
+- Corrigées (9) : CTR SAINT-YAN 1, CTR SAINT-YAN (contour d'ensemble, dessiné
+  en trait fin : ajouté car il portait la même erreur), CTR SAINT-YAN 2,
+  CTR BRICY, CTR SAINT ETIENNE, CTR CANNES, CTR POITIERS BIARD 1,
+  CTR PROVENCE, CTR NICE. Écart après correction : 0,009 à 0,018 NM.
+- Laissées volontairement : TMA LYON, MONTPELLIER, LIMOGES, LUXEUIL et SIV
+  GENEVE, BALE, LYON (regroupements techniques jamais affichés, ni voile,
+  ni libellé, ni sélection) ; TMA CHAMBERY 2 (arc présent, différence de
+  cycle AIP) ; zones « à vérifier » (CTA/SIV AQUITAINE, R 3102 A, TMA MARSAN
+  2, SIV CHAMBERY) ; arcs aplatis de 0,1 à 0,3 NM. Statut : NON IMPLÉMENTÉ
+  (à revoir avec la régénération de sia.js).
+
+4. DIAG (src/010)
+- Ligne « Corrections d'arcs SIA : N appliquées, M ignorées (noms) · corrigées
+  : … » (ou « zones SIA pas encore chargées »).
+
+TESTS (Chrome sans fenêtre, iPad simulé ; vrai NAS et vrai VPS bloqués au DNS)
+- Données : comparaison aux 530 arcs officiels rejouée : 9 zones corrigées à
+  0,009-0,018 NM ; les 301 zones déjà correctes restent correctes ; les 5 057
+  autres zones STRICTEMENT identiques (mêmes points, même emprise).
+- Captures avant/après à 5, 2 et 1 NM (SAINT-YAN 1 et 2 avec la frontière
+  commune, BRICY, NICE, TMA MONTPELLIER) : bord sur l'arc (0 px, contre 27 à
+  914 px en v17.67), liseré intérieur à 7-8 px de l'arc, libellés dans la
+  zone ; « Sélection Zone » : SAINT-YAN 1 / 2 et BRICY proposées dans la
+  partie regagnée, NICE plus proposée dans la partie retirée ; surlignage
+  sur tout le cercle SAINT-YAN 1. TMA MONTPELLIER : regroupement technique,
+  jamais dessiné (les TMA MONTPELLIER 1, 2, 3… affichées sont correctes).
+  Voiles : seules P/D en ont, aucune zone corrigée n'est P/D.
+- Mesures CPU ×4 (après la copie JSON) : chargement des zones médiane 157 ms
+  (v17.67 164) ; jeu embarqué 446 ms (510) ; suivi 2 NM, 20 déplacements :
+  décorations médiane/max Saint-Yan 125/220 ms (121/201), Marseille 230/346
+  (232/329) ; liseré total Marseille 233 ms (255) ; mémoire 79,7 Mo (79,5).
+  Étalon de calcul pur dans la même page : rapport liseré/étalon 0,50-0,60
+  (v17.67 0,55-0,66). AVANT la copie JSON : 0,9-1,4 (ABANDONNÉ : version
+  sans copie JSON).
+- Non-régression bloquante (v17.67 contre v17.68) : carte, gestes HT +
+  Routes, suivi GPS, nr (FdS/GAAR, feux, bandeaux), boutons, simulation,
+  retour automatique et fenêtre terrain, Trafic Moyens Nationaux (bouton,
+  « zéro GLR »), « NPF » seul : 0, Gestion des Cartes (styles), bordures SIA
+  5 / 1 / 0,5 NM (glisser, suivi), Calque Routier téléchargé : OK ; mise à jour
+  v17.67 -> v17.68 + hors ligne + fenêtre « Mise à jour installée » rejoués
+  après la dernière retouche : OK, caches npf-q400-test-* seulement, pérenne
+  intacte ; aucune erreur JS. Écarts vus, identiques en v17.67 relancée le
+  même jour : heures, taille du DIAG, centre après choix d'un feu (46.005).
+- Outillage : les pilotes de test Windows se figeaient parfois en écrivant sur
+  \\wsl.localhost ; essais relancés avec sorties sur le disque Windows.
+
+FICHIERS MODIFIÉS
+src/340, src/010, donc script.js ; index.html, manifest.json, style.css,
+sw.js (version). sia.js : inchangé (identique à v17.52).
+
+VERSION
+- App : v17.68
+- Service Worker : `sw-v17-68_arcs_sia`
+
+STATUT : À MESURER sur iPad (en commençant par SAINT-YAN) ; table À REVOIR.
+
 
 VERSION TEST v17.67 — GESTION DES CARTES : COULEURS PASTEL, TITRES DE RUBRIQUE
 UNIFORMES ; DERNIERS « NPF » SEULS ; DIAG « TAILLE INCONNUE »
