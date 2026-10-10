@@ -1,6 +1,6 @@
-const SW_VERSION = 'sw-v17-69_sia_airac_1026';
-const APP_VERSION = 'v17.69';
-const SIA_DATA_REVISION = 'sia-2026-10-01-v02-g3';
+const SW_VERSION = 'sw-v17-70_sia_airac_1126_selection';
+const APP_VERSION = 'v17.70';
+const SIA_DATA_REVISION = 'sia-2026-10-29-v02-g3';
 const SIA_DATA_URL = './sia.js';
 /*
  * v17.37 — la TEST a ses propres noms de cache (préfixe « npf-q400-test- ») et

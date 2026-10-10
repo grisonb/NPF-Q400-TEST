@@ -1070,7 +1070,8 @@ function hasSiaVerticalValue(raw) {
 }
 
 function formatSiaAirspaceRemark(value) {
-    return escapeHtml(String(value || '').trim()).replace(/#|\n/g, '<br>');
+    /* v17.70 — retours à la ligne avant l'échappement (voir escapeSiaMultilineHtml, src/340). */
+    return escapeSiaMultilineHtml(String(value || '').trim());
 }
 
 function buildSiaAirspacePopup(item) {

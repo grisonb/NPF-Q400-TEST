@@ -1,5 +1,5 @@
 // =========================================================================
-// v15.48 — DONNÉES AÉRONAUTIQUES SIA (v17.69 : AIRAC 10/26 du 01/10/2026, sia.js régénéré par generateur-sia)
+// v15.48 — DONNÉES AÉRONAUTIQUES SIA (v17.70 : AIRAC 11/26 du 29/10/2026, sia.js régénéré par generateur-sia)
 // Première phase TEST : données AIXM optimisées embarquées, stockage IndexedDB,
 // filtres indépendants par appui long sur le bouton de changement de carte.
 // =========================================================================
@@ -14,17 +14,17 @@ const SIA_HIDE_ABOVE_FL115_PREF_KEY = '__npfHideAirspacesAboveFL115';
 const SIA_HIDE_ABOVE_FL115_FEET = 11500;
 const SIA_EMBEDDED_FALLBACK_META = Object.freeze({
     source: 'SIA',
-    airac: '10/26',
-    effectiveDate: '2026-10-01',
+    airac: '11/26',
+    effectiveDate: '2026-10-29',
     datasetVersion: '02',
-    generatedFrom: 'AIXM4.5_all_FR_OM_2026-10-01.xml',
+    generatedFrom: 'AIXM4.5_all_FR_OM_2026-10-29.xml',
     airspaces: 4645,
     ahp: 874,
     dpnNonIfr: 1897,
-    excludedDpnIfr: 2379,
-    geometryDirectAbd: 4452,
+    excludedDpnIfr: 2380,
+    geometryDirectAbd: 4451,
     geometryDerivedAdg: 597,
-    npfDatasetRevision: '2026-10-01-v02-g3',
+    npfDatasetRevision: '2026-10-29-v02-g3',
     vrpFrenchDescriptions: 1094,
     ctrServiceRelations: true,
     frequencySupplementarySource: 'XML_SIA',
@@ -33,7 +33,7 @@ const SIA_EMBEDDED_FALLBACK_META = Object.freeze({
     tmaServiceRelations: 379,
     tmaServiceAirspaces: 351,
     tmaServiceRows: 378,
-    tmaFrequencyRows: 1893,
+    tmaFrequencyRows: 1867,
     technicalTmaUnionParents: 48,
     geometryArcSource: 'AIXM_4.5_Avx',
     geometryArcBoundariesDetected: 596,

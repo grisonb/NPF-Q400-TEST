@@ -852,6 +852,8 @@ function isSiaTechnicalSivParent(item, dataset = siaDataset) {
  * SOCAFS / CAYENNE renvoie « Fréquences : voir ENR 6.4 » et n'est donc pas inventé.
  * v17.69 — valeurs du cycle AIRAC du 01/10/2026 (eAIP ENR 2.2) : BIARRITZ 119.180, CHAMBERY 1 et 2
  * 123.700, BEAUVAIS 1 123.985. Contrôle à chaque cycle par generateur-sia (outils de test).
+ * v17.70 — cycle AIRAC du 29/10/2026 : passages au canal 8,33 kHz (PYRENEES, CLERMONT, PROVENCE, NICE,
+ * MONTPELLIER), lus dans XML-SIA Volume/Activite du cycle.
  */
 const SIA_SIV_VOLUME_FREQUENCIES = Object.freeze({
     "LFBDFS1": ["120.575"],
@@ -861,7 +863,7 @@ const SIA_SIV_VOLUME_FREQUENCIES = Object.freeze({
     "LFBIFS": ["124.000"],
     "LFBLFS": ["124.050"],
     "LFBOFS1": ["121.250"],
-    "LFBPFS": ["126.525"],
+    "LFBPFS": ["126.530"],
     "LFBZFS": ["119.180", "126.525"],
     "LFFFFSN": ["125.700"],
     "LFFFFSO": ["129.625"],
@@ -871,10 +873,10 @@ const SIA_SIV_VOLUME_FREQUENCIES = Object.freeze({
     "LFKJFS": ["119.825"],
     "LFLBFS1": ["123.700"],
     "LFLBFS2": ["123.700"],
-    "LFLCFS1": ["122.225"],
-    "LFLCFS2": ["120.675"],
-    "LFLCFS3": ["120.675"],
-    "LFLCFS4": ["120.500"],
+    "LFLCFS1": ["122.230"],
+    "LFLCFS2": ["120.680"],
+    "LFLCFS3": ["120.680"],
+    "LFLCFS4": ["120.505"],
     "LFLCFS5": ["119.375"],
     "LFLCFS6": ["119.375"],
     "LFLCFS7": ["133.725"],
@@ -883,23 +885,23 @@ const SIA_SIV_VOLUME_FREQUENCIES = Object.freeze({
     "LFLLFS3": ["135.530"],
     "LFLLFS4": ["135.530"],
     "LFLLFS5": ["135.530"],
-    "LFMLFS1": ["132.950"],
-    "LFMLFS2": ["124.350"],
-    "LFMLFS3": ["132.300"],
-    "LFMLFS4": ["132.950"],
+    "LFMLFS1": ["132.955"],
+    "LFMLFS2": ["124.355"],
+    "LFMLFS3": ["132.305"],
+    "LFMLFS4": ["132.955"],
     "LFMLFS5": ["126.260"],
-    "LFMLFS6": ["132.300"],
+    "LFMLFS6": ["132.305"],
     "LFMMFSN1": ["124.500"],
     "LFMMFSN2": ["124.500"],
     "LFMMFSS": ["120.550"],
-    "LFMNFS1": ["120.850"],
-    "LFMNFS2": ["122.925"],
-    "LFMNFS3": ["124.425"],
-    "LFMTFS1": ["134.375"],
-    "LFMTFS1P1": ["134.375"],
-    "LFMTFS1P2": ["134.375"],
-    "LFMTFS2": ["125.900"],
-    "LFMTFS2P1": ["125.900"],
+    "LFMNFS1": ["120.855"],
+    "LFMNFS2": ["122.930"],
+    "LFMNFS3": ["124.430"],
+    "LFMTFS1": ["134.380"],
+    "LFMTFS1P1": ["134.380"],
+    "LFMTFS1P2": ["134.380"],
+    "LFMTFS2": ["125.905"],
+    "LFMTFS2P1": ["125.905"],
     "LFMTFS3": ["136.625"],
     "LFOBFS1": ["123.985"],
     "LFOBFS2": ["119.800"],
@@ -1094,7 +1096,12 @@ function ensureSiaMapPanes() {
     }
 }
 
-function clearSiaRenderedLayers() {
+/*
+ * v17.70 — la zone sélectionnée (coloration + fenêtre) n'est plus oubliée quand les couches SIA sont
+ * libérées ou redessinées (zoom, seuils, suivi) : sa coloration est dans une couche à part et ne
+ * disparaît qu'à la fermeture de sa fenêtre. Seule la suppression des données efface la sélection.
+ */
+function clearSiaRenderedLayers(options = {}) {
     siaRenderedCoverageBounds = null;
     siaRenderedZoom = null;
     siaRenderedSignature = '';
@@ -1111,11 +1118,13 @@ function clearSiaRenderedLayers() {
         touchEntries: 0
     };
     siaLastDecorationViewKey = '';
-    clearSiaSelectionHighlight();
     siaSelectedCtrTouchLayer = null;
-    siaSelectedCtrKey = null;
-    siaSelectedAirspaceItem = null;
-    siaSelectedAirspaceGeometry = null;
+    if (options.clearSelection === true) {
+        clearSiaSelectionHighlight();
+        siaSelectedCtrKey = null;
+        siaSelectedAirspaceItem = null;
+        siaSelectedAirspaceGeometry = null;
+    }
     siaAirspaceTouchEntries = [];
     if (siaLayerGroup) {
         try { siaLayerGroup.clearLayers(); } catch (_) {}
@@ -1525,6 +1534,18 @@ function getSiaAirspaceStyle(item) {
     };
 }
 
+/*
+ * v17.70 — textes SIA sur plusieurs lignes : les « # » (séparateur de lignes des données SIA) et les
+ * retours à la ligne deviennent <br> AVANT l'échappement HTML ; avant, le remplacement de « # » après
+ * l'échappement cassait l'entité de l'apostrophe (« Château d&#39;eau » affiché « d&39;eau »).
+ */
+function escapeSiaMultilineHtml(value) {
+    return String(value || '')
+        .split(/#|\r?\n/)
+        .map(line => escapeHtml(line))
+        .join('<br>');
+}
+
 function buildSiaAirspacePopup(item) {
     const typeLabel = item.t === 'D-OTHER' && item.l
         ? `${item.t} / ${item.l}`
@@ -1540,7 +1561,7 @@ function buildSiaAirspacePopup(item) {
             <div><strong>Plancher :</strong> ${escapeHtml(formatSiaVertical(item.lo))}</div>
             <div><strong>Plafond :</strong> ${escapeHtml(formatSiaVertical(item.up))}</div>
             ${item.a ? `<div><strong>Activité :</strong> ${escapeHtml(item.a)}</div>` : ''}
-            ${remark ? `<div class="sia-popup-remark">${escapeHtml(remark).replace(/#|\n/g, '<br>')}</div>` : ''}
+            ${remark ? `<div class="sia-popup-remark">${escapeSiaMultilineHtml(remark)}</div>` : ''}
         </div>
     `;
 }
@@ -1565,7 +1586,7 @@ function buildSiaTerrainPopup(item) {
             <div><strong>Altitude :</strong> ${escapeHtml(elevation)}</div>
             ${item.city ? `<div><strong>Ville :</strong> ${escapeHtml(item.city)}</div>` : ''}
             <div><strong>Coordonnées :</strong> ${Number(item.x).toFixed(5)}, ${Number(item.y).toFixed(5)}</div>
-            ${item.s ? `<div class="sia-popup-remark">${escapeHtml(item.s).replace(/#|\n/g, '<br>')}</div>` : ''}
+            ${item.s ? `<div class="sia-popup-remark">${escapeSiaMultilineHtml(item.s)}</div>` : ''}
         </div>
     `;
 }
@@ -1918,7 +1939,7 @@ function buildSiaPointPopup(item) {
         return `
             <div class="sia-popup sia-vrp-popup">
                 <div class="sia-popup-title">${escapeHtml(title || 'Point VFR')}</div>
-                ${remark ? `<div class="sia-popup-remark">${escapeHtml(remark).replace(/#|\n/g, '<br>')}</div>` : ''}
+                ${remark ? `<div class="sia-popup-remark">${escapeSiaMultilineHtml(remark)}</div>` : ''}
                 ${waypointActions}
             </div>
         `;
@@ -1932,7 +1953,7 @@ function buildSiaPointPopup(item) {
             ${item.n && item.n !== item.d ? `<div><strong>Nom SIA :</strong> ${escapeHtml(item.n)}</div>` : ''}
             ${item.a ? `<div><strong>Aérodrome associé :</strong> ${escapeHtml(item.a)}</div>` : ''}
             <div><strong>Coordonnées :</strong> ${Number(item.x).toFixed(5)}, ${Number(item.y).toFixed(5)}</div>
-            ${remark ? `<div class="sia-popup-remark">${escapeHtml(remark).replace(/#|\n/g, '<br>')}</div>` : ''}
+            ${remark ? `<div class="sia-popup-remark">${escapeSiaMultilineHtml(remark)}</div>` : ''}
         </div>
     `;
 }
@@ -2344,7 +2365,7 @@ function bindSiaManagementButtons() {
                 await siaDbDelete(SIA_META_KEY);
                 siaDataset = null;
                 siaDatasetLoadPromise = null;
-                clearSiaRenderedLayers();
+                clearSiaRenderedLayers({ clearSelection: true });
                 await refreshSiaManagementStatus();
             } catch (error) {
                 console.error('[SIA] Suppression impossible:', error);

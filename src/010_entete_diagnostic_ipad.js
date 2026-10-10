@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.69';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.70';
 
 
 /*
@@ -2970,7 +2970,7 @@ function appendNpfDiagV1746HeaderLines(lines) {
     try {
         const siaMeta = typeof SIA_EMBEDDED_META !== 'undefined' ? SIA_EMBEDDED_META : null;
         const dateSia = String(siaMeta?.effectiveDate || '').split('-').reverse().join('/');
-        lines.push('Données SIA : AIRAC ' + (dateSia || '—'));
+        lines.push('Données SIA : AIRAC ' + (siaMeta?.airac ? siaMeta.airac + ' du ' : '') + (dateSia || '—'));
     } catch (_) {}
 }
 
@@ -3305,7 +3305,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.69 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.70 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
