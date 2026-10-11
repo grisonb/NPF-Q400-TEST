@@ -180,8 +180,9 @@ IMPLÉMENTÉ / INTÉGRÉ :
   des réglages mémorisés (section 18).
 - v17.71 — contour des zones SIA seulement à 10 NM ou moins (zoom 9) ; terrains
   non sélectionnables comme PÉLIC seulement à partir du zoom 7 ; couleur des VRP
-  = aérodrome SIA seul (VRP sans aérodrome en blanc) ; clignotement des lignes HT
-  (appui long sur le bouton HT) ;
+  = aérodrome SIA, et pour les VRP sans aérodrome dans l'AIXM, terrain d'après les
+  cartes VAC de l'eAIP (44 sur 80, sia.js révision g4 ; 36 restent blancs) ;
+  clignotement des lignes HT (appui long sur le bouton HT) ;
 - v17.70 — sia.js régénéré au cycle AIRAC 11/26 (29/10/2026, embarqué en avance
   sur décision de Bastien) ; coloration de la zone sélectionnée gardée tant que
   sa fenêtre est ouverte ; apostrophe des textes SIA (VRP…) corrigée ;
@@ -739,12 +740,12 @@ Références de version cohérentes :
 - Style : NPF_STYLE_BUILD_VERSION = v17.71
 - Service Worker : `sw-v17-71_ht_clignotement_vrp_contour` ; caches TEST
   `npf-q400-test-app-shell-sw-v17-71_ht_clignotement_vrp_contour`, `npf-q400-test-app-data-v1`,
-  `npf-q400-test-sia-data-sia-2026-10-29-v02-g3`
-- SIA_DATA_REVISION (SW / Index sia.js?siav=) : sia-2026-10-29-v02-g3 (= NPF_SIA_DATA_REVISION
+  `npf-q400-test-sia-data-sia-2026-10-29-v02-g4`
+- SIA_DATA_REVISION (SW / Index sia.js?siav=) : sia-2026-10-29-v02-g4 (= NPF_SIA_DATA_REVISION
   de sia.js ; à changer à chaque nouveau sia.js)
-- sia.js v17.71 : identique à v17.70 (AIRAC 11/26 du 29/10/2026, paquet SIA v02) par
+- sia.js v17.71 : RÉGÉNÉRÉ, révision g4 = g3 + rattachement de 44 VRP d'après l'eAIP (AIRAC 11/26 du 29/10/2026, paquet SIA v02) par
   ~/projects/outils_tests_NPF-Q400-TEST/generateur-sia/generer_sia.py (une commande
-  par cycle, voir son LISEZMOI.txt) ; npfDatasetRevision 2026-10-29-v02-g3.
+  par cycle avec --eaip <ZIP eAIP du cycle>, voir son LISEZMOI.txt) ; npfDatasetRevision 2026-10-29-v02-g4.
 - Images de lancement : icons/startup-ipad9-portrait.png (1620 × 2160) et
   icons/startup-ipad9-landscape.png (2160 × 1620).
 - Icônes des boutons (v17.48) : calculator-fms-icon, search-commune-icon,
@@ -754,7 +755,7 @@ STATUT DE VALIDATION :
 - validation statique v17.71 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
-- `sia.js` identique à v17.70 ; moteur tuiles (src/100) modifié en v17.66 sur demande
+- `sia.js` : seuls le champ « a » de 44 VRP et la révision (g3 -> g4) changent par rapport à v17.70 ; moteur tuiles (src/100) modifié en v17.66 sur demande
   explicite (limite de zoom propre à chaque carte, zoom 11 OACI 1/500 000) ;
 - tests v17.71 : entrée v17.71 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
@@ -2290,7 +2291,7 @@ HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
 
 VERSION TEST v17.71 — CONTOUR DES ZONES SIA À 10 NM ; TERRAINS NON PÉLIC AU ZOOM 7 ;
-COULEUR DES VRP ; CLIGNOTEMENT DES LIGNES HT
+COULEUR DES VRP (VRP SANS AÉRODROME RATTACHÉS D'APRÈS L'eAIP) ; CLIGNOTEMENT DES LIGNES HT
 Date : 11/10/2026
 Base fonctionnelle : v17.70 (commit 25cd205, poussée le 10/10/2026).
 Demandes de Bastien (11/10/2026). Échelles : z9 = 10 NM, z8 = 20 NM.
@@ -2333,7 +2334,7 @@ Demandes de Bastien (11/10/2026). Échelles : z9 = 10 NM, z8 = 20 NM.
   en blanc (texte noir), couleur qu'aucun aérodrome n'utilise. Résultat :
   1 014 VRP à la couleur de leur aérodrome (0 écart), 80 en blanc ; LFMA : 6 VRP
   jaunes ; MM-CD blanc.
-- generer_sia.py et sia.js inchangés (sia.js strictement identique à v17.70).
+- Complété ensuite (point 5) : rattachement des VRP sans aérodrome d'après l'eAIP.
 
 4. CLIGNOTEMENT DES LIGNES HT (src/110, style.css) — nouveau
 - Appui court sur le bouton HT : inchangé. Appui long (650 ms, comme Trafic
@@ -2358,6 +2359,42 @@ Demandes de Bastien (11/10/2026). Échelles : z9 = 10 NM, z8 = 20 NM.
     préparé une seule fois.
   . Toutes les HT : seule l'opacité CSS du canvas HT varie (1 / 0,2).
 
+5. VRP SANS AÉRODROME RATTACHÉS D'APRÈS L'eAIP (generer_sia.py, sia.js g4)
+- Demande de Bastien (11/10/2026) : les 80 VRP sans aérodrome dans l'AIXM / XML-SIA
+  doivent être rattachés à leur terrain d'après les cartes VAC.
+- Source : eAIP du SIA du 01/10/2026 (eaip_01_oct_2026.zip, Téléchargements :
+  Atlas-VAC VAC 421 + VACH 237, cartes APP / ATT outre-mer 106, pages AD 2 HTML).
+  eAIP du 29/10 pas encore publié : celui du 01/10 sert pour le cycle 11/26.
+- Texte des cartes : polices sans table Unicode mais glyphes nommés « MTnnn » (code
+  du caractère) : décodage exact, sans OCR (generateur-sia/modules/vac_libelles.mjs,
+  pdfjs-dist 4.10.38 installé dans generateur-sia/node_modules).
+- Règle (modules/rattachement_vac.py, option --eaip de generer_sia.py, générateur g4) :
+  CONFIRMÉ = code du VRP dessiné à moins de 3 NM de sa position (page géoréférencée
+  par les VRP connus qu'elle porte, ou par ses graduations), ou coordonnées dans le
+  texte de la VAC / VACH / page AD 2 ; MENTIONNÉ = page non géoréférençable, code
+  présent, terrain ≤ 25 NM, aucun autre VRP de ce code à moins de 40 NM. Aérodromes
+  (AD) seulement, hélistations listées à part. Un terrain : retenu ; plusieurs : le
+  plus proche (confirmés d'abord), les autres listés ; aucun : VRP blanc.
+- Résultat : 44 rattachés (41 confirmés, 3 mentionnés : BB-EN, BB-E1, BB-E2 -> LFBD),
+  36 sans terrain (blancs). MM-CD -> LFMY (Salon, VAC ; pas sur la VAC de LFMA).
+  Tableau complet : generateur-sia/sortie/rattachement_vrp.txt.
+  Plusieurs terrains possibles : MM-PN LFLS (aussi LFLL) ; MM-AM LFXA (LFLL) ;
+  MM-ALBY LFLP (LFLB) ; MM-CV LFMV (LFMY) ; MM-PS LFMY (LFMV, LFMI) ; MM-NW LFMV
+  (LFMI) ; MM-EG LFNE (LFMY, LFMI) ; MM-LP LFMY (LFML) ; MM-LR LFMY (LFMI).
+  Sans terrain : 18 FF- de Paris (routes hélicoptères ; seules des hélistations les
+  portent), FF-ET/EG/WS/WD/WC/WN/EL, FF-ONE/OSE/OE, BB-O1/ON/ES, MM-PA, MM-WV, MM-ND,
+  MM-AN, MM-DA/XC/MB/HN/DC (points SIV), AA-HZ (latitude Nord dans l'AIXM : 17.564
+  au lieu de -17.564, erreur de la source).
+- sia.js régénéré (11/26 du 29/10) : comparaison décodée avec v17.70 : zones,
+  terrains, tous les autres champs des points identiques ; seuls « a » de 44 VRP
+  (auparavant vide) et la révision changent. Révision g4 reportée dans sw.js,
+  index.html (sia.js?siav=) et src/330. LISEZMOI.txt du générateur mis à jour.
+- À DÉCIDER : l'app colore les terrains par un algorithme global (DSATUR, voisins à
+  55 NM jamais de la même couleur) ; les 9 terrains ajoutés (LFKG, LFXA, LFXU, LFNE,
+  LFMV, LFKF, NTAA, NWWE, NWWL) redistribuent les couleurs : 88 terrains changent de
+  couleur par rapport à v17.70 (ex. LFMA jaune -> bleu, LFML vert -> jaune).
+  Algorithme non modifié (pas demandé).
+
 TESTS (Chrome sans fenêtre, iPad simulé ; vrai NAS et vrai VPS bloqués au DNS)
 - Contour : zoom 10 (5 NM) 323 contours, zoom 9 (10 NM) 497 visibles, zoom 8
   (20 NM) 0 visible (892 masqués), retour zoom 9 : 497. CTR PROVENCE choisie :
@@ -2365,7 +2402,11 @@ TESTS (Chrome sans fenêtre, iPad simulé ; vrai NAS et vrai VPS bloqués au DNS
 - Terrains non PÉLIC (640) : zoom 9 / 8 / 7 affichés, zoom 6 : 0 (centre et
   Marseille) ; pélicandromes et terrains PÉLIC inchangés (114 au zoom 6 et 7).
 - VRP : 1 094 contrôlés, 0 écart de couleur avec l'aérodrome, 80 sans aérodrome
-  en blanc, MM-CD blanc, LFMA 6 VRP jaunes.
+  en blanc, MM-CD blanc, LFMA 6 VRP jaunes (avant le point 5).
+- Après le point 5 (sia.js g4) : révision g4 chargée ; 1 058 VRP à la couleur de leur
+  terrain (0 écart), 36 blancs ; MM-CD = couleur de LFMY ; MM-AW = LFKG ; AA-HB =
+  NTAA ; MM-EA = LFMN ; aucune erreur JS. Mise à jour v17.70 -> v17.71 puis hors
+  ligne : OK, nouveau cache SIA g4, caches de la pérenne intacts.
 - Menu HT : appui court HT OFF puis ON ; appui long : fenêtre, options grisées ;
   chaque option et chaque rayon ; Toutes les HT grise avion / feu ; feu seul sans
   feu : rien ne clignote ; avion 5 NM : 55 portions, avion 10 NM : 127 ; Fermer ;
@@ -2383,8 +2424,10 @@ TESTS (Chrome sans fenêtre, iPad simulé ; vrai NAS et vrai VPS bloqués au DNS
   seulement, caches de la pérenne intacts.
 
 FICHIERS MODIFIÉS
-src/010, src/110, src/220, src/340, src/350, donc script.js ; style.css ;
-index.html, sw.js, manifest.json (version). sia.js inchangé.
+src/010, src/110, src/220, src/330, src/340, src/350, donc script.js ; style.css ;
+index.html, sw.js, manifest.json (version, révision SIA g4) ; sia.js (g4).
+Outils (hors dépôt) : generateur-sia/generer_sia.py, modules/rattachement_vac.py,
+modules/vac_libelles.mjs, LISEZMOI.txt.
 
 VERSION
 - App : v17.71
