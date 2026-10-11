@@ -1609,6 +1609,9 @@ const SIA_VRP_AIRPORT_COLOR_OVERRIDES = Object.freeze({
  * VRP puissent être visibles dans la même zone opérationnelle. À 55 NM, le
  * dataset AIRAC 08/26 est coloriable avec la palette limitée de 9 couleurs,
  * sans conflit entre voisins (notamment LFTW / LFMI).
+ * v17.72 — règle des 55 NM SUPPRIMÉE : les couleurs viennent de la table figée de sia.js (familles
+ * différentes et non voisines entre terrains limitrophes, VRP à moins de 10 NM). Ce calcul ne sert plus
+ * que de secours pour un terrain absent de la table.
  */
 const SIA_VRP_NEIGHBOUR_DISTANCE_NM = 55;
 let siaVrpAirportColorMap = null;
@@ -1693,35 +1696,34 @@ function buildSiaVrpAirportColorMap(dataset) {
     const assignedIndex = new Map();
     const usage = new Array(SIA_VRP_AIRPORT_COLOR_PALETTE.length).fill(0);
 
+    /*
+     * v17.71 — couleurs FIGÉES : table écrite dans sia.js par generateur-sia (couleurs de la v17.70
+     * conservées, seuls les nouveaux terrains en reçoivent une). Le calcul ci-dessous ne sert plus que
+     * de secours pour un terrain absent de la table. Une couleur hors palette (pastel v17.71, brun ou noir
+     * v17.72) est appliquée telle quelle.
+     * v17.72 — la table passe AVANT les couleurs forcées (LFTW, LFMT) : elle fait foi (règle des terrains
+     * limitrophes, generateur-sia/modules/couleurs_terrains.py).
+     */
+    const fixedColors = SIA_EMBEDDED_RESOURCE && SIA_EMBEDDED_RESOURCE.vrpAirportColors;
+    const fixedApplied = new Map();
+    if (fixedColors && typeof fixedColors === 'object') {
+        Object.entries(fixedColors).forEach(([code, color]) => {
+            if (!airportSet.has(code) || assignedIndex.has(code)) return;
+            if (!/^#[0-9a-f]{6}$/i.test(String(color))) return;
+            const index = paletteIndexByColor.get(String(color).toLowerCase());
+            assignedIndex.set(code, Number.isInteger(index) ? index : -1);
+            if (Number.isInteger(index)) usage[index] += 1;
+            fixedApplied.set(code, String(color).toLowerCase());
+        });
+    }
+
     Object.entries(SIA_VRP_AIRPORT_COLOR_OVERRIDES).forEach(([code, color]) => {
         const index = paletteIndexByColor.get(String(color).toLowerCase());
-        if (Number.isInteger(index) && airportSet.has(code)) {
+        if (Number.isInteger(index) && airportSet.has(code) && !assignedIndex.has(code)) {
             assignedIndex.set(code, index);
             usage[index] += 1;
         }
     });
-
-    /*
-     * v17.71 — couleurs FIGÉES : table écrite dans sia.js par generateur-sia (couleurs de la v17.70
-     * conservées, seuls les nouveaux terrains en reçoivent une). Le calcul ci-dessous ne sert plus que
-     * de secours pour un terrain absent de la table. Une couleur hors palette (version pastel, donnée quand
-     * aucune des 9 couleurs n'est libre à 55 NM) est appliquée telle quelle.
-     */
-    const fixedColors = SIA_EMBEDDED_RESOURCE && SIA_EMBEDDED_RESOURCE.vrpAirportColors;
-    const fixedOutsidePalette = new Map();
-    if (fixedColors && typeof fixedColors === 'object') {
-        Object.entries(fixedColors).forEach(([code, color]) => {
-            if (!airportSet.has(code) || assignedIndex.has(code)) return;
-            const index = paletteIndexByColor.get(String(color).toLowerCase());
-            if (Number.isInteger(index)) {
-                assignedIndex.set(code, index);
-                usage[index] += 1;
-            } else if (/^#[0-9a-f]{6}$/i.test(String(color))) {
-                assignedIndex.set(code, -1);
-                fixedOutsidePalette.set(code, String(color).toLowerCase());
-            }
-        });
-    }
 
     const stableSeed = code => Array.from(code).reduce(
         (sum, char) => ((sum * 33) + char.charCodeAt(0)) >>> 0,
@@ -1804,8 +1806,8 @@ function buildSiaVrpAirportColorMap(dataset) {
     airports.forEach(code => {
         const forced = SIA_VRP_AIRPORT_COLOR_OVERRIDES[code];
         const index = assignedIndex.get(code);
-        const background = forced
-            || fixedOutsidePalette.get(code)
+        const background = fixedApplied.get(code)
+            || forced
             || SIA_VRP_AIRPORT_COLOR_PALETTE[Number.isInteger(index) && index >= 0 ? index : 0];
         mapByAirport.set(code, {
             background,

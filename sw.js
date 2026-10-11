@@ -1,6 +1,6 @@
-const SW_VERSION = 'sw-v17-71_ht_clignotement_vrp_contour';
-const APP_VERSION = 'v17.71';
-const SIA_DATA_REVISION = 'sia-2026-10-29-v02-g6';
+const SW_VERSION = 'sw-v17-72_couleurs_familles';
+const APP_VERSION = 'v17.72';
+const SIA_DATA_REVISION = 'sia-2026-10-29-v02-g7';
 const SIA_DATA_URL = './sia.js';
 /*
  * v17.37 — la TEST a ses propres noms de cache (préfixe « npf-q400-test- ») et
