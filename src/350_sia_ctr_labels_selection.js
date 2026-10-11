@@ -1013,6 +1013,11 @@ function getSiaAirspaceDisplayTitle(item) {
         ].filter(Boolean).join(' / ');
     }
 
+    /* v17.74 — parcs nationaux et réserves naturelles : nom SIA (NomUsuel du XML-SIA). */
+    if (type === 'D-OTHER' && String(item?.l || '').toUpperCase() === 'PRN' && String(item?.pn || '').trim()) {
+        return [displayType, String(item.pn).trim()].join(' / ');
+    }
+
     return [displayType, code, name].filter(Boolean).join(' / ');
 }
 
@@ -1092,6 +1097,12 @@ function buildSiaAirspacePopup(item) {
     const identifier = String(item?.i || '').trim();
     const code = String(item?.c || '').trim();
     const remark = String(item?.r || '').trim();
+    /* v17.74 — parcs et réserves (PRN) : hauteur minimale de survol (plafond SIA) et source du contour. */
+    const isPrn = String(item?.t || '') === 'D-OTHER' && String(item?.l || '').toUpperCase() === 'PRN';
+    const inpnSource = (typeof SIA_EMBEDDED_RESOURCE !== 'undefined' && SIA_EMBEDDED_RESOURCE && SIA_EMBEDDED_RESOURCE.inpnSource) || '';
+    const prnRows = isPrn ? `
+            <div class="sia-airspace-extra-row"><strong>Hauteur minimale de survol :</strong> ${escapeHtml(formatSiaVertical(item?.up))}</div>
+            ${item?.src ? `<div class="sia-airspace-extra-row sia-prn-source">Contour : ${escapeHtml(inpnSource || 'INPN')}</div>` : ''}` : '';
 
     /*
      * v15.55 — présentation identique pour toutes les zones :
@@ -1106,6 +1117,7 @@ function buildSiaAirspacePopup(item) {
 
             <div class="sia-ctr-info-row">${escapeHtml(typeClass || displayType)}</div>
             <div class="sia-ctr-info-row">${escapeHtml(vertical)}</div>
+            ${prnRows}
 
             ${minVertical ? `<div class="sia-airspace-extra-row">MIN : ${escapeHtml(minVertical)}</div>` : ''}
             ${maxVertical ? `<div class="sia-airspace-extra-row">MAX : ${escapeHtml(maxVertical)}</div>` : ''}
@@ -1181,7 +1193,8 @@ function getSiaAirspaceStyle(item) {
         else if (local === 'AER') color = '#00897b';
         else if (local === 'VOL') color = '#3949ab';
         else if (local === 'SUR') color = '#6d4c41';
-        else if (local === 'PRN') color = '#f4511e';
+        /* v17.74 — parcs nationaux et réserves naturelles : contour rouge plein comme les zones P (OACI 1/500 000). */
+        else if (local === 'PRN') { color = '#d50000'; dashArray = null; weight = 2.4; }
         else if (local === 'BAL') color = '#7b1fa2';
     }
 
@@ -3621,6 +3634,7 @@ async function refreshSiaLayers(reason = 'manual') {
             siaRenderedZoom = null;
             siaRenderedSignature = '';
             siaRenderedAirspaceFeatures = [];
+            try { scheduleSiaMapExtras('vide'); } catch (_) {}
             siaRenderedShowDesignatedPoints = null;
             siaRenderedPointLabelsEnabled = null;
         }
@@ -3798,6 +3812,8 @@ async function refreshSiaLayers(reason = 'manual') {
         siaRenderedZoom = zoom;
         siaRenderedSignature = signature;
         siaRenderedAirspaceFeatures = visibleAirspaceFeatures;
+        /* v17.74 — icônes AER / VOL / PJE et points intérieurs des parcs et réserves (PRN). */
+        try { scheduleSiaMapExtras('rendu'); } catch (_) {}
         siaRenderedShowDesignatedPoints = showSiaDesignatedPointsNow;
         siaRenderedTerrainItems = visibleTerrainItems.map(entry => entry.item);
         siaRenderedPointItems = visiblePointItems.map(entry => entry.item);
@@ -3888,6 +3904,297 @@ async function refreshSiaLayers(reason = 'manual') {
         siaRefreshPendingReason = null;
         if (pending) scheduleSiaLayerRefresh(pending);
     }
+}
+
+/*
+ * v17.74 — icônes des zones D-OTHER aéromodélisme 🕹️, voltige ➰ et parachutage 🪂 (champ l de sia.js) : une
+ * icône au centre de chaque zone, à 5 NM d'échelle ou moins, dessinées sur UN SEUL canvas (pas d'élément HTML
+ * par zone), seulement pour les zones à l'écran ; des cibles tactiles invisibles (SVG, comme les VRP) sont
+ * créées pour les seules icônes à l'écran ; toucher une icône ouvre la fenêtre de la zone (même sélection
+ * qu'un point D-OTHER). Les autres catégories D-OTHER ne changent pas.
+ * Parcs nationaux et réserves naturelles (D-OTHER / PRN) dessinés par un contour : rangée de points rouges juste
+ * à l'intérieur du contour (comme la carte OACI 1/500 000), à 10 NM ou moins (zoom 9 et plus, comme les
+ * contours), calculée seulement pour les zones à l'écran, par petits lots (8 ms), jamais doigt posé, en cache
+ * pour le zoom en cours.
+ */
+const SIA_DOTHER_ICONS = Object.freeze({ AER: '\u{1F579}\u{FE0F}', VOL: '\u{27B0}', PJE: '\u{1FA82}' });
+const SIA_DOTHER_ICON_MAX_SCALE_NM = 5;
+const SIA_DOTHER_ICON_SIZE_PX = 24;
+const SIA_PRN_DOTS_MIN_ZOOM = 9;
+const SIA_PRN_COLOR = '#d50000';
+let siaDotherIconCanvas = null;
+let siaDotherIconTouchGroup = null;
+let siaMapExtrasTimer = null;
+let siaMapExtrasEventsInstalled = false;
+let siaDotherIconStats = { drawn: 0, lastMs: 0 };
+let siaPrnDotsGroup = null;
+const siaPrnDotsCache = new Map();
+let siaPrnDotsZoom = null;
+let siaPrnDotsQueue = [];
+let siaPrnDotsRafPending = false;
+let siaPrnDotsStats = { zones: 0, lastMs: 0, maxMs: 0 };
+
+function ensureSiaIconPane() {
+    if (!map || !map.createPane) return null;
+    let pane = map.getPane('siaIconPane');
+    if (!pane) {
+        pane = map.createPane('siaIconPane');
+        pane.style.zIndex = '556';
+        pane.style.pointerEvents = 'none';
+    }
+    return pane;
+}
+
+function getSiaDotherIconEntries() {
+    if (!map || !siaMapAirspacesVisible || isCurrentOfflineOaciMap()) return [];
+    const scaleNm = getCurrentNpfScaleNm();
+    if (!Number.isFinite(scaleNm) || scaleNm > SIA_DOTHER_ICON_MAX_SCALE_NM + 1e-6) return [];
+    const view = map.getBounds().pad(0.05);
+    const entries = [];
+    for (const feature of siaRenderedAirspaceFeatures || []) {
+        const item = feature?.properties?.siaItem;
+        if (!item || item.t !== 'D-OTHER' || !Array.isArray(item.b)) continue;
+        const icon = SIA_DOTHER_ICONS[String(item.l || '').toUpperCase()];
+        if (!icon) continue;
+        const lat = (Number(item.b[1]) + Number(item.b[3])) / 2;
+        const lon = (Number(item.b[0]) + Number(item.b[2])) / 2;
+        if (!Number.isFinite(lat) || !Number.isFinite(lon) || !view.contains([lat, lon])) continue;
+        entries.push({ item, feature, icon, latlng: L.latLng(lat, lon) });
+    }
+    return entries;
+}
+
+function hideSiaDotherIcons() {
+    if (siaDotherIconCanvas) siaDotherIconCanvas.style.display = 'none';
+    if (siaDotherIconTouchGroup) siaDotherIconTouchGroup.clearLayers();
+}
+
+function drawSiaDotherIcons() {
+    const startedAt = performance.now();
+    const pane = ensureSiaIconPane();
+    if (!pane) return;
+    const entries = getSiaDotherIconEntries();
+    if (!siaDotherIconCanvas) {
+        siaDotherIconCanvas = document.createElement('canvas');
+        siaDotherIconCanvas.className = 'sia-dother-icon-canvas';
+        siaDotherIconCanvas.style.position = 'absolute';
+        siaDotherIconCanvas.style.pointerEvents = 'none';
+        pane.appendChild(siaDotherIconCanvas);
+    }
+    if (!siaDotherIconTouchGroup) siaDotherIconTouchGroup = L.layerGroup();
+    if (!map.hasLayer(siaDotherIconTouchGroup)) siaDotherIconTouchGroup.addTo(map);
+    siaDotherIconTouchGroup.clearLayers();
+    const canvas = siaDotherIconCanvas;
+    if (!entries.length) {
+        canvas.style.display = 'none';
+        siaDotherIconStats = { drawn: 0, lastMs: Math.round(performance.now() - startedAt) };
+        return;
+    }
+    const size = map.getSize();
+    const dpr = Math.min(3, window.devicePixelRatio || 1);
+    const width = Math.round(size.x * dpr);
+    const height = Math.round(size.y * dpr);
+    if (canvas.width !== width || canvas.height !== height) {
+        canvas.width = width;
+        canvas.height = height;
+        canvas.style.width = size.x + 'px';
+        canvas.style.height = size.y + 'px';
+    }
+    L.DomUtil.setPosition(canvas, map.containerPointToLayerPoint([0, 0]));
+    canvas.style.display = '';
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.font = `${SIA_DOTHER_ICON_SIZE_PX}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (const entry of entries) {
+        const p = map.latLngToContainerPoint(entry.latlng);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, SIA_DOTHER_ICON_SIZE_PX * 0.66, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        ctx.fill();
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+        ctx.stroke();
+        ctx.fillStyle = '#000000';
+        ctx.fillText(entry.icon, p.x, p.y + 1);
+        const target = L.circleMarker(entry.latlng, {
+            pane: 'siaPointTouchPane',
+            renderer: siaPointTouchRenderer || undefined,
+            radius: 17,
+            stroke: false,
+            fill: true,
+            fillColor: '#000000',
+            fillOpacity: 0.002,
+            interactive: true,
+            bubblingMouseEvents: false,
+            keyboard: false,
+            className: 'sia-dother-icon-touch'
+        });
+        target.on('click', event => {
+            try {
+                if (event?.originalEvent) {
+                    L.DomEvent.stopPropagation(event.originalEvent);
+                    L.DomEvent.preventDefault(event.originalEvent);
+                }
+            } catch (_) {}
+            if (isDrawingMode && event?.latlng) {
+                handleGaarMapClick(event, { fromSiaSurface: true }).catch(() => {});
+                return;
+            }
+            const touchEntry = (siaAirspaceTouchEntries || []).find(candidate => candidate?.item === entry.item);
+            selectSiaCtrTouchLayer(touchEntry?.layer || null, entry.item, entry.latlng, entry.feature.geometry, { directPoint: true });
+        });
+        target.addTo(siaDotherIconTouchGroup);
+    }
+    siaDotherIconStats = { drawn: entries.length, lastMs: Math.round(performance.now() - startedAt) };
+}
+
+/*
+ * Décalage rapide d'un anneau vers l'intérieur (pixels écran) : chaque sommet est poussé le long de la
+ * bissectrice intérieure (sens donné par l'orientation de l'anneau), coût proportionnel au nombre de sommets.
+ * (Le liseré des CTR teste chaque point contre tout le contour : jusqu'à 200 ms pour un grand parc.)
+ */
+function buildSiaPrnInsetLatLngs(ring, insetPx = 6) {
+    if (!map || !Array.isArray(ring) || ring.length < 4) return [];
+    const pts = [];
+    for (const c of ring) {
+        const p = map.latLngToLayerPoint([Number(c[1]), Number(c[0])]);
+        if (!pts.length || Math.hypot(p.x - pts[pts.length - 1].x, p.y - pts[pts.length - 1].y) >= 1.5) pts.push(p);
+    }
+    if (pts.length > 2 && Math.hypot(pts[0].x - pts[pts.length - 1].x, pts[0].y - pts[pts.length - 1].y) < 1.5) pts.pop();
+    const n = pts.length;
+    if (n < 3) return [];
+    let aire = 0;
+    for (let i = 0; i < n; i += 1) {
+        const a = pts[i], b = pts[(i + 1) % n];
+        aire += a.x * b.y - b.x * a.y;
+    }
+    const sens = aire > 0 ? 1 : -1; // repère écran (y vers le bas)
+    const normale = (a, b) => {
+        const dx = b.x - a.x, dy = b.y - a.y, l = Math.hypot(dx, dy) || 1;
+        return { x: -dy / l * sens, y: dx / l * sens };
+    };
+    const out = [];
+    for (let i = 0; i < n; i += 1) {
+        const prev = pts[(i - 1 + n) % n], cur = pts[i], next = pts[(i + 1) % n];
+        const n1 = normale(prev, cur), n2 = normale(cur, next);
+        let bx = n1.x + n2.x, by = n1.y + n2.y;
+        const bl = Math.hypot(bx, by);
+        if (bl < 1e-6) { bx = n1.x; by = n1.y; } else { bx /= bl; by /= bl; }
+        const cosDemi = Math.max(0.35, bx * n1.x + by * n1.y); // angle très aigu : décalage limité
+        const d = insetPx / cosDemi;
+        out.push(map.layerPointToLatLng(L.point(cur.x + bx * d, cur.y + by * d)));
+    }
+    out.push(out[0]);
+    return out;
+}
+
+function clearSiaPrnDots() {
+    siaPrnDotsQueue = [];
+    siaPrnDotsCache.clear();
+    if (siaPrnDotsGroup) siaPrnDotsGroup.clearLayers();
+}
+
+function syncSiaPrnDots() {
+    if (!map) return;
+    if (!siaPrnDotsGroup) siaPrnDotsGroup = L.layerGroup();
+    const zoom = map.getZoom();
+    const allowed = siaMapAirspacesVisible && !isCurrentOfflineOaciMap() && zoom >= SIA_PRN_DOTS_MIN_ZOOM - 1e-6;
+    if (!allowed || zoom !== siaPrnDotsZoom) {
+        clearSiaPrnDots();
+        siaPrnDotsZoom = zoom;
+    }
+    if (!allowed) {
+        if (map.hasLayer(siaPrnDotsGroup)) map.removeLayer(siaPrnDotsGroup);
+        return;
+    }
+    if (!map.hasLayer(siaPrnDotsGroup)) siaPrnDotsGroup.addTo(map);
+    const view = map.getBounds().pad(0.1);
+    const rendered = new Set();
+    for (const feature of siaRenderedAirspaceFeatures || []) {
+        const item = feature?.properties?.siaItem;
+        if (!item || item.t !== 'D-OTHER' || String(item.l || '').toUpperCase() !== 'PRN') continue;
+        const type = String(feature?.geometry?.type || '');
+        if (type !== 'Polygon' && type !== 'MultiPolygon') continue;
+        const key = `${item.c}|${item.n}`;
+        rendered.add(key);
+        if (!siaBoundsIntersects(item.b, view)) continue;
+        if (!siaPrnDotsCache.has(key) && !siaPrnDotsQueue.some(job => job.key === key)) {
+            siaPrnDotsQueue.push({ key, feature });
+        }
+    }
+    /* Zone plus dessinée (filtre, données) : ses points partent aussi. */
+    for (const [key, layers] of siaPrnDotsCache) {
+        if (rendered.has(key)) continue;
+        layers.forEach(layer => { try { siaPrnDotsGroup.removeLayer(layer); } catch (_) {} });
+        siaPrnDotsCache.delete(key);
+    }
+    siaPrnDotsQueue = siaPrnDotsQueue.filter(job => rendered.has(job.key));
+    scheduleSiaPrnDotsQueue();
+}
+
+function scheduleSiaPrnDotsQueue() {
+    if (siaPrnDotsRafPending || !siaPrnDotsQueue.length) return;
+    siaPrnDotsRafPending = true;
+    npfNextFrame(runSiaPrnDotsQueue);
+}
+
+function runSiaPrnDotsQueue() {
+    siaPrnDotsRafPending = false;
+    if (!map || map.getZoom() !== siaPrnDotsZoom) return;
+    if (typeof isNpfMapFingerDown === 'function' && isNpfMapFingerDown()) {
+        scheduleSiaPrnDotsQueue();
+        return;
+    }
+    const sliceStartedAt = performance.now();
+    while (siaPrnDotsQueue.length && performance.now() - sliceStartedAt < 8) {
+        const { key, feature } = siaPrnDotsQueue.shift();
+        if (siaPrnDotsCache.has(key)) continue;
+        const startedAt = performance.now();
+        const layers = [];
+        for (const ring of getSiaCtrOuterRings(feature.geometry)) {
+            const segments = buildSiaPrnInsetLatLngs(ring, 6);
+            if (segments.length < 3) continue;
+            layers.push(L.polyline(segments, {
+                pane: 'siaAirspacePane',
+                renderer: siaAirspaceRenderer || undefined,
+                color: SIA_PRN_COLOR,
+                weight: 3.4,
+                opacity: 0.95,
+                dashArray: '0.1 7',
+                lineCap: 'round',
+                lineJoin: 'round',
+                interactive: false
+            }));
+        }
+        layers.forEach(layer => layer.addTo(siaPrnDotsGroup));
+        siaPrnDotsCache.set(key, layers);
+        const ms = performance.now() - startedAt;
+        siaPrnDotsStats = { zones: siaPrnDotsCache.size, lastMs: Math.round(ms), maxMs: Math.max(siaPrnDotsStats.maxMs, Math.round(ms)) };
+    }
+    scheduleSiaPrnDotsQueue();
+}
+
+function scheduleSiaMapExtras(reason = 'sync') {
+    if (!map) return;
+    if (!siaMapExtrasEventsInstalled) {
+        siaMapExtrasEventsInstalled = true;
+        map.on('zoomstart', hideSiaDotherIcons);
+        map.on('moveend resize', () => scheduleSiaMapExtras('carte'));
+    }
+    clearTimeout(siaMapExtrasTimer);
+    siaMapExtrasTimer = setTimeout(() => {
+        siaMapExtrasTimer = null;
+        if (typeof isNpfMapFingerDown === 'function' && isNpfMapFingerDown()) {
+            scheduleSiaMapExtras(reason);
+            return;
+        }
+        try { drawSiaDotherIcons(); } catch (error) { console.warn('Icônes D-OTHER :', error); }
+        try { syncSiaPrnDots(); } catch (error) { console.warn('Points PRN :', error); }
+    }, 60);
 }
 
 /* v17.46 — DIAG : fin de l'évaluation de script.js (durées du démarrage). */
