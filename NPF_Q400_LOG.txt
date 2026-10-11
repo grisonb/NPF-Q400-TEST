@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 11/10/2026
-Version de travail actuelle : TEST v17.72
+Version de travail actuelle : TEST v17.73
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,8 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.73 — VRP de NIMES COURBESSAC (LFME) supprimés (superposés à ceux de GARONS,
+  invisibles) ; NIMES GARONS (LFTW) en rouge ;
 - v17.72 — couleurs des terrains par FAMILLES : deux terrains limitrophes (VRP à
   moins de 10 NM) n'ont jamais la même famille ni des familles voisines ; brun et
   noir ajoutés ; 25 terrains changent (Provence : LFML magenta, LFMY noir) ;
@@ -509,7 +511,8 @@ NON IMPLÉMENTÉ / OUVERT :
   07/10/2026 : programme VPS bfg-sofia-notams 1.2.0 PRÊT, NON INSTALLÉ
   (~/vps-a-copier/). v17.60 à pousser APRÈS l'installation de la 1.2.0
   (elle annonce « environ 1 minute ») ;
-- v17.72 : À MESURER sur iPad (couleurs des VRP par familles, Provence et Paris) ;
+- v17.73 : À MESURER sur iPad (Nîmes-Garons rouge, plus de VRP ME-…) ;
+- v17.72 : POUSSÉE le 11/10/2026 (a13b3db) ; À MESURER sur iPad (couleurs des VRP par familles, Provence et Paris) ;
 - v17.71 : POUSSÉE le 11/10/2026 (2bfb9cf) ; À MESURER sur iPad (contour à 10 NM, terrains au zoom 7, couleur des
   VRP, fenêtre « Lignes HT » et clignotement en vol) ;
 - v17.70 : À MESURER sur iPad (coloration de la zone sélectionnée au zoom,
@@ -725,48 +728,48 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.72
+Version : TEST v17.73
 Date : 11/10/2026
-Base : v17.71 (2bfb9cf, poussée le 11/10/2026)
+Base : v17.72 (a13b3db, poussée le 11/10/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.72.txt
-2_Index_v17.72.txt
-3_Manifest_v17.72.txt
-4_Script_v17.72.txt
-5_SIA_v17.72.txt
-6_Style_v17.72.txt
-7_Sw_v17.72.txt
+1_Modifications_v17.73.txt
+2_Index_v17.73.txt
+3_Manifest_v17.73.txt
+4_Script_v17.73.txt
+5_SIA_v17.73.txt
+6_Style_v17.73.txt
+7_Sw_v17.73.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.72 (et texte « TEST v17.72 » de l'écran de
+- Index : APP_VERSION = v17.73 (et texte « TEST v17.73 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.72
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.72
-- Style : NPF_STYLE_BUILD_VERSION = v17.72
-- Service Worker : `sw-v17-72_couleurs_familles` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-72_couleurs_familles`, `npf-q400-test-app-data-v1`,
-  `npf-q400-test-sia-data-sia-2026-10-29-v02-g7`
-- SIA_DATA_REVISION (SW / Index sia.js?siav=) : sia-2026-10-29-v02-g7 (= NPF_SIA_DATA_REVISION
+- Manifest : start_url = ./index.html?appv=v17.73
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.73
+- Style : NPF_STYLE_BUILD_VERSION = v17.73
+- Service Worker : `sw-v17-73_vrp_courbessac` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-73_vrp_courbessac`, `npf-q400-test-app-data-v1`,
+  `npf-q400-test-sia-data-sia-2026-10-29-v02-g8`
+- SIA_DATA_REVISION (SW / Index sia.js?siav=) : sia-2026-10-29-v02-g8 (= NPF_SIA_DATA_REVISION
   de sia.js ; à changer à chaque nouveau sia.js)
-- sia.js v17.72 : RÉGÉNÉRÉ, révision g7 = données identiques à g6, table des couleurs par familles ; g6 = métropole seule + 34 VRP rattachés d'après l'eAIP + couleurs figées (AIRAC 11/26 du 29/10/2026, paquet SIA v02) par
+- sia.js v17.73 : RÉGÉNÉRÉ, révision g8 = g7 sans les 7 VRP de LFME, LFTW rouge ; g7 = données identiques à g6, table des couleurs par familles ; g6 = métropole seule + 34 VRP rattachés d'après l'eAIP + couleurs figées (AIRAC 11/26 du 29/10/2026, paquet SIA v02) par
   ~/projects/outils_tests_NPF-Q400-TEST/generateur-sia/generer_sia.py (une commande
-  par cycle avec --eaip <ZIP eAIP du cycle>, voir son LISEZMOI.txt) ; npfDatasetRevision 2026-10-29-v02-g7.
+  par cycle avec --eaip <ZIP eAIP du cycle>, voir son LISEZMOI.txt) ; npfDatasetRevision 2026-10-29-v02-g8.
 - Images de lancement : icons/startup-ipad9-portrait.png (1620 × 2160) et
   icons/startup-ipad9-landscape.png (2160 × 1620).
 - Icônes des boutons (v17.48) : calculator-fms-icon, search-commune-icon,
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.72 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.73 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
 - `sia.js` : par rapport à v17.70, outre-mer retiré, « a » de 34 VRP renseigné, table vrpAirportColors ajoutée (2 pastels), révision g6 ; zones, terrains et points de métropole identiques ; moteur tuiles (src/100) modifié en v17.66 sur demande
   explicite (limite de zoom propre à chaque carte, zoom 11 OACI 1/500 000) ;
-- tests v17.72 : entrée v17.72 ;
+- tests v17.73 : entrée v17.73 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71 et v17.72 À MESURER ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72 et v17.73 À MESURER ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
   v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE ;
   v17.56 VALIDÉE en vol ; v17.57 VALIDÉE sur iPad.
 
@@ -2295,6 +2298,31 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.73 — VRP DE NIMES COURBESSAC SUPPRIMÉS ; NIMES GARONS EN ROUGE
+Date : 11/10/2026
+Base fonctionnelle : v17.72 (commit a13b3db, poussée le 11/10/2026).
+Remarque et décision de Bastien (11/10/2026) : Nîmes-Garons noir comme Salon alors
+que le rouge semblait libre ; aucun point visible pour Courbessac.
+- Cause : les 7 VRP de NIMES COURBESSAC (ME-SG, ME-AS, ME-CA, ME-PA, ME-BC, ME-AL,
+  ME-CS) sont exactement aux mêmes points que ceux de NIMES GARONS (TW-…), dessinés
+  par-dessus : invisibles, ils donnaient le rouge à Courbessac et bloquaient Garons
+  (seuls brun et noir restaient permis) ; Garons et Salon (31 NM, non limitrophes)
+  étaient tous deux noirs.
+- Décision : VRP de Courbessac supprimés, VRP de Garons en rouge.
+- Convertisseur (générateur g8) : complements_manuels.json, rubrique vrp_supprimes
+  (LFME si superposés à LFTW, à moins de 0,05 NM ; un VRP non superposé serait gardé
+  et signalé) ; couleurs_terrains.json : LFTW rouge ; LISEZMOI.txt à jour.
+- sia.js g8 : seuls les 7 VRP ME-… retirés (zones, terrains, autres points
+  identiques) ; couleurs : LFTW noir -> rouge, rien d'autre.
+TESTS : LFTW rouge, plus aucun VRP de LFME, aucune autre couleur changée, aucune
+paire limitrophe trop proche, aucune erreur JS ; capture Nîmes à 5 NM (outils de
+test, out/couleurs73/) ; mise à jour v17.72 -> v17.73 puis hors ligne : OK, pérenne
+intacte.
+FICHIERS MODIFIÉS : sia.js (g8) ; src/010, src/330, donc script.js ; index.html,
+sw.js, manifest.json, style.css (version, révision SIA).
+VERSION : App v17.73 ; Service Worker `sw-v17-73_vrp_courbessac`.
+STATUT : À MESURER sur iPad.
 
 VERSION TEST v17.72 — COULEURS DES TERRAINS PAR FAMILLES ENTRE TERRAINS LIMITROPHES
 Date : 11/10/2026

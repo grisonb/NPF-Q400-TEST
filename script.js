@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.72';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.73';
 
 
 /*
@@ -3305,7 +3305,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.72 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.73 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -55895,7 +55895,7 @@ const SIA_EMBEDDED_FALLBACK_META = Object.freeze({
     excludedDpnIfr: 2380,
     geometryDirectAbd: 4451,
     geometryDerivedAdg: 597,
-    npfDatasetRevision: '2026-10-29-v02-g7',
+    npfDatasetRevision: '2026-10-29-v02-g8',
     vrpFrenchDescriptions: 960,
     ctrServiceRelations: true,
     frequencySupplementarySource: 'XML_SIA',
