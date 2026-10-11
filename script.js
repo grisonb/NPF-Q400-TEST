@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.76';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.77';
 
 
 /*
@@ -3305,7 +3305,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.76 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.77 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -55895,7 +55895,7 @@ const SIA_EMBEDDED_FALLBACK_META = Object.freeze({
     excludedDpnIfr: 2380,
     geometryDirectAbd: 4451,
     geometryDerivedAdg: 597,
-    npfDatasetRevision: '2026-10-29-v02-g12',
+    npfDatasetRevision: '2026-10-29-v02-g13',
     vrpFrenchDescriptions: 867,
     ctrServiceRelations: true,
     frequencySupplementarySource: 'XML_SIA',
@@ -64074,10 +64074,24 @@ async function refreshSiaLayers(reason = 'manual') {
  * contours), calculée seulement pour les zones à l'écran, par petits lots (8 ms), jamais doigt posé, en cache
  * pour le zoom en cours.
  */
-const SIA_DOTHER_ICONS = Object.freeze({ AER: '\u{1F579}\u{FE0F}', VOL: '\u{27B0}', PJE: '\u{1FA82}' });
+/*
+ * v17.77 — voltige 🛩️ (au lieu de ➰) ; aéromodélisme : radiocommande DESSINÉE par l'app (boîtier noir aux coins
+ * arrondis, deux manches blancs à point noir, antenne courte en haut), dessinée une fois puis réutilisée ;
+ * parachutage 🪂. Disque blanc = 85 % du diamètre d'un point VFR (24 px -> 20 px), dessin de 14 px.
+ * Icônes SOUS les points VFR et les terrains (panneau 550 < 555), cibles tactiles sous celles des VRP
+ * (panneau 650 < 660) : un point VFR qui chevauche une icône reste visible et répond au toucher.
+ * Parcs et réserves : points seulement à 5 NM et moins (zoom 10) ; à 10 NM, contour seul ; jamais de points sur une
+ * partie de moins de 40 px à l'écran (« pe », taille préparée par le convertisseur).
+ */
+const SIA_DOTHER_ICON_RADIO = 'radiocommande';
+const SIA_DOTHER_ICONS = Object.freeze({ AER: SIA_DOTHER_ICON_RADIO, VOL: '\u{1F6E9}\u{FE0F}', PJE: '\u{1FA82}' });
 const SIA_DOTHER_ICON_MAX_SCALE_NM = 5;
-const SIA_DOTHER_ICON_SIZE_PX = 24;
-const SIA_PRN_DOTS_MIN_ZOOM = 9;
+const SIA_DOTHER_ICON_DISC_PX = Math.round(0.85 * getSiaVrpVisualSize(''));
+const SIA_DOTHER_ICON_SIZE_PX = 14;
+const SIA_PRN_DOTS_MIN_ZOOM = 10;
+const SIA_PRN_DOTS_MIN_PART_PX = 40;
+let siaDotherIconTouchRenderer = null;
+let siaDotherRadioSprite = null;
 const SIA_PRN_COLOR = '#d50000';
 let siaDotherIconCanvas = null;
 let siaDotherIconTouchGroup = null;
@@ -64096,10 +64110,67 @@ function ensureSiaIconPane() {
     let pane = map.getPane('siaIconPane');
     if (!pane) {
         pane = map.createPane('siaIconPane');
-        pane.style.zIndex = '556';
+        pane.style.zIndex = '550';
         pane.style.pointerEvents = 'none';
     }
+    if (!map.getPane('siaIconTouchPane')) {
+        const touchPane = map.createPane('siaIconTouchPane');
+        touchPane.style.zIndex = '650';
+        touchPane.style.pointerEvents = 'auto';
+    }
+    if (!siaDotherIconTouchRenderer && L.svg) {
+        siaDotherIconTouchRenderer = L.svg({ padding: 0.35, pane: 'siaIconTouchPane' });
+    }
     return pane;
+}
+
+/* Radiocommande dessinée une seule fois (par densité d'écran), puis réutilisée telle quelle. */
+function getSiaDotherRadioSprite(dpr) {
+    if (siaDotherRadioSprite && siaDotherRadioSprite.dpr === dpr) return siaDotherRadioSprite.canvas;
+    const B = SIA_DOTHER_ICON_SIZE_PX;
+    const k = Math.max(2, Math.ceil(dpr * 2));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.ceil(B * k);
+    canvas.height = Math.ceil(B * k);
+    const c = canvas.getContext('2d');
+    c.scale(k, k);
+    const dy = 0.07 * B; /* contenu de 0,07 B à 0,93 B : centré verticalement */
+    c.fillStyle = '#000000';
+    c.strokeStyle = '#000000';
+    /* antenne courte, sortant du haut du boîtier */
+    c.lineCap = 'round';
+    c.lineWidth = 0.11 * B;
+    c.beginPath();
+    c.moveTo(0.64 * B, 0.07 * B + dy);
+    c.lineTo(0.64 * B, 0.3 * B + dy);
+    c.stroke();
+    /* boîtier rectangulaire aux coins arrondis */
+    const x = 0.08 * B, y = 0.28 * B + dy, w = 0.84 * B, h = 0.58 * B, r = 0.14 * B;
+    c.beginPath();
+    c.moveTo(x + r, y);
+    c.lineTo(x + w - r, y);
+    c.quadraticCurveTo(x + w, y, x + w, y + r);
+    c.lineTo(x + w, y + h - r);
+    c.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    c.lineTo(x + r, y + h);
+    c.quadraticCurveTo(x, y + h, x, y + h - r);
+    c.lineTo(x, y + r);
+    c.quadraticCurveTo(x, y, x + r, y);
+    c.fill();
+    /* deux manches : cercle blanc et point noir au centre */
+    for (const cx of [0.3 * B, 0.7 * B]) {
+        const cy = 0.57 * B + dy;
+        c.fillStyle = '#ffffff';
+        c.beginPath();
+        c.arc(cx, cy, 0.155 * B, 0, Math.PI * 2);
+        c.fill();
+        c.fillStyle = '#000000';
+        c.beginPath();
+        c.arc(cx, cy, 0.06 * B, 0, Math.PI * 2);
+        c.fill();
+    }
+    siaDotherRadioSprite = { dpr, canvas };
+    return canvas;
 }
 
 function getSiaDotherIconEntries() {
@@ -64220,20 +64291,25 @@ function drawSiaDotherIcons() {
     for (const entry of entries) {
         const p = map.latLngToContainerPoint(entry.latlng);
         ctx.beginPath();
-        ctx.arc(p.x, p.y, SIA_DOTHER_ICON_SIZE_PX * 0.66, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, SIA_DOTHER_ICON_DISC_PX / 2, 0, Math.PI * 2);
         ctx.fillStyle = 'rgba(255,255,255,0.85)';
         ctx.fill();
         ctx.lineWidth = 1;
         ctx.strokeStyle = 'rgba(0,0,0,0.35)';
         ctx.stroke();
         ctx.fillStyle = '#000000';
-        /* v17.75 — centrage sur la boîte réelle du dessin de l'émoji (pas seulement la largeur du texte). */
-        const m = getSiaDotherIconMetrics(ctx, entry.icon);
-        ctx.fillText(entry.icon, p.x + m.dx, p.y + m.dy);
+        if (entry.icon === SIA_DOTHER_ICON_RADIO) {
+            const B = SIA_DOTHER_ICON_SIZE_PX;
+            ctx.drawImage(getSiaDotherRadioSprite(dpr), p.x - B / 2, p.y - B / 2, B, B);
+        } else {
+            /* v17.75 / v17.76 — centrage d'après les pixels réellement dessinés. */
+            const m = getSiaDotherIconMetrics(ctx, entry.icon);
+            ctx.fillText(entry.icon, p.x + m.dx, p.y + m.dy);
+        }
         const target = L.circleMarker(entry.latlng, {
-            pane: 'siaPointTouchPane',
-            renderer: siaPointTouchRenderer || undefined,
-            radius: 17,
+            pane: 'siaIconTouchPane',
+            renderer: siaDotherIconTouchRenderer || undefined,
+            radius: SIA_DOTHER_ICON_DISC_PX / 2 + 3,
             stroke: false,
             fill: true,
             fillColor: '#000000',
@@ -64352,7 +64428,12 @@ function runSiaPrnDotsQueue() {
         const startedAt = performance.now();
         const layers = [];
         const directionsParAnneau = Array.isArray(feature?.properties?.siaItem?.pi) ? feature.properties.siaItem.pi : [];
+        const etendues = Array.isArray(feature?.properties?.siaItem?.pe) ? feature.properties.siaItem.pe : [];
         getSiaCtrOuterRings(feature.geometry).forEach((ring, index) => {
+            /* Partie trop petite à l'écran (île, îlot) : contour seul, jamais de points. */
+            const lat = Number(ring?.[0]?.[1]);
+            const metresParPixel = 156543.03392 * Math.cos((Number.isFinite(lat) ? lat : 45) * Math.PI / 180) / Math.pow(2, map.getZoom());
+            if (Number(etendues[index]) > 0 && Number(etendues[index]) / metresParPixel < SIA_PRN_DOTS_MIN_PART_PX) return;
             const segments = buildSiaPrnDotsLatLngs(ring, directionsParAnneau[index], 6);
             if (segments.length < 4) return;
             layers.push(L.polyline(segments, {
