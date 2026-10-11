@@ -1540,6 +1540,10 @@ function runSiaInnerBandsStep() {
         }
         job.list = getSiaDecorationFeaturesForCurrentView(siaRenderedAirspaceFeatures).filter(feature => {
             const item = feature?.properties?.siaItem;
+            /* v17.75 — pas de liseré pour les parcs et réserves (PRN) : leurs grands contours bloquaient l'iPad
+             * 3 à 5 s (calcul d'une seule traite, coût au carré du nombre de sommets) ; leur aspect est le
+             * contour rouge + la rangée de points préparée par le convertisseur. */
+            if (item && item.t === 'D-OTHER' && String(item.l || '').toUpperCase() === 'PRN') return false;
             return item && Number(item?.co || 0) !== 1 && !siaInnerBandCache.has(item);
         });
         job.index = 0;
@@ -3964,6 +3968,31 @@ function getSiaDotherIconEntries() {
     return entries;
 }
 
+const siaDotherIconMetricsCache = new Map();
+
+function getSiaDotherIconMetrics(ctx, icon) {
+    const key = `${ctx.font}|${icon}`;
+    if (siaDotherIconMetricsCache.has(key)) return siaDotherIconMetricsCache.get(key);
+    let metrics = { dx: 0, dy: 0 };
+    try {
+        const saved = [ctx.textAlign, ctx.textBaseline];
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const t = ctx.measureText(icon);
+        const left = Number(t.actualBoundingBoxLeft);
+        const right = Number(t.actualBoundingBoxRight);
+        const ascent = Number(t.actualBoundingBoxAscent);
+        const descent = Number(t.actualBoundingBoxDescent);
+        if ([left, right, ascent, descent].every(Number.isFinite) && right + left > 0 && ascent + descent > 0) {
+            /* Boîte dessinée : de x - left à x + right, de y - ascent à y + descent. */
+            metrics = { dx: (left - right) / 2, dy: (ascent - descent) / 2 };
+        }
+        [ctx.textAlign, ctx.textBaseline] = saved;
+    } catch (_) {}
+    siaDotherIconMetricsCache.set(key, metrics);
+    return metrics;
+}
+
 function hideSiaDotherIcons() {
     if (siaDotherIconCanvas) siaDotherIconCanvas.style.display = 'none';
     if (siaDotherIconTouchGroup) siaDotherIconTouchGroup.clearLayers();
@@ -4019,7 +4048,9 @@ function drawSiaDotherIcons() {
         ctx.strokeStyle = 'rgba(0,0,0,0.35)';
         ctx.stroke();
         ctx.fillStyle = '#000000';
-        ctx.fillText(entry.icon, p.x, p.y + 1);
+        /* v17.75 — centrage sur la boîte réelle du dessin de l'émoji (pas seulement la largeur du texte). */
+        const m = getSiaDotherIconMetrics(ctx, entry.icon);
+        ctx.fillText(entry.icon, p.x + m.dx, p.y + m.dy);
         const target = L.circleMarker(entry.latlng, {
             pane: 'siaPointTouchPane',
             renderer: siaPointTouchRenderer || undefined,
@@ -4053,42 +4084,28 @@ function drawSiaDotherIcons() {
 }
 
 /*
- * Décalage rapide d'un anneau vers l'intérieur (pixels écran) : chaque sommet est poussé le long de la
- * bissectrice intérieure (sens donné par l'orientation de l'anneau), coût proportionnel au nombre de sommets.
- * (Le liseré des CTR teste chaque point contre tout le contour : jusqu'à 200 ms pour un grand parc.)
+ * v17.75 — rangée de points des parcs et réserves : la direction intérieure de chaque sommet (« pi », entiers en
+ * centièmes, est / nord, facteur d'angle compris) est calculée UNE FOIS par le convertisseur (generateur-sia,
+ * modules/espaces_proteges.py). L'iPad ne fait que décaler chaque sommet de quelques pixels (une multiplication
+ * par sommet, aucun test de contour), puis Leaflet dessine en pointillé ce qui est à l'écran.
  */
-function buildSiaPrnInsetLatLngs(ring, insetPx = 6) {
-    if (!map || !Array.isArray(ring) || ring.length < 4) return [];
-    const pts = [];
-    for (const c of ring) {
-        const p = map.latLngToLayerPoint([Number(c[1]), Number(c[0])]);
-        if (!pts.length || Math.hypot(p.x - pts[pts.length - 1].x, p.y - pts[pts.length - 1].y) >= 1.5) pts.push(p);
+function buildSiaPrnDotsLatLngs(ring, directions, insetPx = 6) {
+    if (!map || !Array.isArray(ring) || !Array.isArray(directions)) return [];
+    const count = Math.min(ring.length - 1, Math.floor(directions.length / 2));
+    if (count < 3) return [];
+    const metresParPixelEquateur = 156543.03392 / Math.pow(2, map.getZoom());
+    const out = new Array(count + 1);
+    for (let i = 0; i < count; i += 1) {
+        const lon = Number(ring[i][0]);
+        const lat = Number(ring[i][1]);
+        const cosLat = Math.cos(lat * Math.PI / 180);
+        const d = insetPx * metresParPixelEquateur * cosLat;
+        out[i] = L.latLng(
+            lat + (directions[2 * i + 1] / 100) * d / 111320,
+            lon + (directions[2 * i] / 100) * d / (111320 * cosLat)
+        );
     }
-    if (pts.length > 2 && Math.hypot(pts[0].x - pts[pts.length - 1].x, pts[0].y - pts[pts.length - 1].y) < 1.5) pts.pop();
-    const n = pts.length;
-    if (n < 3) return [];
-    let aire = 0;
-    for (let i = 0; i < n; i += 1) {
-        const a = pts[i], b = pts[(i + 1) % n];
-        aire += a.x * b.y - b.x * a.y;
-    }
-    const sens = aire > 0 ? 1 : -1; // repère écran (y vers le bas)
-    const normale = (a, b) => {
-        const dx = b.x - a.x, dy = b.y - a.y, l = Math.hypot(dx, dy) || 1;
-        return { x: -dy / l * sens, y: dx / l * sens };
-    };
-    const out = [];
-    for (let i = 0; i < n; i += 1) {
-        const prev = pts[(i - 1 + n) % n], cur = pts[i], next = pts[(i + 1) % n];
-        const n1 = normale(prev, cur), n2 = normale(cur, next);
-        let bx = n1.x + n2.x, by = n1.y + n2.y;
-        const bl = Math.hypot(bx, by);
-        if (bl < 1e-6) { bx = n1.x; by = n1.y; } else { bx /= bl; by /= bl; }
-        const cosDemi = Math.max(0.35, bx * n1.x + by * n1.y); // angle très aigu : décalage limité
-        const d = insetPx / cosDemi;
-        out.push(map.layerPointToLatLng(L.point(cur.x + bx * d, cur.y + by * d)));
-    }
-    out.push(out[0]);
+    out[count] = out[0];
     return out;
 }
 
@@ -4155,9 +4172,10 @@ function runSiaPrnDotsQueue() {
         if (siaPrnDotsCache.has(key)) continue;
         const startedAt = performance.now();
         const layers = [];
-        for (const ring of getSiaCtrOuterRings(feature.geometry)) {
-            const segments = buildSiaPrnInsetLatLngs(ring, 6);
-            if (segments.length < 3) continue;
+        const directionsParAnneau = Array.isArray(feature?.properties?.siaItem?.pi) ? feature.properties.siaItem.pi : [];
+        getSiaCtrOuterRings(feature.geometry).forEach((ring, index) => {
+            const segments = buildSiaPrnDotsLatLngs(ring, directionsParAnneau[index], 6);
+            if (segments.length < 4) return;
             layers.push(L.polyline(segments, {
                 pane: 'siaAirspacePane',
                 renderer: siaAirspaceRenderer || undefined,
@@ -4169,7 +4187,7 @@ function runSiaPrnDotsQueue() {
                 lineJoin: 'round',
                 interactive: false
             }));
-        }
+        });
         layers.forEach(layer => layer.addTo(siaPrnDotsGroup));
         siaPrnDotsCache.set(key, layers);
         const ms = performance.now() - startedAt;

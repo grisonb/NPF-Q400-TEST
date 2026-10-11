@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 11/10/2026
-Version de travail actuelle : TEST v17.74
+Version de travail actuelle : TEST v17.75
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,9 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.75 — blocages de 3 à 5 s sur iPad (liseré des grands parcs) supprimés : plus
+  de liseré pour les PRN, rangée de points préparée par le convertisseur ; émojis
+  centrés ;
 - v17.74 — icônes 🕹️ ➰ 🪂 des zones aéromodélisme, voltige, parachutage (5 NM) ;
   contours des parcs nationaux et réserves naturelles (zones PRN) d'après l'INPN,
   rouge + rangée de points rouges (sia.js g10) ;
@@ -515,7 +518,8 @@ NON IMPLÉMENTÉ / OUVERT :
   07/10/2026 : programme VPS bfg-sofia-notams 1.2.0 PRÊT, NON INSTALLÉ
   (~/vps-a-copier/). v17.60 à pousser APRÈS l'installation de la 1.2.0
   (elle annonce « environ 1 minute ») ;
-- v17.74 : À MESURER sur iPad (icônes, toucher d'une icône, contours rouges et points des parcs et réserves) ;
+- v17.75 : À MESURER sur iPad (plus de blocage près des parcs, émojis centrés) ;
+- v17.74 : POUSSÉE le 11/10/2026 (83aa51a) ; blocages iPad 3 à 5 s (DIAG 2026-10-11 15-49, corrigés en v17.75) ; À MESURER sur iPad (icônes, toucher d'une icône, contours rouges et points des parcs et réserves) ;
 - v17.73 : POUSSÉE le 11/10/2026 (0e87dd4) ; À MESURER sur iPad (Nîmes-Garons rouge, plus de VRP ME-…, points regroupés et ligne « Terrains ») ;
 - v17.72 : POUSSÉE le 11/10/2026 (a13b3db) ; À MESURER sur iPad (couleurs des VRP par familles, Provence et Paris) ;
 - v17.71 : POUSSÉE le 11/10/2026 (2bfb9cf) ; À MESURER sur iPad (contour à 10 NM, terrains au zoom 7, couleur des
@@ -733,48 +737,48 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.74
+Version : TEST v17.75
 Date : 11/10/2026
-Base : v17.73 (0e87dd4, poussée le 11/10/2026)
+Base : v17.74 (83aa51a, poussée le 11/10/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.74.txt
-2_Index_v17.74.txt
-3_Manifest_v17.74.txt
-4_Script_v17.74.txt
-5_SIA_v17.74.txt
-6_Style_v17.74.txt
-7_Sw_v17.74.txt
+1_Modifications_v17.75.txt
+2_Index_v17.75.txt
+3_Manifest_v17.75.txt
+4_Script_v17.75.txt
+5_SIA_v17.75.txt
+6_Style_v17.75.txt
+7_Sw_v17.75.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.74 (et texte « TEST v17.74 » de l'écran de
+- Index : APP_VERSION = v17.75 (et texte « TEST v17.75 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.74
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.74
-- Style : NPF_STYLE_BUILD_VERSION = v17.74
-- Service Worker : `sw-v17-74_icones_parcs_reserves` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-74_icones_parcs_reserves`, `npf-q400-test-app-data-v1`,
-  `npf-q400-test-sia-data-sia-2026-10-29-v02-g10`
-- SIA_DATA_REVISION (SW / Index sia.js?siav=) : sia-2026-10-29-v02-g10 (= NPF_SIA_DATA_REVISION
+- Manifest : start_url = ./index.html?appv=v17.75
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.75
+- Style : NPF_STYLE_BUILD_VERSION = v17.75
+- Service Worker : `sw-v17-75_parcs_sans_blocage` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-75_parcs_sans_blocage`, `npf-q400-test-app-data-v1`,
+  `npf-q400-test-sia-data-sia-2026-10-29-v02-g11`
+- SIA_DATA_REVISION (SW / Index sia.js?siav=) : sia-2026-10-29-v02-g11 (= NPF_SIA_DATA_REVISION
   de sia.js ; à changer à chaque nouveau sia.js)
-- sia.js v17.74 : RÉGÉNÉRÉ, révision g10 = g9 + noms et contours INPN des parcs et réserves (PRN) ; g9 = g8 + VRP superposés regroupés (« ra ») ; g8 = g7 sans les 7 VRP de LFME, LFTW rouge ; g7 = données identiques à g6, table des couleurs par familles ; g6 = métropole seule + 34 VRP rattachés d'après l'eAIP + couleurs figées (AIRAC 11/26 du 29/10/2026, paquet SIA v02) par
+- sia.js v17.75 : RÉGÉNÉRÉ, révision g11 = g10 + directions intérieures des PRN (pi) ; g10 = g9 + noms et contours INPN des parcs et réserves (PRN) ; g9 = g8 + VRP superposés regroupés (« ra ») ; g8 = g7 sans les 7 VRP de LFME, LFTW rouge ; g7 = données identiques à g6, table des couleurs par familles ; g6 = métropole seule + 34 VRP rattachés d'après l'eAIP + couleurs figées (AIRAC 11/26 du 29/10/2026, paquet SIA v02) par
   ~/projects/outils_tests_NPF-Q400-TEST/generateur-sia/generer_sia.py (une commande
-  par cycle avec --eaip <ZIP eAIP du cycle>, voir son LISEZMOI.txt) ; npfDatasetRevision 2026-10-29-v02-g10.
+  par cycle avec --eaip <ZIP eAIP du cycle>, voir son LISEZMOI.txt) ; npfDatasetRevision 2026-10-29-v02-g11.
 - Images de lancement : icons/startup-ipad9-portrait.png (1620 × 2160) et
   icons/startup-ipad9-landscape.png (2160 × 1620).
 - Icônes des boutons (v17.48) : calculator-fms-icon, search-commune-icon,
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.74 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.75 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
 - `sia.js` : par rapport à v17.70, outre-mer retiré, « a » de 34 VRP renseigné, table vrpAirportColors ajoutée (2 pastels), révision g6 ; zones, terrains et points de métropole identiques ; moteur tuiles (src/100) modifié en v17.66 sur demande
   explicite (limite de zoom propre à chaque carte, zoom 11 OACI 1/500 000) ;
-- tests v17.74 : entrée v17.74 ;
+- tests v17.75 : entrée v17.75 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73 et v17.74 À MESURER ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74 et v17.75 À MESURER ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
   v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE ;
   v17.56 VALIDÉE en vol ; v17.57 VALIDÉE sur iPad.
 
@@ -2303,6 +2307,55 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.75 — BLOCAGES PRÈS DES PARCS SUPPRIMÉS ; ÉMOJIS CENTRÉS
+Date : 11/10/2026
+Base fonctionnelle : v17.74 (commit 83aa51a, poussée le 11/10/2026).
+Retour iPad de Bastien (DIAG NPF_DIAG_2026-10-11_15-49, région de Salon, à l'arrêt) :
+carte figée 5,0 s, 3,1 s, 4,3 s ; runSiaInnerBandsStep 4 987, 3 076, 4 327 ms ; émoji
+🕹️ décalé en bas à droite dans son disque.
+
+1. CAUSE
+- runSiaInnerBandsStep = gestionnaire du LISERÉ intérieur (bande pâle) de toutes les
+  zones à l'écran (v17.52). Depuis v17.74, les parcs et réserves (PRN) sont de grands
+  polygones et recevaient ce liseré : addSiaCtrInnerBand teste chaque point de la bande
+  contre tout le contour (coût au carré du nombre de sommets) et une zone se calcule
+  d'une seule traite. Ce n'était PAS la rangée de points de v17.74. Ma mesure PC v17.74
+  (6 ms) portait sur les points, pas sur ce liseré, et sans ralentissement.
+- Reproduit (CPU ×6, Écrins / Vanoise / Cévennes / Mercantour / Port-Cros, zoom 20 ->
+  2 NM, déplacements) : v17.74 liseré jusqu'à 3 503 ms (Cévennes), 478 (Écrins), 540
+  (Mercantour).
+2. CORRECTION
+- App (src/350) : plus de liseré pour les zones PRN ; la rangée de points utilise les
+  directions intérieures « pi » préparées par le convertisseur : l'iPad décale chaque
+  sommet de 6 px (une multiplication), aucun test de contour ; dessin des seules zones
+  à l'écran, à 10 NM ou moins (zoom 9). Aspect : contour rouge + points rouges (la bande
+  pâle des parcs, effet secondaire du liseré, disparaît).
+- Convertisseur (modules/espaces_proteges.py, générateur g11, LISEZMOI) : « pi » pour
+  les 89 PRN dessinées (196 anneaux, contrôlés : un couple par sommet) ; sia.js g11 :
+  données identiques à g10 sauf « pi » ; +42 ko.
+- Émojis : centrage sur la boîte réelle du dessin (measureText actualBoundingBox) ;
+  écart mesuré dans le canvas : v17.74 jusqu'à 1,5 px, v17.75 0,5 px au plus (PC ; sur
+  iPad la police Apple Color Emoji a d'autres métriques, d'où le décalage vu : la boîte
+  réelle est fournie par Safari, à vérifier sur l'iPad).
+3. MESURES (CPU ×6 ; liseré max, points PRN max, icônes max ; tâches > 100 ms)
+- v17.73 (référence sans parcs) : liseré max 79 à 208 ms ; tâches > 100 ms 17 à 34.
+- v17.74 : liseré max 149 à 3 503 ms ; tâches > 100 ms 22 à 38.
+- v17.75 : liseré max 83 à 226 ms (mêmes zones qu'en v17.73 : CTA MARSEILLE, LTA
+  FRANCE, délégations de Genève, SIV MARSEILLE SUD — aucun parc) ; points des parcs
+  14 ms au plus ; icônes 56 ms au plus ; tâches > 100 ms 10 à 37, comme v17.73.
+  Plus aucun blocage dû aux parcs ; restent les blocages déjà présents en v17.73
+  (liseré de très grandes zones, rafraîchissement SIA) : non traités ici, À DÉCIDER.
+TESTS : aucune erreur JS ; capture à 5 NM des trois émojis (outils de test,
+out/icones74/emoji75_e75c.png). NON-RÉGRESSION bloquante : démarrage sans erreur JS,
+carte et échelle NM, FdS / GAAR, fenêtre terrain, retour sur l'avion (10 s), textes
+« NPF-Q400 » (comme avant), mise à jour v17.74 -> v17.75 puis hors ligne : OK, caches de
+la pérenne intacts.
+FICHIERS MODIFIÉS : src/010, src/330, src/350, donc script.js ; sia.js (g11) ;
+index.html, sw.js, manifest.json, style.css (version, révision SIA). Outils (hors
+dépôt) : generateur-sia/generer_sia.py (g11), modules/espaces_proteges.py, LISEZMOI.txt.
+VERSION : App v17.75 ; Service Worker `sw-v17-75_parcs_sans_blocage`.
+STATUT : À MESURER sur iPad.
 
 VERSION TEST v17.74 — ICÔNES AÉROMODÉLISME / VOLTIGE / PARACHUTAGE ; CONTOURS DES PARCS
 NATIONAUX ET RÉSERVES NATURELLES (ZONES PRN) D'APRÈS L'INPN

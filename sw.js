@@ -1,6 +1,6 @@
-const SW_VERSION = 'sw-v17-74_icones_parcs_reserves';
-const APP_VERSION = 'v17.74';
-const SIA_DATA_REVISION = 'sia-2026-10-29-v02-g10';
+const SW_VERSION = 'sw-v17-75_parcs_sans_blocage';
+const APP_VERSION = 'v17.75';
+const SIA_DATA_REVISION = 'sia-2026-10-29-v02-g11';
 const SIA_DATA_URL = './sia.js';
 /*
  * v17.37 — la TEST a ses propres noms de cache (préfixe « npf-q400-test- ») et
