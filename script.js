@@ -55895,7 +55895,7 @@ const SIA_EMBEDDED_FALLBACK_META = Object.freeze({
     excludedDpnIfr: 2380,
     geometryDirectAbd: 4451,
     geometryDerivedAdg: 597,
-    npfDatasetRevision: '2026-10-29-v02-g5',
+    npfDatasetRevision: '2026-10-29-v02-g6',
     vrpFrenchDescriptions: 960,
     ctrServiceRelations: true,
     frequencySupplementarySource: 'XML_SIA',
@@ -58289,15 +58289,21 @@ function buildSiaVrpAirportColorMap(dataset) {
     /*
      * v17.71 — couleurs FIGÉES : table écrite dans sia.js par generateur-sia (couleurs de la v17.70
      * conservées, seuls les nouveaux terrains en reçoivent une). Le calcul ci-dessous ne sert plus que
-     * de secours pour un terrain absent de la table.
+     * de secours pour un terrain absent de la table. Une couleur hors palette (version pastel, donnée quand
+     * aucune des 9 couleurs n'est libre à 55 NM) est appliquée telle quelle.
      */
     const fixedColors = SIA_EMBEDDED_RESOURCE && SIA_EMBEDDED_RESOURCE.vrpAirportColors;
+    const fixedOutsidePalette = new Map();
     if (fixedColors && typeof fixedColors === 'object') {
         Object.entries(fixedColors).forEach(([code, color]) => {
+            if (!airportSet.has(code) || assignedIndex.has(code)) return;
             const index = paletteIndexByColor.get(String(color).toLowerCase());
-            if (Number.isInteger(index) && airportSet.has(code) && !assignedIndex.has(code)) {
+            if (Number.isInteger(index)) {
                 assignedIndex.set(code, index);
                 usage[index] += 1;
+            } else if (/^#[0-9a-f]{6}$/i.test(String(color))) {
+                assignedIndex.set(code, -1);
+                fixedOutsidePalette.set(code, String(color).toLowerCase());
             }
         });
     }
@@ -58384,7 +58390,8 @@ function buildSiaVrpAirportColorMap(dataset) {
         const forced = SIA_VRP_AIRPORT_COLOR_OVERRIDES[code];
         const index = assignedIndex.get(code);
         const background = forced
-            || SIA_VRP_AIRPORT_COLOR_PALETTE[Number.isInteger(index) ? index : 0];
+            || fixedOutsidePalette.get(code)
+            || SIA_VRP_AIRPORT_COLOR_PALETTE[Number.isInteger(index) && index >= 0 ? index : 0];
         mapByAirport.set(code, {
             background,
             foreground: getSiaVrpReadableTextColor(background)
