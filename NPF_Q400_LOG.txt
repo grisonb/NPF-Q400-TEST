@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 11/10/2026
-Version de travail actuelle : TEST v17.75
+Version de travail actuelle : TEST v17.76
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,8 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.76 — icônes AER / VOL / PJE masquées à 2 NM ou moins d'un aérodrome ; centrage
+  des émojis d'après les pixels dessinés ;
 - v17.75 — blocages de 3 à 5 s sur iPad (liseré des grands parcs) supprimés : plus
   de liseré pour les PRN, rangée de points préparée par le convertisseur ; émojis
   centrés ;
@@ -518,7 +520,8 @@ NON IMPLÉMENTÉ / OUVERT :
   07/10/2026 : programme VPS bfg-sofia-notams 1.2.0 PRÊT, NON INSTALLÉ
   (~/vps-a-copier/). v17.60 à pousser APRÈS l'installation de la 1.2.0
   (elle annonce « environ 1 minute ») ;
-- v17.75 : À MESURER sur iPad (plus de blocage près des parcs, émojis centrés) ;
+- v17.76 : À MESURER sur iPad (centrage de 🕹️, icônes absentes sur les aérodromes) ;
+- v17.75 : POUSSÉE le 11/10/2026 (8c48dee) ; retour iPad : 🕹️ toujours décentré (corrigé en v17.76) ; À MESURER (plus de blocage près des parcs) ;
 - v17.74 : POUSSÉE le 11/10/2026 (83aa51a) ; blocages iPad 3 à 5 s (DIAG 2026-10-11 15-49, corrigés en v17.75) ; À MESURER sur iPad (icônes, toucher d'une icône, contours rouges et points des parcs et réserves) ;
 - v17.73 : POUSSÉE le 11/10/2026 (0e87dd4) ; À MESURER sur iPad (Nîmes-Garons rouge, plus de VRP ME-…, points regroupés et ligne « Terrains ») ;
 - v17.72 : POUSSÉE le 11/10/2026 (a13b3db) ; À MESURER sur iPad (couleurs des VRP par familles, Provence et Paris) ;
@@ -737,48 +740,48 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.75
+Version : TEST v17.76
 Date : 11/10/2026
-Base : v17.74 (83aa51a, poussée le 11/10/2026)
+Base : v17.75 (8c48dee, poussée le 11/10/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.75.txt
-2_Index_v17.75.txt
-3_Manifest_v17.75.txt
-4_Script_v17.75.txt
-5_SIA_v17.75.txt
-6_Style_v17.75.txt
-7_Sw_v17.75.txt
+1_Modifications_v17.76.txt
+2_Index_v17.76.txt
+3_Manifest_v17.76.txt
+4_Script_v17.76.txt
+5_SIA_v17.76.txt
+6_Style_v17.76.txt
+7_Sw_v17.76.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.75 (et texte « TEST v17.75 » de l'écran de
+- Index : APP_VERSION = v17.76 (et texte « TEST v17.76 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.75
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.75
-- Style : NPF_STYLE_BUILD_VERSION = v17.75
-- Service Worker : `sw-v17-75_parcs_sans_blocage` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-75_parcs_sans_blocage`, `npf-q400-test-app-data-v1`,
-  `npf-q400-test-sia-data-sia-2026-10-29-v02-g11`
-- SIA_DATA_REVISION (SW / Index sia.js?siav=) : sia-2026-10-29-v02-g11 (= NPF_SIA_DATA_REVISION
+- Manifest : start_url = ./index.html?appv=v17.76
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.76
+- Style : NPF_STYLE_BUILD_VERSION = v17.76
+- Service Worker : `sw-v17-76_icones_aerodromes` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-76_icones_aerodromes`, `npf-q400-test-app-data-v1`,
+  `npf-q400-test-sia-data-sia-2026-10-29-v02-g12`
+- SIA_DATA_REVISION (SW / Index sia.js?siav=) : sia-2026-10-29-v02-g12 (= NPF_SIA_DATA_REVISION
   de sia.js ; à changer à chaque nouveau sia.js)
-- sia.js v17.75 : RÉGÉNÉRÉ, révision g11 = g10 + directions intérieures des PRN (pi) ; g10 = g9 + noms et contours INPN des parcs et réserves (PRN) ; g9 = g8 + VRP superposés regroupés (« ra ») ; g8 = g7 sans les 7 VRP de LFME, LFTW rouge ; g7 = données identiques à g6, table des couleurs par familles ; g6 = métropole seule + 34 VRP rattachés d'après l'eAIP + couleurs figées (AIRAC 11/26 du 29/10/2026, paquet SIA v02) par
+- sia.js v17.76 : RÉGÉNÉRÉ, révision g12 = g11 + « ad » (AER / VOL / PJE sur aérodrome) ; g11 = g10 + directions intérieures des PRN (pi) ; g10 = g9 + noms et contours INPN des parcs et réserves (PRN) ; g9 = g8 + VRP superposés regroupés (« ra ») ; g8 = g7 sans les 7 VRP de LFME, LFTW rouge ; g7 = données identiques à g6, table des couleurs par familles ; g6 = métropole seule + 34 VRP rattachés d'après l'eAIP + couleurs figées (AIRAC 11/26 du 29/10/2026, paquet SIA v02) par
   ~/projects/outils_tests_NPF-Q400-TEST/generateur-sia/generer_sia.py (une commande
-  par cycle avec --eaip <ZIP eAIP du cycle>, voir son LISEZMOI.txt) ; npfDatasetRevision 2026-10-29-v02-g11.
+  par cycle avec --eaip <ZIP eAIP du cycle>, voir son LISEZMOI.txt) ; npfDatasetRevision 2026-10-29-v02-g12.
 - Images de lancement : icons/startup-ipad9-portrait.png (1620 × 2160) et
   icons/startup-ipad9-landscape.png (2160 × 1620).
 - Icônes des boutons (v17.48) : calculator-fms-icon, search-commune-icon,
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.75 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.76 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
 - `sia.js` : par rapport à v17.70, outre-mer retiré, « a » de 34 VRP renseigné, table vrpAirportColors ajoutée (2 pastels), révision g6 ; zones, terrains et points de métropole identiques ; moteur tuiles (src/100) modifié en v17.66 sur demande
   explicite (limite de zoom propre à chaque carte, zoom 11 OACI 1/500 000) ;
-- tests v17.75 : entrée v17.75 ;
+- tests v17.76 : entrée v17.76 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74 et v17.75 À MESURER ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75 et v17.76 À MESURER ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
   v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE ;
   v17.56 VALIDÉE en vol ; v17.57 VALIDÉE sur iPad.
 
@@ -2307,6 +2310,45 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.76 — ICÔNES MASQUÉES À MOINS DE 2 NM D'UN AÉRODROME ; CENTRAGE DES ÉMOJIS PAR PIXELS
+Date : 11/10/2026
+Base fonctionnelle : v17.75 (commit 8c48dee, poussée le 11/10/2026).
+Retour de Bastien (iPad, v17.75) : 🕹️ toujours décentré ; ne pas afficher AER, VOL et
+PJE sur les aérodromes ou à proximité directe.
+
+1. ICÔNES SUR LES AÉRODROMES
+- Convertisseur (modules/dother_aerodromes.py, générateur g12, LISEZMOI) : zone D-OTHER
+  AER / VOL / PJE dont le centre est à 2 NM ou moins d'un aérodrome (terrain SIA type
+  AD) -> « ad » = code OACI (seuil 2 NM demandé par Bastien ; un premier essai à 1 NM
+  a été remplacé). Cycle 11/26 : AER 225 sur 1 157, VOL 179 sur 287, PJE 116 sur 158
+  (520 zones ; la plupart à moins de 0,5 NM).
+- App (src/350) : pas d'icône pour une zone « ad » ; la zone reste dans les données
+  (« Sélection Zone », fenêtre).
+- sia.js g12 : seul « ad » change par rapport à g11.
+2. CENTRAGE DES ÉMOJIS
+- Capture iPad de Bastien (v17.75) : 🕹️ dessiné environ une demi-largeur à droite et
+  un peu bas de son disque, alors que Chrome le centre ; Safari place mal cet émoji
+  (caractère de variante U+FE0F).
+- v17.75 utilisait les tailles annoncées par la police (measureText), pas fiables
+  pour 🕹️ sur iPad. v17.76 : chaque émoji est dessiné une fois sur une petite image
+  invisible agrandie ×4 ; la boîte des pixels réellement dessinés donne le décalage
+  (mis en cache par police et émoji, 3 calculs au total). La mesure se fait dans le navigateur de l'iPad lui-même : un
+  décalage de Safari est vu et corrigé.
+3. Échelle d'affichage des icônes inchangée : 5 NM ou moins (une demande « 2 NM » a été
+  d'abord comprise comme l'échelle ; Bastien parlait de la distance au terrain).
+TESTS : région de Gap à 5 NM : 16 zones à l'écran, 5 sur aérodrome (LFNA, LFNC, LFNS,
+LFNJ) sans icône, aucune icône « ad » dessinée ; écart de centrage mesuré sur les
+pixels 0,5 px au plus (PC) ; capture (outils de test, out/icones74/emoji75_e76.png) ;
+aucune erreur JS. NON-RÉGRESSION bloquante (code identique, seuil 1 NM avant le passage
+à 2 NM, seule donnée changée ensuite) : démarrage sans erreur JS, carte et échelle NM,
+FdS / GAAR, fenêtre terrain, retour sur l'avion (10,1 s), textes « NPF-Q400 » (comme
+avant), mise à jour v17.75 -> v17.76 puis hors ligne : OK, caches de la pérenne intacts.
+FICHIERS MODIFIÉS : src/010, src/330, src/350, donc script.js ; sia.js (g12) ;
+index.html, sw.js, manifest.json, style.css (version, révision SIA). Outils (hors
+dépôt) : generateur-sia/generer_sia.py (g12), modules/dother_aerodromes.py, LISEZMOI.txt.
+VERSION : App v17.76 ; Service Worker `sw-v17-76_icones_aerodromes`.
+STATUT : À MESURER sur iPad (centrage de 🕹️ à confirmer sur l'iPad).
 
 VERSION TEST v17.75 — BLOCAGES PRÈS DES PARCS SUPPRIMÉS ; ÉMOJIS CENTRÉS
 Date : 11/10/2026

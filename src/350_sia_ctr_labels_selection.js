@@ -3960,6 +3960,9 @@ function getSiaDotherIconEntries() {
         if (!item || item.t !== 'D-OTHER' || !Array.isArray(item.b)) continue;
         const icon = SIA_DOTHER_ICONS[String(item.l || '').toUpperCase()];
         if (!icon) continue;
+        /* v17.76 — pas d'icône pour une zone à 2 NM ou moins d'un aérodrome (« ad », calculé par le
+         * convertisseur) : la zone reste sélectionnable par « Sélection Zone ». */
+        if (item.ad) continue;
         const lat = (Number(item.b[1]) + Number(item.b[3])) / 2;
         const lon = (Number(item.b[0]) + Number(item.b[2])) / 2;
         if (!Number.isFinite(lat) || !Number.isFinite(lon) || !view.contains([lat, lon])) continue;
@@ -3970,24 +3973,47 @@ function getSiaDotherIconEntries() {
 
 const siaDotherIconMetricsCache = new Map();
 
+/*
+ * v17.76 — centrage d'après les PIXELS réellement dessinés : l'émoji est dessiné une fois (par police et par
+ * émoji) sur une petite image invisible, agrandie ×4 ; la boîte des pixels non transparents donne le décalage à
+ * appliquer. Les tailles annoncées par la police (measureText) ne sont pas fiables pour 🕹️ sur iPad.
+ */
 function getSiaDotherIconMetrics(ctx, icon) {
     const key = `${ctx.font}|${icon}`;
     if (siaDotherIconMetricsCache.has(key)) return siaDotherIconMetricsCache.get(key);
     let metrics = { dx: 0, dy: 0 };
     try {
-        const saved = [ctx.textAlign, ctx.textBaseline];
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        const t = ctx.measureText(icon);
-        const left = Number(t.actualBoundingBoxLeft);
-        const right = Number(t.actualBoundingBoxRight);
-        const ascent = Number(t.actualBoundingBoxAscent);
-        const descent = Number(t.actualBoundingBoxDescent);
-        if ([left, right, ascent, descent].every(Number.isFinite) && right + left > 0 && ascent + descent > 0) {
-            /* Boîte dessinée : de x - left à x + right, de y - ascent à y + descent. */
-            metrics = { dx: (left - right) / 2, dy: (ascent - descent) / 2 };
+        const scale = 4;
+        const side = Math.ceil(SIA_DOTHER_ICON_SIZE_PX * 3 * scale);
+        const canvas = document.createElement('canvas');
+        canvas.width = side;
+        canvas.height = side;
+        const c2 = canvas.getContext('2d', { willReadFrequently: true });
+        c2.scale(scale, scale);
+        c2.font = ctx.font;
+        c2.textAlign = 'center';
+        c2.textBaseline = 'middle';
+        c2.fillStyle = '#000000';
+        const centre = side / scale / 2;
+        c2.fillText(icon, centre, centre);
+        const data = c2.getImageData(0, 0, side, side).data;
+        let minX = side, maxX = -1, minY = side, maxY = -1;
+        for (let y = 0; y < side; y += 1) {
+            for (let x = 0; x < side; x += 1) {
+                if (data[(y * side + x) * 4 + 3] > 40) {
+                    if (x < minX) minX = x;
+                    if (x > maxX) maxX = x;
+                    if (y < minY) minY = y;
+                    if (y > maxY) maxY = y;
+                }
+            }
         }
-        [ctx.textAlign, ctx.textBaseline] = saved;
+        if (maxX >= 0) {
+            metrics = {
+                dx: centre - (minX + maxX + 1) / 2 / scale,
+                dy: centre - (minY + maxY + 1) / 2 / scale
+            };
+        }
     } catch (_) {}
     siaDotherIconMetricsCache.set(key, metrics);
     return metrics;

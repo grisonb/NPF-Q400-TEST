@@ -1,6 +1,6 @@
-const SW_VERSION = 'sw-v17-75_parcs_sans_blocage';
-const APP_VERSION = 'v17.75';
-const SIA_DATA_REVISION = 'sia-2026-10-29-v02-g11';
+const SW_VERSION = 'sw-v17-76_icones_aerodromes';
+const APP_VERSION = 'v17.76';
+const SIA_DATA_REVISION = 'sia-2026-10-29-v02-g12';
 const SIA_DATA_URL = './sia.js';
 /*
  * v17.37 — la TEST a ses propres noms de cache (préfixe « npf-q400-test- ») et
