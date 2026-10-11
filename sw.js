@@ -1,6 +1,6 @@
-const SW_VERSION = 'sw-v17-73_vrp_courbessac';
+const SW_VERSION = 'sw-v17-73_vrp_regroupes';
 const APP_VERSION = 'v17.73';
-const SIA_DATA_REVISION = 'sia-2026-10-29-v02-g8';
+const SIA_DATA_REVISION = 'sia-2026-10-29-v02-g9';
 const SIA_DATA_URL = './sia.js';
 /*
  * v17.37 — la TEST a ses propres noms de cache (préfixe « npf-q400-test- ») et

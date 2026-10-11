@@ -1843,6 +1843,42 @@ function getSiaPointMarkerStyle(item) {
     return { radius: 4, color: '#4a148c', weight: 1.5, fillColor: '#e040fb', fillOpacity: 0.95 };
 }
 
+/*
+ * v17.73 — VRP superposés de terrains différents regroupés par generateur-sia en un seul point : « ra » donne
+ * les autres terrains de rattachement (LFxx de métropole). La fenêtre les affiche tous : « Terrains : A / B ».
+ */
+let siaTerrainNameMap = null;
+let siaTerrainNameDataset = null;
+
+function formatSiaTerrainDisplayName(name) {
+    const petits = new Set(['de', 'du', 'des', 'la', 'le', 'les', 'et', 'sur', 'sous', 'en', 'aux', 'au']);
+    return String(name || '').toLowerCase().split(/(\s+|-)/).map((part, index) => {
+        if (!part.trim() || part === '-') return part;
+        if (index > 0 && petits.has(part)) return part;
+        return part.replace(/^(d'|l')?(\p{L})/u, (m, prefix, letter) => (prefix || '') + letter.toUpperCase());
+    }).join('');
+}
+
+function getSiaTerrainDisplayName(code, dataset = getSiaVrpVisualDataset()) {
+    if (!siaTerrainNameMap || siaTerrainNameDataset !== dataset) {
+        siaTerrainNameMap = new Map();
+        siaTerrainNameDataset = dataset || null;
+        for (const terrain of (dataset && dataset.terrain) || []) {
+            const c = String(terrain?.c || '').trim().toUpperCase();
+            if (c && !siaTerrainNameMap.has(c)) siaTerrainNameMap.set(c, formatSiaTerrainDisplayName(terrain.n));
+        }
+    }
+    return siaTerrainNameMap.get(String(code || '').trim().toUpperCase()) || String(code || '');
+}
+
+function buildSiaVrpTerrainsLine(item) {
+    const others = Array.isArray(item?.ra) ? item.ra : [];
+    if (!others.length) return '';
+    const codes = [getSiaVrpAirportCode(item), ...others].filter(Boolean);
+    const names = Array.from(new Set(codes.map(code => getSiaTerrainDisplayName(code))));
+    return `<div class="sia-popup-terrains"><strong>Terrains :</strong> ${escapeHtml(names.join(' / '))}</div>`;
+}
+
 function buildSiaPointPopup(item) {
     /*
      * v15.49 — VRP : titre compact (ex. AS-LFMA), sans répétition des
@@ -1864,6 +1900,7 @@ function buildSiaPointPopup(item) {
         return `
             <div class="sia-popup sia-vrp-popup">
                 <div class="sia-popup-title">${escapeHtml(title || 'Point VFR')}</div>
+                ${buildSiaVrpTerrainsLine(item)}
                 ${remark ? `<div class="sia-popup-remark">${escapeSiaMultilineHtml(remark)}</div>` : ''}
                 ${waypointActions}
             </div>

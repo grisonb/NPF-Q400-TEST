@@ -179,7 +179,8 @@ IMPLÉMENTÉ / INTÉGRÉ :
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
 - v17.73 — VRP de NIMES COURBESSAC (LFME) supprimés (superposés à ceux de GARONS,
-  invisibles) ; NIMES GARONS (LFTW) en rouge ;
+  invisibles) ; NIMES GARONS (LFTW) en rouge ; VRP superposés de terrains différents
+  regroupés en un seul point, fenêtre « Terrains : A / B » (sia.js g9) ;
 - v17.72 — couleurs des terrains par FAMILLES : deux terrains limitrophes (VRP à
   moins de 10 NM) n'ont jamais la même famille ni des familles voisines ; brun et
   noir ajoutés ; 25 terrains changent (Provence : LFML magenta, LFMY noir) ;
@@ -511,7 +512,7 @@ NON IMPLÉMENTÉ / OUVERT :
   07/10/2026 : programme VPS bfg-sofia-notams 1.2.0 PRÊT, NON INSTALLÉ
   (~/vps-a-copier/). v17.60 à pousser APRÈS l'installation de la 1.2.0
   (elle annonce « environ 1 minute ») ;
-- v17.73 : À MESURER sur iPad (Nîmes-Garons rouge, plus de VRP ME-…) ;
+- v17.73 : À MESURER sur iPad (Nîmes-Garons rouge, plus de VRP ME-…, points regroupés et ligne « Terrains ») ;
 - v17.72 : POUSSÉE le 11/10/2026 (a13b3db) ; À MESURER sur iPad (couleurs des VRP par familles, Provence et Paris) ;
 - v17.71 : POUSSÉE le 11/10/2026 (2bfb9cf) ; À MESURER sur iPad (contour à 10 NM, terrains au zoom 7, couleur des
   VRP, fenêtre « Lignes HT » et clignotement en vol) ;
@@ -747,14 +748,14 @@ Références de version cohérentes :
 - Manifest : start_url = ./index.html?appv=v17.73
 - Script : NPF_SCRIPT_BUILD_VERSION = v17.73
 - Style : NPF_STYLE_BUILD_VERSION = v17.73
-- Service Worker : `sw-v17-73_vrp_courbessac` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-73_vrp_courbessac`, `npf-q400-test-app-data-v1`,
-  `npf-q400-test-sia-data-sia-2026-10-29-v02-g8`
-- SIA_DATA_REVISION (SW / Index sia.js?siav=) : sia-2026-10-29-v02-g8 (= NPF_SIA_DATA_REVISION
+- Service Worker : `sw-v17-73_vrp_regroupes` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-73_vrp_regroupes`, `npf-q400-test-app-data-v1`,
+  `npf-q400-test-sia-data-sia-2026-10-29-v02-g9`
+- SIA_DATA_REVISION (SW / Index sia.js?siav=) : sia-2026-10-29-v02-g9 (= NPF_SIA_DATA_REVISION
   de sia.js ; à changer à chaque nouveau sia.js)
-- sia.js v17.73 : RÉGÉNÉRÉ, révision g8 = g7 sans les 7 VRP de LFME, LFTW rouge ; g7 = données identiques à g6, table des couleurs par familles ; g6 = métropole seule + 34 VRP rattachés d'après l'eAIP + couleurs figées (AIRAC 11/26 du 29/10/2026, paquet SIA v02) par
+- sia.js v17.73 : RÉGÉNÉRÉ, révision g9 = g8 + VRP superposés regroupés (« ra ») ; g8 = g7 sans les 7 VRP de LFME, LFTW rouge ; g7 = données identiques à g6, table des couleurs par familles ; g6 = métropole seule + 34 VRP rattachés d'après l'eAIP + couleurs figées (AIRAC 11/26 du 29/10/2026, paquet SIA v02) par
   ~/projects/outils_tests_NPF-Q400-TEST/generateur-sia/generer_sia.py (une commande
-  par cycle avec --eaip <ZIP eAIP du cycle>, voir son LISEZMOI.txt) ; npfDatasetRevision 2026-10-29-v02-g8.
+  par cycle avec --eaip <ZIP eAIP du cycle>, voir son LISEZMOI.txt) ; npfDatasetRevision 2026-10-29-v02-g9.
 - Images de lancement : icons/startup-ipad9-portrait.png (1620 × 2160) et
   icons/startup-ipad9-landscape.png (2160 × 1620).
 - Icônes des boutons (v17.48) : calculator-fms-icon, search-commune-icon,
@@ -2299,7 +2300,8 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
 
-VERSION TEST v17.73 — VRP DE NIMES COURBESSAC SUPPRIMÉS ; NIMES GARONS EN ROUGE
+VERSION TEST v17.73 — VRP DE NIMES COURBESSAC SUPPRIMÉS ; NIMES GARONS EN ROUGE ;
+VRP SUPERPOSÉS REGROUPÉS EN UN SEUL POINT
 Date : 11/10/2026
 Base fonctionnelle : v17.72 (commit a13b3db, poussée le 11/10/2026).
 Remarque et décision de Bastien (11/10/2026) : Nîmes-Garons noir comme Salon alors
@@ -2319,9 +2321,38 @@ TESTS : LFTW rouge, plus aucun VRP de LFME, aucune autre couleur changée, aucun
 paire limitrophe trop proche, aucune erreur JS ; capture Nîmes à 5 NM (outils de
 test, out/couleurs73/) ; mise à jour v17.72 -> v17.73 puis hors ligne : OK, pérenne
 intacte.
-FICHIERS MODIFIÉS : sia.js (g8) ; src/010, src/330, donc script.js ; index.html,
-sw.js, manifest.json, style.css (version, révision SIA).
-VERSION : App v17.73 ; Service Worker `sw-v17-73_vrp_courbessac`.
+SUITE (même version, non poussée) — VRP SUPERPOSÉS REGROUPÉS (décision de Bastien,
+11/10/2026, après la liste des 90 paires de VRP superposés) : un seul point, une
+seule couleur, tous les terrains dans la fenêtre.
+- Convertisseur (modules/regroupement_vrp.py, générateur g9, LISEZMOI.txt) : VRP de
+  terrains différents à 0,1 NM ou moins -> on garde le point visible aujourd'hui (le
+  dernier du fichier, dessiné au-dessus) avec son nom, sa couleur, sa description ; il
+  reçoit « ra » = autres terrains LFxx de métropole (LNMC, LSGG… jamais cités) ; point
+  blanc superposé à un point coloré : retiré ; pour les couleurs, le point ne compte
+  que pour son terrain ; terrains à plus de 30 NM : non regroupés et signalés (aucun).
+  Correction de la liste précédente : LFTL = CANNES QUAI DU LARGE (2,7 NM de Cannes),
+  pas Toulon ; ses points TL-H sont donc regroupés normalement.
+- Cycle 11/26 : 69 points gardés (59 avec plusieurs terrains), 77 points cachés et
+  9 points blancs (MM-PA, MM-AN, 7 FF- d'Évreux) retirés ; liste :
+  generateur-sia/sortie/vrp_regroupes.txt. Couleurs : table inchangée.
+- Contrôle : les 867 points visibles sont exactement les mêmes qu'avant (nom,
+  position, terrain de couleur) ; zones, terrains et autres points identiques.
+- App (src/340) : fenêtre du VRP « Terrains : Salon de Provence / Salon Eyguieres »
+  (noms du SIA mis en forme, sans accents car le SIA n'en a pas) quand le point a
+  plusieurs terrains ; src/330 : méta et carte légère de secours à jour (g9).
+TESTS (suite) : EG -> « Salon de Provence / Salon Eyguieres » ; LL-PU et LL-VN ->
+« Lyon Saint Exupery / Grenoble Alpes Isere » ; MN-SA -> « Nice Cote d'Azur / Cannes
+Mandelieu / Cannes Quai du Large » ; MD-EW -> Cannes / Nice ; points de LFLI (Genève
+absorbé) et de Nice / Cannes (Monaco absorbé) sans ligne Terrains ; aucun terrain
+étranger cité (59 points vérifiés) ; capture de Salon à 5 NM (out/regroupe73/) ;
+aucune erreur JS. NON-RÉGRESSION (bloquante) : démarrage sans erreur JS ; carte et
+échelle en NM (map) ; FdS / GAAR et Trafic Moyens Nationaux (nr) ; fenêtre terrain
+(popup) ; retour sur l'avion (ret55, 10,1 s comme v17.70) ; textes « NPF-Q400 »
+(npf66, identique à v17.70) ; mise à jour v17.72 -> v17.73 puis hors ligne : OK,
+caches de la pérenne intacts.
+FICHIERS MODIFIÉS : sia.js (g9) ; src/010, src/330, src/340, donc script.js ;
+index.html, sw.js, manifest.json, style.css (version, révision SIA).
+VERSION : App v17.73 ; Service Worker `sw-v17-73_vrp_regroupes`.
 STATUT : À MESURER sur iPad.
 
 VERSION TEST v17.72 — COULEURS DES TERRAINS PAR FAMILLES ENTRE TERRAINS LIMITROPHES
