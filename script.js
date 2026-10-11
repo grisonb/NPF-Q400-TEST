@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.77';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.78';
 
 
 /*
@@ -3305,7 +3305,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.77 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.78 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -55895,7 +55895,7 @@ const SIA_EMBEDDED_FALLBACK_META = Object.freeze({
     excludedDpnIfr: 2380,
     geometryDirectAbd: 4451,
     geometryDerivedAdg: 597,
-    npfDatasetRevision: '2026-10-29-v02-g13',
+    npfDatasetRevision: '2026-10-29-v02-g14',
     vrpFrenchDescriptions: 867,
     ctrServiceRelations: true,
     frequencySupplementarySource: 'XML_SIA',
@@ -64084,7 +64084,10 @@ async function refreshSiaLayers(reason = 'manual') {
  * partie de moins de 40 px à l'écran (« pe », taille préparée par le convertisseur).
  */
 const SIA_DOTHER_ICON_RADIO = 'radiocommande';
-const SIA_DOTHER_ICONS = Object.freeze({ AER: SIA_DOTHER_ICON_RADIO, VOL: '\u{1F6E9}\u{FE0F}', PJE: '\u{1FA82}' });
+/* v17.78 — voltige : ➰ RETOURNÉ de haut en bas (boucle vers le haut ; 🛩️ est un jet chez Apple). */
+const SIA_DOTHER_ICONS = Object.freeze({ AER: SIA_DOTHER_ICON_RADIO, VOL: '\u{27B0}', PJE: '\u{1FA82}' });
+const SIA_DOTHER_ICONS_FLIPPED = Object.freeze({ VOL: true });
+const siaDotherEmojiSprites = new Map();
 const SIA_DOTHER_ICON_MAX_SCALE_NM = 5;
 const SIA_DOTHER_ICON_DISC_PX = Math.round(0.85 * getSiaVrpVisualSize(''));
 const SIA_DOTHER_ICON_SIZE_PX = 14;
@@ -64195,36 +64198,36 @@ function getSiaDotherIconEntries() {
     return entries;
 }
 
-const siaDotherIconMetricsCache = new Map();
-
 /*
- * v17.76 — centrage d'après les PIXELS réellement dessinés : l'émoji est dessiné une fois (par police et par
- * émoji) sur une petite image invisible, agrandie ×4 ; la boîte des pixels non transparents donne le décalage à
- * appliquer. Les tailles annoncées par la police (measureText) ne sont pas fiables pour 🕹️ sur iPad.
+ * v17.78 — chaque émoji devient une petite image préparée UNE fois (par émoji, densité d'écran et sens) : dessiné
+ * sur une image invisible, boîte des pixels réellement dessinés (lecture des pixels, fiable aussi sur iPad), puis
+ * recopié CENTRÉ (et retourné de haut en bas pour la voltige) dans une image carrée réutilisée à chaque dessin.
  */
-function getSiaDotherIconMetrics(ctx, icon) {
-    const key = `${ctx.font}|${icon}`;
-    if (siaDotherIconMetricsCache.has(key)) return siaDotherIconMetricsCache.get(key);
-    let metrics = { dx: 0, dy: 0 };
+function getSiaDotherEmojiSprite(icon, dpr, flipped) {
+    const key = `${icon}|${dpr}|${flipped ? 1 : 0}`;
+    if (siaDotherEmojiSprites.has(key)) return siaDotherEmojiSprites.get(key);
+    const B = SIA_DOTHER_ICON_SIZE_PX;
+    const k = Math.max(2, Math.ceil(dpr * 2));
+    const side = Math.ceil(B * k);
+    const sprite = document.createElement('canvas');
+    sprite.width = side;
+    sprite.height = side;
     try {
-        const scale = 4;
-        const side = Math.ceil(SIA_DOTHER_ICON_SIZE_PX * 3 * scale);
-        const canvas = document.createElement('canvas');
-        canvas.width = side;
-        canvas.height = side;
-        const c2 = canvas.getContext('2d', { willReadFrequently: true });
-        c2.scale(scale, scale);
-        c2.font = ctx.font;
-        c2.textAlign = 'center';
-        c2.textBaseline = 'middle';
-        c2.fillStyle = '#000000';
-        const centre = side / scale / 2;
-        c2.fillText(icon, centre, centre);
-        const data = c2.getImageData(0, 0, side, side).data;
-        let minX = side, maxX = -1, minY = side, maxY = -1;
-        for (let y = 0; y < side; y += 1) {
-            for (let x = 0; x < side; x += 1) {
-                if (data[(y * side + x) * 4 + 3] > 40) {
+        const tmpSide = side * 3;
+        const tmp = document.createElement('canvas');
+        tmp.width = tmpSide;
+        tmp.height = tmpSide;
+        const t = tmp.getContext('2d', { willReadFrequently: true });
+        t.font = `${B * k}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
+        t.textAlign = 'center';
+        t.textBaseline = 'middle';
+        t.fillStyle = '#000000';
+        t.fillText(icon, tmpSide / 2, tmpSide / 2);
+        const data = t.getImageData(0, 0, tmpSide, tmpSide).data;
+        let minX = tmpSide, maxX = -1, minY = tmpSide, maxY = -1;
+        for (let y = 0; y < tmpSide; y += 1) {
+            for (let x = 0; x < tmpSide; x += 1) {
+                if (data[(y * tmpSide + x) * 4 + 3] > 40) {
                     if (x < minX) minX = x;
                     if (x > maxX) maxX = x;
                     if (y < minY) minY = y;
@@ -64233,14 +64236,17 @@ function getSiaDotherIconMetrics(ctx, icon) {
             }
         }
         if (maxX >= 0) {
-            metrics = {
-                dx: centre - (minX + maxX + 1) / 2 / scale,
-                dy: centre - (minY + maxY + 1) / 2 / scale
-            };
+            const w = maxX - minX + 1;
+            const h = maxY - minY + 1;
+            const f = Math.min(1, side / w, side / h);
+            const c = sprite.getContext('2d');
+            c.translate(side / 2, side / 2);
+            if (flipped) c.scale(1, -1);
+            c.drawImage(tmp, minX, minY, w, h, -w * f / 2, -h * f / 2, w * f, h * f);
         }
     } catch (_) {}
-    siaDotherIconMetricsCache.set(key, metrics);
-    return metrics;
+    siaDotherEmojiSprites.set(key, sprite);
+    return sprite;
 }
 
 function hideSiaDotherIcons() {
@@ -64298,14 +64304,11 @@ function drawSiaDotherIcons() {
         ctx.strokeStyle = 'rgba(0,0,0,0.35)';
         ctx.stroke();
         ctx.fillStyle = '#000000';
-        if (entry.icon === SIA_DOTHER_ICON_RADIO) {
-            const B = SIA_DOTHER_ICON_SIZE_PX;
-            ctx.drawImage(getSiaDotherRadioSprite(dpr), p.x - B / 2, p.y - B / 2, B, B);
-        } else {
-            /* v17.75 / v17.76 — centrage d'après les pixels réellement dessinés. */
-            const m = getSiaDotherIconMetrics(ctx, entry.icon);
-            ctx.fillText(entry.icon, p.x + m.dx, p.y + m.dy);
-        }
+        const B = SIA_DOTHER_ICON_SIZE_PX;
+        const sprite = entry.icon === SIA_DOTHER_ICON_RADIO
+            ? getSiaDotherRadioSprite(dpr)
+            : getSiaDotherEmojiSprite(entry.icon, dpr, !!SIA_DOTHER_ICONS_FLIPPED[String(entry.item.l || '').toUpperCase()]);
+        ctx.drawImage(sprite, p.x - B / 2, p.y - B / 2, B, B);
         const target = L.circleMarker(entry.latlng, {
             pane: 'siaIconTouchPane',
             renderer: siaDotherIconTouchRenderer || undefined,
@@ -64429,7 +64432,13 @@ function runSiaPrnDotsQueue() {
         const layers = [];
         const directionsParAnneau = Array.isArray(feature?.properties?.siaItem?.pi) ? feature.properties.siaItem.pi : [];
         const etendues = Array.isArray(feature?.properties?.siaItem?.pe) ? feature.properties.siaItem.pe : [];
-        getSiaCtrOuterRings(feature.geometry).forEach((ring, index) => {
+        /* v17.78 — rangée posée sur le contour LISSÉ préparé par le convertisseur (« pd ») ; partie de moins de 3 km :
+         * « pd » vide, jamais de points. Le contour rouge exact n'est pas touché. */
+        const anneauxPoints = Array.isArray(feature?.properties?.siaItem?.pd)
+            ? feature.properties.siaItem.pd
+            : getSiaCtrOuterRings(feature.geometry);
+        anneauxPoints.forEach((ring, index) => {
+            if (!Array.isArray(ring) || ring.length < 4) return;
             /* Partie trop petite à l'écran (île, îlot) : contour seul, jamais de points. */
             const lat = Number(ring?.[0]?.[1]);
             const metresParPixel = 156543.03392 * Math.cos((Number.isFinite(lat) ? lat : 45) * Math.PI / 180) / Math.pow(2, map.getZoom());

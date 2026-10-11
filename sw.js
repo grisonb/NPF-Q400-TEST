@@ -1,6 +1,6 @@
-const SW_VERSION = 'sw-v17-77_icones_sous_vrp';
-const APP_VERSION = 'v17.77';
-const SIA_DATA_REVISION = 'sia-2026-10-29-v02-g13';
+const SW_VERSION = 'sw-v17-78_voltige_parcs_lisses';
+const APP_VERSION = 'v17.78';
+const SIA_DATA_REVISION = 'sia-2026-10-29-v02-g14';
 const SIA_DATA_URL = './sia.js';
 /*
  * v17.37 — la TEST a ses propres noms de cache (préfixe « npf-q400-test- ») et

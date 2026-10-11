@@ -24,7 +24,7 @@ const SIA_EMBEDDED_FALLBACK_META = Object.freeze({
     excludedDpnIfr: 2380,
     geometryDirectAbd: 4451,
     geometryDerivedAdg: 597,
-    npfDatasetRevision: '2026-10-29-v02-g13',
+    npfDatasetRevision: '2026-10-29-v02-g14',
     vrpFrenchDescriptions: 867,
     ctrServiceRelations: true,
     frequencySupplementarySource: 'XML_SIA',
