@@ -1,4 +1,4 @@
-/* NPF_STYLE_BUILD_VERSION: v17.70 */
+/* NPF_STYLE_BUILD_VERSION: v17.71 */
 /* v14.83 — nettoyage des références techniques et limitation des cartouches routiers. */
 /* v14.81 — recherche phonétique nationale élargie aux fragments sur deux lettres. */
 /* v14.80 — Brive conservé uniquement sous LFSL. */
@@ -16822,6 +16822,67 @@ body.simulation-mode-active #ops-frequencies-pdf-button {
     height: 28px;
     flex: 0 0 auto;
     accent-color: #198754;
+}
+
+/* v17.71 — fenêtre « Lignes HT » (appui long sur le bouton HT) : clignotement. */
+.ht-blink-options-sub {
+    padding-left: 22px;
+}
+
+.ht-blink-around-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px 8px;
+}
+
+.ht-blink-radius-group {
+    display: flex;
+    gap: 6px;
+}
+
+.ht-blink-radius-button {
+    min-width: 54px;
+    height: 36px;
+    padding: 0 8px;
+    border: 1px solid #cbd5e1;
+    border-radius: 9px;
+    background: #eef2f7;
+    color: #334155;
+    font-size: 14px;
+    font-weight: 900;
+    cursor: pointer;
+}
+
+.ht-blink-radius-button.active {
+    border-color: #198754;
+    background: #198754;
+    color: #ffffff;
+}
+
+.ht-blink-radius-button:disabled,
+.global-link-options-check-row.ht-blink-disabled {
+    opacity: .38;
+    cursor: default;
+}
+
+.ht-blink-options-footer {
+    display: flex;
+    justify-content: center;
+    margin-top: 10px;
+}
+
+.ht-blink-options-close {
+    min-width: 120px;
+    height: 40px;
+    border: 0;
+    border-radius: 10px;
+    background: #eef2f7;
+    color: #0f172a;
+    font-size: 15px;
+    font-weight: 900;
+    cursor: pointer;
 }
 
 /* ==========================================================================

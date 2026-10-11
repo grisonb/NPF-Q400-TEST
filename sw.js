@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v17-70_sia_airac_1126_selection';
-const APP_VERSION = 'v17.70';
+const SW_VERSION = 'sw-v17-71_ht_clignotement_vrp_contour';
+const APP_VERSION = 'v17.71';
 const SIA_DATA_REVISION = 'sia-2026-10-29-v02-g3';
 const SIA_DATA_URL = './sia.js';
 /*

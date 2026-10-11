@@ -117,9 +117,8 @@ function setupEventListeners() {
 
     if (highVoltageLinesButton) {
         refreshHighVoltageLinesButtonState();
-        highVoltageLinesButton.addEventListener('click', () => {
-            toggleHighVoltageLinesLayer();
-        });
+        /* v17.71 — appui court inchangé ; appui long : fenêtre « Lignes HT » (clignotement). */
+        installHighVoltageLinesButtonInteractions(highVoltageLinesButton);
     }
 
     if (roadOverlayButton) {
@@ -2330,6 +2329,478 @@ async function toggleHighVoltageLinesLayer(forceState = null, options = {}) {
     await refreshVisibleHighVoltageLines(options.source || 'toggle');
     refreshHighVoltageLinesButtonState();
     recordNpfStartupDiagnosticOverlaySnapshot(`lignes-ht ON · ${options.source || 'toggle'}`);
+}
+
+/*
+ * v17.71 — clignotement des lignes HT (appui long sur le bouton HT).
+ *
+ * « Toutes les HT » : seule l'opacité CSS du canvas HT varie (aucun redessin).
+ * « Autour de l'avion / du feu » : les seules portions de lignes HT situées dans le cercle sont
+ * recopiées sur une couche à part (canvas dédié dans le pane HT, donc masqué avec les HT pendant
+ * les gestes) dont seule l'opacité CSS varie. Ces portions sont recalculées au plus une fois par
+ * seconde, et seulement si l'avion ou le feu a bougé, si le réglage, le zoom ou le rendu HT a changé.
+ * Clignotement coupé ou HT non affichées : couche vide et canvas HT à son opacité normale.
+ */
+const NPF_HT_BLINK_SETTINGS_KEY = 'npfHtBlinkSettings';
+const NPF_HT_BLINK_RADII_NM = [2, 5, 10];
+const NPF_HT_BLINK_HALF_PERIOD_MS = 500;
+const NPF_HT_BLINK_MIN_MOVE_NM = 0.05;
+const NPF_HT_BLINK_DEFAULTS = Object.freeze({
+    enabled: false,
+    all: false,
+    aircraft: true,
+    aircraftNm: 5,
+    fire: false,
+    fireNm: 5
+});
+
+let npfHtBlinkSettings = readNpfHtBlinkSettings();
+let npfHtBlinkTimer = null;
+let npfHtBlinkPhaseOn = false;
+let npfHtBlinkTick = 0;
+let npfHtBlinkRenderer = null;
+let npfHtBlinkLayer = null;
+let npfHtBlinkComputedKey = '';
+let npfHtBlinkComputedCenters = [];
+let npfHtBlinkHtCanvasDimmed = false;
+let npfHtBlinkStats = { recomputes: 0, segments: 0, lastMs: 0 };
+/* Index des lignes HT par cases de 0,2° (préparé une seule fois) : évite de parcourir les 13 000 lignes. */
+const NPF_HT_BLINK_GRID_DEG = 0.2;
+let npfHtBlinkGrid = null;
+let npfHtBlinkGridSource = null;
+
+function readNpfHtBlinkSettings() {
+    const settings = { ...NPF_HT_BLINK_DEFAULTS };
+    try {
+        const stored = JSON.parse(localStorage.getItem(NPF_HT_BLINK_SETTINGS_KEY) || 'null');
+        if (stored && typeof stored === 'object') {
+            settings.enabled = stored.enabled === true;
+            settings.all = stored.all === true;
+            settings.aircraft = stored.aircraft !== false;
+            settings.fire = stored.fire === true;
+            if (NPF_HT_BLINK_RADII_NM.includes(Number(stored.aircraftNm))) settings.aircraftNm = Number(stored.aircraftNm);
+            if (NPF_HT_BLINK_RADII_NM.includes(Number(stored.fireNm))) settings.fireNm = Number(stored.fireNm);
+        }
+    } catch (_) {}
+    return settings;
+}
+
+function saveNpfHtBlinkSettings() {
+    try { localStorage.setItem(NPF_HT_BLINK_SETTINGS_KEY, JSON.stringify(npfHtBlinkSettings)); } catch (_) {}
+}
+
+function isNpfHtBlinkHtDisplayed() {
+    try {
+        return !!(
+            map
+            && showHighVoltageLinesLayer
+            && hasLoadedHighVoltageLines
+            && highVoltageLinesLayer
+            && map.hasLayer(highVoltageLinesLayer)
+            && highVoltageLinesRenderedGeoJsonLayer
+            && isHighVoltageLayerEffectiveAtCurrentScale()
+        );
+    } catch (_) {
+        return false;
+    }
+}
+
+function getNpfHtBlinkCenters() {
+    const centers = [];
+    if (!npfHtBlinkSettings.enabled || npfHtBlinkSettings.all) return centers;
+    if (npfHtBlinkSettings.aircraft) {
+        const aircraft = typeof getNpfAircraftLatLngForDeclination === 'function' ? getNpfAircraftLatLngForDeclination() : null;
+        if (aircraft) centers.push({ lat: aircraft.lat, lon: aircraft.lon, nm: npfHtBlinkSettings.aircraftNm });
+    }
+    if (npfHtBlinkSettings.fire) {
+        /* Sans feu sélectionné : rien ne clignote autour du feu, sans message. */
+        const fire = typeof getFireTrafficPoint === 'function' ? getFireTrafficPoint() : null;
+        if (fire) centers.push({ lat: fire.lat, lon: fire.lon, nm: npfHtBlinkSettings.fireNm });
+    }
+    return centers;
+}
+
+function ensureNpfHtBlinkLayer() {
+    if (!map || !L.canvas) return null;
+    if (!npfHtBlinkRenderer) {
+        npfHtBlinkRenderer = L.canvas({ padding: 0.10, pane: 'highVoltageLinesPane' });
+    }
+    if (!npfHtBlinkLayer) npfHtBlinkLayer = L.layerGroup();
+    if (!map.hasLayer(npfHtBlinkLayer)) npfHtBlinkLayer.addTo(map);
+    return npfHtBlinkLayer;
+}
+
+function clearNpfHtBlinkLayer() {
+    npfHtBlinkComputedKey = '';
+    npfHtBlinkComputedCenters = [];
+    try { if (npfHtBlinkLayer) npfHtBlinkLayer.clearLayers(); } catch (_) {}
+    try { if (npfHtBlinkLayer && map?.hasLayer(npfHtBlinkLayer)) map.removeLayer(npfHtBlinkLayer); } catch (_) {}
+    try { if (npfHtBlinkRenderer && map?.hasLayer(npfHtBlinkRenderer)) map.removeLayer(npfHtBlinkRenderer); } catch (_) {}
+}
+
+function setNpfHtBlinkHtCanvasDimmed(dimmed) {
+    if (npfHtBlinkHtCanvasDimmed === !!dimmed) return;
+    npfHtBlinkHtCanvasDimmed = !!dimmed;
+    try {
+        const canvas = highVoltageLinesRenderer?._container;
+        if (canvas) canvas.style.opacity = dimmed ? '0.2' : '';
+    } catch (_) {}
+}
+
+function setNpfHtBlinkLayerVisible(visible) {
+    try {
+        const canvas = npfHtBlinkRenderer?._container;
+        if (canvas) canvas.style.opacity = visible ? '1' : '0';
+    } catch (_) {}
+}
+
+/* Portions d'une ligne [lon, lat]… comprises dans le cercle (calcul plan local, en NM). */
+function appendNpfHtBlinkCirclePortions(line, center, out) {
+    const cosLat = Math.cos(center.lat * Math.PI / 180);
+    const r2 = center.nm * center.nm;
+    const toXY = p => [(Number(p[0]) - center.lon) * 60 * cosLat, (Number(p[1]) - center.lat) * 60];
+    const toLatLng = (x, y) => [center.lat + y / 60, center.lon + x / (60 * cosLat)];
+    let current = null;
+    let prev = toXY(line[0]);
+    for (let i = 1; i < line.length; i += 1) {
+        const next = toXY(line[i]);
+        const dx = next[0] - prev[0];
+        const dy = next[1] - prev[1];
+        const a = dx * dx + dy * dy;
+        const b = 2 * (prev[0] * dx + prev[1] * dy);
+        const c = prev[0] * prev[0] + prev[1] * prev[1] - r2;
+        let t0 = 1;
+        let t1 = 0;
+        if (a === 0) {
+            if (c <= 0) { t0 = 0; t1 = 1; }
+        } else {
+            const disc = b * b - 4 * a * c;
+            if (disc > 0) {
+                const sq = Math.sqrt(disc);
+                t0 = Math.max(0, (-b - sq) / (2 * a));
+                t1 = Math.min(1, (-b + sq) / (2 * a));
+            }
+        }
+        if (t0 < t1) {
+            const start = toLatLng(prev[0] + dx * t0, prev[1] + dy * t0);
+            const end = toLatLng(prev[0] + dx * t1, prev[1] + dy * t1);
+            if (current && t0 === 0) {
+                current.push(end);
+            } else {
+                if (current && current.length >= 2) out.push(current);
+                current = [start, end];
+            }
+            if (t1 < 1) {
+                out.push(current);
+                current = null;
+            }
+        } else if (current) {
+            if (current.length >= 2) out.push(current);
+            current = null;
+        }
+        prev = next;
+    }
+    if (current && current.length >= 2) out.push(current);
+}
+
+function getNpfHtBlinkGrid() {
+    if (npfHtBlinkGrid && npfHtBlinkGridSource === highVoltageLinesIndexedFeatures) return npfHtBlinkGrid;
+    const grid = new Map();
+    const cell = NPF_HT_BLINK_GRID_DEG;
+    for (const feature of highVoltageLinesIndexedFeatures) {
+        const bbox = feature?.__npfBbox;
+        if (!bbox) continue;
+        for (let cx = Math.floor(bbox[0] / cell); cx <= Math.floor(bbox[2] / cell); cx += 1) {
+            for (let cy = Math.floor(bbox[1] / cell); cy <= Math.floor(bbox[3] / cell); cy += 1) {
+                const key = cx + ':' + cy;
+                const list = grid.get(key);
+                if (list) list.push(feature); else grid.set(key, [feature]);
+            }
+        }
+    }
+    npfHtBlinkGrid = grid;
+    npfHtBlinkGridSource = highVoltageLinesIndexedFeatures;
+    return grid;
+}
+
+function recomputeNpfHtBlinkPortions(centers, zoom) {
+    const startedAt = performance.now();
+    const layer = ensureNpfHtBlinkLayer();
+    if (!layer) return;
+    const grid = getNpfHtBlinkGrid();
+    const cell = NPF_HT_BLINK_GRID_DEG;
+    /* Portions regroupées par tension : même style que le rendu HT (src/110, rendu groupé). */
+    const byBand = new Map();
+    let segments = 0;
+    for (const center of centers) {
+        const dLat = center.nm / 60;
+        const dLon = center.nm / (60 * Math.max(0.05, Math.cos(center.lat * Math.PI / 180)));
+        const minLon = center.lon - dLon;
+        const maxLon = center.lon + dLon;
+        const minLat = center.lat - dLat;
+        const maxLat = center.lat + dLat;
+        const seen = new Set();
+        for (let cx = Math.floor(minLon / cell); cx <= Math.floor(maxLon / cell); cx += 1) {
+            for (let cy = Math.floor(minLat / cell); cy <= Math.floor(maxLat / cell); cy += 1) {
+                for (const feature of grid.get(cx + ':' + cy) || []) {
+                    if (seen.has(feature)) continue;
+                    seen.add(feature);
+                    const bbox = feature.__npfBbox;
+                    if (bbox[0] > maxLon || bbox[2] < minLon || bbox[1] > maxLat || bbox[3] < minLat) continue;
+                    if (!shouldRenderHighVoltageFeatureAtZoom(feature, zoom)) continue;
+                    const featureLines = [];
+                    appendHighVoltageGeometryLines(feature.geometry, featureLines);
+                    const band = getHighVoltageAggregationBand(feature);
+                    let portions = byBand.get(band);
+                    if (!portions) byBand.set(band, portions = []);
+                    const before = portions.length;
+                    for (const line of featureLines) appendNpfHtBlinkCirclePortions(line, center, portions);
+                    segments += portions.length - before;
+                }
+            }
+        }
+    }
+    layer.clearLayers();
+    const common = { pane: 'highVoltageLinesPane', renderer: npfHtBlinkRenderer || undefined, interactive: false };
+    const order = ['400', '225', '90', '63', 'autres'].filter(band => byBand.get(band)?.length);
+    for (const band of order) {
+        const style = getHighVoltageLineStyle({ properties: { tension: band } });
+        L.polyline(byBand.get(band), { ...common, color: '#ffe600', weight: Number(style.weight || 2) + 6, opacity: 0.95, dashArray: null, lineCap: 'round', lineJoin: 'round' }).addTo(layer);
+    }
+    for (const band of order) {
+        const style = getHighVoltageLineStyle({ properties: { tension: band } });
+        L.polyline(byBand.get(band), { ...style, ...common }).addTo(layer);
+    }
+    npfHtBlinkStats = { recomputes: npfHtBlinkStats.recomputes + 1, segments, lastMs: Math.round(performance.now() - startedAt) };
+}
+
+function npfHtBlinkCentersMoved(centers) {
+    if (centers.length !== npfHtBlinkComputedCenters.length) return true;
+    for (let i = 0; i < centers.length; i += 1) {
+        const a = centers[i];
+        const b = npfHtBlinkComputedCenters[i];
+        if (a.nm !== b.nm) return true;
+        const dy = (a.lat - b.lat) * 60;
+        const dx = (a.lon - b.lon) * 60 * Math.cos(a.lat * Math.PI / 180);
+        if (Math.hypot(dx, dy) > NPF_HT_BLINK_MIN_MOVE_NM) return true;
+    }
+    return false;
+}
+
+/* Au plus une fois par seconde (une demi-période sur deux). */
+function updateNpfHtBlinkPortions() {
+    const settings = npfHtBlinkSettings;
+    const displayed = settings.enabled && isNpfHtBlinkHtDisplayed();
+    setNpfHtBlinkHtCanvasDimmed(false);
+    if (!displayed || settings.all) {
+        if (npfHtBlinkComputedKey) clearNpfHtBlinkLayer();
+        return;
+    }
+    const centers = getNpfHtBlinkCenters();
+    if (!centers.length) {
+        if (npfHtBlinkComputedKey) clearNpfHtBlinkLayer();
+        return;
+    }
+    const zoom = Number(map.getZoom?.());
+    /* Portions calculées sur toutes les lignes HT (pas seulement celles de la vue) : un nouveau rendu HT
+     * après un déplacement ne demande pas de nouveau calcul. */
+    const key = [zoom, settings.aircraft, settings.aircraftNm, settings.fire, settings.fireNm].join('|');
+    if (key === npfHtBlinkComputedKey && !npfHtBlinkCentersMoved(centers)) return;
+    npfHtBlinkComputedKey = key;
+    npfHtBlinkComputedCenters = centers.map(center => ({ ...center }));
+    recomputeNpfHtBlinkPortions(centers, zoom);
+}
+
+function runNpfHtBlinkTick() {
+    npfHtBlinkTick += 1;
+    if (npfHtBlinkTick % 2 === 1) {
+        try { updateNpfHtBlinkPortions(); } catch (error) { console.warn('Clignotement HT :', error); }
+    }
+    npfHtBlinkPhaseOn = !npfHtBlinkPhaseOn;
+    const settings = npfHtBlinkSettings;
+    if (settings.all) {
+        setNpfHtBlinkHtCanvasDimmed(isNpfHtBlinkHtDisplayed() && !npfHtBlinkPhaseOn);
+    } else if (npfHtBlinkComputedKey) {
+        setNpfHtBlinkLayerVisible(npfHtBlinkPhaseOn);
+    }
+}
+
+function applyNpfHtBlinkSettings() {
+    saveNpfHtBlinkSettings();
+    clearInterval(npfHtBlinkTimer);
+    npfHtBlinkTimer = null;
+    npfHtBlinkTick = 0;
+    npfHtBlinkPhaseOn = false;
+    clearNpfHtBlinkLayer();
+    setNpfHtBlinkHtCanvasDimmed(false);
+    if (!npfHtBlinkSettings.enabled) return;
+    runNpfHtBlinkTick();
+    npfHtBlinkTimer = setInterval(runNpfHtBlinkTick, NPF_HT_BLINK_HALF_PERIOD_MS);
+}
+
+function ensureNpfHtBlinkOptionsMenu() {
+    let modal = document.getElementById('ht-blink-options-modal');
+    if (modal) return modal;
+
+    const radiusButtons = name => NPF_HT_BLINK_RADII_NM
+        .map(nm => `<button type="button" class="ht-blink-radius-button" data-ht-blink-radius="${name}" data-nm="${nm}">${nm} NM</button>`)
+        .join('');
+    modal = document.createElement('div');
+    modal.id = 'ht-blink-options-modal';
+    modal.className = 'global-link-options-modal';
+    modal.setAttribute('aria-hidden', 'true');
+    modal.innerHTML = `
+        <div class="global-link-options-card" role="dialog" aria-modal="true" aria-labelledby="ht-blink-options-title">
+            <div class="global-link-options-header">
+                <strong id="ht-blink-options-title">Lignes HT</strong>
+            </div>
+            <label class="global-link-options-check-row">
+                <input id="ht-blink-enabled-input" type="checkbox">
+                <span>Clignotement</span>
+            </label>
+            <div class="ht-blink-options-sub">
+                <label class="global-link-options-check-row">
+                    <input id="ht-blink-all-input" type="checkbox">
+                    <span>Toutes les HT</span>
+                </label>
+                <div class="ht-blink-around-row">
+                    <label class="global-link-options-check-row">
+                        <input id="ht-blink-aircraft-input" type="checkbox">
+                        <span>Autour de l'avion</span>
+                    </label>
+                    <div class="ht-blink-radius-group">${radiusButtons('aircraft')}</div>
+                </div>
+                <div class="ht-blink-around-row">
+                    <label class="global-link-options-check-row">
+                        <input id="ht-blink-fire-input" type="checkbox">
+                        <span>Autour du feu</span>
+                    </label>
+                    <div class="ht-blink-radius-group">${radiusButtons('fire')}</div>
+                </div>
+            </div>
+            <div class="ht-blink-options-footer">
+                <button type="button" class="ht-blink-options-close">Fermer</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+
+    const close = () => {
+        modal.style.display = 'none';
+        modal.setAttribute('aria-hidden', 'true');
+    };
+    modal.querySelector('.ht-blink-options-close')?.addEventListener('click', close);
+    modal.addEventListener('click', event => {
+        if (event.target === modal) close();
+    });
+    document.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && modal.style.display === 'flex') close();
+    });
+
+    const bindCheck = (id, field) => {
+        modal.querySelector(id)?.addEventListener('change', event => {
+            npfHtBlinkSettings[field] = !!event.target.checked;
+            applyNpfHtBlinkSettings();
+            refreshNpfHtBlinkOptionsMenu();
+        });
+    };
+    bindCheck('#ht-blink-enabled-input', 'enabled');
+    bindCheck('#ht-blink-all-input', 'all');
+    bindCheck('#ht-blink-aircraft-input', 'aircraft');
+    bindCheck('#ht-blink-fire-input', 'fire');
+    modal.querySelectorAll('.ht-blink-radius-button').forEach(button => {
+        button.addEventListener('click', () => {
+            if (button.disabled) return;
+            const field = button.dataset.htBlinkRadius === 'fire' ? 'fireNm' : 'aircraftNm';
+            npfHtBlinkSettings[field] = Number(button.dataset.nm);
+            applyNpfHtBlinkSettings();
+            refreshNpfHtBlinkOptionsMenu();
+        });
+    });
+
+    return modal;
+}
+
+function refreshNpfHtBlinkOptionsMenu() {
+    const modal = document.getElementById('ht-blink-options-modal');
+    if (!modal) return;
+    const settings = npfHtBlinkSettings;
+    const set = (id, checked, disabled) => {
+        const input = modal.querySelector(id);
+        if (!input) return;
+        input.checked = !!checked;
+        input.disabled = !!disabled;
+        input.closest('label')?.classList.toggle('ht-blink-disabled', !!disabled);
+    };
+    const subDisabled = !settings.enabled;
+    const aroundDisabled = subDisabled || settings.all;
+    set('#ht-blink-enabled-input', settings.enabled, false);
+    set('#ht-blink-all-input', settings.all, subDisabled);
+    set('#ht-blink-aircraft-input', settings.aircraft, aroundDisabled);
+    set('#ht-blink-fire-input', settings.fire, aroundDisabled);
+    modal.querySelectorAll('.ht-blink-radius-button').forEach(button => {
+        const isFire = button.dataset.htBlinkRadius === 'fire';
+        const nm = Number(button.dataset.nm);
+        button.classList.toggle('active', nm === (isFire ? settings.fireNm : settings.aircraftNm));
+        button.disabled = aroundDisabled;
+    });
+}
+
+function openNpfHtBlinkOptionsMenu() {
+    const modal = ensureNpfHtBlinkOptionsMenu();
+    refreshNpfHtBlinkOptionsMenu();
+    modal.style.display = 'flex';
+    modal.setAttribute('aria-hidden', 'false');
+}
+
+/* Appui court : HT affichées / masquées (inchangé) ; appui long : fenêtre « Lignes HT ». */
+function installHighVoltageLinesButtonInteractions(button) {
+    if (!button || button.dataset.htBlinkBound === '1') return;
+    button.dataset.htBlinkBound = '1';
+
+    protectNpfLongPressControlFromIosSelection(button);
+
+    let longPressTimer = null;
+    let longPressTriggered = false;
+    const clearLongPress = () => {
+        if (longPressTimer) {
+            clearTimeout(longPressTimer);
+            longPressTimer = null;
+        }
+    };
+    const startLongPress = event => {
+        if (event && event.button !== undefined && event.button !== 0) return;
+        if (event && typeof event.preventDefault === 'function') event.preventDefault();
+        clearLongPress();
+        longPressTriggered = false;
+        longPressTimer = setTimeout(() => {
+            longPressTriggered = true;
+            openNpfHtBlinkOptionsMenu();
+        }, 650);
+    };
+
+    button.addEventListener('pointerdown', startLongPress, { passive: false });
+    button.addEventListener('pointerup', clearLongPress);
+    button.addEventListener('pointerleave', clearLongPress);
+    button.addEventListener('pointercancel', clearLongPress);
+    button.addEventListener('contextmenu', event => {
+        event.preventDefault();
+        clearLongPress();
+        longPressTriggered = true;
+        openNpfHtBlinkOptionsMenu();
+    });
+    button.addEventListener('click', event => {
+        if (longPressTriggered) {
+            event.preventDefault();
+            event.stopPropagation();
+            longPressTriggered = false;
+            return;
+        }
+        toggleHighVoltageLinesLayer();
+    });
+
+    /* Réglage gardé d'un lancement à l'autre. */
+    applyNpfHtBlinkSettings();
 }
 
 

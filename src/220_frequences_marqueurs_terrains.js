@@ -974,12 +974,20 @@ function runNpfViewWindowStep(manager) {
         const addsInView = [];
         const removals = [];
         const addsInMargin = [];
+        /* v17.71 — certains marqueurs ne s'affichent qu'à partir d'un zoom (minZoom). */
+        let zoom = null;
+        try { zoom = Number(map.getZoom()); } catch (_) {}
         for (const entry of manager.entries) {
             if (entry.layer !== layer) continue;
+            const alwaysShown = manager.isAlwaysShown(entry);
+            if (entry.minZoom && !alwaysShown && Number.isFinite(zoom) && zoom < entry.minZoom - 0.001) {
+                if (entry.onMap) removals.push(entry);
+                continue;
+            }
             const wanted = !bounds
                 || !Number.isFinite(entry.lat)
                 || !Number.isFinite(entry.lng)
-                || manager.isAlwaysShown(entry)
+                || alwaysShown
                 || bounds.contains([entry.lat, entry.lng]);
             if (wanted && !entry.onMap) {
                 (view && view.contains([entry.lat, entry.lng]) ? addsInView : addsInMargin).push(entry);
@@ -1051,6 +1059,25 @@ function registerNpfAirportViewMarker(marker, airport) {
     return registerNpfViewWindowMarker(npfAirportViewWindow, marker, airport.lat, airport.lon, airport.oaci);
 }
 
+/*
+ * v17.71 — terrains qui ne peuvent pas être choisis comme PÉLIC (additionalAerodromes) :
+ * affichés seulement à partir du zoom 7 (barre d'échelle à 50 NM ou moins : 50 NM dans le sud,
+ * 20 NM dans le nord ; au zoom 6 elle affiche 100 NM dans le sud et 50 NM dans le nord).
+ * Leur zone tactile suit la même règle.
+ */
+const NPF_NON_PELIC_AIRPORT_MIN_ZOOM = 7;
+
+function registerNpfAirportScaleLimited(layer, airport) {
+    if (!layer || !airport) return layer;
+    registerNpfAirportViewMarker(layer, airport);
+    const entry = npfAirportViewWindow.entries[npfAirportViewWindow.entries.length - 1];
+    if (entry && entry.marker === layer) {
+        entry.minZoom = NPF_NON_PELIC_AIRPORT_MIN_ZOOM;
+        try { entry.onMap = !!(permanentAirportLayer && permanentAirportLayer.hasLayer(layer)); } catch (_) {}
+    }
+    return layer;
+}
+
 function getNpfOpenAirportPopupOaci() {
     try {
         const popup = map && map._popup;
@@ -1076,7 +1103,7 @@ function drawPermanentAirportMarkers() {
      * pistes intégrée à la carte NPF. Les pistes ne remplacent plus les ronds.
      */
     additionalAerodromes.forEach(airport => {
-        registerNpfAirportViewMarker(L.marker([airport.lat, airport.lon], {
+        registerNpfAirportScaleLimited(L.marker([airport.lat, airport.lon], {
             icon: buildTerrainAirportMapIcon(airport, {
                 inverted: true,
                 showCardinalTabs: false,
@@ -1088,7 +1115,7 @@ function drawPermanentAirportMarkers() {
         }), airport);
 
         const popupHtml = `<div class="airport-popup additional-aerodrome-popup"><b>${escapeHtml(airport.oaci)}</b><br>${escapeHtml(airport.name)}${buildVacButtonHtml(airport.oaci)}${buildAirportAddWpButtonHtml(airport.oaci)}</div>`;
-        addAirportTouchHitbox(airport, popupHtml);
+        registerNpfAirportScaleLimited(addAirportTouchHitbox(airport, popupHtml), airport);
     });
 
     otherAirports.forEach(airport => {

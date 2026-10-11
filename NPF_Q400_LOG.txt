@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
-Mise à jour : 10/10/2026
-Version de travail actuelle : TEST v17.70
+Mise à jour : 11/10/2026
+Version de travail actuelle : TEST v17.71
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,10 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.71 — contour des zones SIA seulement à 10 NM ou moins (zoom 9) ; terrains
+  non sélectionnables comme PÉLIC seulement à partir du zoom 7 ; couleur des VRP
+  = aérodrome SIA seul (VRP sans aérodrome en blanc) ; clignotement des lignes HT
+  (appui long sur le bouton HT) ;
 - v17.70 — sia.js régénéré au cycle AIRAC 11/26 (29/10/2026, embarqué en avance
   sur décision de Bastien) ; coloration de la zone sélectionnée gardée tant que
   sa fenêtre est ouverte ; apostrophe des textes SIA (VRP…) corrigée ;
@@ -499,6 +503,8 @@ NON IMPLÉMENTÉ / OUVERT :
   07/10/2026 : programme VPS bfg-sofia-notams 1.2.0 PRÊT, NON INSTALLÉ
   (~/vps-a-copier/). v17.60 à pousser APRÈS l'installation de la 1.2.0
   (elle annonce « environ 1 minute ») ;
+- v17.71 : À MESURER sur iPad (contour à 10 NM, terrains au zoom 7, couleur des
+  VRP, fenêtre « Lignes HT » et clignotement en vol) ;
 - v17.70 : À MESURER sur iPad (coloration de la zone sélectionnée au zoom,
   apostrophes, cycle 11/26 : fréquences 8,33 kHz du 29/10) ;
 - v17.69 : VALIDÉE sur iPad ; (zones SIA du 01/10 : arcs, frontières, fréquences,
@@ -712,31 +718,31 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.70
-Date : 10/10/2026
-Base : v17.69 (0d531d3, poussée le 10/10/2026)
+Version : TEST v17.71
+Date : 11/10/2026
+Base : v17.70 (25cd205, poussée le 10/10/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.70.txt
-2_Index_v17.70.txt
-3_Manifest_v17.70.txt
-4_Script_v17.70.txt
-5_SIA_v17.70.txt
-6_Style_v17.70.txt
-7_Sw_v17.70.txt
+1_Modifications_v17.71.txt
+2_Index_v17.71.txt
+3_Manifest_v17.71.txt
+4_Script_v17.71.txt
+5_SIA_v17.71.txt
+6_Style_v17.71.txt
+7_Sw_v17.71.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.70 (et texte « TEST v17.70 » de l'écran de
+- Index : APP_VERSION = v17.71 (et texte « TEST v17.71 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.70
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.70
-- Style : NPF_STYLE_BUILD_VERSION = v17.70
-- Service Worker : `sw-v17-70_sia_airac_1126_selection` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-70_sia_airac_1126_selection`, `npf-q400-test-app-data-v1`,
+- Manifest : start_url = ./index.html?appv=v17.71
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.71
+- Style : NPF_STYLE_BUILD_VERSION = v17.71
+- Service Worker : `sw-v17-71_ht_clignotement_vrp_contour` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-71_ht_clignotement_vrp_contour`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-sia-2026-10-29-v02-g3`
 - SIA_DATA_REVISION (SW / Index sia.js?siav=) : sia-2026-10-29-v02-g3 (= NPF_SIA_DATA_REVISION
   de sia.js ; à changer à chaque nouveau sia.js)
-- sia.js v17.70 : RÉGÉNÉRÉ (AIRAC 11/26 du 29/10/2026, paquet SIA v02) par
+- sia.js v17.71 : identique à v17.70 (AIRAC 11/26 du 29/10/2026, paquet SIA v02) par
   ~/projects/outils_tests_NPF-Q400-TEST/generateur-sia/generer_sia.py (une commande
   par cycle, voir son LISEZMOI.txt) ; npfDatasetRevision 2026-10-29-v02-g3.
 - Images de lancement : icons/startup-ipad9-portrait.png (1620 × 2160) et
@@ -745,15 +751,15 @@ Références de version cohérentes :
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.70 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.71 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
-- `sia.js` identique à v17.52 ; moteur tuiles (src/100) modifié en v17.66 sur demande
+- `sia.js` identique à v17.70 ; moteur tuiles (src/100) modifié en v17.66 sur demande
   explicite (limite de zoom propre à chaque carte, zoom 11 OACI 1/500 000) ;
-- tests v17.70 : entrée v17.70 ;
+- tests v17.71 : entrée v17.71 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68 et v17.70 À MESURER ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70 et v17.71 À MESURER ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
   v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE ;
   v17.56 VALIDÉE en vol ; v17.57 VALIDÉE sur iPad.
 
@@ -2282,6 +2288,109 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.71 — CONTOUR DES ZONES SIA À 10 NM ; TERRAINS NON PÉLIC AU ZOOM 7 ;
+COULEUR DES VRP ; CLIGNOTEMENT DES LIGNES HT
+Date : 11/10/2026
+Base fonctionnelle : v17.70 (commit 25cd205, poussée le 10/10/2026).
+Demandes de Bastien (11/10/2026). Échelles : z9 = 10 NM, z8 = 20 NM.
+
+1. CONTOUR DES ZONES SIA (src/340, src/350)
+- Le contour des zones n'est dessiné qu'au zoom 9 et plus (10 NM ou moins) ;
+  au-delà il est rendu transparent (opacité 0, sans reconstruire les zones),
+  appliqué au rendu et à chaque fin de zoom (applySiaAirspaceOutlines).
+- Liseré intérieur, voiles et noms des zones : seuils inchangés. Zone
+  sélectionnée (fenêtre ouverte) : coloration gardée à toutes les échelles
+  (couche de sélection à part, inchangée).
+
+2. TERRAINS NON SÉLECTIONNABLES COMME PÉLIC (src/220)
+- additionalAerodromes (liste PIAF, sans bouton PÉLIC) : marqueur ET zone
+  tactile affichés seulement à partir du zoom 7 (fenêtre d'affichage des
+  terrains, champ minZoom) ; toujours affichés s'ils sont base, PÉLIC choisi
+  ou bulle ouverte. Pélicandromes et terrains à bouton PÉLIC : inchangés.
+- Zoom retenu 7 et non une valeur de la barre d'échelle : la barre dépend de la
+  latitude (zoom 7 : 50 NM à Marseille, 20 NM au centre et au nord ; zoom 6 :
+  100 NM dans le sud mais 50 NM au nord). Le zoom 7 donne « 50 NM ou moins »
+  partout en métropole.
+
+3. COULEUR DES VRP (src/340) — cause dans l'app, pas dans les données
+- Règle : couleur de l'aérodrome auquel le SIA rattache le VRP (champ a =
+  AhpUidAssoc ; pour les 1 014 VRP rattachés, le préfixe du nom = 2 dernières
+  lettres de l'aérodrome). Palette de 9 couleurs, voisins à 55 NM jamais de la
+  même couleur, LFTW magenta et LFMT jaune forcés : inchangés.
+- Anomalies trouvées en v17.70 (80 VRP sans aérodrome dans le SIA : VRP de
+  transit MM-, FF-, BB-, AA-, RR-, WE-, WL-) :
+  . 36 rattachés par DÉDUCTION à un aérodrome voisin, donc à sa couleur :
+    FF -> LFOE 7, LFOJ 3, LFPG 1 ; AA -> NTAA 5 ; MM -> LFLL 4, LFMY 4, LFLS 2,
+    LFMC 1, LFKB 1, LFMT 1, LFKF 1, LFML 1 ; RR -> LFRJ 3 ; BB -> LFBC 2 ;
+  . 44 en magenta par défaut (FF 17, MM 15, BB 6, WE 3, WL 2, AA 1), couleur
+    de 15 aérodromes réels (LFBU, LFLI, LFTW, LFSO, LFTL, LFLN, SOCA, TFFF,
+    LFKC, LFRL, LFCL, LFPI, LFHU, LFQT, LFRD) ; 26 à moins de 30 NM d'un
+    aérodrome magenta. Exemple signalé : MM-CD (pont sur la Durance au sud de
+    Cadenet, au nord de LFMA), sans aérodrome dans le SIA, affiché magenta.
+  . VRP rattachés : 0 erreur de couleur ; aucun aérodrome à 2 couleurs.
+- Correction : déduction et rattachements forcés retirés ; VRP sans aérodrome
+  en blanc (texte noir), couleur qu'aucun aérodrome n'utilise. Résultat :
+  1 014 VRP à la couleur de leur aérodrome (0 écart), 80 en blanc ; LFMA : 6 VRP
+  jaunes ; MM-CD blanc.
+- generer_sia.py et sia.js inchangés (sia.js strictement identique à v17.70).
+
+4. CLIGNOTEMENT DES LIGNES HT (src/110, style.css) — nouveau
+- Appui court sur le bouton HT : inchangé. Appui long (650 ms, comme Trafic
+  Moyens Nationaux) : fenêtre « Lignes HT » : Clignotement ; Toutes les HT ;
+  Autour de l'avion 2 / 5 / 10 NM ; Autour du feu 2 / 5 / 10 NM ; Fermer.
+  Options grisées tant que Clignotement est décoché ; Toutes les HT grise les
+  deux autres ; avion et feu cochables ensemble.
+- Défaut : Autour de l'avion 5 NM présélectionné, Clignotement décoché ;
+  réglage gardé (localStorage npfHtBlinkSettings).
+- Avion : position de l'avion (GPS ou simulation) ; feu : feu sélectionné
+  (Go To / Feu). Sans feu : rien ne clignote autour du feu, sans message.
+- Environ 1 fois par seconde (0,5 s allumé, 0,5 s éteint). Seulement si les HT
+  sont affichées (bouton HT, échelle < 50 NM, fond NPF-Q400) ; sinon, ou
+  clignotement coupé : aspect des HT strictement inchangé.
+- Fluidité : jamais de redessin du réseau HT pour clignoter.
+  . Autour : les seules portions de lignes dans le cercle sont recopiées sur
+    une couche à part (canvas dédié dans le pane HT, masqué avec les HT pendant
+    les gestes) : halo jaune + trait HT, ≤ 10 tracés groupés par tension ;
+    seule l'opacité CSS de ce canvas varie. Portions recalculées au plus 1 fois
+    par seconde, seulement si l'avion ou le feu a bougé de plus de 0,05 NM, ou
+    si le réglage ou le zoom a changé ; index des lignes par cases de 0,2°
+    préparé une seule fois.
+  . Toutes les HT : seule l'opacité CSS du canvas HT varie (1 / 0,2).
+
+TESTS (Chrome sans fenêtre, iPad simulé ; vrai NAS et vrai VPS bloqués au DNS)
+- Contour : zoom 10 (5 NM) 323 contours, zoom 9 (10 NM) 497 visibles, zoom 8
+  (20 NM) 0 visible (892 masqués), retour zoom 9 : 497. CTR PROVENCE choisie :
+  coloration gardée aux zooms 8, 7 et 9, retirée à la fermeture.
+- Terrains non PÉLIC (640) : zoom 9 / 8 / 7 affichés, zoom 6 : 0 (centre et
+  Marseille) ; pélicandromes et terrains PÉLIC inchangés (114 au zoom 6 et 7).
+- VRP : 1 094 contrôlés, 0 écart de couleur avec l'aérodrome, 80 sans aérodrome
+  en blanc, MM-CD blanc, LFMA 6 VRP jaunes.
+- Menu HT : appui court HT OFF puis ON ; appui long : fenêtre, options grisées ;
+  chaque option et chaque rayon ; Toutes les HT grise avion / feu ; feu seul sans
+  feu : rien ne clignote ; avion 5 NM : 55 portions, avion 10 NM : 127 ; Fermer ;
+  réglage retrouvé après relance ; aucune erreur JS.
+- Recalcul des portions (CPU ×4) : 39 ms au premier essai, 16 ms après index par
+  cases et tracés groupés (≈ 4 ms réels) ; index préparé une fois (90 ms en ×4).
+- Fluidité, décorations en suivi à 2 NM (Marseille, CPU ×4, HT affichées, avion
+  simulé, 20 pas), médianes v17.70 / v17.71 clignotement coupé / v17.71 avion
+  10 NM : passage 1 230 / 190 / 271 ms (recalcul 2 fois par pas, corrigé),
+  passage 2 225 / 180 / 256 ms (avant optimisation), passage 3 (code final)
+  205 / 232 / 238 ms : équivalent (écarts < 20 %).
+- Non-régression bloquante : lancement sans erreur JS ; carte et échelle en NM,
+  HT et Routes (restitutions) : identiques à v17.70 ; nr (FdS/GAAR) identique ;
+  mise à jour v17.70 -> v17.71 puis hors ligne : OK, caches npf-q400-test-*
+  seulement, caches de la pérenne intacts.
+
+FICHIERS MODIFIÉS
+src/010, src/110, src/220, src/340, src/350, donc script.js ; style.css ;
+index.html, sw.js, manifest.json (version). sia.js inchangé.
+
+VERSION
+- App : v17.71
+- Service Worker : `sw-v17-71_ht_clignotement_vrp_contour`
+
+STATUT : À MESURER sur iPad.
 
 VERSION TEST v17.70 — COLORATION DE LA ZONE SÉLECTIONNÉE GARDÉE ; APOSTROPHES DES
 TEXTES SIA ; CYCLE AIRAC 11/26 (29/10/2026) EMBARQUÉ EN AVANCE

@@ -2756,6 +2756,31 @@ function getSiaAirspaceVeilOpacity(type) {
     }
 }
 
+/*
+ * v17.71 — contour des zones SIA affiché seulement à 10 NM ou moins (zoom 9 et plus) ; au-delà, trait
+ * invisible (voiles, liserés, noms et coloration de la sélection gardent leurs propres règles). Le style n'est
+ * retouché qu'au franchissement du seuil.
+ */
+const SIA_AIRSPACE_OUTLINE_MIN_ZOOM = 9;
+let siaAirspaceOutlineLayers = [];
+let siaAirspaceOutlineAppliedVisible = null;
+
+function isSiaAirspaceOutlineVisible() {
+    try { return !map || map.getZoom() >= SIA_AIRSPACE_OUTLINE_MIN_ZOOM; } catch (_) { return true; }
+}
+
+function applySiaAirspaceOutlines() {
+    const visible = isSiaAirspaceOutlineVisible();
+    if (visible === siaAirspaceOutlineAppliedVisible) return;
+    siaAirspaceOutlineAppliedVisible = visible;
+    for (const layer of siaAirspaceOutlineLayers) {
+        try {
+            const opacity = visible ? Number(layer.options.npfOutlineOpacity ?? 0.95) : 0;
+            if (layer._map && layer.options.opacity !== opacity) layer.setStyle({ opacity });
+        } catch (_) {}
+    }
+}
+
 function applySiaAirspaceVeils() {
     if (!siaAirspaceVeilLayers.length) return;
     const key = getSiaAirspaceVeilOpacity('P') + '|' + getSiaAirspaceVeilOpacity('D');
@@ -3608,12 +3633,17 @@ async function refreshSiaLayers(reason = 'manual') {
             const npfDiagGeoStart = NPF_STARTUP_DIAGNOSTIC.now();
             siaAirspaceVeilLayers = [];
             siaAirspaceVeilAppliedKey = getSiaAirspaceVeilOpacity('P') + '|' + getSiaAirspaceVeilOpacity('D');
+            siaAirspaceOutlineLayers = [];
+            siaAirspaceOutlineAppliedVisible = isSiaAirspaceOutlineVisible();
             const airspaceLayer = L.geoJSON(
                 { type: 'FeatureCollection', features: visibleAirspaceFeatures },
                 {
                     pane: 'siaAirspacePane',
                     renderer: siaAirspaceRenderer,
-                    style: feature => getSiaAirspaceStyle(feature.properties.siaItem),
+                    style: feature => {
+                        const zoneStyle = getSiaAirspaceStyle(feature.properties.siaItem);
+                        return siaAirspaceOutlineAppliedVisible ? zoneStyle : { ...zoneStyle, opacity: 0 };
+                    },
                     pointToLayer: (feature, latlng) => {
                         const itemStyle = getSiaAirspaceStyle(feature.properties.siaItem);
                         return L.circleMarker(latlng, {
@@ -3631,6 +3661,12 @@ async function refreshSiaLayers(reason = 'manual') {
                         try {
                             const veilType = String(_feature?.properties?.siaItem?.t || '');
                             if (veilType === 'P' || veilType === 'D') siaAirspaceVeilLayers.push(layer);
+                        } catch (_) {}
+                        try {
+                            if (!(layer instanceof L.CircleMarker)) {
+                                layer.options.npfOutlineOpacity = getSiaAirspaceStyle(_feature?.properties?.siaItem).opacity;
+                                siaAirspaceOutlineLayers.push(layer);
+                            }
                         } catch (_) {}
                     }
                 }

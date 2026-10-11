@@ -1617,22 +1617,12 @@ let siaVrpAirportColorMap = null;
 let siaVrpAirportColorDataset = null;
 
 /*
- * v15.90 — certains VRP SIA sont publiés sans AhpUidAssoc alors que leur
- * appartenance est évidente dans le groupe local. On ne modifie pas sia.js :
- * un rattachement de secours est calculé uniquement lorsque le voisinage est
- * suffisamment dominant. Les cas ambigus restent volontairement non rattachés.
+ * v17.71 — la couleur d'un VRP est celle de l'aérodrome auquel le SIA le rattache (AhpUidAssoc ; préfixe
+ * du nom = 2 dernières lettres de l'aérodrome pour les 1 014 VRP rattachés). Les VRP sans aérodrome (VRP de
+ * transit des régions MM-, FF-, BB-, RR-…) ne sont plus rattachés par déduction ni forcés à la main : ils
+ * prennent une couleur neutre qu'aucun aérodrome n'utilise (avant : magenta, couleur d'aérodromes réels).
  */
-const SIA_VRP_INFERENCE_RADIUS_NM = 25;
-const SIA_VRP_INFERENCE_MIN_SHARE = 0.52;
-const SIA_VRP_INFERENCE_MIN_MARGIN = 0.18;
-const SIA_VRP_INFERENCE_MIN_SUPPORT = 3;
-const SIA_VRP_INFERENCE_MAX_NEAREST_NM = 10;
-const SIA_VRP_INFERRED_AIRPORT_OVERRIDES = Object.freeze({
-    MMND: 'LFMC',
-    MMSR: 'LFML'
-});
-let siaVrpInferredAirportMap = null;
-let siaVrpInferredAirportDataset = null;
+const SIA_VRP_SANS_AERODROME_VISUAL = Object.freeze({ background: '#ffffff', foreground: '#111111' });
 
 /*
  * v16.76 — depuis v16.73 les points/VRP peuvent être rendus depuis
@@ -1644,95 +1634,9 @@ function getSiaVrpVisualDataset() {
     return siaDataset || siaMapLiteDataset || null;
 }
 
-function getSiaVrpInferenceKey(item) {
-    return [
-        String(item?.c || '').trim().toUpperCase(),
-        Number(item?.x).toFixed(6),
-        Number(item?.y).toFixed(6)
-    ].join('|');
-}
-
-function buildSiaVrpInferredAirportMap(dataset) {
-    const inferred = new Map();
-    if (!dataset) return inferred;
-
-    const vrps = (dataset.points || []).filter(item => item?.k === 'dpn:VRP');
-    const assigned = vrps.filter(item => String(item?.a || '').trim());
-    const airportSet = new Set(
-        assigned.map(item => String(item.a || '').trim().toUpperCase()).filter(Boolean)
-    );
-
-    for (const item of vrps) {
-        if (String(item?.a || '').trim()) continue;
-
-        const key = getSiaVrpInferenceKey(item);
-        const codeId = String(item?.c || '').trim().toUpperCase();
-        const forcedAirport = SIA_VRP_INFERRED_AIRPORT_OVERRIDES[codeId];
-        if (forcedAirport && airportSet.has(forcedAirport)) {
-            inferred.set(key, forcedAirport);
-            continue;
-        }
-
-        const lat = Number(item?.x);
-        const lon = Number(item?.y);
-        if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
-
-        const stats = new Map();
-        for (const candidate of assigned) {
-            const candidateLat = Number(candidate?.x);
-            const candidateLon = Number(candidate?.y);
-            if (!Number.isFinite(candidateLat) || !Number.isFinite(candidateLon)) continue;
-
-            const distance = calculateDistanceInNm(lat, lon, candidateLat, candidateLon);
-            if (!Number.isFinite(distance) || distance > SIA_VRP_INFERENCE_RADIUS_NM) continue;
-
-            const airport = String(candidate?.a || '').trim().toUpperCase();
-            if (!airport) continue;
-
-            const current = stats.get(airport) || { weight: 0, count: 0, nearest: Infinity };
-            current.weight += 1 / Math.pow(Math.max(distance, 1), 1.5);
-            current.count += 1;
-            current.nearest = Math.min(current.nearest, distance);
-            stats.set(airport, current);
-        }
-
-        if (!stats.size) continue;
-        const ranked = Array.from(stats.entries()).sort((a, b) => b[1].weight - a[1].weight);
-        const totalWeight = ranked.reduce((sum, entry) => sum + entry[1].weight, 0);
-        if (!(totalWeight > 0)) continue;
-
-        const [topAirport, topStats] = ranked[0];
-        const secondWeight = ranked.length > 1 ? ranked[1][1].weight : 0;
-        const topShare = topStats.weight / totalWeight;
-        const secondShare = secondWeight / totalWeight;
-
-        if (
-            topStats.count >= SIA_VRP_INFERENCE_MIN_SUPPORT
-            && topStats.nearest <= SIA_VRP_INFERENCE_MAX_NEAREST_NM
-            && topShare >= SIA_VRP_INFERENCE_MIN_SHARE
-            && (topShare - secondShare) >= SIA_VRP_INFERENCE_MIN_MARGIN
-        ) {
-            inferred.set(key, topAirport);
-        }
-    }
-
-    return inferred;
-}
-
-function ensureSiaVrpInferredAirportMap(dataset = getSiaVrpVisualDataset()) {
-    if (siaVrpInferredAirportMap && siaVrpInferredAirportDataset === dataset) {
-        return siaVrpInferredAirportMap;
-    }
-    siaVrpInferredAirportDataset = dataset || null;
-    siaVrpInferredAirportMap = buildSiaVrpInferredAirportMap(dataset);
-    return siaVrpInferredAirportMap;
-}
-
 function getSiaVrpAirportCode(item, dataset = getSiaVrpVisualDataset()) {
-    const officialAirport = String(item?.a || '').trim().toUpperCase();
-    if (officialAirport) return officialAirport;
-    if (item?.k !== 'dpn:VRP') return '';
-    return ensureSiaVrpInferredAirportMap(dataset).get(getSiaVrpInferenceKey(item)) || '';
+    /* v17.71 — rattachement SIA seul (voir SIA_VRP_SANS_AERODROME_VISUAL). */
+    return String(item?.a || '').trim().toUpperCase();
 }
 
 function getSiaVrpReadableTextColor(background) {
@@ -1900,11 +1804,9 @@ function ensureSiaVrpAirportColorMap(dataset = getSiaVrpVisualDataset()) {
 
 function getSiaVrpAirportVisual(item, dataset = getSiaVrpVisualDataset()) {
     const airport = getSiaVrpAirportCode(item, dataset);
-    if (!airport) {
-        return { background: '#ff00ff', foreground: '#ffffff' };
-    }
+    if (!airport) return SIA_VRP_SANS_AERODROME_VISUAL;
     const mapByAirport = ensureSiaVrpAirportColorMap(dataset);
-    return mapByAirport.get(airport) || { background: '#ff00ff', foreground: '#ffffff' };
+    return mapByAirport.get(airport) || SIA_VRP_SANS_AERODROME_VISUAL;
 }
 
 function getSiaPointMarkerStyle(item) {
@@ -3565,6 +3467,8 @@ function initializeSiaSystem() {
             markSiaDecorationMapMotion();
             /* v17.51 — voiles P / D selon l'échelle (simple remplissage). */
             try { applySiaAirspaceVeils(); } catch (_) {}
+            /* v17.71 — contour des zones selon l'échelle (10 NM ou moins). */
+            try { applySiaAirspaceOutlines(); } catch (_) {}
             const now = NPF_STARTUP_DIAGNOSTIC.now();
             siaZoomGestureActive = false;
             if (npfDiagZoomStartedAt > 0) {
