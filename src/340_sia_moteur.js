@@ -849,7 +849,7 @@ function isSiaTechnicalSivParent(item, dataset = siaDataset) {
  * Espace -> Partie -> Volume -> Activite. Le payload v15.69 n'est pas réécrit :
  * l'association est appliquée uniquement au moment de construire le libellé carte.
  * 109 secteurs sur 110 disposent d'une fréquence explicite dans cette source.
- * SOCAFS / CAYENNE renvoie « Fréquences : voir ENR 6.4 » et n'est donc pas inventé.
+ * v17.71 — outre-mer retiré (métropole seule) : entrées NWWWFS et TFFRFS supprimées.
  * v17.69 — valeurs du cycle AIRAC du 01/10/2026 (eAIP ENR 2.2) : BIARRITZ 119.180, CHAMBERY 1 et 2
  * 123.700, BEAUVAIS 1 123.985. Contrôle à chaque cycle par generateur-sia (outils de test).
  * v17.70 — cycle AIRAC du 29/10/2026 : passages au canal 8,33 kHz (PYRENEES, CLERMONT, PROVENCE, NICE,
@@ -963,8 +963,6 @@ const SIA_SIV_VOLUME_FREQUENCIES = Object.freeze({
     "LSAGFS07": ["126.350"],
     "LSAGFS08": ["126.350"],
     "LSAGFS09": ["126.350"],
-    "NWWWFS": ["128.200", "128.300"],
-    "TFFRFS": ["129.800"],
 });
 
 function getSiaVolumeAssignedFrequencies(item) {
@@ -1702,6 +1700,22 @@ function buildSiaVrpAirportColorMap(dataset) {
             usage[index] += 1;
         }
     });
+
+    /*
+     * v17.71 — couleurs FIGÉES : table écrite dans sia.js par generateur-sia (couleurs de la v17.70
+     * conservées, seuls les nouveaux terrains en reçoivent une). Le calcul ci-dessous ne sert plus que
+     * de secours pour un terrain absent de la table.
+     */
+    const fixedColors = SIA_EMBEDDED_RESOURCE && SIA_EMBEDDED_RESOURCE.vrpAirportColors;
+    if (fixedColors && typeof fixedColors === 'object') {
+        Object.entries(fixedColors).forEach(([code, color]) => {
+            const index = paletteIndexByColor.get(String(color).toLowerCase());
+            if (Number.isInteger(index) && airportSet.has(code) && !assignedIndex.has(code)) {
+                assignedIndex.set(code, index);
+                usage[index] += 1;
+            }
+        });
+    }
 
     const stableSeed = code => Array.from(code).reduce(
         (sum, char) => ((sum * 33) + char.charCodeAt(0)) >>> 0,

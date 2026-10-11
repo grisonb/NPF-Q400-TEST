@@ -181,7 +181,9 @@ IMPLÉMENTÉ / INTÉGRÉ :
 - v17.71 — contour des zones SIA seulement à 10 NM ou moins (zoom 9) ; terrains
   non sélectionnables comme PÉLIC seulement à partir du zoom 7 ; couleur des VRP
   = aérodrome SIA, et pour les VRP sans aérodrome dans l'AIXM, terrain d'après les
-  cartes VAC de l'eAIP (44 sur 80, sia.js révision g4 ; 36 restent blancs) ;
+  cartes VAC de l'eAIP (34 sur 69 en métropole ; 35 restent blancs) ; couleurs des
+  terrains FIGÉES (celles de la v17.70) ; données SIA de la MÉTROPOLE SEULE
+  (outre-mer supprimé, sia.js révision g5, −14 %) ;
   clignotement des lignes HT (appui long sur le bouton HT) ;
 - v17.70 — sia.js régénéré au cycle AIRAC 11/26 (29/10/2026, embarqué en avance
   sur décision de Bastien) ; coloration de la zone sélectionnée gardée tant que
@@ -740,12 +742,12 @@ Références de version cohérentes :
 - Style : NPF_STYLE_BUILD_VERSION = v17.71
 - Service Worker : `sw-v17-71_ht_clignotement_vrp_contour` ; caches TEST
   `npf-q400-test-app-shell-sw-v17-71_ht_clignotement_vrp_contour`, `npf-q400-test-app-data-v1`,
-  `npf-q400-test-sia-data-sia-2026-10-29-v02-g4`
-- SIA_DATA_REVISION (SW / Index sia.js?siav=) : sia-2026-10-29-v02-g4 (= NPF_SIA_DATA_REVISION
+  `npf-q400-test-sia-data-sia-2026-10-29-v02-g5`
+- SIA_DATA_REVISION (SW / Index sia.js?siav=) : sia-2026-10-29-v02-g5 (= NPF_SIA_DATA_REVISION
   de sia.js ; à changer à chaque nouveau sia.js)
-- sia.js v17.71 : RÉGÉNÉRÉ, révision g4 = g3 + rattachement de 44 VRP d'après l'eAIP (AIRAC 11/26 du 29/10/2026, paquet SIA v02) par
+- sia.js v17.71 : RÉGÉNÉRÉ, révision g5 = métropole seule + 34 VRP rattachés d'après l'eAIP + couleurs figées (AIRAC 11/26 du 29/10/2026, paquet SIA v02) par
   ~/projects/outils_tests_NPF-Q400-TEST/generateur-sia/generer_sia.py (une commande
-  par cycle avec --eaip <ZIP eAIP du cycle>, voir son LISEZMOI.txt) ; npfDatasetRevision 2026-10-29-v02-g4.
+  par cycle avec --eaip <ZIP eAIP du cycle>, voir son LISEZMOI.txt) ; npfDatasetRevision 2026-10-29-v02-g5.
 - Images de lancement : icons/startup-ipad9-portrait.png (1620 × 2160) et
   icons/startup-ipad9-landscape.png (2160 × 1620).
 - Icônes des boutons (v17.48) : calculator-fms-icon, search-commune-icon,
@@ -755,7 +757,7 @@ STATUT DE VALIDATION :
 - validation statique v17.71 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
-- `sia.js` : seuls le champ « a » de 44 VRP et la révision (g3 -> g4) changent par rapport à v17.70 ; moteur tuiles (src/100) modifié en v17.66 sur demande
+- `sia.js` : par rapport à v17.70, outre-mer retiré, « a » de 34 VRP renseigné, table vrpAirportColors ajoutée, révision g5 ; zones, terrains et points de métropole identiques ; moteur tuiles (src/100) modifié en v17.66 sur demande
   explicite (limite de zoom propre à chaque carte, zoom 11 OACI 1/500 000) ;
 - tests v17.71 : entrée v17.71 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
@@ -2291,7 +2293,7 @@ HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
 
 VERSION TEST v17.71 — CONTOUR DES ZONES SIA À 10 NM ; TERRAINS NON PÉLIC AU ZOOM 7 ;
-COULEUR DES VRP (VRP SANS AÉRODROME RATTACHÉS D'APRÈS L'eAIP) ; CLIGNOTEMENT DES LIGNES HT
+COULEUR DES VRP (RATTACHÉS D'APRÈS L'eAIP, COULEURS FIGÉES) ; MÉTROPOLE SEULE ; CLIGNOTEMENT HT
 Date : 11/10/2026
 Base fonctionnelle : v17.70 (commit 25cd205, poussée le 10/10/2026).
 Demandes de Bastien (11/10/2026). Échelles : z9 = 10 NM, z8 = 20 NM.
@@ -2389,11 +2391,51 @@ Demandes de Bastien (11/10/2026). Échelles : z9 = 10 NM, z8 = 20 NM.
   terrains, tous les autres champs des points identiques ; seuls « a » de 44 VRP
   (auparavant vide) et la révision changent. Révision g4 reportée dans sw.js,
   index.html (sia.js?siav=) et src/330. LISEZMOI.txt du générateur mis à jour.
-- À DÉCIDER : l'app colore les terrains par un algorithme global (DSATUR, voisins à
+- DÉCIDÉ ensuite (point 6 B : couleurs figées) — constat : l'app colore les terrains par un algorithme global (DSATUR, voisins à
   55 NM jamais de la même couleur) ; les 9 terrains ajoutés (LFKG, LFXA, LFXU, LFNE,
   LFMV, LFKF, NTAA, NWWE, NWWL) redistribuent les couleurs : 88 terrains changent de
   couleur par rapport à v17.70 (ex. LFMA jaune -> bleu, LFML vert -> jaune).
   Algorithme non modifié (pas demandé).
+
+6. MÉTROPOLE SEULE, COULEURS FIGÉES (décisions de Bastien du 11/10/2026, sia.js g5)
+A. Métropole seule (generateur-sia/modules/metropole.py, à chaque cycle) :
+- terrain gardé s'il est en LFxx et dans les FIR LFFF / LFRR / LFBB / LFMM / LFEE ;
+  zone gardée si elle touche ces FIR, VRP / point gardé s'il y est — « touche » à
+  10 NM près (interprétation : les délégations de Bâle au-dessus de l'Allemagne et de
+  la Suisse, à 7,2 NM au plus, et les VRP SB-S, SB-NE (Bâle), LI-SE (Annemasse),
+  GG-SE côté suisse seraient sinon perdus ; l'outre-mer le plus proche est à 1 680 NM) ;
+  zones sans géométrie (secteurs ACC / UAC) gardées d'après le nom de FIR.
+- Retirés (cycle 11/26) : 262 zones (D-OTHER 124, D 34, TMA 29, R 27, CTR 20, P 9,
+  FIR 7, OCA 4, RAS 4, CTA 3, UTA 1) ; 149 terrains (NT 55, LF 38, NW 20, TF 12, SO 9,
+  FM 8, NL 2, EG / EL / LN / LS / ZZ 1) — les 38 LF sont des organismes (FIC / ACC,
+  CROSS, camps, LFSC…) que le SIA place à un point fictif en mer (44°59'N 8°32'W) et 2
+  terrains de Saint-Pierre-et-Miquelon (LFVP, LFVM) ; 230 points (VRP 134, ADHP 94,
+  OTHER 2) ; 3 lignes radio (LFVP TWR ×2, LFVM AFIS). VRP sans aérodrome : 69 en
+  métropole, 34 rattachés (mêmes terrains qu'au point 5), 35 blancs.
+- App : tables radio src/020 recopiées (479 lignes, 324 groupes) ; SIV NWWWFS et
+  TFFRFS retirés de SIA_SIV_VOLUME_FREQUENCIES (src/340) ; jeu de secours de script.js
+  (src/330 : carte légère, datait de la révision 15.69 avec l'outre-mer) remplacé par
+  celui de g5 et méta de secours à jour. Filtres OCA / UTA : disparaissent d'eux-mêmes
+  (le menu ne montre que les types présents). Aucun autre réglage ou texte propre à
+  l'outre-mer dans le code.
+- Gain : sia.js 1 378 482 -> 1 185 583 octets (−192 899, −14 %) ; charge complète gzip
+  862 049 -> 736 580 ; script.js −17 718 octets ; mémoire après chargement 33,7 ->
+  32,7 Mo ; chargement du jeu embarqué médiane 355 -> 303 ms.
+B. Couleurs figées (generateur-sia/modules/couleurs_terrains.py + couleurs_terrains.json) :
+- table initialisée avec les couleurs exactes de la v17.70 (129 terrains, mesurées
+  dans l'app) ; écrite dans sia.js (vrpAirportColors, 119 terrains présents) ; l'app
+  (buildSiaVrpAirportColorMap) l'applique avant son calcul, qui ne sert plus que de
+  secours. Nouveaux terrains : LFBS BISCARROSSE PARENTIS magenta (BB-O2, BB-OS),
+  LFKG GHISONACCIA ALZITONE jaune (MM-AW), LFNE SALON EYGUIERES bleu (MM-EG),
+  LFXA AMBERIEU turquoise (MM-AM), LFXU LES MUREAUX rouge (FF-QGL, FF-ROC).
+- Voisins de même couleur : LFNE / LFNG (bleu, 41,1 NM) et LFXU / LFPG (rouge,
+  23,9 NM) : inévitables, les 9 couleurs étant déjà prises par leurs voisins à
+  55 NM ; couleur choisie pour que le voisin identique soit le plus loin possible.
+  Aucun autre conflit (aucun en v17.70).
+C. Contrôle : sia.js g5 décodé contre g4 : les 4 383 zones gardées identiques (et
+  dans le même ordre), 725 terrains et 1 667 points identiques (rattachements
+  compris) ; tous les éléments retirés sont hors métropole (liste :
+  generateur-sia/sortie/elements_retires_hors_metropole.txt).
 
 TESTS (Chrome sans fenêtre, iPad simulé ; vrai NAS et vrai VPS bloqués au DNS)
 - Contour : zoom 10 (5 NM) 323 contours, zoom 9 (10 NM) 497 visibles, zoom 8
@@ -2407,6 +2449,13 @@ TESTS (Chrome sans fenêtre, iPad simulé ; vrai NAS et vrai VPS bloqués au DNS
   terrain (0 écart), 36 blancs ; MM-CD = couleur de LFMY ; MM-AW = LFKG ; AA-HB =
   NTAA ; MM-EA = LFMN ; aucune erreur JS. Mise à jour v17.70 -> v17.71 puis hors
   ligne : OK, nouveau cache SIA g4, caches de la pérenne intacts.
+- Après le point 6 (sia.js g5) : 0 terrain non LF ou hors métropole, 0 point hors
+  métropole ; types restants CTA CTR D D-OTHER FIR P R RAS SECTOR SECTOR-C TMA ;
+  Genève 24 zones, Bâle 132, Corse 25 zones et 5 terrains ; couleurs : aucun terrain
+  de la v17.70 ne change, seuls LFBS, LFKG, LFNE, LFXA, LFXU en reçoivent une ;
+  MM-CD = LFMY (turquoise) ; aucune erreur JS. Mise à jour v17.70 -> v17.71 puis
+  hors ligne : OK (cache SIA g5, pérenne intacte). Fluidité (décorations en suivi
+  2 NM, 1 passage) v17.70 / v17.71 : 328 / 296 ms ; mémoire 33,7 / 32,7 Mo.
 - Menu HT : appui court HT OFF puis ON ; appui long : fenêtre, options grisées ;
   chaque option et chaque rayon ; Toutes les HT grise avion / feu ; feu seul sans
   feu : rien ne clignote ; avion 5 NM : 55 portions, avion 10 NM : 127 ; Fermer ;
@@ -2424,10 +2473,11 @@ TESTS (Chrome sans fenêtre, iPad simulé ; vrai NAS et vrai VPS bloqués au DNS
   seulement, caches de la pérenne intacts.
 
 FICHIERS MODIFIÉS
-src/010, src/110, src/220, src/330, src/340, src/350, donc script.js ; style.css ;
-index.html, sw.js, manifest.json (version, révision SIA g4) ; sia.js (g4).
+src/010, src/020, src/110, src/220, src/330, src/340, src/350, donc script.js ;
+style.css ; index.html, sw.js, manifest.json (version, révision SIA g5) ; sia.js (g5).
 Outils (hors dépôt) : generateur-sia/generer_sia.py, modules/rattachement_vac.py,
-modules/vac_libelles.mjs, LISEZMOI.txt.
+modules/vac_libelles.mjs, modules/metropole.py, modules/couleurs_terrains.py,
+couleurs_terrains.json, LISEZMOI.txt.
 
 VERSION
 - App : v17.71
