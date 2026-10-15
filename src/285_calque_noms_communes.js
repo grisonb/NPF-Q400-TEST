@@ -1,32 +1,37 @@
 /*
- * v17.79 — ESSAI DE FLUIDITÉ : calque « Noms des communes » (tuiles raster transparentes).
+ * v17.79 — calque « Noms des communes » (tuiles raster transparentes) ; essai de fluidité VALIDÉ sur iPad.
+ * v17.80 — le calque fait partie de la carte NPF-Q400 V11 (fond sans noms + noms), téléchargés ensemble par
+ * « Télécharger la carte NPF-Q400 » (src/280) ; la section d'essai « noms-essai » est supprimée.
  *
- * Décision de Bastien (15/10/2026) : les noms de communes passent dans un calque séparé,
- * affiché AU-DESSUS du Calque Routier et SOUS les zones SIA / VRP / avion. Cette version
- * ne sert qu'à mesurer la fluidité sur iPad, sur le secteur Valence / Privas / Aubenas /
- * Montélimar (section serveur « noms-essai »). La carte NPF-Q400 (V10) reste la carte normale.
- *
- * - Base IndexedDB SÉPARÉE « CalqueNomsCommunes » (sans « NPF » ni préfixe « OfflineMap_ ») :
- *   jamais effacée avec la carte NPF-Q400, jamais listée comme carte, jamais choisie comme fond.
- * - Calque absent (rien installé) : rien n'est créé, l'app est strictement identique à avant.
- * - Lecteur PROPRE, distinct du moteur du fond (dont aucun réglage n'est modifié) : 2 lectures
- *   simultanées au plus, et chaque lecture attend que la file du fond soit vide (1,5 s au plus).
- * - Pane « calqueNomsCommunesPane » (z 420) : au-dessus des routes (405-415), sous les zones
- *   SIA (440) ; tuiles transparentes, sans le fond gris imposé aux tuiles du fond (style.css).
- * - Affiché seulement sur le fond NPF-Q400 (et la carte en ligne), zooms 8 et plus
- *   (images jusqu'au zoom 13, agrandies au-delà), interrupteur dans Gestion des Cartes.
- * - DIAG : temps de lecture des tuiles du calque, mémoire, périodes affiché / masqué et lectures
- *   du fond pendant ces périodes (section « CALQUE NOMS DES COMMUNES » de l'export DIAG).
+ * - Base IndexedDB SÉPARÉE « CalqueNomsCommunes » (sans « NPF » ni préfixe « OfflineMap_ ») : jamais listée
+ *   comme carte, jamais un fond ; remplacée (effacée puis réécrite) à chaque téléchargement de la carte, et
+ *   supprimée avec la carte NPF-Q400 dans Gestion des Cartes.
+ * - Affiché SEULEMENT si la carte affichée est une carte NPF-Q400 « avec calque des noms » (V11) : avec la V10 ou
+ *   une carte importée par ZIP (noms déjà imprimés dans la carte), rien n'est créé (pas de noms en double).
+ * - Tuile de noms absente (tuile sans aucun nom, non fournie par le serveur) = transparente : lecture locale sans
+ *   résultat, aucune image, AUCUNE requête réseau.
+ * - Pane « calqueNomsCommunesPane » (z 420) : au-dessus des routes (405-415), sous les zones SIA (440) ; tuiles
+ *   transparentes (style.css). Zooms 8 et plus (images jusqu'au zoom 13, agrandies au-delà).
+ * - Lecteur PROPRE, distinct du moteur du fond (aucun réglage du fond modifié) : 2 lectures au plus, chaque
+ *   lecture attend que la file du fond soit vide (1,5 s au plus).
+ * - v17.80 : la base est ouverte AVANT la première lecture et son ouverture est mesurée à part (DIAG du 15/10
+ *   17:59 : une lecture de 2 007 ms, la seule au-delà de 154 ms, pendant un blocage du fil principal de 1,35 s
+ *   peu après l'installation ; la durée d'une lecture compte aussi l'attente du fil principal). Les lectures
+ *   de plus de 500 ms sont listées au DIAG avec leur heure.
+ * - Case « Afficher les noms des communes » (Gestion des Cartes), cochée par défaut.
  */
 const NPF_CALQUE_NOMS_DB_NAME = 'CalqueNomsCommunes';
 const NPF_CALQUE_NOMS_PACK = 'Calque_Noms_Communes';
 const NPF_CALQUE_NOMS_INFO_KEY = 'npfCalqueNomsCommunesV1';
-const NPF_CALQUE_NOMS_SHOW_KEY = 'npfCalqueNomsCommunesAfficheV1';
+/* v17.80 — nouvelle clé : la case est cochée par défaut pour tous (l'essai v17.79 a pu la décocher). */
+const NPF_CALQUE_NOMS_SHOW_KEY = 'npfCalqueNomsCommunesAfficheV2';
+const NPF_SERVER_MAP_LATEST_KEY = 'npfServerMapLatestV1';
 const NPF_CALQUE_NOMS_PANE = 'calqueNomsCommunesPane';
 const NPF_CALQUE_NOMS_MIN_ZOOM = 8;
 const NPF_CALQUE_NOMS_NATIVE_MAX_ZOOM = 13;
 const NPF_CALQUE_NOMS_MAX_READS = 2;
 const NPF_CALQUE_NOMS_WAIT_FOND_MAX_MS = 1500;
+const NPF_CALQUE_NOMS_SLOW_READ_MS = 500;
 
 let npfCalqueNomsLayer = null;
 let npfCalqueNomsDbPromise = null;
@@ -37,7 +42,7 @@ const npfCalqueNomsQueue = [];
 const npfCalqueNomsStats = {
     lectures: 0, trouvees: 0, vides: 0, erreurs: 0, annulees: 0,
     totalMs: 0, maxMs: 0, durees: [], attenteFondMs: 0, maxAttenteFondMs: 0,
-    tuilesMax: 0, periodes: [], memoire: []
+    tuilesMax: 0, periodes: [], memoire: [], ouvertures: [], lentes: []
 };
 
 function readNpfCalqueNomsInfo() {
@@ -53,9 +58,37 @@ function isNpfCalqueNomsShown() {
     try { return localStorage.getItem(NPF_CALQUE_NOMS_SHOW_KEY) !== '0'; } catch (_) { return true; }
 }
 
+/* Carte NPF-Q400 installée (groupe NPF_France) : version, taille, avec ou sans calque des noms. */
+function getNpfInstalledMapDescription() {
+    const packs = getInstalledMapPacksSafe().filter(pack => pack && isNpfOfflinePackSelection([pack.name]));
+    if (!packs.length) return null;
+    const avecNoms = packs.every(pack => pack.calqueNoms === true);
+    const version = packs.map(pack => pack.versionCarte).find(Boolean) || '';
+    const origine = packs.some(pack => pack.origin === 'serveur') ? 'serveur' : 'import';
+    const sizeBytes = packs.reduce((total, pack) => total + (Number(pack.sizeBytes) > 0 ? Number(pack.sizeBytes) : 0), 0);
+    return { packs, avecNoms, version, origine, sizeBytes };
+}
+
+/* Le calque n'est affiché que sur une carte NPF-Q400 « avec calque des noms » (V11), hors ligne, entièrement active. */
+function isNpfCarteAvecNomsActive() {
+    try {
+        if (!offlineTilesMode || !Array.isArray(activeOfflinePacks) || !activeOfflinePacks.length) return false;
+        const installed = getInstalledMapPacksSafe();
+        return activeOfflinePacks.every(name => {
+            const pack = installed.find(item => item && item.name === name);
+            return !!pack && pack.calqueNoms === true && isNpfOfflinePackSelection([name]);
+        });
+    } catch (_) {
+        return false;
+    }
+}
+
 function openNpfCalqueNomsDb() {
     if (!npfCalqueNomsDbPromise) {
+        const startedAt = performance.now();
         npfCalqueNomsDbPromise = openOfflineTileDatabaseByName(NPF_CALQUE_NOMS_DB_NAME, 3).then(db => {
+            npfCalqueNomsStats.ouvertures.push({ t: Date.now(), ms: Math.round(performance.now() - startedAt) });
+            while (npfCalqueNomsStats.ouvertures.length > 20) npfCalqueNomsStats.ouvertures.shift();
             db.onversionchange = () => {
                 try { db.close(); } catch (_) {}
                 npfCalqueNomsDbPromise = null;
@@ -91,10 +124,11 @@ async function waitNpfCalqueNomsFondIdle() {
     }
 }
 
-function readNpfCalqueNomsTile(coords) {
+/* Lecture d'une tuile de noms (base déjà ouverte) : données, ou null si la tuile n'existe pas (= transparente). */
+function readNpfCalqueNomsTileFromDb(db, coords) {
     const tileUrl = buildOfflineTileUrlForPack(`${coords.z}/${coords.x}/${coords.y}.png`, NPF_CALQUE_NOMS_PACK);
     const key = buildStoredTileKey(tileUrl, NPF_CALQUE_NOMS_PACK);
-    return openNpfCalqueNomsDb().then(db => new Promise((resolve, reject) => {
+    return new Promise((resolve, reject) => {
         let request;
         try {
             request = db.transaction('tiles', 'readonly').objectStore('tiles').get(key);
@@ -104,7 +138,7 @@ function readNpfCalqueNomsTile(coords) {
         }
         request.onsuccess = () => resolve(request.result ? request.result.tile : null);
         request.onerror = () => reject(request.error || new Error('lecture impossible'));
-    }));
+    });
 }
 
 function pumpNpfCalqueNomsQueue() {
@@ -131,21 +165,33 @@ async function runNpfCalqueNomsJob(job) {
         job.done(null, job.tile);
         return;
     }
-    const startedAt = performance.now();
     let data = null;
+    let ms = 0;
     try {
-        data = await readNpfCalqueNomsTile(job.coords);
+        /* v17.80 — ouverture de la base hors de la mesure de la lecture. */
+        const db = await openNpfCalqueNomsDb();
+        if (job.cancelled) {
+            npfCalqueNomsStats.annulees += 1;
+            job.done(null, job.tile);
+            return;
+        }
+        const startedAt = performance.now();
+        data = await readNpfCalqueNomsTileFromDb(db, job.coords);
+        ms = performance.now() - startedAt;
     } catch (error) {
         npfCalqueNomsStats.erreurs += 1;
         job.done(null, job.tile);
         return;
     }
-    const ms = performance.now() - startedAt;
     npfCalqueNomsStats.lectures += 1;
     npfCalqueNomsStats.totalMs += ms;
     if (ms > npfCalqueNomsStats.maxMs) npfCalqueNomsStats.maxMs = Math.round(ms);
     npfCalqueNomsStats.durees.push({ t: Date.now(), ms: Math.round(ms * 10) / 10 });
     if (npfCalqueNomsStats.durees.length > 400) npfCalqueNomsStats.durees.shift();
+    if (ms > NPF_CALQUE_NOMS_SLOW_READ_MS) {
+        npfCalqueNomsStats.lentes.push({ t: Date.now(), ms: Math.round(ms), z: job.coords.z, enAttente: npfCalqueNomsQueue.length, actives: npfCalqueNomsActiveReads });
+        while (npfCalqueNomsStats.lentes.length > 20) npfCalqueNomsStats.lentes.shift();
+    }
     if (!data || job.cancelled) {
         if (!data) npfCalqueNomsStats.vides += 1;
         job.done(null, job.tile);
@@ -230,13 +276,11 @@ function sampleNpfCalqueNomsMemory(reason) {
     while (npfCalqueNomsStats.memoire.length > 60) npfCalqueNomsStats.memoire.shift();
 }
 
-/* Affiche ou retire le calque selon : installé, interrupteur, fond NPF-Q400 (ou carte en ligne). */
+/* Affiche ou retire le calque selon : installé, case cochée, carte NPF-Q400 avec calque des noms affichée. */
 function syncNpfCalqueNomsLayer(reason = 'sync') {
     if (!map || typeof L === 'undefined') return;
     const info = readNpfCalqueNomsInfo();
-    let fondOk = true;
-    try { fondOk = isNpfHeavyOverlayBaseMapAllowed(); } catch (_) {}
-    const wanted = !!info && isNpfCalqueNomsShown() && fondOk;
+    const wanted = !!info && isNpfCalqueNomsShown() && isNpfCarteAvecNomsActive();
     if (!info) {
         if (npfCalqueNomsLayer) {
             try { map.removeLayer(npfCalqueNomsLayer); } catch (_) {}
@@ -253,6 +297,8 @@ function syncNpfCalqueNomsLayer(reason = 'sync') {
     }
     if (wanted && !npfCalqueNomsLayer) {
         ensureNpfCalqueNomsPane();
+        /* v17.80 — base ouverte d'avance : la première lecture ne paie pas l'ouverture. */
+        openNpfCalqueNomsDb().catch(() => {});
         npfCalqueNomsLayer = buildNpfCalqueNomsLayer(info);
         npfCalqueNomsLayer.addTo(map);
         noteNpfCalqueNomsPeriod(true);
@@ -277,10 +323,10 @@ function scheduleNpfCalqueNomsSync(reason) {
 
 function setNpfCalqueNomsShown(shown) {
     try { localStorage.setItem(NPF_CALQUE_NOMS_SHOW_KEY, shown ? '1' : '0'); } catch (_) {}
-    syncNpfCalqueNomsLayer(shown ? 'interrupteur affiché' : 'interrupteur masqué');
+    syncNpfCalqueNomsLayer(shown ? 'case cochée' : 'case décochée');
 }
 
-/* Téléchargement (section « noms-essai ») : appelé avant d'effacer l'ancienne version du calque. */
+/* Téléchargement de la carte (src/280) : avant d'effacer l'ancien calque des noms. */
 function prepareNpfCalqueNomsDownload() {
     try { localStorage.removeItem(NPF_CALQUE_NOMS_INFO_KEY); } catch (_) {}
     if (npfCalqueNomsLayer) {
@@ -292,80 +338,81 @@ function prepareNpfCalqueNomsDownload() {
     refreshNpfCalqueNomsUi();
 }
 
-/* Emprise des tuiles du zoom le plus fin (clés seulement, sans lire les images). */
-function scanNpfCalqueNomsBounds() {
-    return openNpfCalqueNomsDb().then(db => new Promise(resolve => {
-        let maxZoom = -1;
-        let box = null;
-        try {
-            const cursorRequest = db.transaction('tiles', 'readonly').objectStore('tiles').index('tileUrl').openKeyCursor();
-            cursorRequest.onsuccess = () => {
-                const cursor = cursorRequest.result;
-                if (!cursor) {
-                    if (!box) { resolve(null); return; }
-                    const n = 2 ** box.z;
-                    const lon = x => x / n * 360 - 180;
-                    const lat = y => Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n))) * 180 / Math.PI;
-                    resolve([lon(box.x0), lat(box.y1 + 1), lon(box.x1 + 1), lat(box.y0)].map(v => Math.round(v * 10000) / 10000));
-                    return;
-                }
-                const match = String(cursor.key || '').match(/\/(\d+)\/(\d+)\/(\d+)\.png/i);
-                if (match) {
-                    const z = Number(match[1]); const x = Number(match[2]); const y = Number(match[3]);
-                    if (z > maxZoom) { maxZoom = z; box = { z, x0: x, x1: x, y0: y, y1: y }; }
-                    else if (z === maxZoom) {
-                        box.x0 = Math.min(box.x0, x); box.x1 = Math.max(box.x1, x);
-                        box.y0 = Math.min(box.y0, y); box.y1 = Math.max(box.y1, y);
-                    }
-                }
-                cursor.continue();
-            };
-            cursorRequest.onerror = () => resolve(null);
-        } catch (_) {
-            resolve(null);
-        }
-    })).catch(() => null);
-}
-
-/* Téléchargement terminé et vérifié : le calque est ajouté, sans recharger la page. */
-async function finishNpfCalqueNomsDownload(manifest, count) {
-    const bounds = await scanNpfCalqueNomsBounds();
+/* Téléchargement de la carte terminé et vérifié (src/280) : calque des noms installé (la page est ensuite rechargée). */
+function recordNpfCalqueNomsInstalled(manifest, count) {
     const info = {
-        installed: true, tuiles: count, octets: Number(manifest.totalOctets) || 0,
-        version: manifest.versionCarte || manifest.versionContenu || '', creeLe: manifest.creeLe || '',
-        installeLe: Date.now(), bounds
+        installed: true, tuiles: count, octets: Number(manifest.octetsNoms) || 0,
+        version: manifest.versionCarte || '', creeLe: manifest.creeLe || '', installeLe: Date.now(),
+        bounds: Array.isArray(manifest.emprise) && manifest.emprise.length === 4 ? manifest.emprise : null
     };
     localStorage.setItem(NPF_CALQUE_NOMS_INFO_KEY, JSON.stringify(info));
-    syncNpfCalqueNomsLayer('installation');
     return info;
 }
 
-async function deleteNpfCalqueNoms() {
-    const ok = await npfConfirmInApp('Supprimer le calque des noms des communes ? La carte NPF-Q400 n\'est pas touchée.');
-    if (!ok) return;
+/* Carte NPF-Q400 supprimée dans Gestion des Cartes (src/280) : son calque des noms aussi. */
+async function deleteNpfCalqueNomsWithMap() {
     prepareNpfCalqueNomsDownload();
-    try { await deleteIndexedDatabaseWithTimeoutForNpf(NPF_CALQUE_NOMS_DB_NAME, 15000); } catch (_) {}
-    syncNpfCalqueNomsLayer('suppression');
+    if (await doesNpfIndexedDatabaseExist(NPF_CALQUE_NOMS_DB_NAME) !== false) {
+        await deleteIndexedDatabaseWithTimeoutForNpf(NPF_CALQUE_NOMS_DB_NAME, 15000);
+    }
+    syncNpfCalqueNomsLayer('carte supprimée');
 }
 
 function refreshNpfCalqueNomsUi() {
-    const status = document.getElementById('noms-installed-status');
     const toggleRow = document.getElementById('noms-toggle-row');
     const toggle = document.getElementById('noms-toggle-input');
-    const remove = document.getElementById('noms-delete-button');
-    if (!status) return;
-    const info = readNpfCalqueNomsInfo();
-    if (!info) {
-        status.textContent = 'Calque des noms des communes non installé.';
-        if (toggleRow) toggleRow.style.display = 'none';
-        if (remove) remove.style.display = 'none';
-        return;
-    }
-    const date = info.installeLe ? new Date(info.installeLe).toLocaleDateString('fr-FR') : '?';
-    status.textContent = `Installé : ${Number(info.tuiles || 0).toLocaleString('fr-FR')} tuiles (${info.version || '?'}, ${date}).`;
-    if (toggleRow) toggleRow.style.display = '';
+    const carte = getNpfInstalledMapDescription();
+    const visible = !!readNpfCalqueNomsInfo() && !!carte && carte.avecNoms;
+    if (toggleRow) toggleRow.style.display = visible ? '' : 'none';
     if (toggle) toggle.checked = isNpfCalqueNomsShown();
-    if (remove) remove.style.display = '';
+    try { refreshNpfMapInstalledStatus(); } catch (_) {}
+}
+
+/* Gestion des Cartes : « Carte NPF-Q400 — V11, 1,5 Go » et « Nouvelle carte disponible : V11 ».
+ * checkServer : lecture du manifeste du serveur (à l'ouverture de Gestion des Cartes, si le réseau répond). */
+async function refreshNpfMapInstalledStatus({ checkServer = false } = {}) {
+    const box = document.getElementById('npf-map-installed-status');
+    if (!box) return;
+    if (checkServer && typeof NPF_SERVER_MAPS !== 'undefined' && NPF_SERVER_MAPS['npf-q400'] && !npfServerMapDownloadRunning) {
+        try {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 6000);
+            const response = await fetch(`${NPF_SERVER_MAPS['npf-q400'].manifestUrl}?t=${Date.now()}`, { cache: 'no-store', signal: controller.signal });
+            clearTimeout(timer);
+            if (response.ok) {
+                const manifest = await response.json();
+                if (manifest && manifest.versionCarte) {
+                    writeNpfJsonStorage(NPF_SERVER_MAP_LATEST_KEY, { versionCarte: manifest.versionCarte, totalOctets: Number(manifest.totalOctets) || 0, creeLe: manifest.creeLe || '', at: Date.now() });
+                }
+            }
+        } catch (_) {}
+    }
+    const carte = getNpfInstalledMapDescription();
+    const latest = readNpfJsonStorage(NPF_SERVER_MAP_LATEST_KEY, null);
+    const lignes = [];
+    if (!carte) {
+        lignes.push('Carte NPF-Q400 installée : aucune.');
+    } else {
+        const version = carte.version || (carte.origine === 'import' ? 'import manuel (ZIP)' : 'version inconnue');
+        const taille = carte.sizeBytes > 0 ? `, ${formatNpfStorageSizeForUser(carte.sizeBytes)}` : '';
+        lignes.push(`Carte NPF-Q400 — ${version}${taille}${carte.avecNoms ? '' : ' (noms des communes imprimés dans la carte)'}.`);
+    }
+    let nouvelle = '';
+    if (latest && latest.versionCarte && (!carte || carte.version !== latest.versionCarte)) {
+        nouvelle = `${carte ? 'Nouvelle carte disponible' : 'Carte disponible'} : ${latest.versionCarte}${latest.totalOctets > 0 ? `, ${formatNpfStorageSizeForUser(latest.totalOctets)}` : ''}.`;
+    }
+    box.innerHTML = '';
+    lignes.forEach(texte => {
+        const div = document.createElement('div');
+        div.textContent = texte;
+        box.appendChild(div);
+    });
+    if (nouvelle) {
+        const div = document.createElement('div');
+        div.className = 'npf-map-new-available';
+        div.textContent = nouvelle;
+        box.appendChild(div);
+    }
 }
 
 function initNpfCalqueNomsCommunes() {
@@ -373,11 +420,6 @@ function initNpfCalqueNomsCommunes() {
     if (toggle && toggle.dataset.bound !== '1') {
         toggle.dataset.bound = '1';
         toggle.addEventListener('change', () => setNpfCalqueNomsShown(!!toggle.checked));
-    }
-    const remove = document.getElementById('noms-delete-button');
-    if (remove && remove.dataset.bound !== '1') {
-        remove.dataset.bound = '1';
-        remove.addEventListener('click', () => { deleteNpfCalqueNoms(); });
     }
     refreshNpfCalqueNomsUi();
     if (!readNpfCalqueNomsInfo()) return;
@@ -400,22 +442,30 @@ if (document.readyState === 'loading') {
     initNpfCalqueNomsCommunes();
 }
 
-/* DIAG (export) : lectures du calque, mémoire, périodes affiché / masqué et lectures du fond pendant ces périodes. */
+/* DIAG (export) : carte installée, lectures du calque, ouverture de la base, lectures lentes, mémoire,
+ * périodes affiché / masqué et lectures du fond pendant ces périodes. */
 function appendNpfCalqueNomsDiagLines(lines) {
     const info = readNpfCalqueNomsInfo();
+    const carte = getNpfInstalledMapDescription();
     lines.push('');
-    lines.push('CALQUE NOMS DES COMMUNES — ESSAI DE FLUIDITÉ (v17.79)');
+    lines.push('CALQUE NOMS DES COMMUNES (v17.80)');
+    lines.push('Carte NPF-Q400 installée : ' + (carte
+        ? (carte.version || carte.origine) + ' · ' + (carte.avecNoms ? 'avec calque des noms' : 'noms imprimés dans la carte (calque non affiché)') + ' · ' + formatNpfStorageSizeForUser(carte.sizeBytes)
+        : 'aucune') + ' | carte avec noms affichée : ' + (isNpfCarteAvecNomsActive() ? 'oui' : 'non'));
     if (!info) {
-        lines.push('Non installé : aucune couche, aucune lecture.');
+        lines.push('Calque non installé : aucune couche, aucune lecture.');
         return;
     }
     const s = npfCalqueNomsStats;
     const sorted = s.durees.map(item => item.ms).sort((a, b) => a - b);
     const pct = p => (sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))] : null);
     lines.push('Installé : ' + info.tuiles + ' tuiles, version ' + info.version + ', base ' + NPF_CALQUE_NOMS_DB_NAME
-        + ' | interrupteur ' + (isNpfCalqueNomsShown() ? 'affiché' : 'masqué') + ' | couche ' + (npfCalqueNomsLayer ? 'présente' : 'absente'));
-    lines.push('Lectures : ' + s.lectures + ' (' + s.trouvees + ' images, ' + s.vides + ' vides) | erreurs ' + s.erreurs + ' | annulées ' + s.annulees
+        + ' | case ' + (isNpfCalqueNomsShown() ? 'cochée' : 'décochée') + ' | couche ' + (npfCalqueNomsLayer ? 'présente' : 'absente'));
+    lines.push('Lectures : ' + s.lectures + ' (' + s.trouvees + ' images, ' + s.vides + ' sans nom) | erreurs ' + s.erreurs + ' | annulées ' + s.annulees
         + ' | moyenne ' + (s.lectures ? (s.totalMs / s.lectures).toFixed(1) : '—') + ' ms | médiane ' + pct(0.5) + ' ms | 95 % ' + pct(0.95) + ' ms | max ' + s.maxMs + ' ms');
+    lines.push('Ouverture de la base (hors lectures) : ' + (s.ouvertures.length ? s.ouvertures.map(item => new Date(item.t).toLocaleTimeString('fr-FR') + ' ' + item.ms + ' ms').join(' ; ') : 'pas encore ouverte'));
+    lines.push('Lectures de plus de ' + NPF_CALQUE_NOMS_SLOW_READ_MS + ' ms (à comparer aux BLOCAGES JS de la même heure) : '
+        + (s.lentes.length ? s.lentes.map(item => new Date(item.t).toLocaleTimeString('fr-FR') + ' ' + item.ms + ' ms (zoom ' + item.z + ', ' + item.enAttente + ' en attente)').join(' ; ') : 'aucune'));
     lines.push('Attente de la file du fond avant lecture : total ' + Math.round(s.attenteFondMs) + ' ms | max ' + s.maxAttenteFondMs + ' ms');
     lines.push('Tuiles du calque en mémoire : max ' + s.tuilesMax + ' (≈ ' + (s.tuilesMax * 0.25).toFixed(1) + ' Mo d\'images décodées)');
     lines.push('Mémoire (tuiles du calque · images décodées estimées · tas JS si le navigateur le donne) :');

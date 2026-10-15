@@ -1,4 +1,4 @@
-/* NPF_STYLE_BUILD_VERSION: v17.79 */
+/* NPF_STYLE_BUILD_VERSION: v17.80 */
 /* v14.83 — nettoyage des références techniques et limitation des cartouches routiers. */
 /* v14.81 — recherche phonétique nationale élargie aux fragments sur deux lettres. */
 /* v14.80 — Brive conservé uniquement sous LFSL. */
@@ -18648,7 +18648,18 @@ body.npf-calculator-modal-open {
     color: #0b3a66 !important;
 }
 
-/* v17.79 — ESSAI : calque « Noms des communes ». Tuiles transparentes : sans le fond gris
+/* v17.80 — Gestion des Cartes : carte NPF-Q400 installée et nouvelle carte disponible. */
+.npf-map-installed-status {
+    margin: 6px 0 2px;
+    font-size: 14px;
+    line-height: 1.35;
+}
+.npf-map-installed-status .npf-map-new-available {
+    font-weight: 700;
+    color: #0b5394;
+}
+
+/* v17.79 — calque « Noms des communes ». Tuiles transparentes : sans le fond gris
    imposé à toutes les tuiles (.leaflet-tile, applyMapNoBackgroundStyle). */
 .leaflet-pane.calque-noms-communes-pane,
 .leaflet-pane.calque-noms-communes-pane .leaflet-tile-container,

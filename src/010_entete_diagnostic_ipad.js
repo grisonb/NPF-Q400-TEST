@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.79';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.80';
 
 
 /*
@@ -3302,14 +3302,14 @@ function appendNpfDiagDetailExportSections(lines) {
     appendNpfDiagLaunchSection(lines);
     appendNpfDiagNasSection(lines);
     appendNpfDiagPackReadSection(lines);
-    /* v17.79 — essai du calque « Noms des communes » (src/285). */
+    /* v17.79 — calque « Noms des communes » (src/285) ; v17.80 : carte V11. */
     if (typeof appendNpfCalqueNomsDiagLines === 'function') {
         try { appendNpfCalqueNomsDiagLines(lines); } catch (_) {}
     }
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.79 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.80 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
