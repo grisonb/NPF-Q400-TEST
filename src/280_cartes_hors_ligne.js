@@ -3386,6 +3386,28 @@ const NPF_SERVER_MAPS = {
         ancienne: 'les anciens PDF Doc FdF',
         confirmation: 'Doc FdF Réduite / Carte Fréquences, 23 Mo : utilise le Wi-Fi. Tous les PDF Doc FdF de l\'iPad (Carte Fréquences comprise) seront remplacés, seulement une fois les nouveaux complets et vérifiés.',
         besoinOctets: 160 * 1024 * 1024
+    },
+    /* v17.79 — ESSAI : calque « Noms des communes » (secteur Valence / Privas / Aubenas / Montélimar).
+     * Tuiles transparentes dans une base SÉPARÉE (sans « NPF ») : AJOUTÉ au-dessus du Calque Routier,
+     * sans toucher à la carte NPF-Q400 ni aux autres cartes, sans recharger la page (src/285). */
+    'noms-essai': {
+        type: 'tuiles',
+        calque: true,
+        nom: 'Noms des communes (essai secteur)',
+        manifestUrl: `${NPF_SERVER_BASE_URL}noms-essai/manifest.json`,
+        format: 'npf-q400-tiles-v1',
+        groupName: 'Calque_Noms_Communes',
+        packName: 'Calque_Noms_Communes',
+        dbName: 'CalqueNomsCommunes',
+        stateKey: 'npfServerSectionDownloadV1:noms-essai',
+        logKey: 'npfServerSectionLogV1:noms-essai',
+        ui: 'noms-download',
+        libelle: 'Télécharger les noms des communes (essai secteur, 2 Mo)',
+        libelleReprise: 'Reprendre le téléchargement des noms des communes',
+        ancienne: 'l\'ancien calque des noms des communes',
+        confirmation: 'Calque des noms des communes (ESSAI : secteur Valence / Privas / Aubenas / Montélimar), 2 Mo. La carte NPF‑Q400 et les autres cartes ne sont pas touchées.',
+        /* Jamais un groupe de cartes : seule la base du calque est remplacée. */
+        estAncienGroupe: () => false
     }
 };
 const NPF_SERVER_MAP_STATE_KEY = 'npfServerMapDownloadV1';
@@ -3731,8 +3753,9 @@ async function deleteNpfServerSectionOldGroups(cfg, aEffacer) {
             results.push({ groupName: item.groupName, dbName: '', status: 'retirée de la liste (ancienne base commune)' });
         }
     }
-    /* Base cible restée d'un import ou d'un téléchargement inachevé. */
-    const targetDbName = getOfflineMapDatabaseNameForGroup(cfg.groupName);
+    /* Base cible restée d'un import ou d'un téléchargement inachevé (calque des noms : sa propre base, v17.79). */
+    if (cfg.calque) prepareNpfCalqueNomsDownload();
+    const targetDbName = cfg.dbName || getOfflineMapDatabaseNameForGroup(cfg.groupName);
     if (!results.some(item => item.dbName === targetDbName)
         && await doesNpfIndexedDatabaseExist(targetDbName) !== false) {
         const result = await deleteIndexedDatabaseWithTimeoutForNpf(targetDbName, 15000);
@@ -4088,7 +4111,7 @@ async function runNpfServerMapDownload(mapId) {
         alert(`Un import est déjà en cours. Attends la fin avant de télécharger ${cfg.nom}.`);
         return;
     }
-    const targetDbName = cfg.type === 'tuiles' ? getOfflineMapDatabaseNameForGroup(cfg.groupName) : '';
+    const targetDbName = cfg.dbName || (cfg.type === 'tuiles' ? getOfflineMapDatabaseNameForGroup(cfg.groupName) : '');
     let state = readNpfServerMapState(cfg);
     const resuming = !!(state && state.mapId === mapId && state.status !== 'terminé');
 
@@ -4276,6 +4299,17 @@ async function runNpfServerMapDownload(mapId) {
             addNpfServerMapLogEvent(`vérification ÉCHOUÉE : ${count === null ? 'comptage impossible' : count} tuiles au lieu de ${manifest.totalTuiles}`, {}, cfg);
             writeNpfServerMapState(null, cfg);
             showNpfServerMapProgress(`Vérification échouée (${count === null ? 'comptage impossible' : `${count} tuiles au lieu de ${manifest.totalTuiles}`}). La carte n'est pas utilisable : appuie de nouveau sur « ${cfg.libelle} ».`, null, { advice: false, error: true }, cfg);
+            return;
+        }
+
+        if (cfg.calque) {
+            /* v17.79 — calque des noms : ni liste des cartes, ni carte active, ni rechargement. */
+            await finishNpfCalqueNomsDownload(manifest, count);
+            const minutesCalque = Math.max(1, Math.round((Date.now() - Number(state.startedAt || Date.now())) / 60000));
+            addNpfServerMapLogEvent(`terminé et vérifié : ${count} tuiles, ${minutesCalque} min depuis le début ; calque ajouté sans rechargement`, {}, cfg);
+            writeNpfServerMapState(null, cfg);
+            releaseNpfServerMapWakeLock();
+            showNpfServerMapProgress(`100 % — ${cfg.nom} installé et vérifié (${count.toLocaleString('fr-FR')} tuiles).`, 100, { advice: false }, cfg);
             return;
         }
 

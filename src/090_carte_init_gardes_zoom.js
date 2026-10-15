@@ -553,7 +553,8 @@ function initMap() {
      * réappliquée si « fond autorisé » a changé. État initial mémorisé ici.
      */
     map.on('layeradd', event => {
-        if (event?.layer instanceof L.GridLayer) {
+        /* v17.79 — le calque des noms des communes n'est pas un changement de fond. */
+        if (event?.layer instanceof L.GridLayer && !event.layer.__npfCalqueNoms) {
             scheduleNpfHeavyOverlayBaseMapSync('changement-de-fond');
         }
     });

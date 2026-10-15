@@ -1,4 +1,4 @@
-/* NPF_STYLE_BUILD_VERSION: v17.78 */
+/* NPF_STYLE_BUILD_VERSION: v17.79 */
 /* v14.83 — nettoyage des références techniques et limitation des cartouches routiers. */
 /* v14.81 — recherche phonétique nationale élargie aux fragments sur deux lettres. */
 /* v14.80 — Brive conservé uniquement sous LFSL. */
@@ -18646,4 +18646,27 @@ body.npf-calculator-modal-open {
     background-color: #bcdaf6 !important;
     border-color: #7fb2e3 !important;
     color: #0b3a66 !important;
+}
+
+/* v17.79 — ESSAI : calque « Noms des communes ». Tuiles transparentes : sans le fond gris
+   imposé à toutes les tuiles (.leaflet-tile, applyMapNoBackgroundStyle). */
+.leaflet-pane.calque-noms-communes-pane,
+.leaflet-pane.calque-noms-communes-pane .leaflet-tile-container,
+.leaflet-pane.calque-noms-communes-pane .leaflet-tile {
+    background: transparent !important;
+    background-color: transparent !important;
+}
+.leaflet-pane.calque-noms-communes-pane {
+    pointer-events: none;
+}
+.noms-communes-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 8px 0 4px;
+    font-size: 14px;
+}
+.noms-communes-toggle input {
+    width: 20px;
+    height: 20px;
 }

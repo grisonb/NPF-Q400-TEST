@@ -29,6 +29,7 @@
 260_etat_gps.js
 270_position_simulation.js
 280_cartes_hors_ligne.js
+285_calque_noms_communes.js
 290_calculateur_mission.js
 300_chat_equipe.js
 310_calculateur_ui.js

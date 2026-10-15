@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v17-78_voltige_parcs_lisses';
-const APP_VERSION = 'v17.78';
+const SW_VERSION = 'sw-v17-79_calque_noms_essai';
+const APP_VERSION = 'v17.79';
 const SIA_DATA_REVISION = 'sia-2026-10-29-v02-g14';
 const SIA_DATA_URL = './sia.js';
 /*

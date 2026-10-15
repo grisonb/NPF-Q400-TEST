@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
-Mise à jour : 11/10/2026
-Version de travail actuelle : TEST v17.78
+Mise à jour : 15/10/2026
+Version de travail actuelle : TEST v17.79
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,10 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.79 — ESSAI DE FLUIDITÉ : calque « Noms des communes » (tuiles transparentes, base
+  séparée CalqueNomsCommunes) au-dessus du Calque Routier, sous les zones SIA ; section
+  serveur « noms-essai » (secteur Valence / Privas / Aubenas / Montélimar), interrupteur et
+  suppression dans Gestion des Cartes ; DIAG lectures / mémoire affiché-masqué ;
 - v17.78 — voltige : ➰ retourné (boucle en haut) ; parcs : jamais de points sous
   3 km, rangée de points sur contour lissé ;
 - v17.77 — voltige 🛩️, aéromodélisme = radiocommande dessinée ; icônes sous les VRP,
@@ -524,7 +528,10 @@ NON IMPLÉMENTÉ / OUVERT :
   07/10/2026 : programme VPS bfg-sofia-notams 1.2.0 PRÊT, NON INSTALLÉ
   (~/vps-a-copier/). v17.60 à pousser APRÈS l'installation de la 1.2.0
   (elle annonce « environ 1 minute ») ;
-- v17.78 : À MESURER sur iPad (➰ retourné, Frioul / Riou / Calanques à 5 NM) ;
+- v17.79 : À MESURER sur iPad : fluidité du fond NPF-Q400 avec le calque des noms affiché puis masqué
+  (DIAG « CALQUE NOMS DES COMMUNES ») ; section noms-essai PRÉPARÉE, NON ENVOYÉE sur le VPS
+  (installer-noms-essai-vps.ps1, attente de l'OK écrit de Bastien) ; COMMIT LOCAL, NON POUSSÉE ;
+- v17.78 : POUSSÉE le 11/10/2026 (4a9c1e9) ; À MESURER sur iPad (➰ retourné, Frioul / Riou / Calanques à 5 NM) ;
 - v17.77 : POUSSÉE le 11/10/2026 (b5ee146) ; retour iPad : 🛩️ = jet chez Apple, Frioul en fouillis (corrigés en v17.78) ;
 - v17.76 : POUSSÉE le 11/10/2026 (a576abd) ; À MESURER sur iPad (icônes absentes sur les aérodromes) ;
 - v17.75 : POUSSÉE le 11/10/2026 (8c48dee) ; retour iPad : 🕹️ toujours décentré (corrigé en v17.76) ; À MESURER (plus de blocage près des parcs) ;
@@ -746,31 +753,31 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.78
-Date : 11/10/2026
-Base : v17.77 (b5ee146, poussée le 11/10/2026)
+Version : TEST v17.79
+Date : 15/10/2026
+Base : v17.78 (4a9c1e9, poussée le 11/10/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.78.txt
-2_Index_v17.78.txt
-3_Manifest_v17.78.txt
-4_Script_v17.78.txt
-5_SIA_v17.78.txt
-6_Style_v17.78.txt
-7_Sw_v17.78.txt
+1_Modifications_v17.79.txt
+2_Index_v17.79.txt
+3_Manifest_v17.79.txt
+4_Script_v17.79.txt
+5_SIA_v17.79.txt
+6_Style_v17.79.txt
+7_Sw_v17.79.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.78 (et texte « TEST v17.78 » de l'écran de
+- Index : APP_VERSION = v17.79 (et texte « TEST v17.79 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.78
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.78
-- Style : NPF_STYLE_BUILD_VERSION = v17.78
-- Service Worker : `sw-v17-78_voltige_parcs_lisses` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-78_voltige_parcs_lisses`, `npf-q400-test-app-data-v1`,
+- Manifest : start_url = ./index.html?appv=v17.79
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.79
+- Style : NPF_STYLE_BUILD_VERSION = v17.79
+- Service Worker : `sw-v17-79_calque_noms_essai` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-79_calque_noms_essai`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-sia-2026-10-29-v02-g14`
 - SIA_DATA_REVISION (SW / Index sia.js?siav=) : sia-2026-10-29-v02-g14 (= NPF_SIA_DATA_REVISION
   de sia.js ; à changer à chaque nouveau sia.js)
-- sia.js v17.78 : RÉGÉNÉRÉ, révision g14 = g13 + contour lissé des points des PRN (pd), rien sous 3 km ; g13 = g12 + taille des parties de parcs (pe) ; g12 = g11 + « ad » (AER / VOL / PJE sur aérodrome) ; g11 = g10 + directions intérieures des PRN (pi) ; g10 = g9 + noms et contours INPN des parcs et réserves (PRN) ; g9 = g8 + VRP superposés regroupés (« ra ») ; g8 = g7 sans les 7 VRP de LFME, LFTW rouge ; g7 = données identiques à g6, table des couleurs par familles ; g6 = métropole seule + 34 VRP rattachés d'après l'eAIP + couleurs figées (AIRAC 11/26 du 29/10/2026, paquet SIA v02) par
+- sia.js v17.79 : INCHANGÉ (identique à v17.78) ; v17.78 : RÉGÉNÉRÉ, révision g14 = g13 + contour lissé des points des PRN (pd), rien sous 3 km ; g13 = g12 + taille des parties de parcs (pe) ; g12 = g11 + « ad » (AER / VOL / PJE sur aérodrome) ; g11 = g10 + directions intérieures des PRN (pi) ; g10 = g9 + noms et contours INPN des parcs et réserves (PRN) ; g9 = g8 + VRP superposés regroupés (« ra ») ; g8 = g7 sans les 7 VRP de LFME, LFTW rouge ; g7 = données identiques à g6, table des couleurs par familles ; g6 = métropole seule + 34 VRP rattachés d'après l'eAIP + couleurs figées (AIRAC 11/26 du 29/10/2026, paquet SIA v02) par
   ~/projects/outils_tests_NPF-Q400-TEST/generateur-sia/generer_sia.py (une commande
   par cycle avec --eaip <ZIP eAIP du cycle>, voir son LISEZMOI.txt) ; npfDatasetRevision 2026-10-29-v02-g14.
 - Images de lancement : icons/startup-ipad9-portrait.png (1620 × 2160) et
@@ -779,15 +786,15 @@ Références de version cohérentes :
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.78 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.79 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
 - `sia.js` : par rapport à v17.70, outre-mer retiré, « a » de 34 VRP renseigné, table vrpAirportColors ajoutée (2 pastels), révision g6 ; zones, terrains et points de métropole identiques ; moteur tuiles (src/100) modifié en v17.66 sur demande
   explicite (limite de zoom propre à chaque carte, zoom 11 OACI 1/500 000) ;
-- tests v17.78 : entrée v17.78 ;
+- tests v17.79 : entrée v17.79 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77 et v17.78 À MESURER ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78 et v17.79 À MESURER ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
   v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE ;
   v17.56 VALIDÉE en vol ; v17.57 VALIDÉE sur iPad.
 
@@ -2316,6 +2323,64 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.79 — ESSAI DE FLUIDITÉ : CALQUE « NOMS DES COMMUNES » AU-DESSUS DU CALQUE ROUTIER
+Date : 15/10/2026
+Base fonctionnelle : v17.78 (commit 4a9c1e9, poussée le 11/10/2026).
+Demande de Bastien : les noms de communes passent dans un CALQUE SÉPARÉ (tuiles raster
+transparentes), au-dessus du Calque Routier et sous les zones SIA / VRP / avion. Cette version
+sert UNIQUEMENT à vérifier la fluidité sur iPad, sur le secteur Valence / Privas / Aubenas /
+Montélimar, avant de fabriquer la France. La carte V10 (servie depuis le 14/10/2026) reste la
+carte normale ; ses noms imprimés sont donc doublés par le calque : ACCEPTÉ pour cet essai.
+
+1. CALQUE (nouveau fichier src/285_calque_noms_communes.js, après src/280 dans ORDER.txt)
+- Base IndexedDB SÉPARÉE « CalqueNomsCommunes » (sans « NPF » ni préfixe « OfflineMap_ ») :
+  jamais effacée avec la carte NPF-Q400, jamais dans installedMapPacks, jamais un fond de carte,
+  hors de la « Réinitialisation profonde ». Réglages : npfCalqueNomsCommunesV1 (installé) et
+  npfCalqueNomsCommunesAfficheV1 (interrupteur).
+- Calque NON installé : rien n'est créé (aucun pane, aucune couche, aucune lecture) — application
+  identique à v17.78 (mesuré : mêmes panes, couches, bases, capture identique au pixel près hors
+  numéro de version).
+- Pane « calqueNomsCommunesPane » z 420 : au-dessus des routes (405-415), sous les zones SIA (440) ;
+  tuiles transparentes (style.css : exception à la règle du fond gris des tuiles, v13.58).
+- Lecteur PROPRE, distinct du moteur du fond (AUCUN réglage du fond modifié : 5 lectures, files,
+  caches, keepBuffer, délais inchangés) : 2 lectures simultanées au plus ; chaque lecture attend que
+  la file du fond soit vide (1,5 s au plus) ; tuiles retirées = lectures annulées ; keepBuffer 1,
+  mise à jour à l'arrêt du geste ; images jusqu'au zoom 13, agrandies au-delà ; zooms 8 et plus ;
+  emprise limitée aux tuiles présentes.
+- Affiché seulement sur le fond NPF-Q400 (et la carte en ligne) ; interrupteur « Afficher les noms
+  des communes au-dessus des routes » et « Supprimer le calque » dans Gestion des Cartes.
+- src/090 : l'ajout du calque n'est pas pris pour un changement de fond (règle HT / Routes v17.42).
+2. SECTION SERVEUR « noms-essai » (src/280, index.html)
+- « Noms des communes (essai secteur) » dans Gestion des Cartes, même déroulé que les sections
+  (manifeste, morceaux, SHA-256, reprise) ; à la fin, le calque est AJOUTÉ sans toucher à la carte
+  NPF-Q400 ni aux autres cartes et SANS recharger la page ; seule la base du calque est remplacée.
+- Données : tuiles v35 « noms » (styles du dossier NPF carte v30 France), zooms 8 à 13, PNG 256
+  couleurs avec transparence, tuiles vides non stockées : 649 tuiles, 1 morceau de 2,0 Mo
+  (~/projects/npf-cartes-vps/sections/noms-essai). Envoi VPS PRÉPARÉ (installer-noms-essai-vps.ps1,
+  retour-arriere-noms-essai-vps.ps1, outils/carte-noms-essai-vps.sh : /srv/npf-cartes/noms-essai/
+  seulement), NON LANCÉ.
+3. DIAG (export) : section « CALQUE NOMS DES COMMUNES » : lectures du calque (moyenne, médiane, 95 %,
+  max, vides, annulées), attente de la file du fond, tuiles en mémoire, relevés mémoire, périodes
+  affiché / masqué et lectures du FOND pendant ces périodes.
+4. TESTS PC (outils de test : cdp_noms79.js, run_noms79.sh ; faux serveur, jamais le vrai VPS)
+- Calque absent : v17.79 = v17.78 (panes, couches, bases, carte active, routes, Doc FdF, capture) ;
+  aucune erreur JS.
+- Téléchargement : 15 s, 649 tuiles vérifiées, PAS de rechargement ; carte NPF-Q400 (828 tuiles
+  d'essai), installedMapPacks, carte active, Calque Routier (53 parties) et Doc FdF identiques ;
+  pane 420 entre les routes et les zones SIA ; noms au-dessus des routes ; aucune erreur JS.
+- Fluidité, CPU ralenti ×6, profil 1180 × 820, scénario de 20 gestes (zooms 10 à 13, glissements),
+  2 tours affiché / masqué :
+    calque affiché : tâches longues 30 et 26 (2,6 et 2,1 s, max 211 et 168 ms) ; images > 100 ms
+      19 et 16 (max 257 et 208 ms) ; lectures du calque 234 par tour, médiane 4,5 à 6,3 ms,
+      moyenne 14 ms, max 154 ms ; attente de la file du fond max 554 ms ;
+    calque masqué : tâches longues 19 et 18 (2,0 et 1,6 s, max 305 et 209 ms) ; images > 100 ms
+      9 et 8 (max 305 et 250 ms) ;
+    lectures du fond : médiane 31 ms affiché / 67 ms masqué (bruit), pas de dégradation visible ;
+    mémoire : 20 tuiles du calque à l'écran (34 au plus, ≈ 5 à 8,5 Mo d'images décodées) ; tas JS
+      47 à 55 Mo dans les deux cas.
+  => le calque ajoute environ 8 à 11 tâches longues et 8 à 10 images sautées par scénario
+     (≈ +0,5 s de travail sous ×6), sans tâche plus longue que sans calque. À MESURER sur iPad.
 
 VERSION TEST v17.78 — VOLTIGE ➰ RETOURNÉ ; PARCS : PAS DE POINTS SOUS 3 KM, POINTS SUR CONTOUR LISSÉ
 Date : 11/10/2026
