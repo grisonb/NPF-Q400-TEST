@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.82';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.83';
 
 
 /*
@@ -3309,7 +3309,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.82 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.83 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -19951,6 +19951,10 @@ function clearNpfHtBlinkLayer() {
     try { if (npfHtBlinkLayer) npfHtBlinkLayer.clearLayers(); } catch (_) {}
     try { if (npfHtBlinkLayer && map?.hasLayer(npfHtBlinkLayer)) map.removeLayer(npfHtBlinkLayer); } catch (_) {}
     try { if (npfHtBlinkRenderer && map?.hasLayer(npfHtBlinkRenderer)) map.removeLayer(npfHtBlinkRenderer); } catch (_) {}
+    /* v17.83 — Leaflet 1.9.4 annule le redessin en attente quand le canvas est retiré (clearLayers vient d'en demander
+     * un) sans remettre _redrawRequest à zéro : les lignes ajoutées ensuite n'étaient plus dessinées avant un
+     * déplacement de la carte (réactivation, case du menu, avion / feu / distance). Verrou remis à zéro ici. */
+    try { if (npfHtBlinkRenderer && !npfHtBlinkRenderer._map) npfHtBlinkRenderer._redrawRequest = null; } catch (_) {}
 }
 
 function setNpfHtBlinkHtCanvasDimmed(dimmed) {

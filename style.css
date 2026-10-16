@@ -1,4 +1,4 @@
-/* NPF_STYLE_BUILD_VERSION: v17.82 */
+/* NPF_STYLE_BUILD_VERSION: v17.83 */
 /* v14.83 — nettoyage des références techniques et limitation des cartouches routiers. */
 /* v14.81 — recherche phonétique nationale élargie aux fragments sur deux lettres. */
 /* v14.80 — Brive conservé uniquement sous LFSL. */
@@ -18745,4 +18745,31 @@ body.npf-calculator-modal-open {
         width: 22px;
         height: 22px;
     }
+}
+
+/* ==========================================================================
+   v17.83 — TOUS LES BOUTONS « Fermer » : fond ROUGE (#d8232a, rouge du bouton HT allumé), texte blanc.
+   Couleurs seulement : taille, bords et position inchangés. Boutons croix (×) et autres textes : non modifiés.
+   ========================================================================== */
+.briefing-doc-viewer-close,
+#sia-filter-done,
+.bloc-fuel-export-toolbar button#bloc-fuel-export-close-btn,
+.ht-blink-options-close {
+    background: #d8232a;
+    border-color: #d8232a;
+    color: #ffffff;
+}
+
+.briefing-doc-viewer-close:active,
+#sia-filter-done:active,
+.bloc-fuel-export-toolbar button#bloc-fuel-export-close-btn:active,
+.ht-blink-options-close:active {
+    background: #b51d23;
+    border-color: #b51d23;
+}
+
+#chat-minimize-button {
+    background: #d8232a !important;
+    border-color: #d8232a !important;
+    color: #ffffff !important;
 }

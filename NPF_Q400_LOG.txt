@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 16/10/2026
-Version de travail actuelle : TEST v17.82
+Version de travail actuelle : TEST v17.83
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,8 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.83 — clignotement HT immédiat à chaque mise en marche / changement de réglage (avant : rien
+  ne clignotait avant un déplacement de la carte, sauf à la 1re activation) ; boutons « Fermer » rouges ;
 - v17.82 — bouton HT : pastille ronde (coin bas droit, dessin de l'app : rond, point central, 8 rayons)
   qui met en marche / arrête le clignotement des HT d'un toucher ; jaune = en marche, gris = arrêté ;
   même réglage que la case du menu de l'appui long ; visible seulement HT affichées ;
@@ -537,7 +539,9 @@ NON IMPLÉMENTÉ / OUVERT :
   07/10/2026 : programme VPS bfg-sofia-notams 1.2.0 PRÊT, NON INSTALLÉ
   (~/vps-a-copier/). v17.60 à pousser APRÈS l'installation de la 1.2.0
   (elle annonce « environ 1 minute ») ;
-- v17.82 : À MESURER sur iPad (pastille du bouton HT : toucher en vol, accord avec le menu, relance) ; COMMIT LOCAL, NON POUSSÉE ;
+- v17.83 : À MESURER sur iPad (clignotement immédiat à la réactivation, sans bouger la carte ; boutons « Fermer » rouges) ; COMMIT LOCAL, NON POUSSÉE ;
+- v17.82 : pastille du bouton HT fonctionnelle sur iPad (constat de Bastien), mais réactivation sans clignotement avant un
+  déplacement de la carte -> corrigé en v17.83 ; POUSSÉE le 16/10/2026 (6b9ff44) ;
 - v17.81 : À MESURER sur iPad (Calanques, Camargue, Frioul, Écrins à 10 et 5 NM) ; POUSSÉE le 16/10/2026 (d6b926d) ;
 - v17.80 : POUSSÉE le 16/10/2026 (2972c05 + 4295dc0) ; carte V11 INSTALLÉE sur le VPS le 16/10/2026
   (/srv/npf-cartes/npf-q400-v11/, OK écrit de Bastien ; sauvegarde avant-v11-20261016-093128 ; une erreur du
@@ -769,27 +773,27 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.82
+Version : TEST v17.83
 Date : 16/10/2026
-Base : v17.81 (d6b926d, poussée le 16/10/2026)
+Base : v17.82 (6b9ff44, poussée le 16/10/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.82.txt
-2_Index_v17.82.txt
-3_Manifest_v17.82.txt
-4_Script_v17.82.txt
-5_SIA_v17.82.txt
-6_Style_v17.82.txt
-7_Sw_v17.82.txt
+1_Modifications_v17.83.txt
+2_Index_v17.83.txt
+3_Manifest_v17.83.txt
+4_Script_v17.83.txt
+5_SIA_v17.83.txt
+6_Style_v17.83.txt
+7_Sw_v17.83.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.82 (et texte « TEST v17.82 » de l'écran de
+- Index : APP_VERSION = v17.83 (et texte « TEST v17.83 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.82
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.82
-- Style : NPF_STYLE_BUILD_VERSION = v17.82
-- Service Worker : `sw-v17-82_pastille_clignotement_ht` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-82_pastille_clignotement_ht`, `npf-q400-test-app-data-v1`,
+- Manifest : start_url = ./index.html?appv=v17.83
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.83
+- Style : NPF_STYLE_BUILD_VERSION = v17.83
+- Service Worker : `sw-v17-83_ht_immediat_fermer_rouge` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-83_ht_immediat_fermer_rouge`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-sia-2026-10-29-v02-g15`
 - SIA_DATA_REVISION (SW / Index sia.js?siav=) : sia-2026-10-29-v02-g15 (= NPF_SIA_DATA_REVISION
   de sia.js ; à changer à chaque nouveau sia.js)
@@ -802,15 +806,15 @@ Références de version cohérentes :
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.82 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.83 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
 - `sia.js` : par rapport à v17.70, outre-mer retiré, « a » de 34 VRP renseigné, table vrpAirportColors ajoutée (2 pastels), révision g6 ; zones, terrains et points de métropole identiques ; moteur tuiles (src/100) modifié en v17.66 sur demande
   explicite (limite de zoom propre à chaque carte, zoom 11 OACI 1/500 000) ;
-- tests v17.82 : entrée v17.82 ; sia.js strictement identique à la v17.81 ;
+- tests v17.83 : entrée v17.83 ; sia.js strictement identique à la v17.81 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81 et v17.82 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82 et v17.83 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
   v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE ;
   v17.56 VALIDÉE en vol ; v17.57 VALIDÉE sur iPad.
 
@@ -2339,6 +2343,50 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.83 — CLIGNOTEMENT HT IMMÉDIAT ; BOUTONS « FERMER » ROUGES
+Date : 16/10/2026
+Base fonctionnelle : v17.82 (commit 6b9ff44, poussée le 16/10/2026).
+Constat iPad de Bastien (v17.82) : la pastille HT fonctionne, mais quand il RÉACTIVE le clignotement, rien ne
+clignote tant qu'il n'a pas déplacé la carte.
+
+1. CLIGNOTEMENT HT IMMÉDIAT (src/110)
+- Cause (reproduite sur PC, carte immobile) : le calcul était bien relancé tout de suite (applyNpfHtBlinkSettings ->
+  runNpfHtBlinkTick), mais rien n'était DESSINÉ. À chaque arrêt / changement de réglage, clearNpfHtBlinkLayer vide
+  les lignes (Leaflet demande alors un redessin) puis retire le canvas du clignotement ; Leaflet 1.9.4 annule ce
+  redessin sans remettre son verrou (_redrawRequest) à zéro : les lignes ajoutées ensuite ne demandaient plus de
+  redessin, jusqu'au redessin complet provoqué par un déplacement de la carte. La 1re activation marchait (canvas
+  neuf). Touchait la pastille, la case du menu, le mode avion / feu et le changement de distance ; « Toutes les HT »
+  (autre mécanisme) et l'arrêt n'étaient pas touchés.
+- Correction : une ligne dans clearNpfHtBlinkLayer, verrou remis à zéro une fois le canvas retiré. Même calcul,
+  rien de plus lourd.
+2. BOUTONS « FERMER » ROUGES (style.css, bloc v17.83 en fin de fichier)
+- Fond #d8232a (rouge du bouton HT allumé), texte blanc ; couleurs seulement, taille / bords / position / police
+  inchangés (mesurés identiques à la v17.82). Boutons modifiés : menu « Lignes HT » (appui long HT) ; filtre des
+  calques SIA ; chat (« ✕ Fermer ») ; export BLOC/FUEL ; visionneuse FdS / GAAR.
+- Non modifié : bouton « Fermer » de la barre d'outils du document d'export BLOC/FUEL (src/310, jamais affichée :
+  document toujours créé sans barre d'outils).
+- À DÉCIDER (Bastien) : boutons qui ferment une fenêtre avec une croix ou un autre texte, NON MODIFIÉS — croix × :
+  profil SIA, choix FdS / GAAR, mot de passe Global Link, identification Global Link, mot de passe documents, carte
+  hors ligne rapide, simulation de mouvement, répartition carburant, calculateur, gestion des cartes, aide import,
+  DIAG de démarrage, bandeau d'information, réglages trafic, options Global Link, NOTAM du pélicandrome, filtre SIA
+  (en haut), recherche de point GAAR et modification de WP, fenêtres de la carte (Leaflet) ; autres textes : « OK »
+  (aide import), « Annuler » (répartition carburant, connexion chat, effacement chat, masse RLT, réglages trafic,
+  confirmations).
+- Signalé, NON CORRIGÉ (existait avant, sans effet visible) : le petit script embarqué dans le document d'export
+  BLOC/FUEL (src/310, partage / fermeture de la barre d'outils jamais affichée) a une erreur de syntaxe (« \n »
+  écrit dans un gabarit de texte devient un vrai retour à la ligne) : une erreur JS dans la console à chaque
+  ouverture de l'export, en v17.82 comme en v17.83.
+3. TESTS PC (outils de test cdp_ht83.js, cdp_fermer83.js, run_fin83.sh)
+- Clignotement, carte immobile du début à la fin, pixels réellement dessinés : v17.82 = 17 653 à la 1re mise en
+  marche puis 0 à chaque réactivation / case du menu / avion / feu / distance ; v17.83 = dessin immédiat à chaque
+  fois (avion 5 NM 17 653, 10 NM 67 838, 2 NM 2 379, avion + feu 21 311, feu 5 NM 20 112, feu 10 NM 62 789), calcul
+  1 à 10 ms ; arrêt : canvas retiré tout de suite ; « Toutes les HT » : clignote dès l'activation ; aucune erreur JS.
+- Boutons « Fermer » : 5 fenêtres ouvertes et refermées par leur bouton, couleur rouge / texte blanc, tailles et
+  positions identiques à la v17.82 ; captures menu HT, export BLOC/FUEL, visionneuse FdS / GAAR.
+- Non-régression courte (run_fin83.sh) : démarrage sans erreur JS, carte et échelle en NM, fenêtres terrain,
+  Trafic Moyens Nationaux, retour sur l'avion, parcs (v17.75), textes « NPF-Q400 » ; mise à jour v17.82 -> v17.83
+  puis hors ligne : v17.83 servie, caches de la pérenne intacts. Aucune erreur JS.
 
 VERSION TEST v17.82 — BOUTON HT : PASTILLE DU CLIGNOTEMENT
 Date : 16/10/2026
