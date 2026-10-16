@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
-Mise à jour : 15/10/2026
-Version de travail actuelle : TEST v17.80
+Mise à jour : 16/10/2026
+Version de travail actuelle : TEST v17.81
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,8 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.81 — parcs et réserves (PRN) : contour EXACT dessiné seulement en points rouges posés sur
+  la limite (plus de trait plein ni de rangée intérieure) ; sia.js g15 (pd / pi / pe retirés, −102,6 ko) ;
 - v17.80 — carte NPF-Q400 V11 = fond sans noms + calque « Noms des communes », téléchargés
   ensemble (nouveau dossier serveur npf-q400-v11, V10 gardée pour les anciennes versions) ;
   calque seulement avec une carte V11 (V10 / ZIP : pas de noms en double) ; « Nouvelle carte
@@ -532,9 +534,11 @@ NON IMPLÉMENTÉ / OUVERT :
   07/10/2026 : programme VPS bfg-sofia-notams 1.2.0 PRÊT, NON INSTALLÉ
   (~/vps-a-copier/). v17.60 à pousser APRÈS l'installation de la 1.2.0
   (elle annonce « environ 1 minute ») ;
-- v17.80 : À MESURER sur iPad (téléchargement de la V11, calque avec la V11, rien en double avec la V10) ;
-  carte V11 PRÉPARÉE, NON ENVOYÉE sur le VPS (installer-carte-v11-vps.ps1) ; COMMIT LOCAL, NON POUSSÉE ;
-  ordre décidé par Bastien : d'abord le VPS, ensuite la mise en ligne de la v17.80 ;
+- v17.81 : À MESURER sur iPad (Calanques, Camargue, Frioul, Écrins à 10 et 5 NM) ; COMMIT LOCAL, NON POUSSÉE ;
+- v17.80 : POUSSÉE le 16/10/2026 (2972c05 + 4295dc0) ; carte V11 INSTALLÉE sur le VPS le 16/10/2026
+  (/srv/npf-cartes/npf-q400-v11/, OK écrit de Bastien ; sauvegarde avant-v11-20261016-093128 ; une erreur du
+  script à l'étape 6 — lecture de /npf-q400/manifest.json mal écrite — corrigée, étapes 6 et 7 refaites : OK) ;
+  À MESURER sur iPad (téléchargement de la V11, calque avec la V11, rien en double avec la V10) ;
 - v17.79 : fluidité VALIDÉE sur iPad le 15/10/2026 (Bastien ne sent pas de différence, DIAG 17:59) ; POUSSÉE le 15/10/2026 (d3e05f8) ; section noms-essai INSTALLÉE sur le VPS le 15/10/2026
   (/srv/npf-cartes/noms-essai/, OK écrit de Bastien ; retour : retour-arriere-noms-essai-vps.ps1) ;
   À MESURER sur iPad : fluidité du fond NPF-Q400 avec le calque des noms affiché puis masqué
@@ -761,31 +765,31 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.80
-Date : 15/10/2026
-Base : v17.79 (d3e05f8, poussée le 15/10/2026)
+Version : TEST v17.81
+Date : 16/10/2026
+Base : v17.80 (4295dc0, poussée le 16/10/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.80.txt
-2_Index_v17.80.txt
-3_Manifest_v17.80.txt
-4_Script_v17.80.txt
-5_SIA_v17.80.txt
-6_Style_v17.80.txt
-7_Sw_v17.80.txt
+1_Modifications_v17.81.txt
+2_Index_v17.81.txt
+3_Manifest_v17.81.txt
+4_Script_v17.81.txt
+5_SIA_v17.81.txt
+6_Style_v17.81.txt
+7_Sw_v17.81.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.80 (et texte « TEST v17.80 » de l'écran de
+- Index : APP_VERSION = v17.81 (et texte « TEST v17.81 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.80
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.80
-- Style : NPF_STYLE_BUILD_VERSION = v17.80
-- Service Worker : `sw-v17-80_carte_v11_noms` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-80_carte_v11_noms`, `npf-q400-test-app-data-v1`,
-  `npf-q400-test-sia-data-sia-2026-10-29-v02-g14`
-- SIA_DATA_REVISION (SW / Index sia.js?siav=) : sia-2026-10-29-v02-g14 (= NPF_SIA_DATA_REVISION
+- Manifest : start_url = ./index.html?appv=v17.81
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.81
+- Style : NPF_STYLE_BUILD_VERSION = v17.81
+- Service Worker : `sw-v17-81_parcs_contour_points` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-81_parcs_contour_points`, `npf-q400-test-app-data-v1`,
+  `npf-q400-test-sia-data-sia-2026-10-29-v02-g15`
+- SIA_DATA_REVISION (SW / Index sia.js?siav=) : sia-2026-10-29-v02-g15 (= NPF_SIA_DATA_REVISION
   de sia.js ; à changer à chaque nouveau sia.js)
-- sia.js v17.80 : INCHANGÉ (identique à v17.78) ; v17.78 : RÉGÉNÉRÉ, révision g14 = g13 + contour lissé des points des PRN (pd), rien sous 3 km ; g13 = g12 + taille des parties de parcs (pe) ; g12 = g11 + « ad » (AER / VOL / PJE sur aérodrome) ; g11 = g10 + directions intérieures des PRN (pi) ; g10 = g9 + noms et contours INPN des parcs et réserves (PRN) ; g9 = g8 + VRP superposés regroupés (« ra ») ; g8 = g7 sans les 7 VRP de LFME, LFTW rouge ; g7 = données identiques à g6, table des couleurs par familles ; g6 = métropole seule + 34 VRP rattachés d'après l'eAIP + couleurs figées (AIRAC 11/26 du 29/10/2026, paquet SIA v02) par
+- sia.js v17.81 : révision g15 = g14 sans « pd », « pi », « pe » des PRN (retirer_points_prn.py, tout le reste identique) ; v17.78 : RÉGÉNÉRÉ, révision g14 = g13 + contour lissé des points des PRN (pd), rien sous 3 km ; g13 = g12 + taille des parties de parcs (pe) ; g12 = g11 + « ad » (AER / VOL / PJE sur aérodrome) ; g11 = g10 + directions intérieures des PRN (pi) ; g10 = g9 + noms et contours INPN des parcs et réserves (PRN) ; g9 = g8 + VRP superposés regroupés (« ra ») ; g8 = g7 sans les 7 VRP de LFME, LFTW rouge ; g7 = données identiques à g6, table des couleurs par familles ; g6 = métropole seule + 34 VRP rattachés d'après l'eAIP + couleurs figées (AIRAC 11/26 du 29/10/2026, paquet SIA v02) par
   ~/projects/outils_tests_NPF-Q400-TEST/generateur-sia/generer_sia.py (une commande
   par cycle avec --eaip <ZIP eAIP du cycle>, voir son LISEZMOI.txt) ; npfDatasetRevision 2026-10-29-v02-g14.
 - Images de lancement : icons/startup-ipad9-portrait.png (1620 × 2160) et
@@ -794,15 +798,15 @@ Références de version cohérentes :
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.80 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.81 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
 - `sia.js` : par rapport à v17.70, outre-mer retiré, « a » de 34 VRP renseigné, table vrpAirportColors ajoutée (2 pastels), révision g6 ; zones, terrains et points de métropole identiques ; moteur tuiles (src/100) modifié en v17.66 sur demande
   explicite (limite de zoom propre à chaque carte, zoom 11 OACI 1/500 000) ;
-- tests v17.80 : entrée v17.80 ;
+- tests v17.81 : entrée v17.81 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78 et v17.80 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80 et v17.81 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
   v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE ;
   v17.56 VALIDÉE en vol ; v17.57 VALIDÉE sur iPad.
 
@@ -2331,6 +2335,45 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.81 — PARCS ET RÉSERVES : CONTOUR EXACT EN POINTS ROUGES SEULEMENT
+Date : 16/10/2026
+Base fonctionnelle : v17.80 (commit 4295dc0, poussée le 16/10/2026).
+Constat iPad de Bastien (v17.80, Calanques et Camargue) : la rangée de points intérieure, posée sur le contour lissé
+(v17.78), s'écarte du vrai contour et ne le suit plus.
+
+1. DESSIN (src/350)
+- SUPPRIMÉS : le trait plein rouge et la rangée de points intérieure (et tout son mécanisme : constantes, cache,
+  file par lots, décalage des sommets, appel à chaque déplacement de la carte).
+- Le contour EXACT (« g », le même qu'avant) est dessiné uniquement en POINTS ROUGES ronds posés sur la limite :
+  style de la zone elle-même, #d50000 (rouge des zones P), épaisseur 3,4 px, tirets 0,1 / 7 px à bouts ronds :
+  espacement régulier À L'ÉCRAN quelle que soit l'échelle ; toutes les parties, îles comprises ; visible à 10 NM et
+  moins comme les autres contours. Aucun calcul sur l'iPad.
+- Toucher inchangé (surface intérieure de la zone) : appui long -> « Sélection Zone » -> parc -> fenêtre (nom,
+  hauteur minimale de survol, source INPN et date).
+2. DONNÉES (convertisseur generateur-sia, g15)
+- « pd » (contour lissé), « pi » (directions intérieures) et « pe » (taille des parties) ne sont plus produits
+  (modules/espaces_proteges.py : preparer_points et ses outils retirés ; générateur g15).
+- sia.js du cycle 11/26 passé de g14 à g15 par retirer_points_prn.py (RETOUCHE, pas de régénération complète :
+  l'eAIP du cycle, qui rattache 34 VRP à leur terrain, n'est plus disponible) : 89 zones PRN, seules ces trois
+  données retirées, carte légère, terrains, points et autres données vérifiés identiques. Gain : sia.js
+  1 375 003 -> 1 272 419 octets (−102,6 ko), charge utile JSON 3,90 -> 3,69 Mo (−206 ko).
+- Contrôle du générateur g15 (sortie de test, --inpn-garde, sans eAIP) : 4 383 zones identiques au sia.js g15
+  (contours des parcs inchangés), terrains identiques ; seuls les rattachements de VRP diffèrent (eAIP absent).
+- Nouvelle option --inpn-garde : contours INPN repris du dernier téléchargement gardé (sinon retéléchargés).
+  LISEZMOI.txt mis à jour.
+3. TESTS PC (outils de test cdp_parcs81.js, cdp_parcs81b.js, run_fin81.sh)
+- Captures Calanques, Camargue (Vaccarès, Marais du Vigueirat), Frioul, Écrins à 10 puis 5 NM : points rouges sur
+  le contour exact, îles du Frioul comprises. Remarque : aux Écrins, quelques langues très étroites du contour
+  exact (fonds de vallée exclus du cœur) paraissent en trait continu, les points des deux bords se touchant.
+- Style appliqué vérifié sur les PRN à l'écran : #d50000 / 0.1 7 / 3,4 / round ; données : 0 zone avec pd/pi/pe.
+- CPU ×6 : redessin complet du canvas des zones SIA avec les parcs en points : médiane 3 à 29 ms, max 47 ms, comme
+  le même contour en trait plein (aucun blocage > 100 ms dû aux parcs). Scénario 5 parcs (Écrins, Calanques,
+  Camargue, Cévennes, Mercantour), deux ordres : tâches longues v17.80 340 puis 198, v17.81 322 puis 177 (la page
+  passée en premier est toujours la plus lente : bruit d'ordre, pas d'écart dû à la v17.81). Aucune erreur JS.
+- Non-régression courte (run_fin81.sh) : démarrage sans erreur JS, carte et échelle en NM, fenêtres terrain,
+  Trafic Moyens Nationaux, retour sur l'avion, parcs (v17.75), textes « NPF-Q400 » ; mise à jour v17.80 -> v17.81
+  puis hors ligne : v17.81 servie, échelle 50 NM, cache SIA g15 créé, caches de la pérenne intacts. Aucune erreur JS.
 
 VERSION TEST v17.80 — CARTE NPF-Q400 V11 = FOND + CALQUE « NOMS DES COMMUNES »
 Date : 15/10/2026

@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.80';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.81';
 
 
 /*
@@ -3309,7 +3309,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.80 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.81 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -56472,7 +56472,7 @@ const SIA_EMBEDDED_FALLBACK_META = Object.freeze({
     excludedDpnIfr: 2380,
     geometryDirectAbd: 4451,
     geometryDerivedAdg: 597,
-    npfDatasetRevision: '2026-10-29-v02-g14',
+    npfDatasetRevision: '2026-10-29-v02-g15',
     vrpFrenchDescriptions: 867,
     ctrServiceRelations: true,
     frequencySupplementarySource: 'XML_SIA',
@@ -61878,6 +61878,11 @@ function buildSiaAirspacePopup(item) {
     `;
 }
 
+/* v17.81 — parcs nationaux et réserves naturelles (D-OTHER / PRN) : contour exact en points rouges ronds
+ * (épaisseur = diamètre d'un point, 7 px d'un point à l'autre à l'écran). */
+const SIA_PRN_DOTS_WEIGHT = 3.4;
+const SIA_PRN_DOTS_DASH = '0.1 7';
+
 function getSiaAirspaceStyle(item) {
     const type = String(item?.t || '');
     const local = String(item?.l || '');
@@ -61923,8 +61928,11 @@ function getSiaAirspaceStyle(item) {
         else if (local === 'AER') color = '#00897b';
         else if (local === 'VOL') color = '#3949ab';
         else if (local === 'SUR') color = '#6d4c41';
-        /* v17.74 — parcs nationaux et réserves naturelles : contour rouge plein comme les zones P (OACI 1/500 000). */
-        else if (local === 'PRN') { color = '#d50000'; dashArray = null; weight = 2.4; }
+        /* v17.74 — parcs nationaux et réserves naturelles : contour rouge (même rouge que les zones P).
+         * v17.81 — contour EXACT dessiné seulement en POINTS ROUGES ronds posés sur la limite (plus de trait plein ni
+         * de rangée intérieure) : tirets quasi nuls à bouts ronds, écart en pixels d'écran (régulier à toute échelle),
+         * toutes parties comprises ; aucun calcul : c'est le tracé de la zone elle-même (toucher inchangé). */
+        else if (local === 'PRN') { color = '#d50000'; dashArray = SIA_PRN_DOTS_DASH; weight = SIA_PRN_DOTS_WEIGHT; }
         else if (local === 'BAL') color = '#7b1fa2';
     }
 
@@ -64646,10 +64654,9 @@ async function refreshSiaLayers(reason = 'manual') {
  * par zone), seulement pour les zones à l'écran ; des cibles tactiles invisibles (SVG, comme les VRP) sont
  * créées pour les seules icônes à l'écran ; toucher une icône ouvre la fenêtre de la zone (même sélection
  * qu'un point D-OTHER). Les autres catégories D-OTHER ne changent pas.
- * Parcs nationaux et réserves naturelles (D-OTHER / PRN) dessinés par un contour : rangée de points rouges juste
- * à l'intérieur du contour (comme la carte OACI 1/500 000), à 10 NM ou moins (zoom 9 et plus, comme les
- * contours), calculée seulement pour les zones à l'écran, par petits lots (8 ms), jamais doigt posé, en cache
- * pour le zoom en cours.
+ * Parcs nationaux et réserves naturelles (D-OTHER / PRN) : v17.74 à v17.80, rangée de points rouges à l'intérieur
+ * du contour ; v17.81 : SUPPRIMÉE (elle s'écartait du vrai contour sur iPad) — le contour exact est dessiné en
+ * points rouges par son propre style (getSiaAirspaceStyle).
  */
 /*
  * v17.77 — voltige 🛩️ (au lieu de ➰) ; aéromodélisme : radiocommande DESSINÉE par l'app (boîtier noir aux coins
@@ -64657,8 +64664,7 @@ async function refreshSiaLayers(reason = 'manual') {
  * parachutage 🪂. Disque blanc = 85 % du diamètre d'un point VFR (24 px -> 20 px), dessin de 14 px.
  * Icônes SOUS les points VFR et les terrains (panneau 550 < 555), cibles tactiles sous celles des VRP
  * (panneau 650 < 660) : un point VFR qui chevauche une icône reste visible et répond au toucher.
- * Parcs et réserves : points seulement à 5 NM et moins (zoom 10) ; à 10 NM, contour seul ; jamais de points sur une
- * partie de moins de 40 px à l'écran (« pe », taille préparée par le convertisseur).
+ * Parcs et réserves (v17.77 à v17.80) : rangée de points à 5 NM et moins ; supprimée en v17.81.
  */
 const SIA_DOTHER_ICON_RADIO = 'radiocommande';
 /* v17.78 — voltige : ➰ RETOURNÉ de haut en bas (boucle vers le haut ; 🛩️ est un jet chez Apple). */
@@ -64668,22 +64674,13 @@ const siaDotherEmojiSprites = new Map();
 const SIA_DOTHER_ICON_MAX_SCALE_NM = 5;
 const SIA_DOTHER_ICON_DISC_PX = Math.round(0.85 * getSiaVrpVisualSize(''));
 const SIA_DOTHER_ICON_SIZE_PX = 14;
-const SIA_PRN_DOTS_MIN_ZOOM = 10;
-const SIA_PRN_DOTS_MIN_PART_PX = 40;
 let siaDotherIconTouchRenderer = null;
 let siaDotherRadioSprite = null;
-const SIA_PRN_COLOR = '#d50000';
 let siaDotherIconCanvas = null;
 let siaDotherIconTouchGroup = null;
 let siaMapExtrasTimer = null;
 let siaMapExtrasEventsInstalled = false;
 let siaDotherIconStats = { drawn: 0, lastMs: 0 };
-let siaPrnDotsGroup = null;
-const siaPrnDotsCache = new Map();
-let siaPrnDotsZoom = null;
-let siaPrnDotsQueue = [];
-let siaPrnDotsRafPending = false;
-let siaPrnDotsStats = { zones: 0, lastMs: 0, maxMs: 0 };
 
 function ensureSiaIconPane() {
     if (!map || !map.createPane) return null;
@@ -64918,130 +64915,6 @@ function drawSiaDotherIcons() {
     siaDotherIconStats = { drawn: entries.length, lastMs: Math.round(performance.now() - startedAt) };
 }
 
-/*
- * v17.75 — rangée de points des parcs et réserves : la direction intérieure de chaque sommet (« pi », entiers en
- * centièmes, est / nord, facteur d'angle compris) est calculée UNE FOIS par le convertisseur (generateur-sia,
- * modules/espaces_proteges.py). L'iPad ne fait que décaler chaque sommet de quelques pixels (une multiplication
- * par sommet, aucun test de contour), puis Leaflet dessine en pointillé ce qui est à l'écran.
- */
-function buildSiaPrnDotsLatLngs(ring, directions, insetPx = 6) {
-    if (!map || !Array.isArray(ring) || !Array.isArray(directions)) return [];
-    const count = Math.min(ring.length - 1, Math.floor(directions.length / 2));
-    if (count < 3) return [];
-    const metresParPixelEquateur = 156543.03392 / Math.pow(2, map.getZoom());
-    const out = new Array(count + 1);
-    for (let i = 0; i < count; i += 1) {
-        const lon = Number(ring[i][0]);
-        const lat = Number(ring[i][1]);
-        const cosLat = Math.cos(lat * Math.PI / 180);
-        const d = insetPx * metresParPixelEquateur * cosLat;
-        out[i] = L.latLng(
-            lat + (directions[2 * i + 1] / 100) * d / 111320,
-            lon + (directions[2 * i] / 100) * d / (111320 * cosLat)
-        );
-    }
-    out[count] = out[0];
-    return out;
-}
-
-function clearSiaPrnDots() {
-    siaPrnDotsQueue = [];
-    siaPrnDotsCache.clear();
-    if (siaPrnDotsGroup) siaPrnDotsGroup.clearLayers();
-}
-
-function syncSiaPrnDots() {
-    if (!map) return;
-    if (!siaPrnDotsGroup) siaPrnDotsGroup = L.layerGroup();
-    const zoom = map.getZoom();
-    const allowed = siaMapAirspacesVisible && !isCurrentOfflineOaciMap() && zoom >= SIA_PRN_DOTS_MIN_ZOOM - 1e-6;
-    if (!allowed || zoom !== siaPrnDotsZoom) {
-        clearSiaPrnDots();
-        siaPrnDotsZoom = zoom;
-    }
-    if (!allowed) {
-        if (map.hasLayer(siaPrnDotsGroup)) map.removeLayer(siaPrnDotsGroup);
-        return;
-    }
-    if (!map.hasLayer(siaPrnDotsGroup)) siaPrnDotsGroup.addTo(map);
-    const view = map.getBounds().pad(0.1);
-    const rendered = new Set();
-    for (const feature of siaRenderedAirspaceFeatures || []) {
-        const item = feature?.properties?.siaItem;
-        if (!item || item.t !== 'D-OTHER' || String(item.l || '').toUpperCase() !== 'PRN') continue;
-        const type = String(feature?.geometry?.type || '');
-        if (type !== 'Polygon' && type !== 'MultiPolygon') continue;
-        const key = `${item.c}|${item.n}`;
-        rendered.add(key);
-        if (!siaBoundsIntersects(item.b, view)) continue;
-        if (!siaPrnDotsCache.has(key) && !siaPrnDotsQueue.some(job => job.key === key)) {
-            siaPrnDotsQueue.push({ key, feature });
-        }
-    }
-    /* Zone plus dessinée (filtre, données) : ses points partent aussi. */
-    for (const [key, layers] of siaPrnDotsCache) {
-        if (rendered.has(key)) continue;
-        layers.forEach(layer => { try { siaPrnDotsGroup.removeLayer(layer); } catch (_) {} });
-        siaPrnDotsCache.delete(key);
-    }
-    siaPrnDotsQueue = siaPrnDotsQueue.filter(job => rendered.has(job.key));
-    scheduleSiaPrnDotsQueue();
-}
-
-function scheduleSiaPrnDotsQueue() {
-    if (siaPrnDotsRafPending || !siaPrnDotsQueue.length) return;
-    siaPrnDotsRafPending = true;
-    npfNextFrame(runSiaPrnDotsQueue);
-}
-
-function runSiaPrnDotsQueue() {
-    siaPrnDotsRafPending = false;
-    if (!map || map.getZoom() !== siaPrnDotsZoom) return;
-    if (typeof isNpfMapFingerDown === 'function' && isNpfMapFingerDown()) {
-        scheduleSiaPrnDotsQueue();
-        return;
-    }
-    const sliceStartedAt = performance.now();
-    while (siaPrnDotsQueue.length && performance.now() - sliceStartedAt < 8) {
-        const { key, feature } = siaPrnDotsQueue.shift();
-        if (siaPrnDotsCache.has(key)) continue;
-        const startedAt = performance.now();
-        const layers = [];
-        const directionsParAnneau = Array.isArray(feature?.properties?.siaItem?.pi) ? feature.properties.siaItem.pi : [];
-        const etendues = Array.isArray(feature?.properties?.siaItem?.pe) ? feature.properties.siaItem.pe : [];
-        /* v17.78 — rangée posée sur le contour LISSÉ préparé par le convertisseur (« pd ») ; partie de moins de 3 km :
-         * « pd » vide, jamais de points. Le contour rouge exact n'est pas touché. */
-        const anneauxPoints = Array.isArray(feature?.properties?.siaItem?.pd)
-            ? feature.properties.siaItem.pd
-            : getSiaCtrOuterRings(feature.geometry);
-        anneauxPoints.forEach((ring, index) => {
-            if (!Array.isArray(ring) || ring.length < 4) return;
-            /* Partie trop petite à l'écran (île, îlot) : contour seul, jamais de points. */
-            const lat = Number(ring?.[0]?.[1]);
-            const metresParPixel = 156543.03392 * Math.cos((Number.isFinite(lat) ? lat : 45) * Math.PI / 180) / Math.pow(2, map.getZoom());
-            if (Number(etendues[index]) > 0 && Number(etendues[index]) / metresParPixel < SIA_PRN_DOTS_MIN_PART_PX) return;
-            const segments = buildSiaPrnDotsLatLngs(ring, directionsParAnneau[index], 6);
-            if (segments.length < 4) return;
-            layers.push(L.polyline(segments, {
-                pane: 'siaAirspacePane',
-                renderer: siaAirspaceRenderer || undefined,
-                color: SIA_PRN_COLOR,
-                weight: 3.4,
-                opacity: 0.95,
-                dashArray: '0.1 7',
-                lineCap: 'round',
-                lineJoin: 'round',
-                interactive: false
-            }));
-        });
-        layers.forEach(layer => layer.addTo(siaPrnDotsGroup));
-        siaPrnDotsCache.set(key, layers);
-        const ms = performance.now() - startedAt;
-        siaPrnDotsStats = { zones: siaPrnDotsCache.size, lastMs: Math.round(ms), maxMs: Math.max(siaPrnDotsStats.maxMs, Math.round(ms)) };
-    }
-    scheduleSiaPrnDotsQueue();
-}
-
 function scheduleSiaMapExtras(reason = 'sync') {
     if (!map) return;
     if (!siaMapExtrasEventsInstalled) {
@@ -65057,7 +64930,6 @@ function scheduleSiaMapExtras(reason = 'sync') {
             return;
         }
         try { drawSiaDotherIcons(); } catch (error) { console.warn('Icônes D-OTHER :', error); }
-        try { syncSiaPrnDots(); } catch (error) { console.warn('Points PRN :', error); }
     }, 60);
 }
 
