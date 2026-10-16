@@ -983,7 +983,7 @@ function initializeCalculator() {
         try {
             const clone = document.documentElement.cloneNode(true);
             clone.querySelectorAll('.export-toolbar, script').forEach(function (el) { el.remove(); });
-            const html = '<!doctype html>\n' + clone.outerHTML;
+            const html = '<!doctype html>\\n' + clone.outerHTML;
             const file = new File([html], '${safe(exportHtmlFileName)}', { type: 'text/html' });
             if (navigator.canShare && navigator.canShare({ files: [file] })) {
                 await navigator.share({ title: '${safe(exportPrintDocumentTitle)}', text: 'Export BLOC/FUEL NPF-Q400', files: [file] });

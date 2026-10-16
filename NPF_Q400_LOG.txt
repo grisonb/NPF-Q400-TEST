@@ -179,7 +179,8 @@ IMPLÉMENTÉ / INTÉGRÉ :
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
 - v17.83 — clignotement HT immédiat à chaque mise en marche / changement de réglage (avant : rien
-  ne clignotait avant un déplacement de la carte, sauf à la 1re activation) ; boutons « Fermer » rouges ;
+  ne clignotait avant un déplacement de la carte, sauf à la 1re activation) ; boutons « Fermer » et croix × de
+  fermeture rouges ; erreur JS de l'aperçu de l'export BLOC/FUEL corrigée ;
 - v17.82 — bouton HT : pastille ronde (coin bas droit, dessin de l'app : rond, point central, 8 rayons)
   qui met en marche / arrête le clignotement des HT d'un toucher ; jaune = en marche, gris = arrêté ;
   même réglage que la case du menu de l'appui long ; visible seulement HT affichées ;
@@ -539,7 +540,8 @@ NON IMPLÉMENTÉ / OUVERT :
   07/10/2026 : programme VPS bfg-sofia-notams 1.2.0 PRÊT, NON INSTALLÉ
   (~/vps-a-copier/). v17.60 à pousser APRÈS l'installation de la 1.2.0
   (elle annonce « environ 1 minute ») ;
-- v17.83 : À MESURER sur iPad (clignotement immédiat à la réactivation, sans bouger la carte ; boutons « Fermer » rouges) ; COMMIT LOCAL, NON POUSSÉE ;
+- v17.83 : À MESURER sur iPad (clignotement immédiat à la réactivation, sans bouger la carte ; boutons « Fermer » et croix
+  rouges) ; DEUX COMMITS LOCAUX (0a9f299 + complément), NON POUSSÉE ;
 - v17.82 : pastille du bouton HT fonctionnelle sur iPad (constat de Bastien), mais réactivation sans clignotement avant un
   déplacement de la carte -> corrigé en v17.83 ; POUSSÉE le 16/10/2026 (6b9ff44) ;
 - v17.81 : À MESURER sur iPad (Calanques, Camargue, Frioul, Écrins à 10 et 5 NM) ; POUSSÉE le 16/10/2026 (d6b926d) ;
@@ -2366,17 +2368,8 @@ clignote tant qu'il n'a pas déplacé la carte.
   calques SIA ; chat (« ✕ Fermer ») ; export BLOC/FUEL ; visionneuse FdS / GAAR.
 - Non modifié : bouton « Fermer » de la barre d'outils du document d'export BLOC/FUEL (src/310, jamais affichée :
   document toujours créé sans barre d'outils).
-- À DÉCIDER (Bastien) : boutons qui ferment une fenêtre avec une croix ou un autre texte, NON MODIFIÉS — croix × :
-  profil SIA, choix FdS / GAAR, mot de passe Global Link, identification Global Link, mot de passe documents, carte
-  hors ligne rapide, simulation de mouvement, répartition carburant, calculateur, gestion des cartes, aide import,
-  DIAG de démarrage, bandeau d'information, réglages trafic, options Global Link, NOTAM du pélicandrome, filtre SIA
-  (en haut), recherche de point GAAR et modification de WP, fenêtres de la carte (Leaflet) ; autres textes : « OK »
-  (aide import), « Annuler » (répartition carburant, connexion chat, effacement chat, masse RLT, réglages trafic,
-  confirmations).
-- Signalé, NON CORRIGÉ (existait avant, sans effet visible) : le petit script embarqué dans le document d'export
-  BLOC/FUEL (src/310, partage / fermeture de la barre d'outils jamais affichée) a une erreur de syntaxe (« \n »
-  écrit dans un gabarit de texte devient un vrai retour à la ligne) : une erreur JS dans la console à chaque
-  ouverture de l'export, en v17.82 comme en v17.83.
+- Boutons « OK » et « Annuler » : NON MODIFIÉS (décision de Bastien). Croix × : voir point 4 (complément).
+- Erreur de syntaxe du script de l'aperçu de l'export BLOC/FUEL : corrigée, voir point 4 (complément).
 3. TESTS PC (outils de test cdp_ht83.js, cdp_fermer83.js, run_fin83.sh)
 - Clignotement, carte immobile du début à la fin, pixels réellement dessinés : v17.82 = 17 653 à la 1re mise en
   marche puis 0 à chaque réactivation / case du menu / avion / feu / distance ; v17.83 = dessin immédiat à chaque
@@ -2387,6 +2380,28 @@ clignote tant qu'il n'a pas déplacé la carte.
 - Non-régression courte (run_fin83.sh) : démarrage sans erreur JS, carte et échelle en NM, fenêtres terrain,
   Trafic Moyens Nationaux, retour sur l'avion, parcs (v17.75), textes « NPF-Q400 » ; mise à jour v17.82 -> v17.83
   puis hors ligne : v17.83 servie, caches de la pérenne intacts. Aucune erreur JS.
+
+4. COMPLÉMENT v17.83 (même version, second commit local au-dessus de 0a9f299, demande de Bastien)
+- CROIX × DE FERMETURE ROUGES (style.css, second bloc v17.83 en fin de fichier) : fond #d8232a (même rouge que les
+  boutons « Fermer »), croix blanche ; couleurs seulement (!important pour passer devant les anciennes règles) ;
+  taille, position, police, arrondi et zone de toucher mesurés identiques à la v17.82. 18 croix : profil SIA ;
+  choix FdS / GAAR ; mot de passe Global Link ; identification Global Link ; mot de passe des documents ; carte hors
+  ligne rapide ; simulation de mouvement ; répartition carburant ; calculateur (anneau blanc d'origine gardé) ;
+  Gestion des Cartes (croix sans fond auparavant : carré rouge de la taille de sa zone de toucher) ; aide à l'import ;
+  DIAG de démarrage ; bandeau d'information ; réglages trafic ; options Global Link ; NOTAM du pélicandrome ; filtre
+  SIA (croix en haut) ; recherche de point GAAR / modification de WP (même croix).
+- NON MODIFIÉS : croix des popups Leaflet de la carte (points VFR, terrains, zones…) ; « OK », « Annuler » ; « × »
+  qui ne ferment pas de fenêtre (effacer la recherche, effacer le feu, vider un champ du calculateur, quitter la
+  route vers un terrain, supprimer un feu de l'historique, signe « Volume × Densité ») ; ✕ du badge hors ligne du chat.
+- EXPORT BLOC/FUEL (src/310) : dans le script embarqué de l'aperçu, « '<!doctype html>\\n' » au lieu de
+  « '<!doctype html>\n' » (le \n du gabarit de texte devenait un vrai retour à la ligne et cassait le script) :
+  plus d'erreur JS à l'ouverture de l'export ; contenu et format de l'export inchangés (texte de l'aperçu
+  identique à la v17.82).
+- Tests PC (cdp_croix83.js, cdp_croix83b.js, run_fin83b.sh ; VPS et NAS bloqués pendant le test des croix) :
+  18 fenêtres ouvertes par l'app puis fermées par un toucher sur leur croix, en v17.82 et v17.83 : tailles,
+  positions et zone de toucher identiques, couleurs #d8232a / blanc ; captures avant / après (calculateur, Gestion des
+  Cartes, filtre SIA). Export BLOC/FUEL : v17.82 = 1 erreur JS, v17.83 = aucune, script de l'aperçu valide, texte
+  identique. Clignotement HT et boutons « Fermer » refaits sur la version finale. Non-régression courte refaite.
 
 VERSION TEST v17.82 — BOUTON HT : PASTILLE DU CLIGNOTEMENT
 Date : 16/10/2026

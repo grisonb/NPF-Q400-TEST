@@ -18773,3 +18773,36 @@ body.npf-calculator-modal-open {
     border-color: #d8232a !important;
     color: #ffffff !important;
 }
+
+/* ==========================================================================
+   v17.83 — CROIX « × » DE FERMETURE : même rouge que les boutons « Fermer » (#d8232a), croix blanche.
+   Couleurs seulement (!important pour passer devant les anciennes règles, dont celles en !important) : taille,
+   position et zone de toucher inchangées. Calculateur : anneau blanc d'origine gardé. Popups Leaflet de la carte,
+   « OK », « Annuler », croix d'effacement de champ / recherche / feu : non modifiés.
+   ========================================================================== */
+#sia-profile-close,
+#close-briefing-doc-selector-modal,
+#global-link-password-close,
+#global-link-auth-close,
+#briefing-docs-password-close,
+#close-quick-offline-map-modal,
+#close-simulation-motion-modal,
+#fuel-split-close-btn,
+#close-offline-map-btn,
+#close-import-help-modal,
+#npf-startup-diag-close,
+.npf-info-banner-close,
+#traffic-settings-close,
+.global-link-options-close,
+.pelic-notams-modal-close,
+#sia-filter-close,
+.gaar-point-search-close {
+    background: #d8232a !important;
+    border-color: #d8232a !important;
+    color: #ffffff !important;
+}
+
+#close-calculator-btn {
+    background-color: #d8232a !important;
+    color: #ffffff !important;
+}
