@@ -2380,9 +2380,11 @@ France v36 fabriquée et validée par Bastien (dossier NPF carte v30 France, rap
 - Test court : démarrage, carte, Trafic Moyens Nationaux, fenêtres, retour GPS, parcs, textes « NPF-Q400 »,
   mise à jour v17.79 -> v17.80 hors ligne avec caches de la pérenne intacts : comme v17.78, aucune erreur JS.
 4. REMARQUES
-- La « Réinitialisation profonde des cartes » n'efface pas la base CalqueNomsCommunes (≈ 0,3 Go, nom hors
-  « OfflineMap_ ») ; la carte est retirée de la liste, donc le calque n'est plus affiché ; la base est effacée au
-  prochain téléchargement de la carte. À DÉCIDER s'il faut l'inclure.
+- La « Réinitialisation profonde des cartes » n'effaçait pas la base CalqueNomsCommunes (≈ 0,3 Go, nom hors
+  « OfflineMap_ »). TRAITÉ en v17.80 (demande de Bastien, 16/10/2026) : la base des noms est effacée aussi ; le
+  calque est retiré de la carte et sa base fermée juste avant (sinon verrouillée). Test PC : V11 d'essai
+  installée et affichée, réinitialisation -> OfflineMap_NPF_France ET CalqueNomsCommunes effacées, plus aucune
+  carte ni calque, aucune erreur JS ; test court refait : identique, caches de la pérenne intacts.
 - Après un premier téléchargement sur un appareil en mode EN LIGNE, l'app reste en ligne (comportement inchangé
   depuis v17.65) : le calque n'apparaît qu'en mode hors ligne.
 

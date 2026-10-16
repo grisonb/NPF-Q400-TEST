@@ -2839,6 +2839,8 @@ async function getNpfOfflineDatabaseNamesForReset() {
             (databases || []).forEach((entry) => {
                 const name = entry && entry.name ? String(entry.name) : '';
                 if (/^OfflineTilesDB/i.test(name) || /^OfflineMap_/i.test(name)) names.add(name);
+                /* v17.80 — base du calque « Noms des communes » (src/285), effacée aussi. */
+                if (typeof NPF_CALQUE_NOMS_DB_NAME !== 'undefined' && name === NPF_CALQUE_NOMS_DB_NAME) names.add(name);
             });
         }
     } catch (_) {}
@@ -2913,6 +2915,8 @@ window.resetAllOfflineMapsStorage = async function() {
         await new Promise(resolve => setTimeout(resolve, 600));
 
         await setProgress('Suppression bases offline...', 62);
+        /* v17.80 — calque des noms retiré de la carte et sa base fermée avant l'effacement (sinon verrouillée). */
+        try { if (typeof prepareNpfCalqueNomsDownload === 'function') prepareNpfCalqueNomsDownload(); } catch (_) {}
         const dbNames = await getNpfOfflineDatabaseNamesForReset();
         const results = [];
         for (const name of dbNames) {
