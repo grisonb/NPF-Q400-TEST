@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 16/10/2026
-Version de travail actuelle : TEST v17.81
+Version de travail actuelle : TEST v17.82
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,9 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.82 — bouton HT : pastille ronde (coin bas droit, dessin de l'app : rond, point central, 8 rayons)
+  qui met en marche / arrête le clignotement des HT d'un toucher ; jaune = en marche, gris = arrêté ;
+  même réglage que la case du menu de l'appui long ; visible seulement HT affichées ;
 - v17.81 — parcs et réserves (PRN) : contour EXACT dessiné seulement en points rouges posés sur
   la limite (plus de trait plein ni de rangée intérieure) ; sia.js g15 (pd / pi / pe retirés, −102,6 ko) ;
 - v17.80 — carte NPF-Q400 V11 = fond sans noms + calque « Noms des communes », téléchargés
@@ -534,7 +537,8 @@ NON IMPLÉMENTÉ / OUVERT :
   07/10/2026 : programme VPS bfg-sofia-notams 1.2.0 PRÊT, NON INSTALLÉ
   (~/vps-a-copier/). v17.60 à pousser APRÈS l'installation de la 1.2.0
   (elle annonce « environ 1 minute ») ;
-- v17.81 : À MESURER sur iPad (Calanques, Camargue, Frioul, Écrins à 10 et 5 NM) ; COMMIT LOCAL, NON POUSSÉE ;
+- v17.82 : À MESURER sur iPad (pastille du bouton HT : toucher en vol, accord avec le menu, relance) ; COMMIT LOCAL, NON POUSSÉE ;
+- v17.81 : À MESURER sur iPad (Calanques, Camargue, Frioul, Écrins à 10 et 5 NM) ; POUSSÉE le 16/10/2026 (d6b926d) ;
 - v17.80 : POUSSÉE le 16/10/2026 (2972c05 + 4295dc0) ; carte V11 INSTALLÉE sur le VPS le 16/10/2026
   (/srv/npf-cartes/npf-q400-v11/, OK écrit de Bastien ; sauvegarde avant-v11-20261016-093128 ; une erreur du
   script à l'étape 6 — lecture de /npf-q400/manifest.json mal écrite — corrigée, étapes 6 et 7 refaites : OK) ;
@@ -765,27 +769,27 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.81
+Version : TEST v17.82
 Date : 16/10/2026
-Base : v17.80 (4295dc0, poussée le 16/10/2026)
+Base : v17.81 (d6b926d, poussée le 16/10/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.81.txt
-2_Index_v17.81.txt
-3_Manifest_v17.81.txt
-4_Script_v17.81.txt
-5_SIA_v17.81.txt
-6_Style_v17.81.txt
-7_Sw_v17.81.txt
+1_Modifications_v17.82.txt
+2_Index_v17.82.txt
+3_Manifest_v17.82.txt
+4_Script_v17.82.txt
+5_SIA_v17.82.txt
+6_Style_v17.82.txt
+7_Sw_v17.82.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.81 (et texte « TEST v17.81 » de l'écran de
+- Index : APP_VERSION = v17.82 (et texte « TEST v17.82 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.81
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.81
-- Style : NPF_STYLE_BUILD_VERSION = v17.81
-- Service Worker : `sw-v17-81_parcs_contour_points` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-81_parcs_contour_points`, `npf-q400-test-app-data-v1`,
+- Manifest : start_url = ./index.html?appv=v17.82
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.82
+- Style : NPF_STYLE_BUILD_VERSION = v17.82
+- Service Worker : `sw-v17-82_pastille_clignotement_ht` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-82_pastille_clignotement_ht`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-sia-2026-10-29-v02-g15`
 - SIA_DATA_REVISION (SW / Index sia.js?siav=) : sia-2026-10-29-v02-g15 (= NPF_SIA_DATA_REVISION
   de sia.js ; à changer à chaque nouveau sia.js)
@@ -798,15 +802,15 @@ Références de version cohérentes :
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.81 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.82 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
 - `sia.js` : par rapport à v17.70, outre-mer retiré, « a » de 34 VRP renseigné, table vrpAirportColors ajoutée (2 pastels), révision g6 ; zones, terrains et points de métropole identiques ; moteur tuiles (src/100) modifié en v17.66 sur demande
   explicite (limite de zoom propre à chaque carte, zoom 11 OACI 1/500 000) ;
-- tests v17.81 : entrée v17.81 ;
+- tests v17.82 : entrée v17.82 ; sia.js strictement identique à la v17.81 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80 et v17.81 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81 et v17.82 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
   v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE ;
   v17.56 VALIDÉE en vol ; v17.57 VALIDÉE sur iPad.
 
@@ -2335,6 +2339,34 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.82 — BOUTON HT : PASTILLE DU CLIGNOTEMENT
+Date : 16/10/2026
+Base fonctionnelle : v17.81 (commit d6b926d, poussée le 16/10/2026).
+Demande de Bastien : mettre en marche / arrêter le clignotement des HT d'un simple toucher, sans passer par le
+menu de l'appui long.
+
+1. PASTILLE (index.html, style.css, src/110)
+- Pastille ronde dans le coin libre en bas à droite du bouton HT (même esprit que le « N » et l'œil du bouton
+  France) : 36 px (32 px sur écran étroit), bord blanc ; dessin fait par l'app (SVG, pas d'émoji) : rond, point
+  central et 8 rayons courts. JAUNE (#ffd400) avec dessin foncé = clignotement EN MARCHE ; GRISE (#6b7280) avec
+  dessin blanc = clignotement ARRÊTÉ.
+- Toucher la pastille = cocher / décocher « clignotement » du menu de l'appui long : MÊME réglage
+  (npfHtBlinkSettings.enabled, conservé dans localStorage), la case du menu et la pastille restent d'accord
+  (refreshNpfHtBlinkToggle appelé par applyNpfHtBlinkSettings et refreshHighVoltageLinesButtonState).
+- Toucher la pastille n'allume / n'éteint PAS la couche HT et n'ouvre pas le menu ; toucher le reste du bouton :
+  inchangé ; appui long : menu actuel inchangé (avion et / ou feu, 2-5-10 NM, toutes les HT).
+- Pastille visible seulement quand les HT sont affichées (cachée HT éteintes, pendant le chargement, ou sur un fond
+  où les HT ne sont pas permises).
+2. TESTS PC (outils de test cdp_ht82.js, run_fin82.sh)
+- HT éteintes : pas de pastille ; HT allumées : pastille grise 36 × 36 ; toucher (clic puis toucher tactile) :
+  clignotement en marche, minuterie active, couche HT toujours allumée, pastille jaune ; appui long : menu ouvert,
+  case cochée ; case décochée dans le menu : pastille grise ; toucher : la case du menu suit ; relance de l'app :
+  réglage conservé (pastille jaune) ; toucher le corps du bouton : HT éteintes, pastille cachée. Captures grise /
+  jaune / HT éteintes. Aucune erreur JS, aucune boîte de dialogue.
+- Non-régression courte (run_fin82.sh) : démarrage sans erreur JS, carte et échelle en NM, fenêtres terrain,
+  Trafic Moyens Nationaux, retour sur l'avion, parcs (v17.75), textes « NPF-Q400 » ; mise à jour v17.81 -> v17.82
+  puis hors ligne : v17.82 servie, caches de la pérenne intacts. Aucune erreur JS.
 
 VERSION TEST v17.81 — PARCS ET RÉSERVES : CONTOUR EXACT EN POINTS ROUGES SEULEMENT
 Date : 16/10/2026

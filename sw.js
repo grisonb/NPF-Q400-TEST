@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v17-81_parcs_contour_points';
-const APP_VERSION = 'v17.81';
+const SW_VERSION = 'sw-v17-82_pastille_clignotement_ht';
+const APP_VERSION = 'v17.82';
 const SIA_DATA_REVISION = 'sia-2026-10-29-v02-g15';
 const SIA_DATA_URL = './sia.js';
 /*

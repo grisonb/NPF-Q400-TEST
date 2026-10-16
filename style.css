@@ -1,4 +1,4 @@
-/* NPF_STYLE_BUILD_VERSION: v17.81 */
+/* NPF_STYLE_BUILD_VERSION: v17.82 */
 /* v14.83 — nettoyage des références techniques et limitation des cartouches routiers. */
 /* v14.81 — recherche phonétique nationale élargie aux fragments sur deux lettres. */
 /* v14.80 — Brive conservé uniquement sous LFSL. */
@@ -18680,4 +18680,69 @@ body.npf-calculator-modal-open {
 .noms-communes-toggle input {
     width: 20px;
     height: 20px;
+}
+
+/* v17.82 — pastille du clignotement des lignes HT : coin bas-droit du bouton HT (comme l'œil du bouton France),
+   36 px (zone tactile au moins 32 px), jaune + dessin foncé = en marche, gris = arrêté. */
+#high-voltage-lines-button {
+    overflow: visible;
+}
+#high-voltage-lines-button .ht-blink-toggle {
+    position: absolute;
+    right: -10px;
+    bottom: -10px;
+    z-index: 6;
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    min-height: 36px;
+    box-sizing: border-box;
+    padding: 4px;
+    border: 2px solid #ffffff;
+    border-radius: 50%;
+    background: #6b7280;
+    color: #ffffff;
+    box-shadow: 0 2px 7px rgba(0,0,0,.28);
+    align-items: center;
+    justify-content: center;
+    pointer-events: auto;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+}
+#high-voltage-lines-button .ht-blink-toggle.is-on {
+    background: #ffd400;
+    color: #1f2937;
+}
+#high-voltage-lines-button .ht-blink-toggle svg {
+    width: 26px;
+    height: 26px;
+    overflow: visible;
+}
+#high-voltage-lines-button .ht-blink-toggle .ht-blink-rays line,
+#high-voltage-lines-button .ht-blink-toggle .ht-blink-ring {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2.4;
+    stroke-linecap: round;
+}
+#high-voltage-lines-button .ht-blink-toggle .ht-blink-dot {
+    fill: currentColor;
+}
+@media (max-width: 760px) {
+    #high-voltage-lines-button .ht-blink-toggle {
+        right: -7px;
+        bottom: -7px;
+        width: 32px;
+        height: 32px;
+        min-width: 32px;
+        min-height: 32px;
+        padding: 3px;
+    }
+    #high-voltage-lines-button .ht-blink-toggle svg {
+        width: 22px;
+        height: 22px;
+    }
 }

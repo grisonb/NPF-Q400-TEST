@@ -1632,6 +1632,7 @@ function refreshHighVoltageLinesButtonState() {
         && !isHighVoltageLayerEffectiveAtCurrentScale();
     button.classList.toggle('active', showHighVoltageLinesLayer);
     button.classList.toggle('loading', isHighVoltageLinesLoading);
+    refreshNpfHtBlinkToggle();
     button.classList.toggle('base-map-unavailable', baseMapBlocked);
     button.disabled = isHighVoltageLinesLoading || baseMapBlocked;
     button.title = isHighVoltageLinesLoading
@@ -2627,6 +2628,7 @@ function runNpfHtBlinkTick() {
 
 function applyNpfHtBlinkSettings() {
     saveNpfHtBlinkSettings();
+    refreshNpfHtBlinkToggle();
     clearInterval(npfHtBlinkTimer);
     npfHtBlinkTimer = null;
     npfHtBlinkTick = 0;
@@ -2753,7 +2755,43 @@ function openNpfHtBlinkOptionsMenu() {
     modal.setAttribute('aria-hidden', 'false');
 }
 
-/* Appui court : HT affichées / masquées (inchangé) ; appui long : fenêtre « Lignes HT ». */
+/*
+ * v17.82 — pastille « clignotement » dans le coin bas-droit du bouton HT (même esprit que le N et l'œil du bouton
+ * France). Dessin fait par l'app (point central + 8 rayons courts). Jaune, dessin foncé = clignotement EN MARCHE ;
+ * gris = ARRÊTÉ. Un toucher = cocher / décocher « Clignotement » de la fenêtre « Lignes HT » (MÊME réglage, gardé
+ * d'un lancement à l'autre) ; la couche HT elle-même ne change pas. Visible seulement quand les HT sont affichées.
+ */
+function refreshNpfHtBlinkToggle() {
+    const toggle = document.getElementById('ht-blink-toggle');
+    if (!toggle) return;
+    let visible = false;
+    try {
+        visible = !!showHighVoltageLinesLayer && !isHighVoltageLinesLoading && isNpfHeavyOverlayBaseMapAllowed();
+    } catch (_) {
+        visible = false;
+    }
+    let on = false;
+    try { on = !!npfHtBlinkSettings.enabled; } catch (_) { on = false; }
+    toggle.style.display = visible ? 'flex' : 'none';
+    toggle.classList.toggle('is-on', on);
+    toggle.setAttribute('aria-pressed', on ? 'true' : 'false');
+    const label = on ? 'Clignotement des lignes HT en marche — toucher pour l’arrêter' : 'Clignotement des lignes HT arrêté — toucher pour le mettre en marche';
+    toggle.title = label;
+    toggle.setAttribute('aria-label', label);
+}
+
+function toggleNpfHtBlinkFromButton() {
+    npfHtBlinkSettings.enabled = !npfHtBlinkSettings.enabled;
+    applyNpfHtBlinkSettings();
+    refreshNpfHtBlinkOptionsMenu();
+}
+
+function isNpfHtBlinkToggleTarget(event) {
+    return !!event?.target?.closest?.('#ht-blink-toggle');
+}
+
+/* Appui court : HT affichées / masquées (inchangé) ; appui long : fenêtre « Lignes HT ».
+ * v17.82 : un toucher sur la pastille ne fait que mettre en marche / arrêter le clignotement. */
 function installHighVoltageLinesButtonInteractions(button) {
     if (!button || button.dataset.htBlinkBound === '1') return;
     button.dataset.htBlinkBound = '1';
@@ -2770,6 +2808,7 @@ function installHighVoltageLinesButtonInteractions(button) {
     };
     const startLongPress = event => {
         if (event && event.button !== undefined && event.button !== 0) return;
+        if (isNpfHtBlinkToggleTarget(event)) return;
         if (event && typeof event.preventDefault === 'function') event.preventDefault();
         clearLongPress();
         longPressTriggered = false;
@@ -2786,10 +2825,18 @@ function installHighVoltageLinesButtonInteractions(button) {
     button.addEventListener('contextmenu', event => {
         event.preventDefault();
         clearLongPress();
+        if (isNpfHtBlinkToggleTarget(event)) return;
         longPressTriggered = true;
         openNpfHtBlinkOptionsMenu();
     });
     button.addEventListener('click', event => {
+        if (isNpfHtBlinkToggleTarget(event)) {
+            event.preventDefault();
+            event.stopPropagation();
+            longPressTriggered = false;
+            toggleNpfHtBlinkFromButton();
+            return;
+        }
         if (longPressTriggered) {
             event.preventDefault();
             event.stopPropagation();
