@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.83';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.84';
 
 
 /*
@@ -3309,7 +3309,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.83 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.84 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -20610,18 +20610,31 @@ function normalizeRoadOverlayFeature(feature) {
     const roadClass = getRoadOverlayClassFromRef(ref);
     if (!ref || !roadClass) return null;
 
+    const properties = {
+        ref,
+        roadClass,
+        name: String(
+            feature.properties?.name
+            || feature.properties?.nom
+            || feature.properties?.NOM
+            || ''
+        ).trim()
+    };
+    /* v17.84 — Calque Routier v7 : données de placement des étiquettes préparées sur PC (voir
+     * getRoadOverlaySlotLabelCandidates). Absentes des anciens calques : ancien placement. */
+    const lb = feature.properties?.lb;
+    if (
+        Array.isArray(lb)
+        && lb.length === 5
+        && lb.slice(0, 4).every(Number.isFinite)
+        && typeof lb[4] === 'string'
+    ) {
+        properties.lb = lb;
+    }
+
     return {
         type: 'Feature',
-        properties: {
-            ref,
-            roadClass,
-            name: String(
-                feature.properties?.name
-                || feature.properties?.nom
-                || feature.properties?.NOM
-                || ''
-            ).trim()
-        },
+        properties,
         geometry: feature.geometry
     };
 }
@@ -22174,6 +22187,400 @@ function renderRoadOverlayLabelCandidates(candidatesByRef) {
     }
 }
 
+/*
+ * v17.84 — ÉTIQUETTES DU CALQUE ROUTIER v7 : numéro répété le long de chaque route.
+ * Préparé sur PC (outil preparer_etiquettes_routes.js, jamais sur l'iPad) : les tronçons d'un même numéro sont
+ * recollés en BRANCHES (nouvelle branche à chaque carrefour ou changement de numéro), avec une position candidate
+ * tous les 400 m et, pour chaque zoom 11 à 15, « place libre de tout nom de commune du calque noms V11 ».
+ * properties.lb = [branche (<0 : chaussée double), début (<0 : tronçon à l'envers), longueur, 1re position, masques].
+ * Ici, à la fin d'un geste seulement, sans réseau : positions visibles et libres, puis
+ *  1) au moins une étiquette par branche visible (assez longue à l'écran) ;
+ *  2) numéro répété environ tous les 300 px (240 / 280 px à 2 / 1 NM) ;
+ * sans chevauchement entre étiquettes ni sur les terrains, points VFR / SIA, icônes et autres marqueurs.
+ */
+const ROAD_OVERLAY_LABEL_SLOT_M = 400;
+const ROAD_OVERLAY_LABEL_SLOT_B32 = '0123456789abcdefghijklmnopqrstuv';
+const ROAD_OVERLAY_LABEL_MAX_COUNT = 140;
+let roadOverlayLabelStats = { mode: '', slots: 0, branches: 0, obstacles: 0, labels: 0, lastMs: 0 };
+/* Jeton : un placement en cours (lots d'étiquettes) s'arrête dès qu'un autre commence ou que le calque est vidé. */
+let roadOverlayLabelBuildToken = 0;
+const ROAD_OVERLAY_LABEL_GRID_PX = 64;
+const ROAD_OVERLAY_LABEL_MARKER_BATCH = 12;
+
+function getRoadOverlayLabelSpacingPx(zoom) {
+    if (zoom >= 13) return 300;
+    if (zoom >= 12) return 280;
+    return 240;
+}
+
+function roadOverlayRecordHasLabelSlots(record) {
+    if (!record) return false;
+    if (typeof record.hasLabelSlots === 'boolean') return record.hasLabelSlots;
+    const features = record.geojson?.features || [];
+    let found = false;
+    for (let index = 0; index < features.length && index < 400; index += 1) {
+        if (Array.isArray(features[index]?.properties?.lb)) {
+            found = true;
+            break;
+        }
+    }
+    record.hasLabelSlots = found;
+    return found;
+}
+
+function roadOverlayLabelDistanceM(a, b) {
+    /* Même formule que l'outil de préparation (équirectangulaire locale). */
+    const rad = Math.PI / 180;
+    const x = (b[0] - a[0]) * rad * Math.cos((a[1] + b[1]) / 2 * rad);
+    const y = (b[1] - a[1]) * rad;
+    return Math.hypot(x, y) * 6371008.8;
+}
+
+function getRoadOverlaySlotLabelCandidates(zoom, viewBounds, inner) {
+    const candidates = [];
+    const seen = new Set();
+    const maskBit = 1 << (Math.max(11, Math.min(15, zoom)) - 11);
+
+    loadedRoadOverlayParts.forEach((record, partKey) => {
+        if (
+            record?.tier !== roadOverlayLoadedZoomTier
+            || !record?.geojson?.features?.length
+        ) {
+            return;
+        }
+
+        for (const feature of record.geojson.features) {
+            const lb = feature?.properties?.lb;
+            if (!Array.isArray(lb) || !lb[4]) continue;
+            if (!shouldDisplayRoadOverlayFeature(feature)) continue;
+
+            const roadClass = String(feature.properties.roadClass || '').toUpperCase();
+            if ((roadClass === 'D' || roadClass === 'M' || roadClass === 'T') && zoom < 12) continue;
+            if (!roadOverlayBboxIntersectsBounds(getRoadOverlayFeatureBbox(feature), viewBounds)) continue;
+
+            const ref = normalizeRoadOverlayDisplayReference(feature.properties.ref);
+            if (!ref) continue;
+
+            const [branchRaw, startRaw, branchLength, firstSlot, masks] = lb;
+            const reversed = startRaw < 0;
+            const start = reversed ? -startRaw - 1 : startRaw;
+            const coordinates = feature.geometry?.type === 'LineString'
+                ? feature.geometry.coordinates
+                : getRoadOverlayLongestLineCoordinates(feature);
+            if (!Array.isArray(coordinates) || coordinates.length < 2) continue;
+            const line = reversed ? coordinates.slice().reverse() : coordinates;
+
+            let walked = 0;
+            let segmentIndex = 1;
+            let segmentLength = roadOverlayLabelDistanceM(line[0], line[1]);
+
+            for (let slot = 0; slot < masks.length; slot += 1) {
+                const mask = ROAD_OVERLAY_LABEL_SLOT_B32.indexOf(masks[slot]);
+                if (mask < 0 || !(mask & maskBit)) continue;
+
+                const k = firstSlot + slot;
+                const key = branchRaw + ':' + k;
+                if (seen.has(key)) continue;
+
+                const along = (
+                    branchLength < ROAD_OVERLAY_LABEL_SLOT_M
+                        ? branchLength / 2
+                        : (k + 0.5) * ROAD_OVERLAY_LABEL_SLOT_M
+                ) - start;
+
+                while (walked + segmentLength < along && segmentIndex < line.length - 1) {
+                    walked += segmentLength;
+                    segmentIndex += 1;
+                    segmentLength = roadOverlayLabelDistanceM(line[segmentIndex - 1], line[segmentIndex]);
+                }
+                const a = line[segmentIndex - 1];
+                const b = line[segmentIndex];
+                const ratio = segmentLength > 0
+                    ? Math.max(0, Math.min(1, (along - walked) / segmentLength))
+                    : 0;
+                const lon = a[0] + (b[0] - a[0]) * ratio;
+                const lat = a[1] + (b[1] - a[1]) * ratio;
+                const point = map.latLngToContainerPoint([lat, lon]);
+                if (
+                    point.x < inner.left || point.x > inner.right
+                    || point.y < inner.top || point.y > inner.bottom
+                ) {
+                    continue;
+                }
+
+                seen.add(key);
+                candidates.push({
+                    ref,
+                    roadClass,
+                    branch: Math.abs(branchRaw),
+                    double: branchRaw < 0,
+                    branchLength,
+                    k,
+                    x: point.x,
+                    y: point.y,
+                    latlng: L.latLng(lat, lon),
+                    partKey
+                });
+            }
+        }
+    });
+
+    return candidates;
+}
+
+function collectRoadOverlayLabelObstacles() {
+    const boxes = [];
+    if (!map) return boxes;
+    const size = map.getSize();
+    const visible = box => !(box.right < 0 || box.left > size.x || box.bottom < 0 || box.top > size.y);
+
+    /* Terrains, points VRP, waypoints, trafic, avion… (marqueurs DOM). */
+    try {
+        const container = map.getContainer();
+        const origin = container.getBoundingClientRect();
+        container.querySelectorAll('.leaflet-marker-icon').forEach(element => {
+            if (element.classList.contains('road-overlay-label-marker')) return;
+            const rect = element.getBoundingClientRect();
+            if (rect.width < 2 || rect.height < 2) return;
+            const box = {
+                left: rect.left - origin.left,
+                right: rect.right - origin.left,
+                top: rect.top - origin.top,
+                bottom: rect.bottom - origin.top
+            };
+            if (visible(box)) boxes.push(box);
+        });
+    } catch (_) {}
+
+    /* Boutons et panneaux posés sur la carte (recherche, colonnes de boutons, « Survolée », échelle, DIAG…) :
+     * une étiquette dessous ne se verrait pas. Les enfants visibles des conteneurs, pas les conteneurs entiers. */
+    try {
+        const origin = map.getContainer().getBoundingClientRect();
+        const addElement = element => {
+            if (!element || element.offsetParent === null) return;
+            const rect = element.getBoundingClientRect();
+            if (rect.width < 2 || rect.height < 2) return;
+            const box = {
+                left: rect.left - origin.left,
+                right: rect.right - origin.left,
+                top: rect.top - origin.top,
+                bottom: rect.bottom - origin.top
+            };
+            if (visible(box)) boxes.push(box);
+        };
+        ['left-map-action-buttons', 'main-action-buttons', 'ui-overlay'].forEach(id => {
+            const container = document.getElementById(id);
+            if (container) Array.from(container.children).forEach(addElement);
+        });
+        ['nearest-commune-display', 'commune-info-display', 'traffic-status-display', 'sia-profile-swipe-handle', 'yul-trace-button']
+            .forEach(id => addElement(document.getElementById(id)));
+        map.getContainer().querySelectorAll('.leaflet-control').forEach(addElement);
+    } catch (_) {}
+
+    /* Points SIA (VFR, ADHP…) et icônes AER / VOL / PJE dessinés sur canvas. */
+    const addCircle = layer => {
+        if (!(layer instanceof L.CircleMarker) || layer instanceof L.Circle || !layer._map || !layer._latlng) return;
+        const point = map.latLngToContainerPoint(layer._latlng);
+        const radius = Number(layer._radius || layer.options?.radius || 4) + 1;
+        const box = { left: point.x - radius, right: point.x + radius, top: point.y - radius, bottom: point.y + radius };
+        if (visible(box)) boxes.push(box);
+    };
+    try {
+        if (typeof siaPointRenderer !== 'undefined' && siaPointRenderer?._layers) {
+            Object.values(siaPointRenderer._layers).forEach(addCircle);
+        }
+    } catch (_) {}
+    try {
+        if (typeof siaAirspaceRenderer !== 'undefined' && siaAirspaceRenderer?._layers) {
+            Object.values(siaAirspaceRenderer._layers).forEach(addCircle);
+        }
+    } catch (_) {}
+    try {
+        if (typeof siaDotherIconTouchGroup !== 'undefined' && siaDotherIconTouchGroup && map.hasLayer(siaDotherIconTouchGroup)) {
+            siaDotherIconTouchGroup.eachLayer(addCircle);
+        }
+    } catch (_) {}
+
+    return boxes;
+}
+
+function getRoadOverlaySlotLabelBox(candidate) {
+    const width = Math.max(36, Math.min(106, 18 + String(candidate.ref || '').length * 8));
+    const height = 24;
+    const padding = 3;
+    return {
+        left: candidate.x - width / 2 - padding,
+        right: candidate.x + width / 2 + padding,
+        top: candidate.y - height / 2 - padding,
+        bottom: candidate.y + height / 2 + padding
+    };
+}
+
+function addRoadOverlayLabelMarker(candidate) {
+    const marker = L.marker(candidate.latlng || candidate.point, {
+        pane: 'roadOverlayLabelPane',
+        interactive: false,
+        keyboard: false,
+        icon: L.divIcon({
+            className: 'road-overlay-label-marker',
+            html: `<span class="road-overlay-ref road-overlay-ref-${candidate.roadClass.toLowerCase()}">${escapeHtml(candidate.ref)}</span>`,
+            iconSize: null
+        })
+    });
+    marker.__npfRoadPartKey = candidate.partKey;
+    marker.__npfRoadRef = candidate.ref;
+    marker.addTo(roadOverlayLabelsLayer);
+}
+
+async function renderRoadOverlaySlotLabels() {
+    /*
+     * Découpé pour ne jamais bloquer l'iPad (mesuré CPU ×6) : positions, pause, choix des places, puis
+     * création des étiquettes par lots de ROAD_OVERLAY_LABEL_MARKER_BATCH avec une pause entre deux lots.
+     */
+    const token = ++roadOverlayLabelBuildToken;
+    let workMs = 0;
+    let longestSliceMs = 0;
+    const endSlice = () => {
+        const ms = performance.now() - startedAt;
+        workMs += ms;
+        longestSliceMs = Math.max(longestSliceMs, ms);
+    };
+    let startedAt = performance.now();
+    const zoom = Number(map.getZoom());
+    const size = map.getSize();
+    const margin = Math.max(18, Math.min(42, Math.round(Math.min(size.x, size.y) * 0.045)));
+    const inner = { left: margin, right: size.x - margin, top: margin, bottom: size.y - margin };
+    const viewBounds = map.getBounds();
+
+    const candidates = getRoadOverlaySlotLabelCandidates(zoom, viewBounds, inner);
+    const obstacles = collectRoadOverlayLabelObstacles();
+    endSlice();
+    await yieldRoadOverlayRenderTurn();
+    if (token !== roadOverlayLabelBuildToken) return;
+    startedAt = performance.now();
+
+    /* Zones occupées rangées dans une grille : chaque essai ne compare que les zones voisines. */
+    const grid = new Map();
+    const cellsOf = box => {
+        const keys = [];
+        for (let x = Math.floor(box.left / ROAD_OVERLAY_LABEL_GRID_PX); x <= Math.floor(box.right / ROAD_OVERLAY_LABEL_GRID_PX); x += 1) {
+            for (let y = Math.floor(box.top / ROAD_OVERLAY_LABEL_GRID_PX); y <= Math.floor(box.bottom / ROAD_OVERLAY_LABEL_GRID_PX); y += 1) {
+                keys.push(x + ':' + y);
+            }
+        }
+        return keys;
+    };
+    const occupy = box => {
+        cellsOf(box).forEach(key => {
+            if (!grid.has(key)) grid.set(key, []);
+            grid.get(key).push(box);
+        });
+    };
+    const collides = box => cellsOf(box).some(key => (
+        (grid.get(key) || []).some(other => roadOverlayLabelBoxesIntersect(box, other))
+    ));
+    obstacles.forEach(occupy);
+
+    const placedByRef = new Map();
+    const placed = [];
+    const spacing = getRoadOverlayLabelSpacingPx(zoom);
+    let metersPerPixel = 1;
+    try {
+        metersPerPixel = map.distance(
+            map.containerPointToLatLng([size.x / 2 - 50, size.y / 2]),
+            map.containerPointToLatLng([size.x / 2 + 50, size.y / 2])
+        ) / 100 || 1;
+    } catch (_) {}
+
+    const branches = new Map();
+    for (const candidate of candidates) {
+        let branch = branches.get(candidate.branch);
+        if (!branch) {
+            branch = {
+                ref: candidate.ref,
+                roadClass: candidate.roadClass,
+                double: candidate.double,
+                lengthPx: candidate.branchLength / metersPerPixel,
+                classPriority: getRoadOverlayLabelClassPriority(candidate.roadClass),
+                branchPriority: getRoadOverlayLabelBranchPriority(candidate.ref),
+                slots: []
+            };
+            branches.set(candidate.branch, branch);
+        }
+        branch.slots.push(candidate);
+    }
+    const ordered = Array.from(branches.values()).sort((first, second) => (
+        first.classPriority - second.classPriority
+        || first.branchPriority - second.branchPriority
+        || Number(first.double) - Number(second.double)
+        || second.slots.length - first.slots.length
+        || second.lengthPx - first.lengthPx
+    ));
+    ordered.forEach(branch => branch.slots.sort((first, second) => first.k - second.k));
+
+    const nearestSameRef = candidate => {
+        let nearest = Infinity;
+        for (const other of placedByRef.get(candidate.ref) || []) {
+            nearest = Math.min(nearest, Math.hypot(other.x - candidate.x, other.y - candidate.y));
+        }
+        return nearest;
+    };
+    const place = (candidate, box) => {
+        occupy(box);
+        if (!placedByRef.has(candidate.ref)) placedByRef.set(candidate.ref, []);
+        placedByRef.get(candidate.ref).push(candidate);
+        placed.push(candidate);
+    };
+
+    /* 1) Au moins une étiquette par branche visible (chaussée double exceptée) : la position libre la plus
+     *    proche du milieu de la partie visible, sauf si le même numéro est déjà affiché tout près. */
+    for (const branch of ordered) {
+        if (placed.length >= ROAD_OVERLAY_LABEL_MAX_COUNT) break;
+        if (branch.double || branch.lengthPx < 40) continue;
+        const middle = branch.slots[Math.floor((branch.slots.length - 1) / 2)].k;
+        const byMiddle = branch.slots.slice().sort((first, second) => Math.abs(first.k - middle) - Math.abs(second.k - middle));
+        for (const candidate of byMiddle) {
+            if (nearestSameRef(candidate) < 150) break;
+            const box = getRoadOverlaySlotLabelBox(candidate);
+            if (collides(box)) continue;
+            place(candidate, box);
+            break;
+        }
+    }
+
+    /* 2) Répétition le long de chaque branche, environ tous les « spacing » pixels. */
+    for (const branch of ordered) {
+        if (branch.double) continue;
+        for (const candidate of branch.slots) {
+            if (placed.length >= ROAD_OVERLAY_LABEL_MAX_COUNT) break;
+            if (nearestSameRef(candidate) < spacing) continue;
+            const box = getRoadOverlaySlotLabelBox(candidate);
+            if (collides(box)) continue;
+            place(candidate, box);
+        }
+    }
+    endSlice();
+
+    /* 3) Création des étiquettes par petits lots. */
+    for (let index = 0; index < placed.length; index += ROAD_OVERLAY_LABEL_MARKER_BATCH) {
+        await yieldRoadOverlayRenderTurn();
+        if (token !== roadOverlayLabelBuildToken || !roadOverlayLabelsLayer) return;
+        startedAt = performance.now();
+        placed.slice(index, index + ROAD_OVERLAY_LABEL_MARKER_BATCH).forEach(addRoadOverlayLabelMarker);
+        endSlice();
+    }
+
+    roadOverlayLabelStats = {
+        mode: 'v7',
+        slots: candidates.length,
+        branches: branches.size,
+        obstacles: obstacles.length,
+        labels: placed.length,
+        lastMs: Math.round(workMs),
+        plusLongueTrancheMs: Math.round(longestSliceMs)
+    };
+}
+
 function getRoadOverlayStyleBand() {
     const zoom = map?.getZoom?.() ?? 0;
     if (zoom >= 13) return 3;
@@ -22230,6 +22637,16 @@ function shouldRefreshRoadOverlayLabelsForView({ force = false } = {}) {
     ) {
         return true;
     }
+
+    /*
+     * v17.84 — placement refait à la fin de CHAQUE geste (même petit) : avant, un déplacement de moins de
+     * 1 200 m / 24 % de l'écran gardait les étiquettes placées pour l'ancienne vue (souvent hors écran).
+     */
+    try {
+        const last = map.latLngToContainerPoint(roadOverlayLastLabelCenter);
+        const size = map.getSize();
+        return Math.hypot(last.x - size.x / 2, last.y - size.y / 2) >= 2;
+    } catch (_) {}
 
     try {
         const bounds = map.getBounds();
@@ -22366,6 +22783,7 @@ async function clearRoadOverlayRenderedPartsProgressively(options = {}, serialTo
 
     /* Les cartouches sont peu nombreux : les retirer d'abord évite les labels
      * orphelins pendant la libération progressive des géométries. */
+    roadOverlayLabelBuildToken += 1;
     try { roadOverlayLabelsLayer?.clearLayers(); } catch (_) {}
 
     for (let index = 0; index < records.length; index += 1) {
@@ -22414,6 +22832,7 @@ function clearRoadOverlayRenderedParts(options = {}) {
 
     try { roadOverlayCasingLayer?.clearLayers(); } catch (_) {}
     try { roadOverlayLineLayer?.clearLayers(); } catch (_) {}
+    roadOverlayLabelBuildToken += 1;
     try { roadOverlayLabelsLayer?.clearLayers(); } catch (_) {}
 
     /*
@@ -22753,6 +23172,7 @@ async function waitForRoadOverlayOfflineTiles(token) {
 
 function rebuildRoadOverlayLabels() {
     if (!roadOverlayLabelsLayer) return;
+    roadOverlayLabelBuildToken += 1;
     roadOverlayLabelsLayer.clearLayers();
 
     /*
@@ -22760,6 +23180,20 @@ function rebuildRoadOverlayLabels() {
      * Le meilleur tronçon de chaque référence est retenu, puis les cartouches
      * sont triés et filtrés globalement pour éviter les amas illisibles.
      */
+    let slotParts = 0;
+    loadedRoadOverlayParts.forEach(record => {
+        if (record?.tier === roadOverlayLoadedZoomTier && roadOverlayRecordHasLabelSlots(record)) slotParts += 1;
+    });
+    if (slotParts > 0) {
+        /* v17.84 — Calque Routier v7 : nouveau placement (numéro répété, chaque branche). */
+        renderRoadOverlaySlotLabels().catch(error => {
+            console.warn('Étiquettes du calque routier (v7) :', error);
+            try { roadOverlayLabelsLayer.clearLayers(); } catch (_) {}
+        });
+        return;
+    }
+
+    const startedAt = performance.now();
     const candidatesByRef = new Map();
 
     loadedRoadOverlayParts.forEach((record, partKey) => {
@@ -22778,6 +23212,14 @@ function rebuildRoadOverlayLabels() {
     });
 
     renderRoadOverlayLabelCandidates(candidatesByRef);
+    roadOverlayLabelStats = {
+        mode: 'ancien',
+        slots: candidatesByRef.size,
+        branches: 0,
+        obstacles: 0,
+        labels: roadOverlayLabelsLayer.getLayers().length,
+        lastMs: Math.round(performance.now() - startedAt)
+    };
 }
 
 async function refreshRoadOverlayVisibleParts(source = 'refresh') {
@@ -48527,10 +48969,10 @@ const NPF_SERVER_MAPS = {
         stateKey: 'npfServerSectionDownloadV1:calque-routier',
         logKey: 'npfServerSectionLogV1:calque-routier',
         ui: 'routes-download',
-        libelle: 'Télécharger le Calque Routier (23 Mo)',
+        libelle: 'Télécharger le Calque Routier (26 Mo)',
         libelleReprise: 'Reprendre le téléchargement du Calque Routier',
         ancienne: 'l\'ancien Calque Routier',
-        confirmation: 'Calque Routier de 23 Mo : utilise le Wi-Fi. L\'ancien Calque Routier sera remplacé en entier, seulement une fois le nouveau complet et vérifié.',
+        confirmation: 'Calque Routier de 26 Mo : utilise le Wi-Fi. L\'ancien Calque Routier sera remplacé en entier, seulement une fois le nouveau complet et vérifié.',
         /* Place une fois installé (routes + index par zone), mesurée sur desktop le 09/10/2026. */
         besoinOctets: 450 * 1024 * 1024
     },

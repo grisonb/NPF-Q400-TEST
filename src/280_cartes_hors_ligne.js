@@ -3378,10 +3378,10 @@ const NPF_SERVER_MAPS = {
         stateKey: 'npfServerSectionDownloadV1:calque-routier',
         logKey: 'npfServerSectionLogV1:calque-routier',
         ui: 'routes-download',
-        libelle: 'Télécharger le Calque Routier (23 Mo)',
+        libelle: 'Télécharger le Calque Routier (26 Mo)',
         libelleReprise: 'Reprendre le téléchargement du Calque Routier',
         ancienne: 'l\'ancien Calque Routier',
-        confirmation: 'Calque Routier de 23 Mo : utilise le Wi-Fi. L\'ancien Calque Routier sera remplacé en entier, seulement une fois le nouveau complet et vérifié.',
+        confirmation: 'Calque Routier de 26 Mo : utilise le Wi-Fi. L\'ancien Calque Routier sera remplacé en entier, seulement une fois le nouveau complet et vérifié.',
         /* Place une fois installé (routes + index par zone), mesurée sur desktop le 09/10/2026. */
         besoinOctets: 450 * 1024 * 1024
     },

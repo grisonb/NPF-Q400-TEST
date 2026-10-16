@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 16/10/2026
-Version de travail actuelle : TEST v17.83
+Version de travail actuelle : TEST v17.84
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,9 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.84 — étiquettes du Calque Routier : numéro répété le long de chaque route (~300 px), une étiquette
+  par branche (carrefour, changement de numéro), jamais sur un nom de commune V11, un terrain, un point, une
+  icône ni sous un bouton ; placement refait à la fin de chaque geste ; Calque Routier v7 (préparé sur PC) ;
 - v17.83 — clignotement HT immédiat à chaque mise en marche / changement de réglage (avant : rien
   ne clignotait avant un déplacement de la carte, sauf à la 1re activation) ; boutons « Fermer » et croix × de
   fermeture rouges ; erreur JS de l'aperçu de l'export BLOC/FUEL corrigée ;
@@ -540,8 +543,10 @@ NON IMPLÉMENTÉ / OUVERT :
   07/10/2026 : programme VPS bfg-sofia-notams 1.2.0 PRÊT, NON INSTALLÉ
   (~/vps-a-copier/). v17.60 à pousser APRÈS l'installation de la 1.2.0
   (elle annonce « environ 1 minute ») ;
+- v17.84 : À MESURER sur iPad (étiquettes des routes à 2 / 1 / 0,5 NM, Gardanne / Trets, avec le Calque Routier v7) ;
+  COMMIT LOCAL, NON POUSSÉE ; Calque Routier v7 PRÊT, NON INSTALLÉ sur le VPS (OK écrit de Bastien attendu) ;
 - v17.83 : À MESURER sur iPad (clignotement immédiat à la réactivation, sans bouger la carte ; boutons « Fermer » et croix
-  rouges) ; DEUX COMMITS LOCAUX (0a9f299 + complément), NON POUSSÉE ;
+  rouges) ; POUSSÉE le 16/10/2026 (0a9f299 + 9048a17) ;
 - v17.82 : pastille du bouton HT fonctionnelle sur iPad (constat de Bastien), mais réactivation sans clignotement avant un
   déplacement de la carte -> corrigé en v17.83 ; POUSSÉE le 16/10/2026 (6b9ff44) ;
 - v17.81 : À MESURER sur iPad (Calanques, Camargue, Frioul, Écrins à 10 et 5 NM) ; POUSSÉE le 16/10/2026 (d6b926d) ;
@@ -775,27 +780,27 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.83
+Version : TEST v17.84
 Date : 16/10/2026
-Base : v17.82 (6b9ff44, poussée le 16/10/2026)
+Base : v17.83 (9048a17, poussée le 16/10/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.83.txt
-2_Index_v17.83.txt
-3_Manifest_v17.83.txt
-4_Script_v17.83.txt
-5_SIA_v17.83.txt
-6_Style_v17.83.txt
-7_Sw_v17.83.txt
+1_Modifications_v17.84.txt
+2_Index_v17.84.txt
+3_Manifest_v17.84.txt
+4_Script_v17.84.txt
+5_SIA_v17.84.txt
+6_Style_v17.84.txt
+7_Sw_v17.84.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.83 (et texte « TEST v17.83 » de l'écran de
+- Index : APP_VERSION = v17.84 (et texte « TEST v17.84 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.83
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.83
-- Style : NPF_STYLE_BUILD_VERSION = v17.83
-- Service Worker : `sw-v17-83_ht_immediat_fermer_rouge` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-83_ht_immediat_fermer_rouge`, `npf-q400-test-app-data-v1`,
+- Manifest : start_url = ./index.html?appv=v17.84
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.84
+- Style : NPF_STYLE_BUILD_VERSION = v17.84
+- Service Worker : `sw-v17-84_etiquettes_routes` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-84_etiquettes_routes`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-sia-2026-10-29-v02-g15`
 - SIA_DATA_REVISION (SW / Index sia.js?siav=) : sia-2026-10-29-v02-g15 (= NPF_SIA_DATA_REVISION
   de sia.js ; à changer à chaque nouveau sia.js)
@@ -808,15 +813,15 @@ Références de version cohérentes :
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.83 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.84 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
 - `sia.js` : par rapport à v17.70, outre-mer retiré, « a » de 34 VRP renseigné, table vrpAirportColors ajoutée (2 pastels), révision g6 ; zones, terrains et points de métropole identiques ; moteur tuiles (src/100) modifié en v17.66 sur demande
   explicite (limite de zoom propre à chaque carte, zoom 11 OACI 1/500 000) ;
-- tests v17.83 : entrée v17.83 ; sia.js strictement identique à la v17.81 ;
+- tests v17.84 : entrée v17.84 ; sia.js strictement identique à la v17.81 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82 et v17.83 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82, v17.83 et v17.84 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
   v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE ;
   v17.56 VALIDÉE en vol ; v17.57 VALIDÉE sur iPad.
 
@@ -2345,6 +2350,65 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.84 — ÉTIQUETTES DU CALQUE ROUTIER : NUMÉRO RÉPÉTÉ, UNE ÉTIQUETTE PAR BRANCHE
+Date : 16/10/2026
+Base fonctionnelle : v17.83 (commits 0a9f299 + 9048a17, poussée le 16/10/2026).
+Constat iPad de Bastien (v17.83, 0,5 NM, Gardanne / Trets) : une seule étiquette « D6 » pour une longue route, la
+branche nord-ouest sans étiquette ; la D12 n'apparaît qu'en déplaçant la carte (hors écran ou absente selon l'arrêt).
+
+1. CAUSES (src/120, v17.83)
+- addRoadOverlayLabelsForGeojson : un seul candidat PAR NUMÉRO (candidatesByRef) = milieu de la partie visible du
+  plus long tronçon (les routes sont découpées en tronçons de quelques dizaines de mètres) : la D6 et sa branche
+  nord-ouest portent le même numéro, une seule étiquette pour les deux.
+- shouldRefreshRoadOverlayLabelsForView : placement refait seulement après un déplacement de plus de 1 200 m / 24 %
+  de l'écran (ou zoom, ou 60 s) : après un petit déplacement, les étiquettes restaient placées pour l'ancienne vue.
+2. CALQUE ROUTIER v7 (préparé sur PC, jamais sur l'iPad)
+- Outil ~/projects/npf-cartes-vps/outils/preparer_etiquettes_routes.js (Node, ~9 min) depuis le v6 et les morceaux
+  noms de la V11 : tronçons d'un même numéro recollés en BRANCHES en suivant le tronçon le mieux aligné à chaque
+  nœud (virage < 40°) : nouvelle branche à chaque carrefour ou changement de numéro (213 919 branches, 113 428 de plus
+  de 100 m retenues) ; chaussées doubles repérées (28 680, l'autre chaussée porte le numéro) ; une position candidate
+  tous les 400 m (au milieu si plus courte) : 1 043 833 positions ; pour chaque position et chaque zoom 11 à 15, place
+  de l'étiquette libre de tout nom de commune du calque noms V11 (pixels des tuiles noms ; sur un nom : 40,7 % à z11,
+  34,7 % à z12, 13,5 % à z13).
+- Chaque tronçon d'une branche retenue reçoit properties.lb = [branche, début, longueur, 1re position, masques] ;
+  routes, géométries et autres propriétés STRICTEMENT identiques au v6 (vérifié partie par partie). ZIP
+  NPF_Routes_France_Complete_v7.zip 25,8 Mo (v6 : 23,1 Mo) ; morceaux de section v7 (5) dans
+  ~/projects/npf-cartes-vps/calque-routier-v7/morceaux (decouper_section.py, recollé = original).
+- Les apps v17.83 et avant ignorent « lb » à l'import : elles lisent le v7 comme le v6.
+- VPS : installer-calque-routier-v7-vps.ps1 (v6 sauvegardé, bascule vers le v7 dans /srv/npf-cartes/calque-routier/,
+  vérifications curl, reste identique) et retour-arriere-calque-routier-v7-vps.ps1 + outils/calque-routier-v7-vps.sh ;
+  syntaxe vérifiée, NON LANCÉS (OK écrit de Bastien attendu).
+3. APP (src/120, src/280, index.html)
+- Import : « lb » conservé (normalizeRoadOverlayFeature). Calque v7 présent : nouveau placement
+  (renderRoadOverlaySlotLabels) ; ancien calque (v6) : ancien placement inchangé.
+- Placement, à la fin d'un geste seulement (même moment qu'avant, après les tuiles), sans réseau : positions
+  visibles et libres de noms au zoom courant ; 1) au moins une étiquette par branche visible (≥ 40 px), au plus près
+  du milieu de sa partie visible, sauf même numéro déjà affiché à moins de 150 px ; 2) numéro répété le long de
+  chaque branche : 300 px à 0,5 NM et moins, 280 px à 1 NM, 240 px à 2 NM ; plafond 140 étiquettes. Jamais de
+  chevauchement entre étiquettes ni sur les zones occupées relevées à l'écran : marqueurs (terrains, VRP, waypoints,
+  trafic, avion), points SIA et icônes AER / VOL / PJE (canvas), boutons et panneaux posés sur la carte (recherche,
+  colonnes de boutons, « Survolée », échelle, DIAG).
+- Placement refait à la fin de CHAQUE geste (même petit déplacement).
+- Découpé pour l'iPad (mesuré CPU ×6) : positions, pause, choix des places (grille des zones occupées), puis création
+  des étiquettes par lots de 12 avec une pause entre deux lots ; un placement périmé s'arrête (jeton).
+- Bouton et confirmation « Télécharger le Calque Routier » : 23 Mo -> 26 Mo.
+4. TESTS PC (cdp_routes84.js, run_routes84.sh, carte V11 d'essai Gardanne / Trets / Valence extraite des vrais
+   morceaux V11 par carte84/extraire_v11_essai.py, faux serveur ; v17.83 + Calque Routier v6 contre v17.84 + v7)
+- Carte V11 hors ligne avec noms, Gardanne, Trets-Rousset, Valence à 2 NM, 1 NM, 0,5 NM :
+  v17.84 : 0 chevauchement, 0 étiquette sur un nom de commune (pixels des tuiles noms affichées), 0 sous un bouton
+  ou panneau, 0 sur un marqueur ou un point ; D6 répétée 3 fois et ses branches D6EH / D6EF / D6EE étiquetées
+  (Gardanne 0,5 NM) ; D12 2 fois (Trets-Rousset 1 et 0,5 NM) ; 3 à 67 étiquettes selon la vue.
+  v17.83 : une étiquette par numéro, 1 à 3 étiquettes par vue sur un nom de commune, 1 à 8 sous les boutons.
+- Petits déplacements à 0,5 NM : étiquettes replacées à chaque fois, sans chevauchement ni nom.
+- CPU ×6, mêmes gestes (3 secteurs, 1 et 0,5 NM) : aucune tâche de plus de 100 ms pendant le placement des
+  étiquettes (plus longue tranche 42 ms) ; tâches > 100 ms sur tout le parcours : v17.84 4, v17.83 6 (tuiles et
+  carte, dans les deux versions). Premier essai non découpé : 2 tâches de 102 et 106 ms pendant le placement ->
+  découpage ajouté (point 3) avant livraison.
+- Aucune erreur JS. Non-régression courte (run_fin84.sh) : démarrage sans erreur JS, carte et échelle en NM,
+  FdS / GAAR, Trafic Moyens Nationaux, fenêtres terrain, retour sur l'avion, parcs (v17.75), textes « NPF-Q400 » ;
+  mise à jour v17.83 -> v17.84 puis hors ligne : v17.84 servie, échelle 50 NM, seuls les caches npf-q400-test-*
+  touchés, caches de la pérenne intacts. Aucune erreur JS.
 
 VERSION TEST v17.83 — CLIGNOTEMENT HT IMMÉDIAT ; BOUTONS « FERMER » ROUGES
 Date : 16/10/2026
