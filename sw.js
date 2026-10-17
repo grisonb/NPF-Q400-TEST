@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v17-84_etiquettes_routes';
-const APP_VERSION = 'v17.84';
+const SW_VERSION = 'sw-v17-85_noms_sans_quadrillage';
+const APP_VERSION = 'v17.85';
 const SIA_DATA_REVISION = 'sia-2026-10-29-v02-g15';
 const SIA_DATA_URL = './sia.js';
 /*

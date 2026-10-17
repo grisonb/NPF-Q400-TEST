@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 16/10/2026
-Version de travail actuelle : TEST v17.84
+Version de travail actuelle : TEST v17.85
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,7 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.85 — calque « Noms des communes » : plus de quadrillage gris (tuiles de noms absentes rendues invisibles) ;
 - v17.84 — étiquettes du Calque Routier : numéro répété le long de chaque route (~300 px), une étiquette
   par branche (carrefour, changement de numéro), jamais sur un nom de commune V11, un terrain, un point, une
   icône ni sous un bouton ; placement refait à la fin de chaque geste ; Calque Routier v7 (préparé sur PC) ;
@@ -543,8 +544,13 @@ NON IMPLÉMENTÉ / OUVERT :
   07/10/2026 : programme VPS bfg-sofia-notams 1.2.0 PRÊT, NON INSTALLÉ
   (~/vps-a-copier/). v17.60 à pousser APRÈS l'installation de la 1.2.0
   (elle annonce « environ 1 minute ») ;
+- v17.85 : À MESURER sur iPad (plus de quadrillage avec les noms, Cazouls-lès-Béziers / Gardanne, 2 / 1 / 0,5 NM) ;
+  COMMIT LOCAL, NON POUSSÉE ;
 - v17.84 : À MESURER sur iPad (étiquettes des routes à 2 / 1 / 0,5 NM, Gardanne / Trets, avec le Calque Routier v7) ;
-  COMMIT LOCAL, NON POUSSÉE ; Calque Routier v7 PRÊT, NON INSTALLÉ sur le VPS (OK écrit de Bastien attendu) ;
+  POUSSÉE le 17/10/2026 (9c9ff46) ; Calque Routier v7 INSTALLÉ sur le VPS le 17/10/2026 (OK écrit de Bastien,
+  installer-calque-routier-v7-vps.ps1 : 6 étapes OK ; v6 gardé dans /home/ubuntu/npf-cartes-sauvegardes/
+  calque-routier-v6-20261017-122730 ; carte V11, V10, autres sections et services bfg-* inchangés ; retour arrière :
+  retour-arriere-calque-routier-v7-vps.ps1, non lancé) ; à retélécharger sur l'iPad (Gestion des Cartes) ;
 - v17.83 : À MESURER sur iPad (clignotement immédiat à la réactivation, sans bouger la carte ; boutons « Fermer » et croix
   rouges) ; POUSSÉE le 16/10/2026 (0a9f299 + 9048a17) ;
 - v17.82 : pastille du bouton HT fonctionnelle sur iPad (constat de Bastien), mais réactivation sans clignotement avant un
@@ -780,27 +786,27 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.84
-Date : 16/10/2026
-Base : v17.83 (9048a17, poussée le 16/10/2026)
+Version : TEST v17.85
+Date : 17/10/2026
+Base : v17.84 (9c9ff46, poussée le 17/10/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.84.txt
-2_Index_v17.84.txt
-3_Manifest_v17.84.txt
-4_Script_v17.84.txt
-5_SIA_v17.84.txt
-6_Style_v17.84.txt
-7_Sw_v17.84.txt
+1_Modifications_v17.85.txt
+2_Index_v17.85.txt
+3_Manifest_v17.85.txt
+4_Script_v17.85.txt
+5_SIA_v17.85.txt
+6_Style_v17.85.txt
+7_Sw_v17.85.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.84 (et texte « TEST v17.84 » de l'écran de
+- Index : APP_VERSION = v17.85 (et texte « TEST v17.85 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.84
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.84
-- Style : NPF_STYLE_BUILD_VERSION = v17.84
-- Service Worker : `sw-v17-84_etiquettes_routes` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-84_etiquettes_routes`, `npf-q400-test-app-data-v1`,
+- Manifest : start_url = ./index.html?appv=v17.85
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.85
+- Style : NPF_STYLE_BUILD_VERSION = v17.85
+- Service Worker : `sw-v17-85_noms_sans_quadrillage` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-85_noms_sans_quadrillage`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-sia-2026-10-29-v02-g15`
 - SIA_DATA_REVISION (SW / Index sia.js?siav=) : sia-2026-10-29-v02-g15 (= NPF_SIA_DATA_REVISION
   de sia.js ; à changer à chaque nouveau sia.js)
@@ -813,15 +819,15 @@ Références de version cohérentes :
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.84 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.85 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
 - `sia.js` : par rapport à v17.70, outre-mer retiré, « a » de 34 VRP renseigné, table vrpAirportColors ajoutée (2 pastels), révision g6 ; zones, terrains et points de métropole identiques ; moteur tuiles (src/100) modifié en v17.66 sur demande
   explicite (limite de zoom propre à chaque carte, zoom 11 OACI 1/500 000) ;
-- tests v17.84 : entrée v17.84 ; sia.js strictement identique à la v17.81 ;
+- tests v17.85 : entrée v17.85 ; sia.js strictement identique à la v17.81 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82, v17.83 et v17.84 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82, v17.83, v17.84 et v17.85 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
   v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE ;
   v17.56 VALIDÉE en vol ; v17.57 VALIDÉE sur iPad.
 
@@ -2350,6 +2356,49 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.85 — CALQUE « NOMS DES COMMUNES » : PLUS DE QUADRILLAGE GRIS
+Date : 17/10/2026
+Base fonctionnelle : v17.84 (commit 9c9ff46, poussée le 17/10/2026).
+Constat iPad de Bastien (v17.84, carte V11 hors ligne, 0,5 NM, Cazouls-lès-Béziers ; vu aussi sur Gardanne en
+v17.83) : quadrillage de fines lignes grises régulières, qui disparaît quand on décoche « Afficher les noms des
+communes ».
+
+1. CAUSE (src/285, runNpfCalqueNomsJob)
+- La V11 ne contient pas les tuiles de noms entièrement transparentes (zones sans aucun nom). Pour une tuile absente
+  (et aussi annulée ou illisible), le calque terminait la tuile avec job.done(null, job.tile) SANS lui donner
+  d'image : Leaflet l'affichait comme une tuile chargée, élément <img> de 256 px sans image. Les navigateurs
+  dessinent un fin cadre gris autour d'une image vide : tuiles vides côte à côte = quadrillage, seulement là où il
+  n'y a pas de noms, et seulement quand le calque est affiché.
+- Pistes écartées : anti-joints / fond gris des tuiles (la règle de la v17.79 rend bien les tuiles noms
+  transparentes) ; données (≈ 1 240 tuiles noms V11 contrôlées aux zooms 11 à 13 : bords pas plus opaques que
+  l'intérieur, 4,7 % contre 4,8 % de pixels non transparents à z11 ; aucun cadre) ; agrandissement au-delà du
+  zoom 13 (le défaut est là dès 2 NM). Aucune correction des données : rien à faire sur le VPS.
+2. CORRECTION (src/285)
+- finishNpfCalqueNomsEmptyTile : tuile absente, annulée ou illisible rendue invisible (style visibility = hidden,
+  plus fort que la classe leaflet-tile-loaded de Leaflet) avant d'être rendue à Leaflet. Tuiles avec noms
+  inchangées ; rien d'autre de modifié.
+3. TESTS PC
+- Essai minimal : quatre <img> vides de 256 px côte à côte : Chromium dessine un quadrillage gris (16 320 pixels
+  différents du fond) ; avec visibility:hidden : rien (WebKit Windows ne dessinait rien dans cet essai minimal).
+- App complète, carte V11 d'essai (Cazouls + Gardanne, extraite des vrais morceaux V11, carte85/), faux serveur,
+  hors ligne, 2 / 1 / 0,5 NM, noms cochés puis décochés ; mesure : lignes droites de 200 px et plus présentes
+  seulement avec les noms (comparaison des deux captures), tuiles noms vides affichées (DOM) :
+  · WebKit 26.5 (Playwright, moteur de Safari) : v17.84 jusqu'à 9 tuiles vides affichées par vue, lignes de
+    262 à 1 073 px (quadrillage visible sur les captures) ; v17.85 0 tuile vide affichée, aucune ligne (plus long
+    trait 19 px = lettres des noms) ;
+  · Chromium : même résultat (v17.84 26 lignes sur les 6 vues, v17.85 0).
+- Fluidité CPU ×6 (Chromium, noms affichés, 2 secteurs, z11 à z13, vues + déplacements, 6 parcours en alternant
+  les versions) : tâches > 100 ms v17.84 1, 0, 1, 3 ; v17.85 3, 2, 1, 1, toutes à l'arrivée sur une vue ou après
+  un déplacement (tuiles), dans les deux versions : comparable. Aucune erreur JS.
+- Incident de test (signalé à Bastien) : premiers essais WebKit lancés sans bloquer le service worker de l'app :
+  ses requêtes ont échappé au détournement vers le faux serveur : 2 lectures du manifeste V11 sur le vrai VPS et
+  au moins 1 lecture d'un script SOFIA sur le vrai NAS, par test (lecture seule, rien écrit). Tests refaits avec
+  service worker bloqué et toute requête hors localhost coupée (4 requêtes détournées, toutes les autres coupées).
+- Non-régression courte (run_fin85.sh) : démarrage sans erreur JS, carte et échelle en NM, FdS / GAAR, Trafic
+  Moyens Nationaux, fenêtres terrain, retour sur l'avion, parcs, textes « NPF-Q400 » ; mise à jour v17.84 -> v17.85
+  puis hors ligne : v17.85 servie, échelle 50 NM, seuls les caches npf-q400-test-* touchés, caches de la pérenne
+  intacts. Aucune erreur JS.
 
 VERSION TEST v17.84 — ÉTIQUETTES DU CALQUE ROUTIER : NUMÉRO RÉPÉTÉ, UNE ÉTIQUETTE PAR BRANCHE
 Date : 16/10/2026

@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.84';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.85';
 
 
 /*
@@ -3309,7 +3309,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.84 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.85 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -50183,13 +50183,24 @@ function pumpNpfCalqueNomsQueue() {
     }
 }
 
+/*
+ * v17.85 — tuile de noms ABSENTE (aucun nom : la V11 ne contient pas les tuiles vides), annulée ou illisible :
+ * l'élément <img> restait affiché SANS image. Les navigateurs dessinent alors un fin cadre gris autour d'une image
+ * vide (vu sur iPad et reproduit sous Chrome) : tuiles côte à côte = quadrillage gris sur la carte. La tuile vide
+ * est rendue invisible (visibility, plus forte que la classe leaflet-tile-loaded de Leaflet).
+ */
+function finishNpfCalqueNomsEmptyTile(job) {
+    try { job.tile.style.visibility = 'hidden'; } catch (_) {}
+    job.done(null, job.tile);
+}
+
 async function runNpfCalqueNomsJob(job) {
     const waited = await waitNpfCalqueNomsFondIdle();
     npfCalqueNomsStats.attenteFondMs += waited;
     if (waited > npfCalqueNomsStats.maxAttenteFondMs) npfCalqueNomsStats.maxAttenteFondMs = Math.round(waited);
     if (job.cancelled) {
         npfCalqueNomsStats.annulees += 1;
-        job.done(null, job.tile);
+        finishNpfCalqueNomsEmptyTile(job);
         return;
     }
     let data = null;
@@ -50199,7 +50210,7 @@ async function runNpfCalqueNomsJob(job) {
         const db = await openNpfCalqueNomsDb();
         if (job.cancelled) {
             npfCalqueNomsStats.annulees += 1;
-            job.done(null, job.tile);
+            finishNpfCalqueNomsEmptyTile(job);
             return;
         }
         const startedAt = performance.now();
@@ -50207,7 +50218,7 @@ async function runNpfCalqueNomsJob(job) {
         ms = performance.now() - startedAt;
     } catch (error) {
         npfCalqueNomsStats.erreurs += 1;
-        job.done(null, job.tile);
+        finishNpfCalqueNomsEmptyTile(job);
         return;
     }
     npfCalqueNomsStats.lectures += 1;
@@ -50221,13 +50232,13 @@ async function runNpfCalqueNomsJob(job) {
     }
     if (!data || job.cancelled) {
         if (!data) npfCalqueNomsStats.vides += 1;
-        job.done(null, job.tile);
+        finishNpfCalqueNomsEmptyTile(job);
         return;
     }
     npfCalqueNomsStats.trouvees += 1;
     const url = URL.createObjectURL(data instanceof Blob ? data : new Blob([data], { type: 'image/png' }));
     job.tile.onload = () => { URL.revokeObjectURL(url); job.done(null, job.tile); };
-    job.tile.onerror = () => { URL.revokeObjectURL(url); job.done(null, job.tile); };
+    job.tile.onerror = () => { URL.revokeObjectURL(url); finishNpfCalqueNomsEmptyTile(job); };
     job.tile.src = url;
 }
 
