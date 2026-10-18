@@ -344,6 +344,9 @@ function scheduleNpfCalqueNomsSync(reason) {
 /* Téléchargement de la carte (src/280) : avant d'effacer l'ancien calque des noms. */
 function prepareNpfCalqueNomsDownload() {
     try { localStorage.removeItem(NPF_CALQUE_NOMS_INFO_KEY); } catch (_) {}
+    /* v17.88 — carte effacée (téléchargement complet, suppression, réinitialisation) : liste des morceaux oubliée. */
+    try { localStorage.removeItem('npfCarteV11MorceauxV1'); localStorage.removeItem('npfCarteV11MajV1'); } catch (_) {}
+    try { if (typeof npfCarteMajPlan !== 'undefined') npfCarteMajPlan = null; } catch (_) {}
     if (npfCalqueNomsLayer) {
         try { map.removeLayer(npfCalqueNomsLayer); } catch (_) {}
         npfCalqueNomsLayer = null;
@@ -391,7 +394,12 @@ async function refreshNpfMapInstalledStatus({ checkServer = false } = {}) {
             if (response.ok) {
                 const manifest = await response.json();
                 if (manifest && manifest.versionCarte) {
-                    writeNpfJsonStorage(NPF_SERVER_MAP_LATEST_KEY, { versionCarte: manifest.versionCarte, totalOctets: Number(manifest.totalOctets) || 0, creeLe: manifest.creeLe || '', at: Date.now() });
+                    /* v17.88 — empreintes des morceaux gardées (DIAG : morceaux à jour / à mettre à jour). */
+                    writeNpfJsonStorage(NPF_SERVER_MAP_LATEST_KEY, {
+                        versionCarte: manifest.versionCarte, totalOctets: Number(manifest.totalOctets) || 0, creeLe: manifest.creeLe || '', at: Date.now(),
+                        morceaux: Array.isArray(manifest.morceaux) ? manifest.morceaux.map(chunk => ({ fichier: chunk && chunk.fichier, sha256: chunk && chunk.sha256 })) : null
+                    });
+                    try { if (typeof onNpfCarteManifestRead === 'function') onNpfCarteManifestRead(manifest); } catch (_) {}
                 }
             }
         } catch (_) {}
@@ -409,6 +417,13 @@ async function refreshNpfMapInstalledStatus({ checkServer = false } = {}) {
     let nouvelle = '';
     if (latest && latest.versionCarte && (!carte || carte.version !== latest.versionCarte)) {
         nouvelle = `${carte ? 'Nouvelle carte disponible' : 'Carte disponible'} : ${latest.versionCarte}${latest.totalOctets > 0 ? `, ${formatNpfStorageSizeForUser(latest.totalOctets)}` : ''}.`;
+    } else if (carte && typeof npfCarteMajPlan !== 'undefined' && npfCarteMajPlan) {
+        /* v17.88 — même version (V11) mais morceaux changés sur le serveur. */
+        if (npfCarteMajPlan.etat === 'maj') {
+            nouvelle = `Mise à jour disponible : ${npfCarteMajPlan.indices.length} morceau${npfCarteMajPlan.indices.length > 1 ? 'x' : ''}, ${formatNpfStorageSizeForUser(npfCarteMajPlan.octets)} (bouton ci-dessus).`;
+        } else if (npfCarteMajPlan.etat === 'complet' && latest && latest.creeLe && carte.packs.some(pack => pack.serverCreeLe && pack.serverCreeLe !== latest.creeLe)) {
+            nouvelle = `Nouvelle version de la carte disponible (${npfCarteMajPlan.raison}) : téléchargement complet${latest.totalOctets > 0 ? `, ${formatNpfStorageSizeForUser(latest.totalOctets)}` : ''}.`;
+        }
     }
     box.innerHTML = '';
     lignes.forEach(texte => {
@@ -457,6 +472,8 @@ function appendNpfCalqueNomsDiagLines(lines) {
     lines.push('Carte NPF-Q400 installée : ' + (carte
         ? (carte.version || carte.origine) + ' · ' + (carte.avecNoms ? 'avec calque des noms' : 'noms imprimés dans la carte (calque non affiché)') + ' · ' + formatNpfStorageSizeForUser(carte.sizeBytes)
         : 'aucune') + ' | carte avec noms affichée : ' + (isNpfCarteAvecNomsActive() ? 'oui' : 'non'));
+    /* v17.88 — morceaux V11 installés / à jour / à mettre à jour. */
+    try { if (typeof describeNpfCarteMorceauxForDiag === 'function') lines.push(describeNpfCarteMorceauxForDiag()); } catch (_) {}
     if (!info) {
         lines.push('Calque non installé : aucune couche, aucune lecture.');
         return;

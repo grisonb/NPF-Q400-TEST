@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 16/10/2026
-Version de travail actuelle : TEST v17.87
+Version de travail actuelle : TEST v17.88
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,8 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.88 — carte NPF-Q400 V11 : mise à jour PARTIELLE (seuls les morceaux changés sur le serveur sont téléchargés :
+  « Mise à jour de la carte : NN Mo »), liste des morceaux installés, ligne DIAG ; rien sur le VPS ;
 - v17.87 — noms des communes de la carte V11 toujours affichés (plus de case) ; nettoyage : diagnostic « tuiles zoom
   passif », ancien placement de la fiche PÉLIC v16.24, styles CSS sans élément, clés noms-essai v17.79 effacées ;
 - v17.86 — étiquettes des pélicandromes les plus proches : « Rot. NN min » (calcul du calculateur) ; le plus proche
@@ -549,8 +551,11 @@ NON IMPLÉMENTÉ / OUVERT :
   07/10/2026 : programme VPS bfg-sofia-notams 1.2.0 PRÊT, NON INSTALLÉ
   (~/vps-a-copier/). v17.60 à pousser APRÈS l'installation de la 1.2.0
   (elle annonce « environ 1 minute ») ;
-- v17.87 : À MESURER sur iPad (noms V11 affichés sans case, y compris après un ancien réglage « décoché ») ; COMMIT
-  LOCAL, NON POUSSÉE ;
+- v17.88 : À MESURER sur iPad (au premier lancement avec réseau, le DIAG doit montrer « Morceaux V11 : installés 30 |
+  à jour 30 » : liste reprise du manifeste du serveur) ; COMMIT LOCAL, NON POUSSÉE ; serveur INCHANGÉ ;
+  IMPORTANT : mettre les iPad en v17.88 AVANT de changer un morceau sur le VPS (sinon : téléchargement complet) ;
+- v17.87 : À MESURER sur iPad (noms V11 affichés sans case, y compris après un ancien réglage « décoché ») ;
+  POUSSÉE le 18/10/2026 (2ca4d19) ;
 - v17.86 : À MESURER sur iPad (Rot. dans les étiquettes, bordure verte du plus proche, bouton Moyens Nationaux, croix
   centrées) ; POUSSÉE le 18/10/2026 (801c336) ; inventaire des fonctions devenues inutiles : 5 éléments retirés en
   v17.87 (décision de Bastien), les autres GARDÉS (À DÉCIDER plus tard) ;
@@ -796,27 +801,27 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.87
+Version : TEST v17.88
 Date : 18/10/2026
-Base : v17.86 (801c336, poussée le 18/10/2026)
+Base : v17.87 (2ca4d19, poussée le 18/10/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.87.txt
-2_Index_v17.87.txt
-3_Manifest_v17.87.txt
-4_Script_v17.87.txt
-5_SIA_v17.87.txt
-6_Style_v17.87.txt
-7_Sw_v17.87.txt
+1_Modifications_v17.88.txt
+2_Index_v17.88.txt
+3_Manifest_v17.88.txt
+4_Script_v17.88.txt
+5_SIA_v17.88.txt
+6_Style_v17.88.txt
+7_Sw_v17.88.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.87 (et texte « TEST v17.87 » de l'écran de
+- Index : APP_VERSION = v17.88 (et texte « TEST v17.88 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.87
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.87
-- Style : NPF_STYLE_BUILD_VERSION = v17.87
-- Service Worker : `sw-v17-87_noms_toujours_nettoyage` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-87_noms_toujours_nettoyage`, `npf-q400-test-app-data-v1`,
+- Manifest : start_url = ./index.html?appv=v17.88
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.88
+- Style : NPF_STYLE_BUILD_VERSION = v17.88
+- Service Worker : `sw-v17-88_maj_partielle_carte` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-88_maj_partielle_carte`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-sia-2026-10-29-v02-g15`
 - SIA_DATA_REVISION (SW / Index sia.js?siav=) : sia-2026-10-29-v02-g15 (= NPF_SIA_DATA_REVISION
   de sia.js ; à changer à chaque nouveau sia.js)
@@ -829,15 +834,15 @@ Références de version cohérentes :
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.87 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.88 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
 - `sia.js` : par rapport à v17.70, outre-mer retiré, « a » de 34 VRP renseigné, table vrpAirportColors ajoutée (2 pastels), révision g6 ; zones, terrains et points de métropole identiques ; moteur tuiles (src/100) modifié en v17.66 sur demande
   explicite (limite de zoom propre à chaque carte, zoom 11 OACI 1/500 000) ;
-- tests v17.87 : entrée v17.87 ; sia.js strictement identique à la v17.81 ;
+- tests v17.88 : entrée v17.88 ; sia.js strictement identique à la v17.81 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82, v17.83, v17.84, v17.85, v17.86 et v17.87 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82, v17.83, v17.84, v17.85, v17.86, v17.87 et v17.88 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
   v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE ;
   v17.56 VALIDÉE en vol ; v17.57 VALIDÉE sur iPad.
 
@@ -2366,6 +2371,67 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.88 — CARTE NPF-Q400 V11 : MISE À JOUR PARTIELLE (SEULS LES MORCEAUX CHANGÉS)
+Date : 18/10/2026
+Base fonctionnelle : v17.87 (commit 2ca4d19, poussée le 18/10/2026). Aucun changement sur le VPS.
+But : pouvoir remplacer un seul morceau de la carte V11 (prochaine étape prévue : npf-q400-v11-noms-001.bin, ≈ 50 Mo,
+noms des communes manquants à 2 NM) sans faire retélécharger 1,5 Go.
+
+1. APP (src/280, src/285)
+- Liste des morceaux installés (clé npfCarteV11MorceauxV1 : fichier, couche, SHA-256, octets, tuiles) écrite à la
+  fin d'un téléchargement complet, puis morceau par morceau pendant une mise à jour ; oubliée quand la carte est
+  effacée (téléchargement complet, Supprimer, réinitialisation profonde).
+- iPad déjà en V11 (v17.80 à v17.87) sans liste : au lancement (≈ 9 s, si réseau) et à l'ouverture de Gestion des
+  Cartes, la liste est reprise du manifeste du serveur SEULEMENT si la carte installée en vient : même date de création
+  (creeLe), même version, même taille totale, même nombre de tuiles de noms. Choix : la date de création du manifeste
+  est gardée avec la carte depuis la v17.80 et change à chaque nouvelle version du manifeste ; si elle diffère, on ne
+  sait plus quels morceaux sont installés : rien n'est deviné, téléchargement complet.
+- Manifeste (format inchangé npf-q400-carte-v2, champs en plus) : un morceau changé porte « precedent » = { sha256 du
+  morceau qu'il remplace, supprimer : tuiles qui n'existent plus }. Mise à jour partielle seulement si tous les
+  autres morceaux sont identiques (même fichier, même couche, même empreinte) et que chaque morceau changé remplace
+  exactement celui qui est installé ; sinon téléchargement complet (comme aujourd'hui).
+- Gestion des Cartes (si réseau) : bouton « Mise à jour de la carte : NN Mo » (taille réelle des morceaux changés) et
+  ligne « Mise à jour disponible : N morceau(x), NN Mo » ; rien ne démarre sans un toucher (confirmation). Liste
+  inconnue et serveur changé : « Nouvelle version de la carte disponible (…) : téléchargement complet ».
+- Mise à jour : seuls les morceaux changés sont téléchargés et vérifiés (SHA-256, nombre de tuiles) ; leurs tuiles
+  remplacent les anciennes sur place (la carte n'est jamais effacée ni désactivée), puis les tuiles « supprimer » sont
+  effacées ; la liste est mise à jour après chaque morceau : reprise naturelle après une coupure (« Reprendre la mise à
+  jour de la carte »). Fin : nombres de tuiles vérifiés (fond et noms) ; incohérence -> liste oubliée, téléchargement
+  complet proposé. Barre et pourcentage comme le téléchargement complet ; carte rechargée à la fin.
+- DIAG : « Morceaux V11 : installés N | à jour N | à mettre à jour N | liste : origine, date | serveur lu le … ».
+- Autres sections inchangées. Le même système pourrait servir plus tard aux cartes OACI 1/500 000 et OACI (morceaux
+  de tuiles, même format) ; pas au Calque Routier ni à la Doc FdF (un seul fichier ZIP vérifié en entier).
+2. OUTIL PC (~/projects/npf-cartes-vps/outils/preparer_maj_carte_v11.py)
+- Remplace un ou plusieurs morceaux (même nom, même couche) : nouveau manifeste (creeLe, révision, totaux), lien
+  « precedent » et liste des tuiles à supprimer ; refuse un morceau contenant une tuile d'un AUTRE morceau (découpage
+  à garder) ; sortie vérifiée (empreintes). Pour le VPS : seuls le nouveau morceau et le manifeste seront à envoyer
+  (non fait).
+3. CE QUE VERRA UN IPAD RESTÉ EN v17.87 OU AVANT quand un morceau changera sur le VPS
+- Rien d'annoncé (la version reste « V11 ») ; il garde sa carte telle quelle (sans les nouveaux noms). Le bouton
+  « Télécharger la carte NPF-Q400 » referait un téléchargement COMPLET (1,5 Go) de la nouvelle carte.
+4. TESTS PC (faux serveur local, jamais le vrai VPS : cdp_maj88.js, cdp_adopt88.js, run_maj88.sh, run_adopt88.sh,
+   carte88/ : morceau de test = vrai noms-001 avec une tuile changée (Peynier 2 NM), une supprimée, une ajoutée)
+- Vraie V11 complète (30 morceaux, 1,54 Go, 172 s) puis serveur modifié : « Mise à jour de la carte : 50 Mo »,
+  confirmation « 50 Mo à télécharger (1 morceau sur 30) » ; coupure à 26 % : « Mise à jour arrêtée… La carte installée
+  reste utilisable », carte complète et lisible (164 406 + 83 022 tuiles), « Reprendre la mise à jour de la carte » ;
+  reprise : seul noms-001 téléchargé (journal du serveur) ; tuile changée = nouvelle image, supprimée absente, ajoutée
+  présente, 0 différence sur 208 tuiles de noms et 206 tuiles du fond relues avant / après ; nombres de tuiles
+  justes ; DIAG « à jour 30 » ; nouvelle tuile visible à 2 NM.
+- Mémoire (pic du tas JS) : téléchargement complet 257-268 Mo, mise à jour 121-172 Mo. CPU ×6 : 1 tâche > 100 ms
+  pendant la mise à jour (401 ms, réception du morceau), comme le téléchargement complet (557 et 512 ms sur ses deux
+  premiers morceaux, même code).
+- V11 installée par la v17.87 puis passage en v17.88 : manifeste identique -> liste reprise au démarrage, DIAG « à jour
+  2 / 2 » ; serveur déjà changé -> rien deviné, « Nouvelle version… téléchargement complet », bouton = téléchargement
+  complet habituel ; v17.87 avec serveur changé : rien d'annoncé. Téléchargement complet et réinitialisation profonde
+  identiques à la v17.87 (liste enregistrée puis effacée).
+- Un premier passage avait compté 10 tuiles « différentes » : erreur du test (échantillon décalé par la tuile
+  supprimée / ajoutée), corrigée ; les morceaux d'origine et de test ne diffèrent que de la tuile changée.
+- Non-régression courte (run_fin88.sh) : démarrage sans erreur JS, carte et échelle en NM, FdS / GAAR, Trafic Moyens
+  Nationaux, fenêtres terrain (fiche PÉLIC au même endroit), retour sur l'avion, parcs, textes « NPF-Q400 »,
+  clignotement HT immédiat, boutons « Fermer », 18 croix, Rot. et bordure verte, bouton Communes identique à la
+  v17.87 ; mise à jour v17.87 -> v17.88 puis hors ligne : v17.88 servie, seuls les caches npf-q400-test-* touchés,
+  caches de la pérenne intacts. Aucune erreur JS.
 
 VERSION TEST v17.87 — NOMS DES COMMUNES V11 TOUJOURS AFFICHÉS ; NETTOYAGE (INVENTAIRE v17.86)
 Date : 18/10/2026

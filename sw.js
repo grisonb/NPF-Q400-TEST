@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v17-87_noms_toujours_nettoyage';
-const APP_VERSION = 'v17.87';
+const SW_VERSION = 'sw-v17-88_maj_partielle_carte';
+const APP_VERSION = 'v17.88';
 const SIA_DATA_REVISION = 'sia-2026-10-29-v02-g15';
 const SIA_DATA_URL = './sia.js';
 /*

@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.87';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.88';
 
 
 /*
@@ -3309,7 +3309,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.87 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.88 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -48793,6 +48793,18 @@ function refreshNpfServerMapDownloadButton(mapId = null) {
     }
     ui.button.disabled = false;
     const state = readNpfServerMapState(cfg);
+    /* v17.88 — carte V11 : « Reprendre la mise à jour » / « Mise à jour de la carte : NN Mo ». */
+    if (mapId === 'npf-q400' && !(state && state.status !== 'terminé')) {
+        const maj = readNpfCarteMajState();
+        if (maj && maj.status !== 'terminé') {
+            ui.button.textContent = 'Reprendre la mise à jour de la carte';
+            return;
+        }
+        if (npfCarteMajPlan && npfCarteMajPlan.etat === 'maj') {
+            ui.button.textContent = `Mise à jour de la carte : ${formatNpfStorageSizeForUser(npfCarteMajPlan.octets)}`;
+            return;
+        }
+    }
     if (state && state.status !== 'terminé') {
         ui.button.textContent = cfg.libelleReprise;
         const total = Number(state.total) || 0;
@@ -49205,7 +49217,7 @@ async function downloadAndStoreNpfServerMapChunk(context, index) {
     const { state, manifest, mapConfig: cfg } = context;
     const chunk = manifest.morceaux[index];
     const total = manifest.morceaux.length;
-    const label = `morceau ${index + 1} sur ${total}`;
+    const label = typeof context.labelFor === 'function' ? context.labelFor(index) : `morceau ${index + 1} sur ${total}`;
     const url = new URL(chunk.fichier, cfg.manifestUrl).toString();
     const octets = Number(chunk.octets);
     const downloadShare = cfg.type === 'tuiles' ? 0.6 : 0.9;
@@ -49612,6 +49624,8 @@ async function runNpfServerMapDownload(mapId) {
         });
         localStorage.setItem('installedMapPacks', JSON.stringify(installed));
         if (cfg.avecNoms) recordNpfCalqueNomsInstalled(manifest, countNoms);
+        /* v17.88 — liste des morceaux installés (empreintes) : base des mises à jour partielles. */
+        if (cfg.avecNoms) writeNpfCarteMorceaux(buildNpfCarteMorceauxFromManifest(manifest, 'téléchargement complet'));
         await persistSimpleActiveOfflinePacks([cfg.packName]);
         mapSourceMode = state.previousOffline ? 'offline' : 'online';
         localStorage.setItem(MAP_SOURCE_MODE_KEY, mapSourceMode);
@@ -49654,13 +49668,353 @@ async function runNpfServerMapDownload(mapId) {
     }
 }
 
+/* ==========================================================================
+ * v17.88 — MISE À JOUR PARTIELLE DE LA CARTE NPF-Q400 V11
+ * - L'app retient la liste des morceaux installés (fichier, couche, empreinte SHA-256, octets, tuiles), écrite à la
+ *   fin d'un téléchargement complet, puis morceau par morceau pendant une mise à jour.
+ * - Un iPad qui a déjà la V11 (installée par v17.80 à v17.87) n'a pas cette liste : elle est reprise du manifeste du
+ *   serveur SEULEMENT si la carte installée vient de ce manifeste (même date de création « creeLe », même version,
+ *   même taille, même nombre de tuiles de noms). Sinon rien n'est deviné : téléchargement complet.
+ * - Manifeste : un morceau changé porte « precedent » = { sha256 du morceau remplacé, supprimer : tuiles qui n'existent
+ *   plus } (outil preparer_maj_carte_v11.py). Mise à jour partielle seulement si tous les autres morceaux sont
+ *   identiques et que chaque morceau changé remplace exactement celui qui est installé ; sinon téléchargement complet.
+ * - Mise à jour : seuls les morceaux changés sont téléchargés et vérifiés (SHA-256) ; leurs tuiles remplacent les
+ *   anciennes sur place (la carte reste affichée), puis les tuiles supprimées sont effacées ; la liste est mise à jour
+ *   après chaque morceau (reprise naturelle après une coupure). Vérification finale des nombres de tuiles.
+ * ========================================================================== */
+const NPF_CARTE_MORCEAUX_KEY = 'npfCarteV11MorceauxV1';
+const NPF_CARTE_MAJ_STATE_KEY = 'npfCarteV11MajV1';
+const NPF_CARTE_MAJ_DELETE_BATCH = 200;
+let npfCarteMajPlan = null;
+let npfCarteAdoptionTried = false;
+
+function readNpfCarteMorceaux() {
+    const ref = readNpfJsonStorage(NPF_CARTE_MORCEAUX_KEY, null);
+    return ref && typeof ref === 'object' && ref.creeLe && Array.isArray(ref.morceaux) && ref.morceaux.length ? ref : null;
+}
+
+function writeNpfCarteMorceaux(ref) {
+    if (ref) writeNpfJsonStorage(NPF_CARTE_MORCEAUX_KEY, ref);
+    else {
+        try { localStorage.removeItem(NPF_CARTE_MORCEAUX_KEY); } catch (_) {}
+    }
+}
+
+function buildNpfCarteMorceauEntry(chunk) {
+    return {
+        fichier: String(chunk.fichier), couche: chunk.couche, sha256: String(chunk.sha256),
+        octets: Number(chunk.octets) || 0, tuiles: Number(chunk.tuiles) || 0
+    };
+}
+
+function buildNpfCarteMorceauxFromManifest(manifest, source) {
+    return {
+        format: manifest.format, versionCarte: manifest.versionCarte || '', creeLe: manifest.creeLe || '',
+        source, at: Date.now(), morceaux: manifest.morceaux.map(buildNpfCarteMorceauEntry)
+    };
+}
+
+/* Carte NPF-Q400 V11 installée depuis le serveur (fond + calque des noms). */
+function getNpfInstalledV11Pack() {
+    const cfg = getNpfServerSection('npf-q400');
+    return getInstalledMapPacksSafe().find(pack => pack && pack.name === cfg.packName && pack.calqueNoms === true && pack.origin === 'serveur') || null;
+}
+
+function readNpfCarteMajState() {
+    const state = readNpfJsonStorage(NPF_CARTE_MAJ_STATE_KEY, null);
+    return state && typeof state === 'object' && state.creeLe ? state : null;
+}
+
+function writeNpfCarteMajState(state) {
+    if (state) writeNpfJsonStorage(NPF_CARTE_MAJ_STATE_KEY, { ...state, updatedAt: Date.now() });
+    else {
+        try { localStorage.removeItem(NPF_CARTE_MAJ_STATE_KEY); } catch (_) {}
+    }
+}
+
+/* iPad déjà en V11 sans liste : reprise du manifeste seulement s'il est celui de la carte installée. */
+function adoptNpfCarteMorceauxIfSame(manifest) {
+    if (readNpfCarteMorceaux()) return 'déjà';
+    const pack = getNpfInstalledV11Pack();
+    if (!pack) return 'aucune carte V11';
+    let info = null;
+    try { info = typeof readNpfCalqueNomsInfo === 'function' ? readNpfCalqueNomsInfo() : null; } catch (_) {}
+    const same = !!manifest.creeLe && pack.serverCreeLe === manifest.creeLe
+        && pack.versionCarte === manifest.versionCarte
+        && Number(pack.sizeBytes) === Number(manifest.totalOctets)
+        && !!info && info.creeLe === manifest.creeLe && Number(info.tuiles) === Number(manifest.totalTuilesNoms);
+    if (!same) return 'différente';
+    writeNpfCarteMorceaux(buildNpfCarteMorceauxFromManifest(manifest, 'reprise du manifeste du serveur (carte installée identique)'));
+    addNpfServerMapLogEvent(`liste des morceaux installés reprise du manifeste du serveur (carte installée identique, ${manifest.morceaux.length} morceaux)`, {}, getNpfServerSection('npf-q400'));
+    return 'adoptée';
+}
+
+/* Ce que le manifeste du serveur demande : rien, mise à jour partielle, ou téléchargement complet. */
+function computeNpfCarteMajPlan(manifest) {
+    const pack = getNpfInstalledV11Pack();
+    if (!pack) return { etat: 'aucune' };
+    const cfg = getNpfServerSection('npf-q400');
+    const full = readNpfServerMapState(cfg);
+    if (full && full.status !== 'terminé') return { etat: 'complet', raison: 'téléchargement complet inachevé' };
+    const ref = readNpfCarteMorceaux();
+    if (!ref) {
+        return pack.serverCreeLe === manifest.creeLe
+            ? { etat: 'à jour', sansListe: true }
+            : { etat: 'complet', raison: 'liste des morceaux installés inconnue' };
+    }
+    if (ref.format !== manifest.format || ref.morceaux.length !== manifest.morceaux.length) {
+        return { etat: 'complet', raison: 'liste des morceaux différente' };
+    }
+    const indices = [];
+    for (let index = 0; index < manifest.morceaux.length; index += 1) {
+        const installed = ref.morceaux[index];
+        const chunk = manifest.morceaux[index];
+        if (!installed || !chunk || installed.fichier !== chunk.fichier || installed.couche !== chunk.couche) {
+            return { etat: 'complet', raison: 'liste des morceaux différente' };
+        }
+        if (installed.sha256 === chunk.sha256) continue;
+        const precedent = chunk.precedent;
+        if (!precedent || precedent.sha256 !== installed.sha256 || !Array.isArray(precedent.supprimer)) {
+            return { etat: 'complet', raison: `${chunk.fichier} : aucun lien avec le morceau installé` };
+        }
+        indices.push(index);
+    }
+    if (!indices.length) return { etat: 'à jour' };
+    return {
+        etat: 'maj', indices, creeLe: manifest.creeLe,
+        octets: indices.reduce((total, index) => total + Number(manifest.morceaux[index].octets || 0), 0)
+    };
+}
+
+/* Manifeste lu (ouverture de Gestion des Cartes, démarrage) : liste reprise si possible, plan, bouton. */
+function onNpfCarteManifestRead(manifest) {
+    try {
+        const cfg = getNpfServerSection('npf-q400');
+        if (!manifest || manifest.format !== cfg.format || !Array.isArray(manifest.morceaux)) return null;
+        adoptNpfCarteMorceauxIfSame(manifest);
+        npfCarteMajPlan = computeNpfCarteMajPlan(manifest);
+        refreshNpfServerMapDownloadButton('npf-q400');
+        return npfCarteMajPlan;
+    } catch (_) {
+        return null;
+    }
+}
+
+/* Premier lancement (et chaque lancement tant que la liste manque) : lecture discrète du manifeste. */
+async function tryNpfCarteAdoptionAtStartup() {
+    if (npfCarteAdoptionTried || readNpfCarteMorceaux() || !getNpfInstalledV11Pack()) return;
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+    npfCarteAdoptionTried = true;
+    const cfg = getNpfServerSection('npf-q400');
+    try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 8000);
+        const response = await fetch(`${cfg.manifestUrl}?t=${Date.now()}`, { cache: 'no-store', signal: controller.signal });
+        clearTimeout(timer);
+        if (!response.ok) return;
+        onNpfCarteManifestRead(await response.json());
+    } catch (_) {}
+}
+
+async function deleteNpfCarteMorceauObsoleteTiles(context, chunk) {
+    const paths = Array.isArray(chunk.precedent && chunk.precedent.supprimer) ? chunk.precedent.supprimer : [];
+    if (!paths.length) return 0;
+    const noms = chunk.couche === 'noms';
+    const packName = noms ? NPF_CALQUE_NOMS_PACK : context.mapConfig.packName;
+    const dbKey = noms ? 'nomsDb' : 'tileDb';
+    if (!context[dbKey]) context[dbKey] = await openOfflineTileDatabaseByName(noms ? NPF_CALQUE_NOMS_DB_NAME : context.dbName, 3);
+    for (let start = 0; start < paths.length; start += NPF_CARTE_MAJ_DELETE_BATCH) {
+        const keys = paths.slice(start, start + NPF_CARTE_MAJ_DELETE_BATCH).map(tilePath => {
+            const tileUrl = buildOfflineTileUrlForPack(String(tilePath), packName);
+            return buildStoredTileKey(tileUrl, packName);
+        });
+        await new Promise((resolve, reject) => {
+            const transaction = context[dbKey].transaction('tiles', 'readwrite');
+            const store = transaction.objectStore('tiles');
+            keys.forEach(key => store.delete(key));
+            transaction.oncomplete = () => resolve();
+            transaction.onerror = () => reject(transaction.error || new Error('effacement impossible'));
+            transaction.onabort = () => reject(transaction.error || new Error('effacement annulé'));
+        });
+        await npfServerMapWait(4);
+    }
+    return paths.length;
+}
+
+async function runNpfCarteMaj() {
+    const cfg = getNpfServerSection('npf-q400');
+    if (npfServerMapDownloadRunning) return;
+    if (isZipImportRunning) {
+        alert('Un import est déjà en cours. Attends la fin avant de mettre à jour la carte NPF-Q400.');
+        return;
+    }
+    let manifest;
+    try {
+        showNpfServerMapProgress('Lecture du manifeste de la carte…', null, { advice: false, error: false }, cfg);
+        manifest = await fetchNpfServerMapManifest(cfg);
+    } catch (error) {
+        const message = error && error.message ? error.message : String(error);
+        showNpfServerMapProgress(`Serveur de la carte injoignable (${message}). La carte installée n'a pas changé.`, null, { advice: false, error: true }, cfg);
+        return;
+    }
+    const plan = onNpfCarteManifestRead(manifest) || { etat: 'complet', raison: 'manifeste illisible' };
+    if (plan.etat === 'à jour') {
+        writeNpfCarteMajState(null);
+        showNpfServerMapProgress('La carte NPF-Q400 est déjà à jour.', 100, { advice: false, error: false }, cfg);
+        refreshNpfServerMapDownloadButton('npf-q400');
+        return;
+    }
+    if (plan.etat !== 'maj') {
+        writeNpfCarteMajState(null);
+        showNpfServerMapProgress(`Mise à jour partielle impossible (${plan.raison || plan.etat}). La carte installée n'a pas changé : utilise « ${cfg.libelle} » (téléchargement complet).`, null, { advice: false, error: true }, cfg);
+        refreshNpfServerMapDownloadButton('npf-q400');
+        return;
+    }
+    const previous = readNpfCarteMajState();
+    const resuming = !!(previous && previous.creeLe === manifest.creeLe);
+    const totalOctets = resuming ? Math.max(Number(previous.totalOctets) || 0, plan.octets) : plan.octets;
+    const ok = await npfConfirmInApp([
+        resuming
+            ? `Reprendre la mise à jour de la carte NPF‑Q400 : ${formatNpfStorageSizeForUser(plan.octets)} restants (${plan.indices.length} morceau${plan.indices.length > 1 ? 'x' : ''}) ?`
+            : `Mettre à jour la carte NPF‑Q400 : ${formatNpfStorageSizeForUser(plan.octets)} à télécharger (${plan.indices.length} morceau${plan.indices.length > 1 ? 'x' : ''} sur ${manifest.morceaux.length}) ?`,
+        'La carte installée reste utilisable pendant la mise à jour. Utilise le Wi-Fi.'
+    ].join('\n\n'));
+    if (!ok) return;
+
+    const pack = getNpfInstalledV11Pack();
+    const dbName = pack && pack.dbName ? pack.dbName : getOfflineMapDatabaseNameForGroup(cfg.groupName);
+    npfServerMapDownloadRunning = true;
+    npfServerSectionRunningId = 'npf-q400';
+    isZipImportRunning = true;
+    refreshNpfServerMapDownloadButton();
+    const state = {
+        creeLe: manifest.creeLe, status: 'en cours', totalOctets,
+        doneOctets: Math.max(0, totalOctets - plan.octets), startedAt: resuming ? previous.startedAt : Date.now()
+    };
+    writeNpfCarteMajState(state);
+    const order = plan.indices.slice();
+    const context = {
+        mapConfig: cfg, dbName, tileDb: null, nomsDb: null, state, manifest, code: '',
+        labelFor: index => `mise à jour, morceau ${order.indexOf(index) + 1} sur ${order.length}`
+    };
+    addNpfServerMapLogEvent(`${resuming ? 'reprise de la mise à jour' : 'mise à jour partielle'} : ${order.length} morceau(x), ${formatNpfStorageSizeForUser(plan.octets)} (${order.map(index => manifest.morceaux[index].fichier).join(', ')})`, {}, cfg);
+    try {
+        const wakeLock = await requestNpfServerMapWakeLock();
+        addNpfServerMapLogEvent(`écran allumé (Screen Wake Lock) : ${wakeLock}`, {}, cfg);
+        context.tileDb = await openOfflineTileDatabaseByName(dbName, 3);
+        for (const index of order) {
+            const chunk = manifest.morceaux[index];
+            await downloadAndStoreNpfServerMapChunk(context, index);
+            const deleted = await deleteNpfCarteMorceauObsoleteTiles(context, chunk);
+            const ref = readNpfCarteMorceaux();
+            if (!ref || !ref.morceaux[index] || ref.morceaux[index].fichier !== chunk.fichier) throw new Error('liste des morceaux installés perdue pendant la mise à jour');
+            ref.morceaux[index] = buildNpfCarteMorceauEntry(chunk);
+            ref.at = Date.now();
+            writeNpfCarteMorceaux(ref);
+            state.doneOctets = (Number(state.doneOctets) || 0) + Number(chunk.octets || 0);
+            writeNpfCarteMajState(state);
+            addNpfServerMapLogEvent(`mise à jour : ${chunk.fichier} installé (${chunk.tuiles} tuiles, ${deleted} supprimée(s))`, {}, cfg);
+        }
+        try { context.tileDb.close(); } catch (_) {}
+        try { if (context.nomsDb) context.nomsDb.close(); } catch (_) {}
+        context.tileDb = null;
+        context.nomsDb = null;
+
+        showNpfServerMapProgress('99 % — vérification de la carte…', 99, {}, cfg);
+        const count = await countTilesInOfflineDatabase(dbName, 120000);
+        const countNoms = await countTilesInOfflineDatabase(NPF_CALQUE_NOMS_DB_NAME, 120000);
+        if (count !== Number(manifest.totalTuiles) || countNoms !== Number(manifest.totalTuilesNoms)) {
+            /* Incohérence : la liste est oubliée, seul le téléchargement complet sera proposé. */
+            writeNpfCarteMorceaux(null);
+            writeNpfCarteMajState(null);
+            npfCarteMajPlan = { etat: 'complet', raison: 'vérification après mise à jour' };
+            addNpfServerMapLogEvent(`mise à jour : vérification ÉCHOUÉE (${count} / ${manifest.totalTuiles} tuiles, ${countNoms} / ${manifest.totalTuilesNoms} noms) : téléchargement complet conseillé`, {}, cfg);
+            showNpfServerMapProgress(`Vérification après mise à jour échouée (${count} tuiles au lieu de ${manifest.totalTuiles}, ${countNoms} noms au lieu de ${manifest.totalTuilesNoms}). Appuie sur « ${cfg.libelle} » pour la télécharger en entier.`, null, { advice: false, error: true }, cfg);
+            return;
+        }
+        const ref = readNpfCarteMorceaux();
+        if (ref) {
+            ref.creeLe = manifest.creeLe;
+            ref.versionCarte = manifest.versionCarte || ref.versionCarte;
+            ref.at = Date.now();
+            writeNpfCarteMorceaux(ref);
+        }
+        const installed = getInstalledMapPacksSafe().map(item => (item && item.name === cfg.packName)
+            ? { ...item, sizeBytes: Number(manifest.totalOctets) || item.sizeBytes, serverCreeLe: manifest.creeLe, versionCarte: manifest.versionCarte || item.versionCarte, date: new Date().toLocaleDateString() }
+            : item);
+        localStorage.setItem('installedMapPacks', JSON.stringify(installed));
+        recordNpfCalqueNomsInstalled(manifest, countNoms);
+        writeNpfCarteMajState(null);
+        npfCarteMajPlan = { etat: 'à jour' };
+        const minutes = Math.max(1, Math.round((Date.now() - Number(state.startedAt || Date.now())) / 60000));
+        addNpfServerMapLogEvent(`mise à jour terminée et vérifiée : ${count} tuiles + ${countNoms} tuiles de noms, ${minutes} min`, {}, cfg);
+        releaseNpfServerMapWakeLock();
+        showNpfServerMapProgress(`100 % — carte NPF-Q400 mise à jour et vérifiée (${order.length} morceau${order.length > 1 ? 'x' : ''}).`, 100, { advice: false }, cfg);
+        npfServerMapDownloadRunning = false;
+        npfServerSectionRunningId = '';
+        isZipImportRunning = false;
+        reloadAfterOfflinePackChange('Carte NPF-Q400 mise à jour. Rechargement de la carte…');
+    } catch (error) {
+        const message = error && error.message ? error.message : String(error);
+        addNpfServerMapLogEvent(`mise à jour arrêtée : ${message}`, {}, cfg);
+        writeNpfCarteMajState({ ...state, status: 'interrompu' });
+        showNpfServerMapProgress(`Mise à jour arrêtée : ${message}. La carte installée reste utilisable. Appuie sur « Reprendre la mise à jour de la carte ».`, null, { advice: false, error: true }, cfg);
+    } finally {
+        try { if (context.tileDb) context.tileDb.close(); } catch (_) {}
+        try { if (context.nomsDb) context.nomsDb.close(); } catch (_) {}
+        if (npfServerMapDownloadRunning) {
+            npfServerMapDownloadRunning = false;
+            npfServerSectionRunningId = '';
+            isZipImportRunning = false;
+            releaseNpfServerMapWakeLock();
+            const ui = getNpfServerMapUi(cfg);
+            const message = ui.text ? ui.text.textContent : '';
+            const isError = ui.box ? ui.box.classList.contains('npf-map-download-error') : false;
+            refreshNpfServerMapDownloadButton();
+            if (ui.text && message) ui.text.textContent = message;
+            if (ui.box) ui.box.classList.toggle('npf-map-download-error', isError);
+        }
+    }
+}
+
+/* DIAG : morceaux installés / à jour / à mettre à jour (dernier manifeste lu). */
+function describeNpfCarteMorceauxForDiag() {
+    const ref = readNpfCarteMorceaux();
+    const latest = readNpfJsonStorage(typeof NPF_SERVER_MAP_LATEST_KEY !== 'undefined' ? NPF_SERVER_MAP_LATEST_KEY : 'npfServerMapLatestV1', null);
+    if (!ref) return `Morceaux V11 : liste absente${getNpfInstalledV11Pack() ? ' (carte V11 installée : reprise si elle est identique au manifeste du serveur, sinon téléchargement complet)' : ''}`;
+    const serveur = latest && Array.isArray(latest.morceaux) ? latest.morceaux : null;
+    let aJour = '?';
+    let aMettre = '?';
+    if (serveur) {
+        const bySha = new Map(serveur.map(item => [item.fichier, item.sha256]));
+        aJour = ref.morceaux.filter(item => bySha.get(item.fichier) === item.sha256).length;
+        aMettre = ref.morceaux.length - aJour;
+    }
+    const maj = readNpfCarteMajState();
+    return `Morceaux V11 : installés ${ref.morceaux.length} | à jour ${aJour} | à mettre à jour ${aMettre}`
+        + ` | liste : ${ref.source}, ${ref.creeLe}`
+        + (serveur ? ` | serveur lu le ${new Date(latest.at || 0).toLocaleString('fr-FR')}` : ' | manifeste du serveur pas encore lu')
+        + (maj ? ` | mise à jour ${maj.status} (${Math.round((Number(maj.doneOctets) || 0) / 1048576)} / ${Math.round((Number(maj.totalOctets) || 0) / 1048576)} Mo)` : '');
+}
+
 function initNpfServerMapDownloadUi() {
     Object.keys(NPF_SERVER_MAPS).forEach(mapId => {
         const cfg = getNpfServerSection(mapId);
         const ui = getNpfServerMapUi(cfg);
         if (!ui.button || ui.button.dataset.bound === '1') return;
         ui.button.dataset.bound = '1';
-        ui.button.addEventListener('click', () => { runNpfServerMapDownload(mapId); });
+        ui.button.addEventListener('click', () => {
+            /* v17.88 — carte V11 : mise à jour partielle quand elle est proposée (ou à reprendre). */
+            if (mapId === 'npf-q400' && !npfServerMapDownloadRunning) {
+                const full = readNpfServerMapState(cfg);
+                const maj = readNpfCarteMajState();
+                if (!(full && full.status !== 'terminé') && ((maj && maj.status !== 'terminé') || (npfCarteMajPlan && npfCarteMajPlan.etat === 'maj'))) {
+                    runNpfCarteMaj();
+                    return;
+                }
+            }
+            runNpfServerMapDownload(mapId);
+        });
         if (cfg.avecNoms) {
             /* v17.80 — Gestion des Cartes : carte installée et nouvelle carte disponible. */
             const opener = document.getElementById('offline-maps-button');
@@ -49671,6 +50025,15 @@ function initNpfServerMapDownloadUi() {
         if (state && state.status === 'en cours') {
             addNpfServerMapLogEvent(`interrompu (fermeture ou rechargement de l'app) au morceau ${(Number(state.next) || 0) + 1} sur ${state.total}`, {}, cfg);
             writeNpfServerMapState({ ...state, status: 'interrompu' }, cfg);
+        }
+        if (cfg.avecNoms) {
+            const maj = readNpfCarteMajState();
+            if (maj && maj.status === 'en cours') {
+                addNpfServerMapLogEvent('mise à jour interrompue (fermeture ou rechargement de l\'app)', {}, cfg);
+                writeNpfCarteMajState({ ...maj, status: 'interrompu' });
+            }
+            /* v17.88 — iPad déjà en V11 sans liste des morceaux : lecture discrète du manifeste après le démarrage. */
+            setTimeout(() => { tryNpfCarteAdoptionAtStartup().catch(() => {}); }, 9000);
         }
     });
     refreshNpfServerMapDownloadButton();
@@ -50027,6 +50390,9 @@ function scheduleNpfCalqueNomsSync(reason) {
 /* Téléchargement de la carte (src/280) : avant d'effacer l'ancien calque des noms. */
 function prepareNpfCalqueNomsDownload() {
     try { localStorage.removeItem(NPF_CALQUE_NOMS_INFO_KEY); } catch (_) {}
+    /* v17.88 — carte effacée (téléchargement complet, suppression, réinitialisation) : liste des morceaux oubliée. */
+    try { localStorage.removeItem('npfCarteV11MorceauxV1'); localStorage.removeItem('npfCarteV11MajV1'); } catch (_) {}
+    try { if (typeof npfCarteMajPlan !== 'undefined') npfCarteMajPlan = null; } catch (_) {}
     if (npfCalqueNomsLayer) {
         try { map.removeLayer(npfCalqueNomsLayer); } catch (_) {}
         npfCalqueNomsLayer = null;
@@ -50074,7 +50440,12 @@ async function refreshNpfMapInstalledStatus({ checkServer = false } = {}) {
             if (response.ok) {
                 const manifest = await response.json();
                 if (manifest && manifest.versionCarte) {
-                    writeNpfJsonStorage(NPF_SERVER_MAP_LATEST_KEY, { versionCarte: manifest.versionCarte, totalOctets: Number(manifest.totalOctets) || 0, creeLe: manifest.creeLe || '', at: Date.now() });
+                    /* v17.88 — empreintes des morceaux gardées (DIAG : morceaux à jour / à mettre à jour). */
+                    writeNpfJsonStorage(NPF_SERVER_MAP_LATEST_KEY, {
+                        versionCarte: manifest.versionCarte, totalOctets: Number(manifest.totalOctets) || 0, creeLe: manifest.creeLe || '', at: Date.now(),
+                        morceaux: Array.isArray(manifest.morceaux) ? manifest.morceaux.map(chunk => ({ fichier: chunk && chunk.fichier, sha256: chunk && chunk.sha256 })) : null
+                    });
+                    try { if (typeof onNpfCarteManifestRead === 'function') onNpfCarteManifestRead(manifest); } catch (_) {}
                 }
             }
         } catch (_) {}
@@ -50092,6 +50463,13 @@ async function refreshNpfMapInstalledStatus({ checkServer = false } = {}) {
     let nouvelle = '';
     if (latest && latest.versionCarte && (!carte || carte.version !== latest.versionCarte)) {
         nouvelle = `${carte ? 'Nouvelle carte disponible' : 'Carte disponible'} : ${latest.versionCarte}${latest.totalOctets > 0 ? `, ${formatNpfStorageSizeForUser(latest.totalOctets)}` : ''}.`;
+    } else if (carte && typeof npfCarteMajPlan !== 'undefined' && npfCarteMajPlan) {
+        /* v17.88 — même version (V11) mais morceaux changés sur le serveur. */
+        if (npfCarteMajPlan.etat === 'maj') {
+            nouvelle = `Mise à jour disponible : ${npfCarteMajPlan.indices.length} morceau${npfCarteMajPlan.indices.length > 1 ? 'x' : ''}, ${formatNpfStorageSizeForUser(npfCarteMajPlan.octets)} (bouton ci-dessus).`;
+        } else if (npfCarteMajPlan.etat === 'complet' && latest && latest.creeLe && carte.packs.some(pack => pack.serverCreeLe && pack.serverCreeLe !== latest.creeLe)) {
+            nouvelle = `Nouvelle version de la carte disponible (${npfCarteMajPlan.raison}) : téléchargement complet${latest.totalOctets > 0 ? `, ${formatNpfStorageSizeForUser(latest.totalOctets)}` : ''}.`;
+        }
     }
     box.innerHTML = '';
     lignes.forEach(texte => {
@@ -50140,6 +50518,8 @@ function appendNpfCalqueNomsDiagLines(lines) {
     lines.push('Carte NPF-Q400 installée : ' + (carte
         ? (carte.version || carte.origine) + ' · ' + (carte.avecNoms ? 'avec calque des noms' : 'noms imprimés dans la carte (calque non affiché)') + ' · ' + formatNpfStorageSizeForUser(carte.sizeBytes)
         : 'aucune') + ' | carte avec noms affichée : ' + (isNpfCarteAvecNomsActive() ? 'oui' : 'non'));
+    /* v17.88 — morceaux V11 installés / à jour / à mettre à jour. */
+    try { if (typeof describeNpfCarteMorceauxForDiag === 'function') lines.push(describeNpfCarteMorceauxForDiag()); } catch (_) {}
     if (!info) {
         lines.push('Calque non installé : aucune couche, aucune lecture.');
         return;
