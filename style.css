@@ -1,4 +1,4 @@
-/* NPF_STYLE_BUILD_VERSION: v17.85 */
+/* NPF_STYLE_BUILD_VERSION: v17.86 */
 /* v14.83 — nettoyage des références techniques et limitation des cartouches routiers. */
 /* v14.81 — recherche phonétique nationale élargie aux fragments sur deux lettres. */
 /* v14.80 — Brive conservé uniquement sous LFSL. */
@@ -18805,4 +18805,86 @@ body.npf-calculator-modal-open {
 #close-calculator-btn {
     background-color: #d8232a !important;
     color: #ffffff !important;
+}
+
+/* ==========================================================================
+   v17.86 — CROIX DE FERMETURE ROUGES DESSINÉES (plus de caractère « × ») : sur iPad, le « × » de la police Apple
+   n'était pas centré. Le caractère reste en place mais transparent (taille, position et zone de toucher
+   inchangées) ; la croix est dessinée par deux traits blancs (::after), centrée, 0,53 em comme le « × » d'avant ;
+   coins arrondis à 6 px (Gestion des Cartes comprise). Calculateur : anneau blanc d'origine gardé.
+   ========================================================================== */
+#sia-profile-close,
+#close-briefing-doc-selector-modal,
+#global-link-password-close,
+#global-link-auth-close,
+#briefing-docs-password-close,
+#close-quick-offline-map-modal,
+#close-simulation-motion-modal,
+#fuel-split-close-btn,
+#close-offline-map-btn,
+#close-import-help-modal,
+#npf-startup-diag-close,
+.npf-info-banner-close,
+#traffic-settings-close,
+.global-link-options-close,
+.pelic-notams-modal-close,
+#sia-filter-close,
+.gaar-point-search-close,
+#close-calculator-btn {
+    color: transparent !important;
+    text-shadow: none !important;
+    border-radius: 6px !important;
+}
+
+#sia-profile-close,
+#npf-startup-diag-close,
+.npf-info-banner-close,
+#traffic-settings-close,
+.global-link-options-close,
+.pelic-notams-modal-close,
+.gaar-point-search-close {
+    position: relative;
+}
+
+#sia-profile-close::after,
+#close-briefing-doc-selector-modal::after,
+#global-link-password-close::after,
+#global-link-auth-close::after,
+#briefing-docs-password-close::after,
+#close-quick-offline-map-modal::after,
+#close-simulation-motion-modal::after,
+#fuel-split-close-btn::after,
+#close-offline-map-btn::after,
+#close-import-help-modal::after,
+#npf-startup-diag-close::after,
+.npf-info-banner-close::after,
+#traffic-settings-close::after,
+.global-link-options-close::after,
+.pelic-notams-modal-close::after,
+#sia-filter-close::after,
+.gaar-point-search-close::after,
+#close-calculator-btn::after {
+    content: "" !important;
+    position: absolute !important;
+    left: 50% !important;
+    top: 50% !important;
+    width: 0.53em !important;
+    height: 0.53em !important;
+    margin: 0 !important;
+    transform: translate(-50%, -50%) !important;
+    background:
+        linear-gradient(45deg, transparent calc(50% - max(1px, 0.05em)), #ffffff calc(50% - max(1px, 0.05em)), #ffffff calc(50% + max(1px, 0.05em)), transparent calc(50% + max(1px, 0.05em))),
+        linear-gradient(-45deg, transparent calc(50% - max(1px, 0.05em)), #ffffff calc(50% - max(1px, 0.05em)), #ffffff calc(50% + max(1px, 0.05em)), transparent calc(50% + max(1px, 0.05em))) !important;
+    border-radius: 0 !important;
+    pointer-events: none !important;
+}
+
+/* ==========================================================================
+   v17.86 — étiquette du PÉLICANDROME LE PLUS PROCHE : quand un autre est sélectionné, elle garde une bordure
+   verte (même vert que la sélection, même épaisseur que le bord blanc : taille inchangée). Le pélicandrome
+   sélectionné garde son style. Ligne « Rot. NN min » : même style que la ligne distance / temps.
+   ========================================================================== */
+.leaflet-tooltip.route-tooltip-other-pelic.route-tooltip-nearest-pelic,
+.leaflet-tooltip.route-tooltip-other-pelic.route-tooltip-near-icon.route-tooltip-nearest-pelic {
+    border-color: #39ff14 !important;
 }

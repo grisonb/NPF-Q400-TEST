@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.85';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.86';
 
 
 /*
@@ -3309,7 +3309,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.85 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.86 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -30574,9 +30574,10 @@ function displayCommuneDetails(commune, shouldFitBounds = true) {
      * l'intérieur vert corresponde immédiatement au PÉLIC réellement choisi. */
     drawPermanentAirportMarkers();
 
-    closestAirports.forEach(ap => {
+    closestAirports.forEach((ap, index) => {
         allPoints.push([ap.lat, ap.lon]);
-        drawRoute([lat, lon], [ap.lat, ap.lon], { oaci: ap.oaci });
+        /* v17.86 — le plus proche (liste triée par distance) garde sa bordure verte même si un autre est choisi. */
+        drawRoute([lat, lon], [ap.lat, ap.lon], { oaci: ap.oaci, isNearest: index === 0 });
     });
 
     drawWaterPointMarkersForCommune(commune);
@@ -30708,11 +30709,21 @@ function drawRoute(startLatLng, endLatLng, options = {}) {
         color = isSelected ? '#39ff14' : '#00a8ff';
         const tooltipClass = isSelected
             ? 'route-tooltip route-tooltip-selected route-tooltip-near-icon'
-            : 'route-tooltip route-tooltip-other-pelic route-tooltip-near-icon';
+            : `route-tooltip route-tooltip-other-pelic route-tooltip-near-icon${options.isNearest ? ' route-tooltip-nearest-pelic' : ''}`;
         const baseFlag = selectedBaseOACI === oaci
             ? '<div class="route-label-base-flag">BASE</div>'
             : '';
-        labelText = `${baseFlag}<div class="route-label-oaci">${oaci}</div><div class="route-label-sub">${Math.round(distance)} Nm / ${formatFlightTimeLabel(distance)}</div>`;
+        /* v17.86 — temps de rotation feu ↔ ce pélicandrome : MÊME calcul que le calculateur (distance arrondie,
+         * calculateRotationTime, résultat arrondi ; src/290 et updateCalculatorData). Calculé une fois, au dessin
+         * des routes (feu ou pélicandrome choisi), jamais pendant les déplacements de la carte. */
+        let rotationLine = '';
+        try {
+            const rotationMinutes = Math.round(calculateRotationTime(Math.round(distance)));
+            if (Number.isFinite(rotationMinutes) && rotationMinutes > 0) {
+                rotationLine = `<div class="route-label-sub route-label-rotation">Rot. ${rotationMinutes} min</div>`;
+            }
+        } catch (_) {}
+        labelText = `${baseFlag}<div class="route-label-oaci">${oaci}</div><div class="route-label-sub">${Math.round(distance)} Nm / ${formatFlightTimeLabel(distance)}</div>${rotationLine}`;
 
         L.polyline(routeLatLngs, {
             color: '#ffffff',
@@ -34497,7 +34508,9 @@ function updateGlobalLinkButton(options = {}) {
     }
     if (offCountEl) {
         offCountEl.textContent = String(offCount);
-        offCountEl.style.display = npfGlobalLinkEnabled && offCount > 0 ? 'inline-flex' : 'none';
+        /* v17.86 — pastille marron (nombre de trafics hors ligne) retirée du bouton à la demande de Bastien ;
+         * les trafics hors ligne restent affichés sur la carte. */
+        offCountEl.style.display = 'none';
         offCountEl.title = `${offCount} appareil(s) non actif(s) — total national`;
     }
 }

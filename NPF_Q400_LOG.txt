@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 16/10/2026
-Version de travail actuelle : TEST v17.85
+Version de travail actuelle : TEST v17.86
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,9 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.86 — étiquettes des pélicandromes les plus proches : « Rot. NN min » (calcul du calculateur) ; le plus proche
+  garde une bordure verte si un autre est choisi ; bouton Moyens Nationaux sans la pastille marron ; croix rouges
+  dessinées (centrées sur iPad), coins arrondis 6 px ;
 - v17.85 — calque « Noms des communes » : plus de quadrillage gris (tuiles de noms absentes rendues invisibles) ;
 - v17.84 — étiquettes du Calque Routier : numéro répété le long de chaque route (~300 px), une étiquette
   par branche (carrefour, changement de numéro), jamais sur un nom de commune V11, un terrain, un point, une
@@ -544,8 +547,10 @@ NON IMPLÉMENTÉ / OUVERT :
   07/10/2026 : programme VPS bfg-sofia-notams 1.2.0 PRÊT, NON INSTALLÉ
   (~/vps-a-copier/). v17.60 à pousser APRÈS l'installation de la 1.2.0
   (elle annonce « environ 1 minute ») ;
+- v17.86 : À MESURER sur iPad (Rot. dans les étiquettes, bordure verte du plus proche, bouton Moyens Nationaux, croix
+  centrées) ; COMMIT LOCAL, NON POUSSÉE ; inventaire des fonctions devenues inutiles (entrée v17.86) : À DÉCIDER ;
 - v17.85 : À MESURER sur iPad (plus de quadrillage avec les noms, Cazouls-lès-Béziers / Gardanne, 2 / 1 / 0,5 NM) ;
-  COMMIT LOCAL, NON POUSSÉE ;
+  POUSSÉE le 17/10/2026 (106a10d) ;
 - v17.84 : À MESURER sur iPad (étiquettes des routes à 2 / 1 / 0,5 NM, Gardanne / Trets, avec le Calque Routier v7) ;
   POUSSÉE le 17/10/2026 (9c9ff46) ; Calque Routier v7 INSTALLÉ sur le VPS le 17/10/2026 (OK écrit de Bastien,
   installer-calque-routier-v7-vps.ps1 : 6 étapes OK ; v6 gardé dans /home/ubuntu/npf-cartes-sauvegardes/
@@ -786,27 +791,27 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.85
-Date : 17/10/2026
-Base : v17.84 (9c9ff46, poussée le 17/10/2026)
+Version : TEST v17.86
+Date : 18/10/2026
+Base : v17.85 (106a10d, poussée le 17/10/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.85.txt
-2_Index_v17.85.txt
-3_Manifest_v17.85.txt
-4_Script_v17.85.txt
-5_SIA_v17.85.txt
-6_Style_v17.85.txt
-7_Sw_v17.85.txt
+1_Modifications_v17.86.txt
+2_Index_v17.86.txt
+3_Manifest_v17.86.txt
+4_Script_v17.86.txt
+5_SIA_v17.86.txt
+6_Style_v17.86.txt
+7_Sw_v17.86.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.85 (et texte « TEST v17.85 » de l'écran de
+- Index : APP_VERSION = v17.86 (et texte « TEST v17.86 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.85
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.85
-- Style : NPF_STYLE_BUILD_VERSION = v17.85
-- Service Worker : `sw-v17-85_noms_sans_quadrillage` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-85_noms_sans_quadrillage`, `npf-q400-test-app-data-v1`,
+- Manifest : start_url = ./index.html?appv=v17.86
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.86
+- Style : NPF_STYLE_BUILD_VERSION = v17.86
+- Service Worker : `sw-v17-86_rotation_croix_dessinees` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-86_rotation_croix_dessinees`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-sia-2026-10-29-v02-g15`
 - SIA_DATA_REVISION (SW / Index sia.js?siav=) : sia-2026-10-29-v02-g15 (= NPF_SIA_DATA_REVISION
   de sia.js ; à changer à chaque nouveau sia.js)
@@ -819,15 +824,15 @@ Références de version cohérentes :
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.85 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.86 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
 - `sia.js` : par rapport à v17.70, outre-mer retiré, « a » de 34 VRP renseigné, table vrpAirportColors ajoutée (2 pastels), révision g6 ; zones, terrains et points de métropole identiques ; moteur tuiles (src/100) modifié en v17.66 sur demande
   explicite (limite de zoom propre à chaque carte, zoom 11 OACI 1/500 000) ;
-- tests v17.85 : entrée v17.85 ; sia.js strictement identique à la v17.81 ;
+- tests v17.86 : entrée v17.86 ; sia.js strictement identique à la v17.81 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82, v17.83, v17.84 et v17.85 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82, v17.83, v17.84, v17.85 et v17.86 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
   v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE ;
   v17.56 VALIDÉE en vol ; v17.57 VALIDÉE sur iPad.
 
@@ -2356,6 +2361,60 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.86 — ROTATION DANS LES ÉTIQUETTES PÉLIC, BORDURE VERTE DU PLUS PROCHE, CROIX DESSINÉES
+Date : 18/10/2026
+Base fonctionnelle : v17.85 (commit 106a10d, poussée le 17/10/2026).
+Statuts rattrapés : v17.84 poussée le 17/10/2026 (9c9ff46) et Calque Routier v7 installé sur le VPS le 17/10/2026
+(déjà notés avec la v17.85) ; v17.85 poussée le 17/10/2026 (106a10d).
+
+1. TEMPS DE ROTATION DANS LES ÉTIQUETTES DES PÉLICANDROMES LES PLUS PROCHES (src/150, drawRoute)
+- Nouvelle ligne « Rot. NN min » sous « NN Nm / temps ». Calcul EXISTANT, inchangé : calculateRotationTime (src/290)
+  appliqué comme le calculateur (distance feu -> pélicandrome arrondie, résultat arrondi ; 20 min + distance
+  retenue × 2 / vitesse, 10 NM minimum). Aucune nouvelle formule. Le pélicandrome sélectionné affiche la même valeur
+  que le calculateur (vérifié : LFMU 27 min, LFMK 41 min).
+- Calculé au dessin des routes (choix du feu ou du pélicandrome), jamais pendant les déplacements de la carte.
+2. BORDURE VERTE DU PLUS PROCHE (src/150, style.css)
+- Quand un autre pélicandrome est sélectionné, l'étiquette du plus proche (1er de la liste triée par distance)
+  garde une bordure verte #39ff14 de 2 px (même épaisseur que le bord blanc : taille inchangée) ; le sélectionné
+  garde son style (fond vert, bord blanc).
+3. BOUTON TRAFIC MOYENS NATIONAUX (src/180, updateGlobalLinkButton)
+- Pastille marron (nombre de trafics hors ligne, total national) toujours masquée. Pastille des actifs, contour du
+  bouton et trafics hors ligne sur la carte inchangés (vérifié : 2 actifs + 2 hors ligne -> 4 dessinés, mêmes
+  éléments hors ligne qu'en v17.85).
+4. INVENTAIRE DES FONCTIONS DEVENUES INUTILES : AUCUNE MODIFICATION, À DÉCIDER par Bastien (rapport v17.86)
+- Plus sûr -> plus risqué : diagnostic « tuiles zoom passif » jamais appelé (src/090, src/100) ; ancien
+  repositionnement de la fiche PÉLIC v16.24 (src/210) ; une trentaine de fonctions jamais appelées (src/050, 110,
+  130, 170, 220, 260, 270, 280, 310, 340, 350…) ; sélecteurs CSS orphelins (#bingo-banner…, #boot-force-update-button,
+  champs de publication trafic) ; 3 clés localStorage du calque noms-essai v17.79 jamais effacées ; libellé
+  « Carte NPF-Q400 (B) » (essai v17.43) ; secours « ancien cache SIA partagé » du SW (v17.37) ; nettoyages et
+  migrations v17.30 / v17.47 relancés à chaque démarrage ; noms de communes dessinés par l'app (bouton Communes) en
+  double avec le calque noms V11 ; interrupteur TEST « Recentrage économe » (v17.36, encore À MESURER) ; mesures DIAG
+  de l'essai du calque noms et des lectures Blob / brut ; lecture des anciennes cartes en Blob ; ancien placement
+  des étiquettes routières (Calque Routier v6, encore utile tant que les iPad n'ont pas le v7) ; base de tuiles
+  historique OfflineTilesDB_v13_70_clean (à ne pas toucher).
+- La case « Afficher les noms des communes » (Gestion des Cartes) est celle du calque noms V11 : elle sert.
+5. CROIX ROUGES DE FERMETURE DESSINÉES (style.css, bloc v17.86)
+- Sur iPad, le « × » (caractère de police Apple) n'était pas centré. Les 18 croix de la v17.83 : caractère rendu
+  transparent (il garde sa place : taille, position et zone de toucher identiques) et croix dessinée par deux traits
+  blancs (::after, dégradés CSS), centrée, 0,53 em comme le « × » d'avant ; coins arrondis à 6 px (Gestion des Cartes
+  comprise ; calculateur : anneau blanc gardé) ; position: relative sur les 7 boutons non positionnés (sans effet sur
+  leur place).
+6. TESTS PC (cdp_pelic86.js, cdp_croix86.js, pw_croix86.js WebKit, run_fin86.sh)
+- Étiquettes (feu à Cazouls-lès-Béziers, 3 pélicandromes LFMU 11,7 / LFMK 36,0 / LFMP 40,6 NM) : Rot. 27 / 41 / 43 min ;
+  LFMK choisi : LFMU bleu à bordure verte, LFMK fond vert. Bouton : pastille marron masquée, pastille des actifs « 2 ».
+- Croix (Chrome, 18 fenêtres) : chaque croix ferme sa fenêtre ; position, taille et zone de toucher identiques à la
+  v17.85 ; centre de la croix à 0,5 px au plus du centre du bouton (avant : jusqu'à 1,75 px, même sur PC) ; même
+  taille que l'ancien « × » (Gestion des Cartes 19 px au lieu de 17). WebKit 26.5 (6 fenêtres, service worker bloqué,
+  tout coupé sauf localhost) : centrées à 0,5 px au plus, coins 6 px, fermeture OK ; l'ancien « × » n'avait pas la
+  même taille selon le moteur (15 px WebKit, 17 px Chrome), la croix dessinée si (19 px).
+- CPU ×6 : redessin des routes et étiquettes v17.85 50 à 58 ms, v17.86 55 à 57 ms ; aucune tâche > 100 ms pendant
+  les déplacements. (Deux premières mesures à 300-650 ms : PC chargé par une recherche dans le code lancée en
+  parallèle ; refaites au calme, et la feuille de style seule ne change rien.)
+- Non-régression courte (run_fin86.sh) : démarrage sans erreur JS, carte et échelle en NM, FdS / GAAR, Trafic Moyens
+  Nationaux, fenêtres terrain, retour sur l'avion, parcs, textes « NPF-Q400 », clignotement HT immédiat, boutons
+  « Fermer » rouges ; mise à jour v17.85 -> v17.86 puis hors ligne : v17.86 servie, seuls les caches npf-q400-test-*
+  touchés, caches de la pérenne intacts. Aucune erreur JS.
 
 VERSION TEST v17.85 — CALQUE « NOMS DES COMMUNES » : PLUS DE QUADRILLAGE GRIS
 Date : 17/10/2026

@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v17-85_noms_sans_quadrillage';
-const APP_VERSION = 'v17.85';
+const SW_VERSION = 'sw-v17-86_rotation_croix_dessinees';
+const APP_VERSION = 'v17.86';
 const SIA_DATA_REVISION = 'sia-2026-10-29-v02-g15';
 const SIA_DATA_URL = './sia.js';
 /*

@@ -1021,7 +1021,9 @@ function updateGlobalLinkButton(options = {}) {
     }
     if (offCountEl) {
         offCountEl.textContent = String(offCount);
-        offCountEl.style.display = npfGlobalLinkEnabled && offCount > 0 ? 'inline-flex' : 'none';
+        /* v17.86 — pastille marron (nombre de trafics hors ligne) retirée du bouton à la demande de Bastien ;
+         * les trafics hors ligne restent affichés sur la carte. */
+        offCountEl.style.display = 'none';
         offCountEl.title = `${offCount} appareil(s) non actif(s) — total national`;
     }
 }
