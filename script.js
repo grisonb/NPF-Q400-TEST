@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.86';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.87';
 
 
 /*
@@ -3309,7 +3309,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.86 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.87 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -13910,166 +13910,6 @@ function scheduleTrafficVisualResumeAfterMapInteraction(reason = 'map-end') {
     }, TRAFFIC_VISUAL_RESUME_AFTER_MAP_MS);
 }
 
-/*
- * v16.92 — diagnostic PASSIF du chargement des tuiles pendant un zoom.
- *
- * Important : ce code n'agit jamais sur la file, les priorités, les epochs,
- * la concurrence IndexedDB, Leaflet ou les couches annexes. Il se contente
- * d'observer l'état existant à intervalles espacés.
- */
-let npfPassiveTileZoomDiagToken = 0;
-let npfPassiveTileZoomStartZoom = NaN;
-let npfPassiveTileZoomStartedAt = 0;
-let npfPassiveTileZoomIdbSeqStart = 0;
-let npfPassiveTileZoomLookupSeqStart = 0;
-
-function beginNpfPassiveTileZoomDiagnostic() {
-    npfPassiveTileZoomDiagToken += 1;
-    npfPassiveTileZoomStartZoom = Number(map?.getZoom?.());
-    npfPassiveTileZoomStartedAt = NPF_STARTUP_DIAGNOSTIC.now();
-    npfPassiveTileZoomIdbSeqStart = Number(directOfflineTileIdbDiagSeq || 0);
-    npfPassiveTileZoomLookupSeqStart = Number(directOfflineTileLookupDiagSeq || 0);
-}
-
-function scheduleNpfPassiveTileZoomDiagnostic() {
-    if (!map || !baseTileLayer) return;
-
-    const token = npfPassiveTileZoomDiagToken;
-    const fromZoom = Number(npfPassiveTileZoomStartZoom);
-    const toZoom = Number(map.getZoom?.());
-    const startedAt = Number(npfPassiveTileZoomStartedAt)
-        || NPF_STARTUP_DIAGNOSTIC.now();
-    const zoomEndedAt = NPF_STARTUP_DIAGNOSTIC.now();
-
-    if (!Number.isFinite(fromZoom) || !Number.isFinite(toZoom)) return;
-
-    const direction = toZoom > fromZoom
-        ? 'IN'
-        : (toZoom < fromZoom ? 'OUT' : 'STABLE');
-
-    let firstVisibleMs = null;
-    let maxQueued = Math.max(0, Number(directOfflineNpfReadQueue?.length || 0));
-    let maxActive = Math.max(0, Number(directOfflineNpfActiveReads || 0));
-    let maxLoaded = 0;
-    let maxTotal = 0;
-
-    const finish = (status, state, elapsedMs) => {
-        if (token !== npfPassiveTileZoomDiagToken) return;
-
-        const loaded = Math.max(0, Number(state?.loaded || 0));
-        const total = Math.max(0, Number(state?.total || 0));
-        const tileZoomReady = state?.tileZoomReady !== false;
-
-        const idbEvents = getDirectOfflineTileIdbDiagEventsSince(
-            npfPassiveTileZoomIdbSeqStart
-        );
-        const lookupEvents = getDirectOfflineTileLookupDiagEventsSince(
-            npfPassiveTileZoomLookupSeqStart
-        );
-        const idbSummary = summarizeDirectOfflineTileIdbDiagEvents(idbEvents);
-        const lookupSummary = summarizeDirectOfflineTileLookupDiagEvents(lookupEvents);
-
-        npfDiagSiaInteraction(
-            'TUILES ZOOM PASSIF',
-            `direction=${direction} · z${fromZoom}->${toZoom} · état=${status} · première=${firstVisibleMs === null ? '—' : Math.round(firstVisibleMs) + 'ms'} · couverture=${status === 'complet' ? Math.round(elapsedMs) + 'ms' : '—'} · visibles=${loaded}/${total} · IDB=${idbSummary.count} moy=${idbSummary.avgMs}ms max=${idbSummary.maxMs}ms >=1s=${idbSummary.ge1000} · lookup=${lookupSummary.count} cache=${lookupSummary.cacheHits} max=${lookupSummary.maxMs}ms timeout=${lookupSummary.readTimeouts}`,
-            {
-                direction,
-                fromZoom,
-                toZoom,
-                zoomGestureMs: Math.round(zoomEndedAt - startedAt),
-                firstVisibleMs: firstVisibleMs === null ? -1 : Math.round(firstVisibleMs),
-                coverageMs: status === 'complet' ? Math.round(elapsedMs) : -1,
-                loaded,
-                total,
-                tileZoomReady: tileZoomReady ? 1 : 0,
-                maxLoaded,
-                maxTotal,
-                maxQueued,
-                maxActive,
-                readsQueued: Math.max(0, Number(directOfflineNpfReadQueue?.length || 0)),
-                readsActive: Math.max(0, Number(directOfflineNpfActiveReads || 0)),
-                idbReads: idbSummary.count,
-                idbFound: idbSummary.found,
-                idbMiss: idbSummary.miss,
-                idbErrors: idbSummary.errors,
-                idbAvgMs: idbSummary.avgMs,
-                idbMaxMs: idbSummary.maxMs,
-                idbGe500: idbSummary.ge500,
-                idbGe1000: idbSummary.ge1000,
-                idbIndexGets: idbSummary.indexGets,
-                idbIndexDirectHits: idbSummary.indexDirectHits,
-                idbIndexCursorFallbacks: idbSummary.indexCursorFallbacks,
-                idbIndexCursorMax: idbSummary.indexCursorMax,
-                idbLegacyReads: idbSummary.legacyReads,
-                tileLookups: lookupSummary.count,
-                tileLookupCacheHits: lookupSummary.cacheHits,
-                tileLookupIdb: lookupSummary.idbLookups,
-                tileLookupAvgMs: lookupSummary.avgMs,
-                tileLookupMaxMs: lookupSummary.maxMs,
-                tileLookupDbAttempts: lookupSummary.dbAttempts,
-                tileLookupUrlAttempts: lookupSummary.urlAttempts,
-                tileLookupOpenMs: lookupSummary.openMs,
-                tileLookupReadMs: lookupSummary.readMs,
-                tileLookupTimeouts: lookupSummary.readTimeouts,
-                tileLookupSlowest: lookupSummary.slowestCoords
-            }
-        );
-    };
-
-    const check = () => {
-        if (token !== npfPassiveTileZoomDiagToken || !map || !baseTileLayer) return;
-
-        const now = NPF_STARTUP_DIAGNOSTIC.now();
-        const elapsedMs = Math.max(0, now - zoomEndedAt);
-        const state = typeof getVisibleBaseTileLoadStateForSia === 'function'
-            ? getVisibleBaseTileLoadStateForSia()
-            : {
-                total: getNpfRetainedBaseTileCount(),
-                loaded: countVisibleLoadedBaseTiles(),
-                tileZoomReady: true
-            };
-
-        const loaded = Math.max(0, Number(state?.loaded || 0));
-        const total = Math.max(0, Number(state?.total || 0));
-        maxLoaded = Math.max(maxLoaded, loaded);
-        maxTotal = Math.max(maxTotal, total);
-        maxQueued = Math.max(
-            maxQueued,
-            Math.max(0, Number(directOfflineNpfReadQueue?.length || 0))
-        );
-        maxActive = Math.max(
-            maxActive,
-            Math.max(0, Number(directOfflineNpfActiveReads || 0))
-        );
-
-        if (
-            firstVisibleMs === null
-            && state?.tileZoomReady !== false
-            && loaded > 0
-        ) {
-            firstVisibleMs = elapsedMs;
-        }
-
-        if (
-            state?.tileZoomReady !== false
-            && total > 0
-            && loaded >= total
-        ) {
-            finish('complet', state, elapsedMs);
-            return;
-        }
-
-        if (elapsedMs >= 12000) {
-            finish('timeout', state, elapsedMs);
-            return;
-        }
-
-        setTimeout(check, 80);
-    };
-
-    setTimeout(check, 0);
-}
-
 function beginBaseMapZoomStabilityGuard(reason = 'zoomstart') {
     if (!map) return;
 
@@ -16736,142 +16576,6 @@ window.getNpfOfflineRecoveryStatus = function getNpfOfflineRecoveryStatus() {
     };
 };
 
-
-/*
- * v16.93 — instrumentation PASSIVE des lectures de tuiles.
- * Aucun événement UI n'est généré à chaque lecture : on garde uniquement
- * de petits buffers en mémoire, résumés ensuite par TUILES ZOOM PASSIF.
- */
-const DIRECT_OFFLINE_TILE_IO_DIAG_LIMIT = 240;
-let directOfflineTileIdbDiagSeq = 0;
-let directOfflineTileLookupDiagSeq = 0;
-const directOfflineTileIdbDiagEvents = [];
-const directOfflineTileLookupDiagEvents = [];
-
-function directOfflineTileDiagNow() {
-    try {
-        if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
-            return performance.now();
-        }
-    } catch (_) {}
-    return Date.now();
-}
-
-function pushDirectOfflineTileDiagEvent(buffer, event) {
-    buffer.push(event);
-    if (buffer.length > DIRECT_OFFLINE_TILE_IO_DIAG_LIMIT) {
-        buffer.splice(0, buffer.length - DIRECT_OFFLINE_TILE_IO_DIAG_LIMIT);
-    }
-}
-
-function recordDirectOfflineTileIdbDiagEvent(event = {}) {
-    directOfflineTileIdbDiagSeq += 1;
-    pushDirectOfflineTileDiagEvent(directOfflineTileIdbDiagEvents, {
-        seq: directOfflineTileIdbDiagSeq,
-        ...event
-    });
-}
-
-function recordDirectOfflineTileLookupDiagEvent(event = {}) {
-    directOfflineTileLookupDiagSeq += 1;
-    pushDirectOfflineTileDiagEvent(directOfflineTileLookupDiagEvents, {
-        seq: directOfflineTileLookupDiagSeq,
-        ...event
-    });
-}
-
-function getDirectOfflineTileIdbDiagEventsSince(seq) {
-    const minSeq = Math.max(0, Number(seq) || 0);
-    return directOfflineTileIdbDiagEvents.filter(event => Number(event?.seq) > minSeq);
-}
-
-function getDirectOfflineTileLookupDiagEventsSince(seq) {
-    const minSeq = Math.max(0, Number(seq) || 0);
-    return directOfflineTileLookupDiagEvents.filter(event => Number(event?.seq) > minSeq);
-}
-
-function summarizeDirectOfflineTileIdbDiagEvents(events = []) {
-    const safe = Array.isArray(events) ? events : [];
-    const durations = safe.map(event => Math.max(0, Number(event?.durationMs) || 0));
-    const totalMs = durations.reduce((sum, value) => sum + value, 0);
-    const maxMs = durations.length ? Math.max(...durations) : 0;
-
-    return {
-        count: safe.length,
-        found: safe.filter(event => event?.outcome === 'hit').length,
-        miss: safe.filter(event => event?.outcome === 'miss').length,
-        errors: safe.filter(event => event?.outcome === 'error').length,
-        avgMs: safe.length ? Math.round(totalMs / safe.length) : 0,
-        maxMs: Math.round(maxMs),
-        ge500: durations.filter(value => value >= 500).length,
-        ge1000: durations.filter(value => value >= 1000).length,
-        indexGets: safe.reduce(
-            (sum, event) => sum + Math.max(0, Number(event?.indexGets) || 0),
-            0
-        ),
-        indexDirectHits: safe.reduce(
-            (sum, event) => sum + Math.max(0, Number(event?.indexDirectHits) || 0),
-            0
-        ),
-        indexCursorFallbacks: safe.reduce(
-            (sum, event) => sum + Math.max(0, Number(event?.indexCursorFallbacks) || 0),
-            0
-        ),
-        indexCursorMax: safe.length
-            ? Math.max(...safe.map(event => Math.max(0, Number(event?.indexCursorSteps) || 0)))
-            : 0,
-        legacyReads: safe.filter(
-            event => Number(event?.legacyGets) > 0 || Number(event?.legacyCursorSteps) > 0
-        ).length
-    };
-}
-
-function summarizeDirectOfflineTileLookupDiagEvents(events = []) {
-    const safe = Array.isArray(events) ? events : [];
-    const durations = safe.map(event => Math.max(0, Number(event?.durationMs) || 0));
-    const totalMs = durations.reduce((sum, value) => sum + value, 0);
-    const slowest = safe.reduce((best, event) => {
-        if (!best) return event;
-        return (Number(event?.durationMs) || 0) > (Number(best?.durationMs) || 0)
-            ? event
-            : best;
-    }, null);
-
-    return {
-        count: safe.length,
-        cacheHits: safe.filter(event => event?.outcome === 'cache-hit').length,
-        idbLookups: safe.filter(
-            event => !['cache-hit', 'miss-cache'].includes(String(event?.outcome || ''))
-        ).length,
-        avgMs: safe.length ? Math.round(totalMs / safe.length) : 0,
-        maxMs: safe.length
-            ? Math.round(Math.max(...durations))
-            : 0,
-        dbAttempts: safe.reduce(
-            (sum, event) => sum + Math.max(0, Number(event?.dbAttempts) || 0),
-            0
-        ),
-        urlAttempts: safe.reduce(
-            (sum, event) => sum + Math.max(0, Number(event?.urlAttempts) || 0),
-            0
-        ),
-        openMs: Math.round(safe.reduce(
-            (sum, event) => sum + Math.max(0, Number(event?.openMs) || 0),
-            0
-        )),
-        readMs: Math.round(safe.reduce(
-            (sum, event) => sum + Math.max(0, Number(event?.readMs) || 0),
-            0
-        )),
-        readTimeouts: safe.reduce(
-            (sum, event) => sum + Math.max(0, Number(event?.readTimeouts) || 0),
-            0
-        ),
-        slowestCoords: slowest?.coords
-            ? `${slowest.coords.z}/${slowest.coords.x}/${slowest.coords.y}`
-            : ''
-    };
-}
 
 /*
  * v15.37 TEST — diagnostic léger, accessible uniquement depuis la console.
@@ -37586,16 +37290,10 @@ function scheduleNpfRunwayMapRefresh(source = 'map-change') {
 
 
 /*
- * Fiche PÉLIC — maintien dans la zone visible de la carte.
- *
- * Leaflet ancre normalement la popup à l'icône et peut donc placer une grande
- * fiche en partie hors écran lorsqu'un PÉLIC se trouve près du bord supérieur.
- * Pour les PÉLIC uniquement, on laisse la carte immobile puis on descend la
- * popup elle-même si nécessaire. La fiche peut donc être visuellement séparée
- * de l'icône : la priorité est donnée à la lisibilité complète des commandes.
+ * Fiche PÉLIC : options communes de la popup. Le maintien dans la zone visible est fait depuis la v17.45 en faisant
+ * glisser la carte (ci-dessous) ; l'ancien déplacement de la fiche elle-même (v16.24, plus appelé) est retiré en v17.87.
  */
 const NPF_PELIC_POPUP_CLASS = 'npf-pelic-leaflet-popup';
-const NPF_PELIC_POPUP_MARGIN_PX = 10;
 
 function getNpfPelicPopupOptions(extraOptions = {}) {
     return {
@@ -37605,61 +37303,6 @@ function getNpfPelicPopupOptions(extraOptions = {}) {
         className: NPF_PELIC_POPUP_CLASS,
         ...extraOptions
     };
-}
-
-function getNpfPelicPopupSafeTop(popupRect, mapRect) {
-    let safeTop = mapRect.top + NPF_PELIC_POPUP_MARGIN_PX;
-
-    /*
-     * Les bandeaux supérieurs font partie de la zone réellement occupée sur
-     * l'iPad. Si la popup les recouvre horizontalement, elle est placée sous
-     * leur bord inférieur plutôt que simplement sous le bord physique du map.
-     */
-    ['#bingo-map-display', '#commune-info-display', '#npf-waypoint-route-banner']
-        .forEach(selector => {
-            const element = document.querySelector(selector);
-            if (!element) return;
-            const style = window.getComputedStyle(element);
-            if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return;
-            const rect = element.getBoundingClientRect();
-            if (!(rect.width > 0 && rect.height > 0)) return;
-            const horizontalOverlap = Math.min(popupRect.right, rect.right) - Math.max(popupRect.left, rect.left);
-            if (horizontalOverlap <= 0) return;
-            if (rect.bottom <= mapRect.top || rect.top >= mapRect.bottom) return;
-            safeTop = Math.max(safeTop, rect.bottom + 8);
-        });
-
-    return safeTop;
-}
-
-function repositionNpfPelicPopupIfNeeded(popup) {
-    if (!popup || !map) return;
-    const className = String(popup?.options?.className || '');
-    if (!className.split(/\s+/).includes(NPF_PELIC_POPUP_CLASS)) return;
-
-    const container = typeof popup.getElement === 'function'
-        ? popup.getElement()
-        : popup._container;
-    const mapContainer = typeof map.getContainer === 'function' ? map.getContainer() : null;
-    if (!container || !mapContainer) return;
-
-    /* Repart toujours de la position Leaflet normale avant de calculer le décalage. */
-    try {
-        if (typeof popup._updatePosition === 'function') popup._updatePosition();
-    } catch (_) {}
-
-    const popupRect = container.getBoundingClientRect();
-    const mapRect = mapContainer.getBoundingClientRect();
-    const safeTop = getNpfPelicPopupSafeTop(popupRect, mapRect);
-    const shiftDown = Math.ceil(safeTop - popupRect.top);
-    if (!(shiftDown > 0)) return;
-
-    const currentBottom = Number.parseFloat(container.style.bottom);
-    if (!Number.isFinite(currentBottom)) return;
-
-    /* Diminuer bottom déplace la popup vers le bas sans déplacer la carte. */
-    container.style.bottom = `${currentBottom - shiftDown}px`;
-    container.dataset.npfPelicPopupShift = String(shiftDown);
 }
 
 /*
@@ -50058,13 +49701,20 @@ if (document.readyState === 'loading') {
  *   17:59 : une lecture de 2 007 ms, la seule au-delà de 154 ms, pendant un blocage du fil principal de 1,35 s
  *   peu après l'installation ; la durée d'une lecture compte aussi l'attente du fil principal). Les lectures
  *   de plus de 500 ms sont listées au DIAG avec leur heure.
- * - Case « Afficher les noms des communes » (Gestion des Cartes), cochée par défaut.
+ * - v17.87 : plus de case « Afficher les noms des communes » : le calque est toujours affiché sur une carte V11.
  */
 const NPF_CALQUE_NOMS_DB_NAME = 'CalqueNomsCommunes';
 const NPF_CALQUE_NOMS_PACK = 'Calque_Noms_Communes';
 const NPF_CALQUE_NOMS_INFO_KEY = 'npfCalqueNomsCommunesV1';
-/* v17.80 — nouvelle clé : la case est cochée par défaut pour tous (l'essai v17.79 a pu la décocher). */
-const NPF_CALQUE_NOMS_SHOW_KEY = 'npfCalqueNomsCommunesAfficheV2';
+/* v17.87 — anciennes clés effacées une fois au démarrage : réglage de la case supprimée (v17.80) et restes de
+ * l'essai « noms-essai » v17.79 (case, téléchargement et journal de la section d'essai). La clé du calque V11
+ * (NPF_CALQUE_NOMS_INFO_KEY) et la base CalqueNomsCommunes ne sont pas touchées. */
+const NPF_CALQUE_NOMS_OLD_KEYS = [
+    'npfCalqueNomsCommunesAfficheV2',
+    'npfCalqueNomsCommunesAfficheV1',
+    'npfServerSectionDownloadV1:noms-essai',
+    'npfServerSectionLogV1:noms-essai'
+];
 const NPF_SERVER_MAP_LATEST_KEY = 'npfServerMapLatestV1';
 const NPF_CALQUE_NOMS_PANE = 'calqueNomsCommunesPane';
 const NPF_CALQUE_NOMS_MIN_ZOOM = 8;
@@ -50094,8 +49744,10 @@ function readNpfCalqueNomsInfo() {
     }
 }
 
-function isNpfCalqueNomsShown() {
-    try { return localStorage.getItem(NPF_CALQUE_NOMS_SHOW_KEY) !== '0'; } catch (_) { return true; }
+function removeNpfCalqueNomsOldKeys() {
+    NPF_CALQUE_NOMS_OLD_KEYS.forEach(key => {
+        try { localStorage.removeItem(key); } catch (_) {}
+    });
 }
 
 /* Carte NPF-Q400 installée (groupe NPF_France) : version, taille, avec ou sans calque des noms. */
@@ -50327,11 +49979,11 @@ function sampleNpfCalqueNomsMemory(reason) {
     while (npfCalqueNomsStats.memoire.length > 60) npfCalqueNomsStats.memoire.shift();
 }
 
-/* Affiche ou retire le calque selon : installé, case cochée, carte NPF-Q400 avec calque des noms affichée. */
+/* Affiche ou retire le calque selon : installé et carte NPF-Q400 avec calque des noms affichée (v17.87 : plus de case). */
 function syncNpfCalqueNomsLayer(reason = 'sync') {
     if (!map || typeof L === 'undefined') return;
     const info = readNpfCalqueNomsInfo();
-    const wanted = !!info && isNpfCalqueNomsShown() && isNpfCarteAvecNomsActive();
+    const wanted = !!info && isNpfCarteAvecNomsActive();
     if (!info) {
         if (npfCalqueNomsLayer) {
             try { map.removeLayer(npfCalqueNomsLayer); } catch (_) {}
@@ -50372,11 +50024,6 @@ function scheduleNpfCalqueNomsSync(reason) {
     npfCalqueNomsSyncTimer = setTimeout(() => syncNpfCalqueNomsLayer(reason), 300);
 }
 
-function setNpfCalqueNomsShown(shown) {
-    try { localStorage.setItem(NPF_CALQUE_NOMS_SHOW_KEY, shown ? '1' : '0'); } catch (_) {}
-    syncNpfCalqueNomsLayer(shown ? 'case cochée' : 'case décochée');
-}
-
 /* Téléchargement de la carte (src/280) : avant d'effacer l'ancien calque des noms. */
 function prepareNpfCalqueNomsDownload() {
     try { localStorage.removeItem(NPF_CALQUE_NOMS_INFO_KEY); } catch (_) {}
@@ -50410,12 +50057,6 @@ async function deleteNpfCalqueNomsWithMap() {
 }
 
 function refreshNpfCalqueNomsUi() {
-    const toggleRow = document.getElementById('noms-toggle-row');
-    const toggle = document.getElementById('noms-toggle-input');
-    const carte = getNpfInstalledMapDescription();
-    const visible = !!readNpfCalqueNomsInfo() && !!carte && carte.avecNoms;
-    if (toggleRow) toggleRow.style.display = visible ? '' : 'none';
-    if (toggle) toggle.checked = isNpfCalqueNomsShown();
     try { refreshNpfMapInstalledStatus(); } catch (_) {}
 }
 
@@ -50467,11 +50108,7 @@ async function refreshNpfMapInstalledStatus({ checkServer = false } = {}) {
 }
 
 function initNpfCalqueNomsCommunes() {
-    const toggle = document.getElementById('noms-toggle-input');
-    if (toggle && toggle.dataset.bound !== '1') {
-        toggle.dataset.bound = '1';
-        toggle.addEventListener('change', () => setNpfCalqueNomsShown(!!toggle.checked));
-    }
+    removeNpfCalqueNomsOldKeys();
     refreshNpfCalqueNomsUi();
     if (!readNpfCalqueNomsInfo()) return;
     /* Calque installé : ajouté une fois la carte prête (fond déjà en place). */
@@ -50511,7 +50148,7 @@ function appendNpfCalqueNomsDiagLines(lines) {
     const sorted = s.durees.map(item => item.ms).sort((a, b) => a - b);
     const pct = p => (sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))] : null);
     lines.push('Installé : ' + info.tuiles + ' tuiles, version ' + info.version + ', base ' + NPF_CALQUE_NOMS_DB_NAME
-        + ' | case ' + (isNpfCalqueNomsShown() ? 'cochée' : 'décochée') + ' | couche ' + (npfCalqueNomsLayer ? 'présente' : 'absente'));
+        + ' | toujours affiché sur V11 | couche ' + (npfCalqueNomsLayer ? 'présente' : 'absente'));
     lines.push('Lectures : ' + s.lectures + ' (' + s.trouvees + ' images, ' + s.vides + ' sans nom) | erreurs ' + s.erreurs + ' | annulées ' + s.annulees
         + ' | moyenne ' + (s.lectures ? (s.totalMs / s.lectures).toFixed(1) : '—') + ' ms | médiane ' + pct(0.5) + ' ms | 95 % ' + pct(0.95) + ' ms | max ' + s.maxMs + ' ms');
     lines.push('Ouverture de la base (hors lectures) : ' + (s.ouvertures.length ? s.ouvertures.map(item => new Date(item.t).toLocaleTimeString('fr-FR') + ' ' + item.ms + ' ms').join(' ; ') : 'pas encore ouverte'));

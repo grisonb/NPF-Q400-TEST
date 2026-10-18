@@ -99,16 +99,10 @@ function scheduleNpfRunwayMapRefresh(source = 'map-change') {
 
 
 /*
- * Fiche PÉLIC — maintien dans la zone visible de la carte.
- *
- * Leaflet ancre normalement la popup à l'icône et peut donc placer une grande
- * fiche en partie hors écran lorsqu'un PÉLIC se trouve près du bord supérieur.
- * Pour les PÉLIC uniquement, on laisse la carte immobile puis on descend la
- * popup elle-même si nécessaire. La fiche peut donc être visuellement séparée
- * de l'icône : la priorité est donnée à la lisibilité complète des commandes.
+ * Fiche PÉLIC : options communes de la popup. Le maintien dans la zone visible est fait depuis la v17.45 en faisant
+ * glisser la carte (ci-dessous) ; l'ancien déplacement de la fiche elle-même (v16.24, plus appelé) est retiré en v17.87.
  */
 const NPF_PELIC_POPUP_CLASS = 'npf-pelic-leaflet-popup';
-const NPF_PELIC_POPUP_MARGIN_PX = 10;
 
 function getNpfPelicPopupOptions(extraOptions = {}) {
     return {
@@ -118,61 +112,6 @@ function getNpfPelicPopupOptions(extraOptions = {}) {
         className: NPF_PELIC_POPUP_CLASS,
         ...extraOptions
     };
-}
-
-function getNpfPelicPopupSafeTop(popupRect, mapRect) {
-    let safeTop = mapRect.top + NPF_PELIC_POPUP_MARGIN_PX;
-
-    /*
-     * Les bandeaux supérieurs font partie de la zone réellement occupée sur
-     * l'iPad. Si la popup les recouvre horizontalement, elle est placée sous
-     * leur bord inférieur plutôt que simplement sous le bord physique du map.
-     */
-    ['#bingo-map-display', '#commune-info-display', '#npf-waypoint-route-banner']
-        .forEach(selector => {
-            const element = document.querySelector(selector);
-            if (!element) return;
-            const style = window.getComputedStyle(element);
-            if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return;
-            const rect = element.getBoundingClientRect();
-            if (!(rect.width > 0 && rect.height > 0)) return;
-            const horizontalOverlap = Math.min(popupRect.right, rect.right) - Math.max(popupRect.left, rect.left);
-            if (horizontalOverlap <= 0) return;
-            if (rect.bottom <= mapRect.top || rect.top >= mapRect.bottom) return;
-            safeTop = Math.max(safeTop, rect.bottom + 8);
-        });
-
-    return safeTop;
-}
-
-function repositionNpfPelicPopupIfNeeded(popup) {
-    if (!popup || !map) return;
-    const className = String(popup?.options?.className || '');
-    if (!className.split(/\s+/).includes(NPF_PELIC_POPUP_CLASS)) return;
-
-    const container = typeof popup.getElement === 'function'
-        ? popup.getElement()
-        : popup._container;
-    const mapContainer = typeof map.getContainer === 'function' ? map.getContainer() : null;
-    if (!container || !mapContainer) return;
-
-    /* Repart toujours de la position Leaflet normale avant de calculer le décalage. */
-    try {
-        if (typeof popup._updatePosition === 'function') popup._updatePosition();
-    } catch (_) {}
-
-    const popupRect = container.getBoundingClientRect();
-    const mapRect = mapContainer.getBoundingClientRect();
-    const safeTop = getNpfPelicPopupSafeTop(popupRect, mapRect);
-    const shiftDown = Math.ceil(safeTop - popupRect.top);
-    if (!(shiftDown > 0)) return;
-
-    const currentBottom = Number.parseFloat(container.style.bottom);
-    if (!Number.isFinite(currentBottom)) return;
-
-    /* Diminuer bottom déplace la popup vers le bas sans déplacer la carte. */
-    container.style.bottom = `${currentBottom - shiftDown}px`;
-    container.dataset.npfPelicPopupShift = String(shiftDown);
 }
 
 /*

@@ -18,13 +18,20 @@
  *   17:59 : une lecture de 2 007 ms, la seule au-delà de 154 ms, pendant un blocage du fil principal de 1,35 s
  *   peu après l'installation ; la durée d'une lecture compte aussi l'attente du fil principal). Les lectures
  *   de plus de 500 ms sont listées au DIAG avec leur heure.
- * - Case « Afficher les noms des communes » (Gestion des Cartes), cochée par défaut.
+ * - v17.87 : plus de case « Afficher les noms des communes » : le calque est toujours affiché sur une carte V11.
  */
 const NPF_CALQUE_NOMS_DB_NAME = 'CalqueNomsCommunes';
 const NPF_CALQUE_NOMS_PACK = 'Calque_Noms_Communes';
 const NPF_CALQUE_NOMS_INFO_KEY = 'npfCalqueNomsCommunesV1';
-/* v17.80 — nouvelle clé : la case est cochée par défaut pour tous (l'essai v17.79 a pu la décocher). */
-const NPF_CALQUE_NOMS_SHOW_KEY = 'npfCalqueNomsCommunesAfficheV2';
+/* v17.87 — anciennes clés effacées une fois au démarrage : réglage de la case supprimée (v17.80) et restes de
+ * l'essai « noms-essai » v17.79 (case, téléchargement et journal de la section d'essai). La clé du calque V11
+ * (NPF_CALQUE_NOMS_INFO_KEY) et la base CalqueNomsCommunes ne sont pas touchées. */
+const NPF_CALQUE_NOMS_OLD_KEYS = [
+    'npfCalqueNomsCommunesAfficheV2',
+    'npfCalqueNomsCommunesAfficheV1',
+    'npfServerSectionDownloadV1:noms-essai',
+    'npfServerSectionLogV1:noms-essai'
+];
 const NPF_SERVER_MAP_LATEST_KEY = 'npfServerMapLatestV1';
 const NPF_CALQUE_NOMS_PANE = 'calqueNomsCommunesPane';
 const NPF_CALQUE_NOMS_MIN_ZOOM = 8;
@@ -54,8 +61,10 @@ function readNpfCalqueNomsInfo() {
     }
 }
 
-function isNpfCalqueNomsShown() {
-    try { return localStorage.getItem(NPF_CALQUE_NOMS_SHOW_KEY) !== '0'; } catch (_) { return true; }
+function removeNpfCalqueNomsOldKeys() {
+    NPF_CALQUE_NOMS_OLD_KEYS.forEach(key => {
+        try { localStorage.removeItem(key); } catch (_) {}
+    });
 }
 
 /* Carte NPF-Q400 installée (groupe NPF_France) : version, taille, avec ou sans calque des noms. */
@@ -287,11 +296,11 @@ function sampleNpfCalqueNomsMemory(reason) {
     while (npfCalqueNomsStats.memoire.length > 60) npfCalqueNomsStats.memoire.shift();
 }
 
-/* Affiche ou retire le calque selon : installé, case cochée, carte NPF-Q400 avec calque des noms affichée. */
+/* Affiche ou retire le calque selon : installé et carte NPF-Q400 avec calque des noms affichée (v17.87 : plus de case). */
 function syncNpfCalqueNomsLayer(reason = 'sync') {
     if (!map || typeof L === 'undefined') return;
     const info = readNpfCalqueNomsInfo();
-    const wanted = !!info && isNpfCalqueNomsShown() && isNpfCarteAvecNomsActive();
+    const wanted = !!info && isNpfCarteAvecNomsActive();
     if (!info) {
         if (npfCalqueNomsLayer) {
             try { map.removeLayer(npfCalqueNomsLayer); } catch (_) {}
@@ -332,11 +341,6 @@ function scheduleNpfCalqueNomsSync(reason) {
     npfCalqueNomsSyncTimer = setTimeout(() => syncNpfCalqueNomsLayer(reason), 300);
 }
 
-function setNpfCalqueNomsShown(shown) {
-    try { localStorage.setItem(NPF_CALQUE_NOMS_SHOW_KEY, shown ? '1' : '0'); } catch (_) {}
-    syncNpfCalqueNomsLayer(shown ? 'case cochée' : 'case décochée');
-}
-
 /* Téléchargement de la carte (src/280) : avant d'effacer l'ancien calque des noms. */
 function prepareNpfCalqueNomsDownload() {
     try { localStorage.removeItem(NPF_CALQUE_NOMS_INFO_KEY); } catch (_) {}
@@ -370,12 +374,6 @@ async function deleteNpfCalqueNomsWithMap() {
 }
 
 function refreshNpfCalqueNomsUi() {
-    const toggleRow = document.getElementById('noms-toggle-row');
-    const toggle = document.getElementById('noms-toggle-input');
-    const carte = getNpfInstalledMapDescription();
-    const visible = !!readNpfCalqueNomsInfo() && !!carte && carte.avecNoms;
-    if (toggleRow) toggleRow.style.display = visible ? '' : 'none';
-    if (toggle) toggle.checked = isNpfCalqueNomsShown();
     try { refreshNpfMapInstalledStatus(); } catch (_) {}
 }
 
@@ -427,11 +425,7 @@ async function refreshNpfMapInstalledStatus({ checkServer = false } = {}) {
 }
 
 function initNpfCalqueNomsCommunes() {
-    const toggle = document.getElementById('noms-toggle-input');
-    if (toggle && toggle.dataset.bound !== '1') {
-        toggle.dataset.bound = '1';
-        toggle.addEventListener('change', () => setNpfCalqueNomsShown(!!toggle.checked));
-    }
+    removeNpfCalqueNomsOldKeys();
     refreshNpfCalqueNomsUi();
     if (!readNpfCalqueNomsInfo()) return;
     /* Calque installé : ajouté une fois la carte prête (fond déjà en place). */
@@ -471,7 +465,7 @@ function appendNpfCalqueNomsDiagLines(lines) {
     const sorted = s.durees.map(item => item.ms).sort((a, b) => a - b);
     const pct = p => (sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))] : null);
     lines.push('Installé : ' + info.tuiles + ' tuiles, version ' + info.version + ', base ' + NPF_CALQUE_NOMS_DB_NAME
-        + ' | case ' + (isNpfCalqueNomsShown() ? 'cochée' : 'décochée') + ' | couche ' + (npfCalqueNomsLayer ? 'présente' : 'absente'));
+        + ' | toujours affiché sur V11 | couche ' + (npfCalqueNomsLayer ? 'présente' : 'absente'));
     lines.push('Lectures : ' + s.lectures + ' (' + s.trouvees + ' images, ' + s.vides + ' sans nom) | erreurs ' + s.erreurs + ' | annulées ' + s.annulees
         + ' | moyenne ' + (s.lectures ? (s.totalMs / s.lectures).toFixed(1) : '—') + ' ms | médiane ' + pct(0.5) + ' ms | 95 % ' + pct(0.95) + ' ms | max ' + s.maxMs + ' ms');
     lines.push('Ouverture de la base (hors lectures) : ' + (s.ouvertures.length ? s.ouvertures.map(item => new Date(item.t).toLocaleTimeString('fr-FR') + ' ' + item.ms + ' ms').join(' ; ') : 'pas encore ouverte'));

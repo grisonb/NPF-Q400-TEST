@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 16/10/2026
-Version de travail actuelle : TEST v17.86
+Version de travail actuelle : TEST v17.87
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -178,6 +178,8 @@ IMPLÉMENTÉ / INTÉGRÉ :
   retirés d'otherAirports ; 12 codes marqués CLOSED par le SIA retirés de la
   liste PIAF (6 codes sans fiche SIA gardés) ; noms alignés ; migration unique
   des réglages mémorisés (section 18).
+- v17.87 — noms des communes de la carte V11 toujours affichés (plus de case) ; nettoyage : diagnostic « tuiles zoom
+  passif », ancien placement de la fiche PÉLIC v16.24, styles CSS sans élément, clés noms-essai v17.79 effacées ;
 - v17.86 — étiquettes des pélicandromes les plus proches : « Rot. NN min » (calcul du calculateur) ; le plus proche
   garde une bordure verte si un autre est choisi ; bouton Moyens Nationaux sans la pastille marron ; croix rouges
   dessinées (centrées sur iPad), coins arrondis 6 px ;
@@ -547,8 +549,11 @@ NON IMPLÉMENTÉ / OUVERT :
   07/10/2026 : programme VPS bfg-sofia-notams 1.2.0 PRÊT, NON INSTALLÉ
   (~/vps-a-copier/). v17.60 à pousser APRÈS l'installation de la 1.2.0
   (elle annonce « environ 1 minute ») ;
+- v17.87 : À MESURER sur iPad (noms V11 affichés sans case, y compris après un ancien réglage « décoché ») ; COMMIT
+  LOCAL, NON POUSSÉE ;
 - v17.86 : À MESURER sur iPad (Rot. dans les étiquettes, bordure verte du plus proche, bouton Moyens Nationaux, croix
-  centrées) ; COMMIT LOCAL, NON POUSSÉE ; inventaire des fonctions devenues inutiles (entrée v17.86) : À DÉCIDER ;
+  centrées) ; POUSSÉE le 18/10/2026 (801c336) ; inventaire des fonctions devenues inutiles : 5 éléments retirés en
+  v17.87 (décision de Bastien), les autres GARDÉS (À DÉCIDER plus tard) ;
 - v17.85 : À MESURER sur iPad (plus de quadrillage avec les noms, Cazouls-lès-Béziers / Gardanne, 2 / 1 / 0,5 NM) ;
   POUSSÉE le 17/10/2026 (106a10d) ;
 - v17.84 : À MESURER sur iPad (étiquettes des routes à 2 / 1 / 0,5 NM, Gardanne / Trets, avec le Calque Routier v7) ;
@@ -791,27 +796,27 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.86
+Version : TEST v17.87
 Date : 18/10/2026
-Base : v17.85 (106a10d, poussée le 17/10/2026)
+Base : v17.86 (801c336, poussée le 18/10/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.86.txt
-2_Index_v17.86.txt
-3_Manifest_v17.86.txt
-4_Script_v17.86.txt
-5_SIA_v17.86.txt
-6_Style_v17.86.txt
-7_Sw_v17.86.txt
+1_Modifications_v17.87.txt
+2_Index_v17.87.txt
+3_Manifest_v17.87.txt
+4_Script_v17.87.txt
+5_SIA_v17.87.txt
+6_Style_v17.87.txt
+7_Sw_v17.87.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.86 (et texte « TEST v17.86 » de l'écran de
+- Index : APP_VERSION = v17.87 (et texte « TEST v17.87 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.86
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.86
-- Style : NPF_STYLE_BUILD_VERSION = v17.86
-- Service Worker : `sw-v17-86_rotation_croix_dessinees` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-86_rotation_croix_dessinees`, `npf-q400-test-app-data-v1`,
+- Manifest : start_url = ./index.html?appv=v17.87
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.87
+- Style : NPF_STYLE_BUILD_VERSION = v17.87
+- Service Worker : `sw-v17-87_noms_toujours_nettoyage` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-87_noms_toujours_nettoyage`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-sia-2026-10-29-v02-g15`
 - SIA_DATA_REVISION (SW / Index sia.js?siav=) : sia-2026-10-29-v02-g15 (= NPF_SIA_DATA_REVISION
   de sia.js ; à changer à chaque nouveau sia.js)
@@ -824,15 +829,15 @@ Références de version cohérentes :
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.86 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.87 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
 - `sia.js` : par rapport à v17.70, outre-mer retiré, « a » de 34 VRP renseigné, table vrpAirportColors ajoutée (2 pastels), révision g6 ; zones, terrains et points de métropole identiques ; moteur tuiles (src/100) modifié en v17.66 sur demande
   explicite (limite de zoom propre à chaque carte, zoom 11 OACI 1/500 000) ;
-- tests v17.86 : entrée v17.86 ; sia.js strictement identique à la v17.81 ;
+- tests v17.87 : entrée v17.87 ; sia.js strictement identique à la v17.81 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82, v17.83, v17.84, v17.85 et v17.86 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82, v17.83, v17.84, v17.85, v17.86 et v17.87 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
   v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE ;
   v17.56 VALIDÉE en vol ; v17.57 VALIDÉE sur iPad.
 
@@ -2361,6 +2366,47 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.87 — NOMS DES COMMUNES V11 TOUJOURS AFFICHÉS ; NETTOYAGE (INVENTAIRE v17.86)
+Date : 18/10/2026
+Base fonctionnelle : v17.86 (commit 801c336, poussée le 18/10/2026).
+
+1. NOMS DES COMMUNES DE LA CARTE V11 TOUJOURS AFFICHÉS (index.html, src/285, style.css)
+- Case « Afficher les noms des communes » supprimée de Gestion des Cartes (et son style). Le calque noms V11 s'affiche
+  dès que la carte NPF-Q400 V11 hors ligne est à l'écran (syncNpfCalqueNomsLayer : installé + carte V11 active),
+  sans réglage. isNpfCalqueNomsShown / setNpfCalqueNomsShown retirées ; ligne DIAG « toujours affiché sur V11 ».
+- Inchangés : téléchargement V11 en un bouton, mode en ligne (pas de calque), réinitialisation profonde, base
+  CalqueNomsCommunes, clé npfCalqueNomsCommunesV1, cartes V10 / ZIP (pas de noms en double), bouton Communes.
+2. NETTOYAGE (inventaire v17.86, décision de Bastien ; chaque élément revérifié : aucune référence restante)
+- Retirés : diagnostic « TUILES ZOOM PASSIF » v16.92 (src/090 : 2 fonctions + 5 variables, jamais appelées) et
+  son instrumentation v16.93 (src/100 : tampons, compteurs, 8 fonctions, servant seulement à ce diagnostic ; rien
+  d'autre du moteur de tuiles touché) ; ancien déplacement de la fiche PÉLIC v16.24 (src/210 :
+  getNpfPelicPopupSafeTop, repositionNpfPelicPopupIfNeeded, NPF_PELIC_POPUP_MARGIN_PX ; la fiche est maintenue
+  visible par le glissement de la carte depuis v17.45) ; styles CSS sans élément (#bingo-banner / alert / panel /
+  status / card et classes du même nom, en gardant [class*="bingo"] / [id*="bingo"] qui s'appliquent au bandeau
+  BINGO ; #boot-force-update-button ; #traffic-publication-callsign-input et -type-input).
+- Effacées une fois au démarrage (initNpfCalqueNomsCommunes) : npfCalqueNomsCommunesAfficheV2 (réglage de la case
+  supprimée) et les 3 clés de l'essai noms-essai v17.79 (npfCalqueNomsCommunesAfficheV1,
+  npfServerSectionDownloadV1:noms-essai, npfServerSectionLogV1:noms-essai). Clé et base du calque V11 non touchées.
+- GARDÉS par prudence : libellé « Carte NPF-Q400 (B) » (src/280:1182) : affiché dans la liste de Gestion des Cartes
+  seulement si une carte « NPF_France_B » (essai v17.43) est encore installée sur l'iPad ; plus rien n'en crée, mais
+  l'état de l'iPad n'est pas vérifiable depuis le PC (la liste des cartes du DIAG le dira) -> À DÉCIDER. Classes CSS
+  .traffic-publication-status / -idle / -waiting / -ok / -error, elles aussi sans élément mais hors de la liste
+  demandée -> À DÉCIDER. Tous les autres éléments de l'inventaire v17.86 : non touchés (demande de Bastien).
+3. TESTS PC (pw_noms87.js Chromium + WebKit, cdp_communes87.js, cdp_pelic86.js, cdp_croix86.js, run_fin87.sh)
+- Carte V11 d'essai hors ligne, anciens réglages posés (case « décochée », 3 clés noms-essai) puis relance : noms
+  affichés à Cazouls et Gardanne à 2 / 1 / 0,5 NM (mêmes tuiles qu'en v17.86), case absente, 4 anciennes clés
+  effacées, clé et base du calque V11 présentes ; Chromium et WebKit. CPU ×6 (noms affichés, vues + déplacements) :
+  tâches > 100 ms v17.86 1, v17.87 2, toutes à l'arrivée sur une vue (tuiles) : comparable.
+- Bouton Communes (fichier local 500 m, chemin de l'iPad) : contours et noms identiques à la v17.86 (Cazouls 1 NM :
+  77 contours, 52 noms ; Gardanne 0,5 NM : 21 contours, 9 noms ; mêmes listes).
+- Feu et pélicandromes : Rot. 27 / 41 / 43 min, bordure verte du plus proche, pastille marron masquée ; fiche PÉLIC
+  ouverte au même endroit qu'en v17.86 (paysage 225-591, portrait 221-587) ; 18 croix identiques à la v17.86 et
+  fermant leur fenêtre ; clignotement HT immédiat ; boutons « Fermer » rouges.
+- Non-régression courte (run_fin87.sh) : démarrage sans erreur JS, carte et échelle en NM, FdS / GAAR, Trafic Moyens
+  Nationaux, fenêtres terrain, retour sur l'avion, parcs, textes « NPF-Q400 » ; mise à jour v17.86 -> v17.87 puis
+  hors ligne : v17.87 servie, seuls les caches npf-q400-test-* touchés, caches de la pérenne intacts. Aucune
+  erreur JS.
 
 VERSION TEST v17.86 — ROTATION DANS LES ÉTIQUETTES PÉLIC, BORDURE VERTE DU PLUS PROCHE, CROIX DESSINÉES
 Date : 18/10/2026

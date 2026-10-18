@@ -1,4 +1,4 @@
-/* NPF_STYLE_BUILD_VERSION: v17.86 */
+/* NPF_STYLE_BUILD_VERSION: v17.87 */
 /* v14.83 — nettoyage des références techniques et limitation des cartouches routiers. */
 /* v14.81 — recherche phonétique nationale élargie aux fragments sur deux lettres. */
 /* v14.80 — Brive conservé uniquement sous LFSL. */
@@ -2266,14 +2266,6 @@ body.fuel-keyboard-open .fuel-split-hint {
         text-align: center !important;
     }
 
-    #boot-force-update-button {
-        height: 28px !important;
-        max-width: 120px !important;
-        margin-top: 4px !important;
-        padding: 2px 6px !important;
-        font-size: 12px !important;
-        border-radius: 8px !important;
-    }
 
     #results-list {
         max-height: 24dvh !important;
@@ -2680,16 +2672,6 @@ body.fuel-keyboard-open .fuel-split-hint {
 
 /* v11.50 — réduction bandeau Bingo carte */
 @media (max-width: 760px) {
-    .bingo-banner,
-    #bingo-banner,
-    .bingo-alert,
-    #bingo-alert,
-    .bingo-panel,
-    #bingo-panel,
-    .bingo-status,
-    #bingo-status,
-    .bingo-card,
-    #bingo-card,
     [class*="bingo"],
     [id*="bingo"] {
         max-height: 48px !important;
@@ -2702,16 +2684,6 @@ body.fuel-keyboard-open .fuel-split-hint {
         overflow: hidden !important;
     }
 
-    .bingo-banner *,
-    #bingo-banner *,
-    .bingo-alert *,
-    #bingo-alert *,
-    .bingo-panel *,
-    #bingo-panel *,
-    .bingo-status *,
-    #bingo-status *,
-    .bingo-card *,
-    #bingo-card *,
     [class*="bingo"] *,
     [id*="bingo"] * {
         font-size: inherit !important;
@@ -2722,16 +2694,6 @@ body.fuel-keyboard-open .fuel-split-hint {
 }
 
 @media (min-width: 761px) {
-    .bingo-banner,
-    #bingo-banner,
-    .bingo-alert,
-    #bingo-alert,
-    .bingo-panel,
-    #bingo-panel,
-    .bingo-status,
-    #bingo-status,
-    .bingo-card,
-    #bingo-card,
     [class*="bingo"],
     [id*="bingo"] {
         max-height: 58px !important;
@@ -11524,9 +11486,7 @@ body.gaar-point-search-open .gaar-editing-banner {
     gap: 8px;
 }
 
-.traffic-search-row input,
-#traffic-publication-callsign-input,
-#traffic-publication-type-input {
+.traffic-search-row input {
     width: 100%;
     min-height: 42px;
     box-sizing: border-box;
@@ -18669,17 +18629,6 @@ body.npf-calculator-modal-open {
 }
 .leaflet-pane.calque-noms-communes-pane {
     pointer-events: none;
-}
-.noms-communes-toggle {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin: 8px 0 4px;
-    font-size: 14px;
-}
-.noms-communes-toggle input {
-    width: 20px;
-    height: 20px;
 }
 
 /* v17.82 — pastille du clignotement des lignes HT : coin bas-droit du bouton HT (comme l'œil du bouton France),

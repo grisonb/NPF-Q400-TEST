@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v17-86_rotation_croix_dessinees';
-const APP_VERSION = 'v17.86';
+const SW_VERSION = 'sw-v17-87_noms_toujours_nettoyage';
+const APP_VERSION = 'v17.87';
 const SIA_DATA_REVISION = 'sia-2026-10-29-v02-g15';
 const SIA_DATA_URL = './sia.js';
 /*
