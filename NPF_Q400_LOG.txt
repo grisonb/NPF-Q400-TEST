@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
-Mise à jour : 16/10/2026
-Version de travail actuelle : TEST v17.88
+Mise à jour : 19/10/2026
+Version de travail actuelle : TEST v17.89
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -551,9 +551,20 @@ NON IMPLÉMENTÉ / OUVERT :
   07/10/2026 : programme VPS bfg-sofia-notams 1.2.0 PRÊT, NON INSTALLÉ
   (~/vps-a-copier/). v17.60 à pousser APRÈS l'installation de la 1.2.0
   (elle annonce « environ 1 minute ») ;
+- v17.89 : À MESURER sur iPad (feu Barret-sur-Méouge : LFLU 50 Nm / 14' / Rot. 49 min, LFML 54 Nm / 15' / Rot. 51 min ;
+  même rotation dans l'étiquette et le calculateur) ; COMMIT LOCAL, NON POUSSÉE ;
+- Fluidité des gestes (DIAG iPad v17.85 du 18/10/2026 10:20, 77 min de simulation : médiane 33 images/s) : ANALYSÉE le
+  18/10/2026 (entrée v17.89, § 6), non reproduite sur PC ; cause probable = état de l'iPad en session longue (DÉDUIT,
+  NON PROUVÉ) ; À MESURER (même session de 77 min en v17.88 ou plus, iPad redémarré) ; 2 pistes NON IMPLÉMENTÉES ;
 - v17.88 : À MESURER sur iPad (au premier lancement avec réseau, le DIAG doit montrer « Morceaux V11 : installés 30 |
-  à jour 30 » : liste reprise du manifeste du serveur) ; COMMIT LOCAL, NON POUSSÉE ; serveur INCHANGÉ ;
+  à jour 30 » : liste reprise du manifeste du serveur) ; POUSSÉE le 18/10/2026 (50647cf) ;
   IMPORTANT : mettre les iPad en v17.88 AVANT de changer un morceau sur le VPS (sinon : téléchargement complet) ;
+  noms v37 (communes manquantes à 2 NM) INSTALLÉS sur le VPS le 18/10/2026 (OK écrit de Bastien,
+  installer-noms-v37-vps.ps1 : 6 étapes OK) : seul npf-q400-v11-noms-001.bin remplacé (50,4 -> 56,6 Mo, 7 513 noms
+  ajoutés au zoom 11 dont 4 072 en France, anciens noms inchangés) + manifeste (révision 1) ; ancien noms-001, manifeste
+  et SHA256SUMS gardés dans /home/ubuntu/npf-cartes-sauvegardes/v11-noms001-avant-20261018-174336 ; 29 autres morceaux,
+  V10, autres sections et services bfg-* identiques ; retour arrière : retour-arriere-noms-v37-vps.ps1 (non lancé) ;
+  iPad en v17.88 : « Mise à jour de la carte : 57 Mo » ; iPad en v17.87 ou avant : rien d'annoncé ;
 - v17.87 : À MESURER sur iPad (noms V11 affichés sans case, y compris après un ancien réglage « décoché ») ;
   POUSSÉE le 18/10/2026 (2ca4d19) ;
 - v17.86 : À MESURER sur iPad (Rot. dans les étiquettes, bordure verte du plus proche, bouton Moyens Nationaux, croix
@@ -801,27 +812,27 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.88
-Date : 18/10/2026
-Base : v17.87 (2ca4d19, poussée le 18/10/2026)
+Version : TEST v17.89
+Date : 19/10/2026
+Base : v17.88 (50647cf, poussée le 18/10/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.88.txt
-2_Index_v17.88.txt
-3_Manifest_v17.88.txt
-4_Script_v17.88.txt
-5_SIA_v17.88.txt
-6_Style_v17.88.txt
-7_Sw_v17.88.txt
+1_Modifications_v17.89.txt
+2_Index_v17.89.txt
+3_Manifest_v17.89.txt
+4_Script_v17.89.txt
+5_SIA_v17.89.txt
+6_Style_v17.89.txt
+7_Sw_v17.89.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.88 (et texte « TEST v17.88 » de l'écran de
+- Index : APP_VERSION = v17.89 (et texte « TEST v17.89 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.88
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.88
-- Style : NPF_STYLE_BUILD_VERSION = v17.88
-- Service Worker : `sw-v17-88_maj_partielle_carte` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-88_maj_partielle_carte`, `npf-q400-test-app-data-v1`,
+- Manifest : start_url = ./index.html?appv=v17.89
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.89
+- Style : NPF_STYLE_BUILD_VERSION = v17.89
+- Service Worker : `sw-v17-89_regle_vitesse_unique` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-89_regle_vitesse_unique`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-sia-2026-10-29-v02-g15`
 - SIA_DATA_REVISION (SW / Index sia.js?siav=) : sia-2026-10-29-v02-g15 (= NPF_SIA_DATA_REVISION
   de sia.js ; à changer à chaque nouveau sia.js)
@@ -834,15 +845,15 @@ Références de version cohérentes :
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.88 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.89 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
 - `sia.js` : par rapport à v17.70, outre-mer retiré, « a » de 34 VRP renseigné, table vrpAirportColors ajoutée (2 pastels), révision g6 ; zones, terrains et points de métropole identiques ; moteur tuiles (src/100) modifié en v17.66 sur demande
   explicite (limite de zoom propre à chaque carte, zoom 11 OACI 1/500 000) ;
-- tests v17.88 : entrée v17.88 ; sia.js strictement identique à la v17.81 ;
+- tests v17.89 : entrée v17.89 ; sia.js strictement identique à la v17.81 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82, v17.83, v17.84, v17.85, v17.86, v17.87 et v17.88 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82, v17.83, v17.84, v17.85, v17.86, v17.87, v17.88 et v17.89 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
   v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE ;
   v17.56 VALIDÉE en vol ; v17.57 VALIDÉE sur iPad.
 
@@ -2371,6 +2382,85 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.89 — RÈGLE DE VITESSE UNIQUE ET PROGRESSIVE (TEMPS DE VOL, TRANSIT, ROTATION)
+Date : 19/10/2026
+Base fonctionnelle : v17.88 (commit 50647cf, poussée le 18/10/2026). Noms v37 installés sur le VPS le 18/10/2026 (voir
+statuts). sia.js inchangé.
+Constat (Bastien, iPad v17.88, feu Barret-sur-Méouge 05) : LFLU « 50 Nm / 14' » et « Rot. 49 min », LFML « 54 Nm / 16' »
+et « Rot. 47 min » : le plus proche avait la rotation la plus longue, avec le même forfait au sol. Analyse du 18/10 (lecture
+seule) : calculateRotationTime passait de 210 à 240 kt sur TOUTE la distance au-delà de 50 Nm (50 Nm -> 48,6 min ;
+51 Nm -> 45,5 min ; de 51 à 57 Nm, plus loin = plus court) ; le temps de vol des étiquettes et le transit du
+calculateur basculaient, eux, à 70 Nm (70 Nm -> 20' ; 71 Nm -> 18') ; le temps de vol de l'étiquette était calculé sur la
+distance NON arrondie (54,4 Nm affichés « 54 Nm » -> 16' au lieu de 15').
+
+1. RÈGLE DÉCIDÉE PAR BASTIEN (19/10/2026)
+- Aller simple pour d Nm : les 70 premiers Nm à 210 kt (3,5 Nm/min), seulement la partie au-delà de 70 Nm à 240 kt
+  (4 Nm/min) : min(d, 70) / 3,5 + max(d − 70, 0) / 4 minutes.
+- Une seule fonction (src/050 : calculateNpfOneWayTransitMinutes, constantes NPF_TRANSIT_*), utilisée par :
+  - le temps de vol des étiquettes (calculateOneWayFlightTimeMinutes, arrondi à la minute) ;
+  - le transit du calculateur (calculateTransitTime : Prévi, Suivi, Dérout., heure sur feu) ;
+  - la rotation (calculateRotationTime) : 20 min fixes + 2 × aller simple (non arrondi), minimum de 10 Nm conservé,
+    résultat arrondi par les appelants comme avant (étiquettes, rotation AUTO, nombre de rotations, Dérout.).
+- Étiquettes (src/150) : temps de vol et rotation calculés sur la MÊME distance, celle affichée (arrondie au Nm) ; aussi
+  pour l'étiquette BASE (temps de vol seul).
+- Aides « ? » du calculateur (Prévi : transit, rotation ; Suivi : transit, rotation, heure sur feu ; Dérout. : rotation ;
+  détail des formules du nombre de rotations) : nouvelle règle et détail du calcul (ex. « 70 / 3,5 + 10 / 4 = 22,5 min »).
+
+2. AVANT / APRÈS (vraies fonctions de la v17.88 et de la v17.89)
+   Nm  | aller simple | rotation
+   10  | 3' -> 3'     | 26 -> 26 min
+   30  | 9' -> 9'     | 37 -> 37 min
+   50  | 14' -> 14'   | 49 -> 49 min
+   51  | 15' -> 15'   | 46 -> 49 min
+   54  | 15' -> 15'   | 47 -> 51 min
+   57  | 16' -> 16'   | 49 -> 53 min
+   70  | 20' -> 20'   | 55 -> 60 min
+   71  | 18' -> 20'   | 56 -> 61 min
+   80  | 20' -> 23'   | 60 -> 65 min
+   100 | 25' -> 28'   | 70 -> 75 min
+   150 | 38' -> 40'   | 95 -> 100 min
+- Jusqu'à 70 Nm, l'aller simple est inchangé ; la rotation est inchangée jusqu'à 50 Nm, plus longue de 51 à 70 Nm (jusqu'à
+  +5 min) ; au-delà de 70 Nm, aller simple et transit plus longs (+2 à +3 min), rotation +5 min.
+- De 0 à 200 Nm (pas de 0,1 Nm, arrondis compris) : plus loin n'est JAMAIS plus court (avant : une baisse à 50 Nm pour
+  la rotation, une à 70 Nm pour le temps de vol et le transit).
+
+3. AUTRES USAGES CHERCHÉS (210 / 240 kt, 3,5 / 4 Nm/min, seuils 50 / 70 Nm)
+- Carburant, BINGO, conso transit, conso rotation (kg/Nm, seuil 70 Nm : calculateBingo, calculateFuelToGo,
+  calculateConsoRotation) : AUCUN temps, INCHANGÉS ; valeurs identiques de 0 à 200 Nm (vérifié).
+- Temps à la vitesse sol réelle (bandeau avion -> cible, vecteur, profil SIA) : hors règle, inchangés.
+- Seuils 25 / 50 Nm du moteur SIA (pas de tracé) : géométrie, inchangés.
+
+4. TESTS PC (réseau coupé sauf localhost, VPS et NAS compris : run_win89.sh, run_switch89w.sh, run_vitesse89.sh,
+   cdp_vitesse89.js ; carte V11 avec noms réellement installée dans le profil de test)
+- Feu Barret-sur-Méouge, point à 50 / 54 Nm : v17.88 « LFLU 50 Nm / 14' Rot. 49 min » et « LFML 54 Nm / 16' Rot. 47 min »
+  (constat de l'iPad reproduit) ; v17.89 « LFLU 50 Nm / 14' Rot. 49 min » et « LFML 54 Nm / 15' Rot. 51 min ». Feu sur la
+  mairie (recherche) : 51 / 55 Nm, v17.88 Rot. 46 / 48, v17.89 Rot. 49 / 51 min.
+- Pélicandrome choisi (LFLU puis LFML) : même rotation dans l'étiquette et le calculateur (Prévi, Suivi, Dérout.) ;
+  bordure verte sur LFLU (le plus proche) quand LFML est choisi ; 20 aides « ? » lues, aucune « undefined / NaN / null ».
+- Étiquette BASE : distance affichée utilisée (LFTW 64,6 Nm affiché « 65 Nm » : 18' -> 19').
+- Non-régression courte (run_fin89.sh, v17.88 et v17.89 côte à côte) : démarrage sans erreur JS ni erreur console (17
+  essais) ; carte V11 avec noms, hors ligne, échelle en NM ; fenêtres et popups (878 valeurs), Trafic Moyens Nationaux,
+  clignotement HT immédiat (165 valeurs), boutons « Fermer » (52), communes, fiche PÉLIC au même endroit, 18 croix :
+  identiques à la v17.88 (seuls écarts : durées, et la position de la fenêtre DIAG, qui varie déjà d'un essai à l'autre en
+  v17.88) ; textes : aucun « NPF » seul ; mise à jour v17.88 -> v17.89 puis hors ligne : v17.89 servie, seuls les caches
+  npf-q400-test-* touchés, caches de la pérenne intacts (comme v17.87 -> v17.88). Parcs à CPU ×6 (tâches longues, total
+  des 5 parcs) : v17.88 176 et 241, v17.89 326, 292 et 234 : mesures qui se recouvrent, bruit de la machine (code des
+  parcs et des zones SIA non modifié).
+5. REMARQUE CONSIGNÉE SANS CODE — FLUIDITÉ DES GESTES (DIAG iPad v17.85 du 18/10/2026 10:20)
+- Constat : 77 min de simulation à 300 kt, HT + Routes, V11 avec noms : images/s pendant les gestes médiane 33, pire 4,
+  7 gestes saccadés sur 183 ; suivi GPS parfait. DIAG iPad courts sans simulation : v17.79 51, v17.80 55, v17.88 55.
+- DIAG : un seul blocage JS > 100 ms pendant un geste (108 ms) en 77 min ; lectures du fond et du calque noms rapides ;
+  6 canvas de 25,6 Mo (146 Mo, dont 2 HT : clignotement en marche), jusqu'à 1 328 tuiles en mémoire ; ce matin-là,
+  démarrage deux fois plus lent que la veille.
+- PC, CPU ×6, simulation 300 kt + suivi + HT + Routes + feu, vraies cartes V10 / V11 (outils_tests : cdp_geste89.js,
+  geste89/, sum89.py, prof89.js) : v17.67 à v17.88 du même ordre (écarts dans le bruit) ; calque noms, numéros de routes
+  répétés, Rot., bandes intérieures SIA, parcs, clignotement HT coupés un par un : aucun effet mesurable ; 40 min de
+  simulation (v17.85 et v17.67) : ni baisse ni fuite (tas JS, éléments, calques, canvas stables).
+- Conclusion : cause probable = état de l'iPad en session longue (comme v17.53 en 2026-10-05) — DÉDUIT, NON PROUVÉ ;
+  À MESURER : même session de 77 min en v17.88 ou plus sur iPad redémarré. Pistes NON IMPLÉMENTÉES : (a) DIAG images/s
+  par tranche de 10 min avec tuiles et mémoire des canvas ; (b) second canvas HT seulement clignotement en marche et marge
+  des canvas des calques 1,2 -> 1,1 écran (≈ 25 à 45 Mo ; risque : bords sans calque pendant les glissés) — À DÉCIDER.
 
 VERSION TEST v17.88 — CARTE NPF-Q400 V11 : MISE À JOUR PARTIELLE (SEULS LES MORCEAUX CHANGÉS)
 Date : 18/10/2026

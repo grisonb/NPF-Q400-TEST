@@ -243,7 +243,7 @@ function drawRoute(startLatLng, endLatLng, options = {}) {
         dashArray = '5, 10';
         layer = userToTargetLayer;
     } else if (isLftwRoute) {
-        labelText = `<b>BASE ${selectedBaseOACI}</b><span class="route-label-sub">${formatRouteDegrees(magneticBearing)} / ${Math.round(distance)} Nm / ${formatFlightTimeLabel(distance)}</span>`;
+        labelText = `<b>BASE ${selectedBaseOACI}</b><span class="route-label-sub">${formatRouteDegrees(magneticBearing)} / ${Math.round(distance)} Nm / ${formatFlightTimeLabel(Math.round(distance))}</span>`;
         color = 'var(--success-color)';
         dashArray = '5, 10';
         layer = lftwRouteLayer;
@@ -259,7 +259,8 @@ function drawRoute(startLatLng, endLatLng, options = {}) {
             : '';
         /* v17.86 — temps de rotation feu ↔ ce pélicandrome : MÊME calcul que le calculateur (distance arrondie,
          * calculateRotationTime, résultat arrondi ; src/290 et updateCalculatorData). Calculé une fois, au dessin
-         * des routes (feu ou pélicandrome choisi), jamais pendant les déplacements de la carte. */
+         * des routes (feu ou pélicandrome choisi), jamais pendant les déplacements de la carte.
+         * v17.89 — temps de vol et rotation calculés sur la MÊME distance : celle affichée, arrondie au Nm. */
         let rotationLine = '';
         try {
             const rotationMinutes = Math.round(calculateRotationTime(Math.round(distance)));
@@ -267,7 +268,7 @@ function drawRoute(startLatLng, endLatLng, options = {}) {
                 rotationLine = `<div class="route-label-sub route-label-rotation">Rot. ${rotationMinutes} min</div>`;
             }
         } catch (_) {}
-        labelText = `${baseFlag}<div class="route-label-oaci">${oaci}</div><div class="route-label-sub">${Math.round(distance)} Nm / ${formatFlightTimeLabel(distance)}</div>${rotationLine}`;
+        labelText = `${baseFlag}<div class="route-label-oaci">${oaci}</div><div class="route-label-sub">${Math.round(distance)} Nm / ${formatFlightTimeLabel(Math.round(distance))}</div>${rotationLine}`;
 
         L.polyline(routeLatLngs, {
             color: '#ffffff',

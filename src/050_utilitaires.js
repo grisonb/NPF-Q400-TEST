@@ -18,16 +18,47 @@ const formatRouteDegrees = (bearing) => {
     const text = formatNpfAngleTenth(bearing);
     return text === null ? '---,-°' : `${text}°`;
 };
+/*
+ * v17.89 — règle de vitesse UNIQUE et PROGRESSIVE (décision de Bastien du 19/10/2026) : les 70 premiers Nm à 210 kt
+ * (3,5 Nm/min), seulement la partie au-delà de 70 Nm à 240 kt (4 Nm/min). Temps d'aller simple en minutes, non arrondi.
+ * Seule fonction utilisée pour le temps de vol des étiquettes, le transit et la rotation du calculateur : un terrain
+ * plus loin n'a jamais un temps plus court (avant : 240 kt sur TOUTE la distance au-delà du seuil, 50 Nm pour la
+ * rotation et 70 Nm pour le transit). Distance non numérique : NaN, comme avant.
+ */
+const NPF_TRANSIT_FIRST_LEG_NM = 70;
+const NPF_TRANSIT_FIRST_LEG_NM_PER_MIN = 3.5;
+const NPF_TRANSIT_BEYOND_NM_PER_MIN = 4;
+const NPF_TRANSIT_RULE_TEXT = '70 premiers Nm à 210 kt (3,5 Nm/min), partie au-delà de 70 Nm à 240 kt (4 Nm/min)';
+
+function calculateNpfOneWayTransitMinutes(distanceNm) {
+    const distance = Number(distanceNm);
+    if (!Number.isFinite(distance)) return NaN;
+    return Math.min(distance, NPF_TRANSIT_FIRST_LEG_NM) / NPF_TRANSIT_FIRST_LEG_NM_PER_MIN
+        + Math.max(distance - NPF_TRANSIT_FIRST_LEG_NM, 0) / NPF_TRANSIT_BEYOND_NM_PER_MIN;
+}
+
+/* v17.89 — détail du calcul pour les aides du calculateur, ex. « 70 / 3,5 + 10 / 4 = 22,5 min ». */
+function formatNpfOneWayTransitCalculation(distanceNm) {
+    const distance = Number(distanceNm);
+    if (!Number.isFinite(distance)) return 'N/A';
+    const tenth = value => String(Math.round(value * 10) / 10).replace('.', ',');
+    const first = Math.min(distance, NPF_TRANSIT_FIRST_LEG_NM);
+    const beyond = Math.max(distance - NPF_TRANSIT_FIRST_LEG_NM, 0);
+    const minutes = tenth(calculateNpfOneWayTransitMinutes(distance));
+    return beyond > 0
+        ? `${tenth(first)} / 3,5 + ${tenth(beyond)} / 4 = ${minutes} min`
+        : `${tenth(first)} / 3,5 = ${minutes} min`;
+}
+
 function calculateOneWayFlightTimeMinutes(distanceNm) {
     /*
      * v11.58 — temps de vol étiquette carte.
      * Distance prise uniquement : feu ↔ base ou feu ↔ pélicandrome.
-     * Formule identique transit : 210 kt jusqu'à 70 Nm, 240 kt au-delà.
+     * v17.89 — règle unique et progressive (calculateNpfOneWayTransitMinutes), arrondie à la minute.
      */
     const distance = Number(distanceNm);
     if (!Number.isFinite(distance) || distance <= 0) return null;
-    const speedKt = distance <= 70 ? 210 : 240;
-    return Math.round(distance * 60 / speedKt);
+    return Math.round(calculateNpfOneWayTransitMinutes(distance));
 }
 
 function formatFlightTimeLabel(distanceNm) {

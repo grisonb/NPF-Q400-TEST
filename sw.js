@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v17-88_maj_partielle_carte';
-const APP_VERSION = 'v17.88';
+const SW_VERSION = 'sw-v17-89_regle_vitesse_unique';
+const APP_VERSION = 'v17.89';
 const SIA_DATA_REVISION = 'sia-2026-10-29-v02-g15';
 const SIA_DATA_URL = './sia.js';
 /*
