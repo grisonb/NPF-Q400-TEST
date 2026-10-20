@@ -19,42 +19,46 @@ const formatRouteDegrees = (bearing) => {
     return text === null ? '---,-°' : `${text}°`;
 };
 /*
- * v17.89 — règle de vitesse UNIQUE et PROGRESSIVE (décision de Bastien du 19/10/2026) : les 70 premiers Nm à 210 kt
- * (3,5 Nm/min), seulement la partie au-delà de 70 Nm à 240 kt (4 Nm/min). Temps d'aller simple en minutes, non arrondi.
- * Seule fonction utilisée pour le temps de vol des étiquettes, le transit et la rotation du calculateur : un terrain
- * plus loin n'a jamais un temps plus court (avant : 240 kt sur TOUTE la distance au-delà du seuil, 50 Nm pour la
- * rotation et 70 Nm pour le transit). Distance non numérique : NaN, comme avant.
+ * v17.89 — règle de vitesse UNIQUE (décision de Bastien, corrigée le 20/10/2026), temps d'aller simple t en minutes
+ * pour une distance d en Nm, non arrondi :
+ * - d ≤ 70 Nm : t = d / 3,5 (toute la distance à 210 kt) ;
+ * - d > 70 Nm : t = max(d / 4 ; 20) (toute la distance à 240 kt, jamais moins que les 20 min du temps à 70 Nm).
+ * Une distance plus grande ne donne jamais une durée plus courte (elle peut donner la même : 70 à 80 Nm = 20 min).
+ * Seule fonction utilisée pour le temps de vol des étiquettes, le transit et la rotation du calculateur (avant : seuil
+ * à 50 Nm pour la rotation, 70 Nm pour le transit, et 71 Nm plus court que 70 Nm). Distance non numérique : NaN.
  */
-const NPF_TRANSIT_FIRST_LEG_NM = 70;
-const NPF_TRANSIT_FIRST_LEG_NM_PER_MIN = 3.5;
-const NPF_TRANSIT_BEYOND_NM_PER_MIN = 4;
-const NPF_TRANSIT_RULE_TEXT = '70 premiers Nm à 210 kt (3,5 Nm/min), partie au-delà de 70 Nm à 240 kt (4 Nm/min)';
+const NPF_TRANSIT_SPEED_THRESHOLD_NM = 70;
+const NPF_TRANSIT_SLOW_NM_PER_MIN = 3.5;
+const NPF_TRANSIT_FAST_NM_PER_MIN = 4;
+const NPF_TRANSIT_MIN_BEYOND_THRESHOLD_MIN = NPF_TRANSIT_SPEED_THRESHOLD_NM / NPF_TRANSIT_SLOW_NM_PER_MIN;
+const NPF_TRANSIT_RULE_TEXT = '≤ 70 Nm : distance / 3,5 (210 kt) ; > 70 Nm : distance / 4 (240 kt), jamais moins de 20 min (temps à 70 Nm) — ex. 54 Nm = 15,4 min, 80 Nm = 20 min, 100 Nm = 25 min';
 
 function calculateNpfOneWayTransitMinutes(distanceNm) {
     const distance = Number(distanceNm);
     if (!Number.isFinite(distance)) return NaN;
-    return Math.min(distance, NPF_TRANSIT_FIRST_LEG_NM) / NPF_TRANSIT_FIRST_LEG_NM_PER_MIN
-        + Math.max(distance - NPF_TRANSIT_FIRST_LEG_NM, 0) / NPF_TRANSIT_BEYOND_NM_PER_MIN;
+    if (distance <= NPF_TRANSIT_SPEED_THRESHOLD_NM) return distance / NPF_TRANSIT_SLOW_NM_PER_MIN;
+    return Math.max(distance / NPF_TRANSIT_FAST_NM_PER_MIN, NPF_TRANSIT_MIN_BEYOND_THRESHOLD_MIN);
 }
 
-/* v17.89 — détail du calcul pour les aides du calculateur, ex. « 70 / 3,5 + 10 / 4 = 22,5 min ». */
+/* v17.89 — détail du calcul pour les aides du calculateur, ex. « 54 / 3,5 = 15,4 min », « 100 / 4 = 25 min »,
+ * « 80 / 4 = 20 min, minimum 20 min (temps à 70 Nm) : 20 min ». */
 function formatNpfOneWayTransitCalculation(distanceNm) {
     const distance = Number(distanceNm);
     if (!Number.isFinite(distance)) return 'N/A';
     const tenth = value => String(Math.round(value * 10) / 10).replace('.', ',');
-    const first = Math.min(distance, NPF_TRANSIT_FIRST_LEG_NM);
-    const beyond = Math.max(distance - NPF_TRANSIT_FIRST_LEG_NM, 0);
     const minutes = tenth(calculateNpfOneWayTransitMinutes(distance));
-    return beyond > 0
-        ? `${tenth(first)} / 3,5 + ${tenth(beyond)} / 4 = ${minutes} min`
-        : `${tenth(first)} / 3,5 = ${minutes} min`;
+    if (distance <= NPF_TRANSIT_SPEED_THRESHOLD_NM) return `${tenth(distance)} / 3,5 = ${minutes} min`;
+    const fast = distance / NPF_TRANSIT_FAST_NM_PER_MIN;
+    return fast >= NPF_TRANSIT_MIN_BEYOND_THRESHOLD_MIN
+        ? `${tenth(distance)} / 4 = ${minutes} min`
+        : `${tenth(distance)} / 4 = ${tenth(fast)} min, minimum 20 min (temps à 70 Nm) : ${minutes} min`;
 }
 
 function calculateOneWayFlightTimeMinutes(distanceNm) {
     /*
      * v11.58 — temps de vol étiquette carte.
      * Distance prise uniquement : feu ↔ base ou feu ↔ pélicandrome.
-     * v17.89 — règle unique et progressive (calculateNpfOneWayTransitMinutes), arrondie à la minute.
+     * v17.89 — règle unique (calculateNpfOneWayTransitMinutes), arrondie à la minute.
      */
     const distance = Number(distanceNm);
     if (!Number.isFinite(distance) || distance <= 0) return null;

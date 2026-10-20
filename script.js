@@ -8632,42 +8632,46 @@ const formatRouteDegrees = (bearing) => {
     return text === null ? '---,-°' : `${text}°`;
 };
 /*
- * v17.89 — règle de vitesse UNIQUE et PROGRESSIVE (décision de Bastien du 19/10/2026) : les 70 premiers Nm à 210 kt
- * (3,5 Nm/min), seulement la partie au-delà de 70 Nm à 240 kt (4 Nm/min). Temps d'aller simple en minutes, non arrondi.
- * Seule fonction utilisée pour le temps de vol des étiquettes, le transit et la rotation du calculateur : un terrain
- * plus loin n'a jamais un temps plus court (avant : 240 kt sur TOUTE la distance au-delà du seuil, 50 Nm pour la
- * rotation et 70 Nm pour le transit). Distance non numérique : NaN, comme avant.
+ * v17.89 — règle de vitesse UNIQUE (décision de Bastien, corrigée le 20/10/2026), temps d'aller simple t en minutes
+ * pour une distance d en Nm, non arrondi :
+ * - d ≤ 70 Nm : t = d / 3,5 (toute la distance à 210 kt) ;
+ * - d > 70 Nm : t = max(d / 4 ; 20) (toute la distance à 240 kt, jamais moins que les 20 min du temps à 70 Nm).
+ * Une distance plus grande ne donne jamais une durée plus courte (elle peut donner la même : 70 à 80 Nm = 20 min).
+ * Seule fonction utilisée pour le temps de vol des étiquettes, le transit et la rotation du calculateur (avant : seuil
+ * à 50 Nm pour la rotation, 70 Nm pour le transit, et 71 Nm plus court que 70 Nm). Distance non numérique : NaN.
  */
-const NPF_TRANSIT_FIRST_LEG_NM = 70;
-const NPF_TRANSIT_FIRST_LEG_NM_PER_MIN = 3.5;
-const NPF_TRANSIT_BEYOND_NM_PER_MIN = 4;
-const NPF_TRANSIT_RULE_TEXT = '70 premiers Nm à 210 kt (3,5 Nm/min), partie au-delà de 70 Nm à 240 kt (4 Nm/min)';
+const NPF_TRANSIT_SPEED_THRESHOLD_NM = 70;
+const NPF_TRANSIT_SLOW_NM_PER_MIN = 3.5;
+const NPF_TRANSIT_FAST_NM_PER_MIN = 4;
+const NPF_TRANSIT_MIN_BEYOND_THRESHOLD_MIN = NPF_TRANSIT_SPEED_THRESHOLD_NM / NPF_TRANSIT_SLOW_NM_PER_MIN;
+const NPF_TRANSIT_RULE_TEXT = '≤ 70 Nm : distance / 3,5 (210 kt) ; > 70 Nm : distance / 4 (240 kt), jamais moins de 20 min (temps à 70 Nm) — ex. 54 Nm = 15,4 min, 80 Nm = 20 min, 100 Nm = 25 min';
 
 function calculateNpfOneWayTransitMinutes(distanceNm) {
     const distance = Number(distanceNm);
     if (!Number.isFinite(distance)) return NaN;
-    return Math.min(distance, NPF_TRANSIT_FIRST_LEG_NM) / NPF_TRANSIT_FIRST_LEG_NM_PER_MIN
-        + Math.max(distance - NPF_TRANSIT_FIRST_LEG_NM, 0) / NPF_TRANSIT_BEYOND_NM_PER_MIN;
+    if (distance <= NPF_TRANSIT_SPEED_THRESHOLD_NM) return distance / NPF_TRANSIT_SLOW_NM_PER_MIN;
+    return Math.max(distance / NPF_TRANSIT_FAST_NM_PER_MIN, NPF_TRANSIT_MIN_BEYOND_THRESHOLD_MIN);
 }
 
-/* v17.89 — détail du calcul pour les aides du calculateur, ex. « 70 / 3,5 + 10 / 4 = 22,5 min ». */
+/* v17.89 — détail du calcul pour les aides du calculateur, ex. « 54 / 3,5 = 15,4 min », « 100 / 4 = 25 min »,
+ * « 80 / 4 = 20 min, minimum 20 min (temps à 70 Nm) : 20 min ». */
 function formatNpfOneWayTransitCalculation(distanceNm) {
     const distance = Number(distanceNm);
     if (!Number.isFinite(distance)) return 'N/A';
     const tenth = value => String(Math.round(value * 10) / 10).replace('.', ',');
-    const first = Math.min(distance, NPF_TRANSIT_FIRST_LEG_NM);
-    const beyond = Math.max(distance - NPF_TRANSIT_FIRST_LEG_NM, 0);
     const minutes = tenth(calculateNpfOneWayTransitMinutes(distance));
-    return beyond > 0
-        ? `${tenth(first)} / 3,5 + ${tenth(beyond)} / 4 = ${minutes} min`
-        : `${tenth(first)} / 3,5 = ${minutes} min`;
+    if (distance <= NPF_TRANSIT_SPEED_THRESHOLD_NM) return `${tenth(distance)} / 3,5 = ${minutes} min`;
+    const fast = distance / NPF_TRANSIT_FAST_NM_PER_MIN;
+    return fast >= NPF_TRANSIT_MIN_BEYOND_THRESHOLD_MIN
+        ? `${tenth(distance)} / 4 = ${minutes} min`
+        : `${tenth(distance)} / 4 = ${tenth(fast)} min, minimum 20 min (temps à 70 Nm) : ${minutes} min`;
 }
 
 function calculateOneWayFlightTimeMinutes(distanceNm) {
     /*
      * v11.58 — temps de vol étiquette carte.
      * Distance prise uniquement : feu ↔ base ou feu ↔ pélicandrome.
-     * v17.89 — règle unique et progressive (calculateNpfOneWayTransitMinutes), arrondie à la minute.
+     * v17.89 — règle unique (calculateNpfOneWayTransitMinutes), arrondie à la minute.
      */
     const distance = Number(distanceNm);
     if (!Number.isFinite(distance) || distance <= 0) return null;
@@ -50602,7 +50606,7 @@ let CALCULATOR_DATA = { distBaseFeu: 0, distPelicFeu: 0, csFeu: '--:--', distGps
 const calculateBingo = (dist) => (dist <= 70) ? (dist * 5) + 700 : (dist * 4) + 700;
 const calculateFuelToGo = (dist) => (dist <= 70) ? (dist * 5) : (dist * 4);
 const calculateConsoRotation = (dist) => { const effectiveDist = Math.max(dist, 10); return (effectiveDist <= 70) ? (effectiveDist * 10) + 250 : (effectiveDist * 8) + 250; };
-/* v17.89 — règle unique et progressive (src/050, calculateNpfOneWayTransitMinutes). */
+/* v17.89 — règle unique (src/050, calculateNpfOneWayTransitMinutes) : ≤ 70 Nm à 210 kt, > 70 Nm à 240 kt, jamais moins de 20 min. */
 const calculateTransitTime = (dist) => calculateNpfOneWayTransitMinutes(dist);
 
 /*
@@ -50611,7 +50615,7 @@ const calculateTransitTime = (dist) => calculateNpfOneWayTransitMinutes(dist);
  */
 const RETARDANT_LOADING_FORFAIT_MIN = 10;
 
-/* v17.89 — 20 min fixes + 2 × temps d'aller simple (règle unique et progressive), minimum de 10 Nm conservé. Avant :
+/* v17.89 — 20 min fixes + 2 × temps d'aller simple (règle unique, seuil 70 Nm), minimum de 10 Nm conservé. Avant :
  * 240 kt sur TOUTE la distance au-delà de 50 Nm (LFML 54 Nm = 47 min < LFLU 50 Nm = 49 min). */
 const calculateRotationTime = (dist) => {
     const effectiveDist = Math.max(dist, 10);
@@ -51128,7 +51132,7 @@ function updatePreviTab() {
     const heureSurFeu = heureTO !== null ? heureTO + previTempsAvantFeu : null;
 
     document.getElementById('duree-transit').textContent = formatTime(transitTime) || '--:--';
-    setHelp('duree-transit-help', `DURÉE TRANSIT BASE → FEU\n\nFormule : temps d'aller simple Base → Feu\n\nRègle vitesse :\n- les 70 premiers Nm à 210 kt (3,5 Nm/min)\n- seulement la partie au-delà de 70 Nm à 240 kt (4 Nm/min)\n\nDistance Base → Feu : ${CALCULATOR_DATA.distBaseFeu} Nm\n\nCalcul : ${formatNpfOneWayTransitCalculation(CALCULATOR_DATA.distBaseFeu)} = ${formatTime(transitTime)} (${transitTime} min)`);
+    setHelp('duree-transit-help', `DURÉE TRANSIT BASE → FEU\n\nFormule : temps d'aller simple Base → Feu\n\nRègle vitesse :\n- distance ≤ 70 Nm : distance / 3,5 (210 kt)\n- distance > 70 Nm : distance / 4 (240 kt), jamais moins de 20 min (temps à 70 Nm)\n- exemples : 54 Nm = 15,4 min ; 80 Nm = 20 min ; 100 Nm = 25 min\n\nDistance Base → Feu : ${CALCULATOR_DATA.distBaseFeu} Nm\n\nCalcul : ${formatNpfOneWayTransitCalculation(CALCULATOR_DATA.distBaseFeu)} = ${formatTime(transitTime)} (${transitTime} min)`);
 
     document.getElementById('heure-sur-feu').textContent = formatTime(heureSurFeu) || '--:--';
     setHelp('heure-sur-feu-help', `HEURE SUR FEU — PRÉVI\n\nFormule : BLOC DÉPART + forfait plein retardant éventuel + durée transit Base → Feu\n\nBLOC DÉPART : ${formatTime(heureTO) || 'N/A'}\nRLT Départ : ${rltDepartMass !== null ? `${rltDepartMass} kg` : 'non renseigné'}\nForfait plein retardant : ${previForfaitRltMin} min\nDurée transit : ${formatTime(transitTime)} (${transitTime} min)\n\nCalcul : ${formatTime(heureTO) || 'N/A'} + ${previForfaitRltMin} min + ${formatTime(transitTime)} = ${formatTime(heureSurFeu) || 'N/A'}\n\n${firstTransitAlreadyLoaded ? 'Aucun forfait au premier transit : le champ RLT Départ de l’en-tête contient déjà une masse.' : `Le champ RLT Départ est vide : le forfait de ${RETARDANT_LOADING_FORFAIT_MIN} min est appliqué avant le premier transit.`}\nLes 10 min avant validation du largage restent appliquées séparément dans les limites CS/TMD/HDV.`);
@@ -51137,7 +51141,7 @@ function updatePreviTab() {
     setHelp('conso-aller-feu-help', `CONSO TRANSIT BASE → FEU\n\nFormule : Distance Base → Feu × Conso au Nm\n\nRègle consommation :\n- Distance ≤ 70 Nm : 5 kg/Nm\n- Distance > 70 Nm : 4 kg/Nm\n\nDistance Base → Feu : ${CALCULATOR_DATA.distBaseFeu} Nm\nConso retenue : ${CALCULATOR_DATA.distBaseFeu <= 70 ? 5 : 4} kg/Nm\n\nCalcul : ${CALCULATOR_DATA.distBaseFeu} × ${CALCULATOR_DATA.distBaseFeu <= 70 ? 5 : 4} = ${consoAller} kg`);
 
     document.getElementById('duree-rotation').textContent = rotationTime === 20 ? '--:--' : formatTime(rotationTime);
-    setHelp('duree-rotation-help', `DURÉE ROTATION FEU ↔ PÉLIC\n\nFormule : 20 min + 2 × temps d'aller simple\n\nDistance retenue :\n- Distance Feu → Pélicandrome mesurée si ≥ 10 Nm\n- 10 Nm minimum si la distance mesurée est < 10 Nm\n\nDistance Feu → Pélic mesurée : ${CALCULATOR_DATA.distPelicFeu} Nm\nDistance retenue : ${Math.max(CALCULATOR_DATA.distPelicFeu, 10)} Nm\n\nRègle vitesse :\n- les 70 premiers Nm à 210 kt (3,5 Nm/min)\n- seulement la partie au-delà de 70 Nm à 240 kt (4 Nm/min)\n\nAller simple : ${formatNpfOneWayTransitCalculation(Math.max(CALCULATOR_DATA.distPelicFeu, 10))}\nCalcul : 20 + 2 × aller simple = ${formatTime(rotationTime)} (${rotationTime} min)\n\nCette durée sert pour les rotations supplémentaires après validation éventuelle du +1.`);
+    setHelp('duree-rotation-help', `DURÉE ROTATION FEU ↔ PÉLIC\n\nFormule : 20 min + 2 × temps d'aller simple\n\nDistance retenue :\n- Distance Feu → Pélicandrome mesurée si ≥ 10 Nm\n- 10 Nm minimum si la distance mesurée est < 10 Nm\n\nDistance Feu → Pélic mesurée : ${CALCULATOR_DATA.distPelicFeu} Nm\nDistance retenue : ${Math.max(CALCULATOR_DATA.distPelicFeu, 10)} Nm\n\nRègle vitesse :\n- distance ≤ 70 Nm : distance / 3,5 (210 kt)\n- distance > 70 Nm : distance / 4 (240 kt), jamais moins de 20 min (temps à 70 Nm)\n- exemples : 54 Nm = 15,4 min ; 80 Nm = 20 min ; 100 Nm = 25 min\n\nAller simple : ${formatNpfOneWayTransitCalculation(Math.max(CALCULATOR_DATA.distPelicFeu, 10))}\nCalcul : 20 + 2 × aller simple = ${formatTime(rotationTime)} (${rotationTime} min)\n\nCette durée sert pour les rotations supplémentaires après validation éventuelle du +1.`);
 
     document.getElementById('conso-par-rotation').textContent = consoRotation === 250 ? '-- kg' : `${consoRotation} kg`;
     setHelp('conso-par-rotation-help', `CONSO ROTATION FEU ↔ PÉLIC\n\nFormule : (Distance retenue × conso aller-retour) + forfait largage\n\nDistance retenue :\n- Distance Feu → Pélicandrome mesurée si ≥ 10 Nm\n- 10 Nm minimum si la distance mesurée est < 10 Nm\n\nDistance Feu → Pélic mesurée : ${CALCULATOR_DATA.distPelicFeu} Nm\nDistance retenue : ${Math.max(CALCULATOR_DATA.distPelicFeu, 10)} Nm\n\nRègle consommation aller-retour :\n- Distance retenue ≤ 70 Nm : 10 kg/Nm\n- Distance retenue > 70 Nm : 8 kg/Nm\n\nForfait largage : 250 kg\n\nCalcul : (${Math.max(CALCULATOR_DATA.distPelicFeu, 10)} × ${Math.max(CALCULATOR_DATA.distPelicFeu, 10) <= 70 ? 10 : 8}) + 250 = ${consoRotation} kg`);

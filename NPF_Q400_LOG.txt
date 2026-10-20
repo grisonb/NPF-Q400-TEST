@@ -552,7 +552,8 @@ NON IMPLÉMENTÉ / OUVERT :
   (~/vps-a-copier/). v17.60 à pousser APRÈS l'installation de la 1.2.0
   (elle annonce « environ 1 minute ») ;
 - v17.89 : À MESURER sur iPad (feu Barret-sur-Méouge : LFLU 50 Nm / 14' / Rot. 49 min, LFML 54 Nm / 15' / Rot. 51 min ;
-  même rotation dans l'étiquette et le calculateur) ; COMMIT LOCAL, NON POUSSÉE ;
+  même rotation dans l'étiquette et le calculateur ; 71 à 80 Nm = 20') ; COMMITS LOCAUX (3025945 règle progressive
+  ABANDONNÉE, puis règle corrigée), NON POUSSÉE ;
 - Fluidité des gestes (DIAG iPad v17.85 du 18/10/2026 10:20, 77 min de simulation : médiane 33 images/s) : ANALYSÉE le
   18/10/2026 (entrée v17.89, § 6), non reproduite sur PC ; cause probable = état de l'iPad en session longue (DÉDUIT,
   NON PROUVÉ) ; À MESURER (même session de 77 min en v17.88 ou plus, iPad redémarré) ; 2 pistes NON IMPLÉMENTÉES ;
@@ -2383,8 +2384,8 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
 
-VERSION TEST v17.89 — RÈGLE DE VITESSE UNIQUE ET PROGRESSIVE (TEMPS DE VOL, TRANSIT, ROTATION)
-Date : 19/10/2026
+VERSION TEST v17.89 — RÈGLE DE VITESSE UNIQUE, SEUIL 70 NM (TEMPS DE VOL, TRANSIT, ROTATION)
+Date : 19/10/2026, règle corrigée le 20/10/2026
 Base fonctionnelle : v17.88 (commit 50647cf, poussée le 18/10/2026). Noms v37 installés sur le VPS le 18/10/2026 (voir
 statuts). sia.js inchangé.
 Constat (Bastien, iPad v17.88, feu Barret-sur-Méouge 05) : LFLU « 50 Nm / 14' » et « Rot. 49 min », LFML « 54 Nm / 16' »
@@ -2394,9 +2395,13 @@ seule) : calculateRotationTime passait de 210 à 240 kt sur TOUTE la distance au
 calculateur basculaient, eux, à 70 Nm (70 Nm -> 20' ; 71 Nm -> 18') ; le temps de vol de l'étiquette était calculé sur la
 distance NON arrondie (54,4 Nm affichés « 54 Nm » -> 16' au lieu de 15').
 
-1. RÈGLE DÉCIDÉE PAR BASTIEN (19/10/2026)
-- Aller simple pour d Nm : les 70 premiers Nm à 210 kt (3,5 Nm/min), seulement la partie au-delà de 70 Nm à 240 kt
-  (4 Nm/min) : min(d, 70) / 3,5 + max(d − 70, 0) / 4 minutes.
+1. RÈGLE DE BASTIEN (corrigée le 20/10/2026)
+- Aller simple t (minutes) pour d Nm : d ≤ 70 : t = d / 3,5 (toute la distance à 210 kt) ; d > 70 : t = max(d / 4 ; 20)
+  (toute la distance à 240 kt, jamais moins que les 20 min du temps à 70 Nm). Une distance plus grande ne donne jamais
+  une durée plus courte ; elle peut donner la même (70 à 80 Nm = 20 min).
+- HISTORIQUE : premier commit local v17.89 (3025945, 19/10/2026, NON POUSSÉ) avec une règle PROGRESSIVE (70 premiers Nm à
+  210 kt, seulement la partie au-delà à 240 kt : min(d, 70) / 3,5 + max(d − 70, 0) / 4) : FAUSSE (Bastien, 20/10/2026),
+  ABANDONNÉE et remplacée par un second commit (pas d'amend). Tout le reste de ce commit est gardé.
 - Une seule fonction (src/050 : calculateNpfOneWayTransitMinutes, constantes NPF_TRANSIT_*), utilisée par :
   - le temps de vol des étiquettes (calculateOneWayFlightTimeMinutes, arrondi à la minute) ;
   - le transit du calculateur (calculateTransitTime : Prévi, Suivi, Dérout., heure sur feu) ;
@@ -2405,10 +2410,11 @@ distance NON arrondie (54,4 Nm affichés « 54 Nm » -> 16' au lieu de 15').
 - Étiquettes (src/150) : temps de vol et rotation calculés sur la MÊME distance, celle affichée (arrondie au Nm) ; aussi
   pour l'étiquette BASE (temps de vol seul).
 - Aides « ? » du calculateur (Prévi : transit, rotation ; Suivi : transit, rotation, heure sur feu ; Dérout. : rotation ;
-  détail des formules du nombre de rotations) : nouvelle règle et détail du calcul (ex. « 70 / 3,5 + 10 / 4 = 22,5 min »).
+  détail des formules du nombre de rotations) : règle, exemples chiffrés (54 Nm = 15,4 min ; 80 Nm = 20 min ; 100 Nm =
+  25 min) et détail du calcul (« 54 / 3,5 = 15,4 min », « 75 / 4 = 18,8 min, minimum 20 min (temps à 70 Nm) : 20 min »).
 
-2. AVANT / APRÈS (vraies fonctions de la v17.88 et de la v17.89)
-   Nm  | aller simple | rotation
+2. AVANT / APRÈS (vraies fonctions de la v17.88 et de la v17.89 corrigée ; outils_tests regle89/table89.js)
+   Nm  | aller simple (étiquette) | rotation
    10  | 3' -> 3'     | 26 -> 26 min
    30  | 9' -> 9'     | 37 -> 37 min
    50  | 14' -> 14'   | 49 -> 49 min
@@ -2416,14 +2422,16 @@ distance NON arrondie (54,4 Nm affichés « 54 Nm » -> 16' au lieu de 15').
    54  | 15' -> 15'   | 47 -> 51 min
    57  | 16' -> 16'   | 49 -> 53 min
    70  | 20' -> 20'   | 55 -> 60 min
-   71  | 18' -> 20'   | 56 -> 61 min
-   80  | 20' -> 23'   | 60 -> 65 min
-   100 | 25' -> 28'   | 70 -> 75 min
-   150 | 38' -> 40'   | 95 -> 100 min
-- Jusqu'à 70 Nm, l'aller simple est inchangé ; la rotation est inchangée jusqu'à 50 Nm, plus longue de 51 à 70 Nm (jusqu'à
-  +5 min) ; au-delà de 70 Nm, aller simple et transit plus longs (+2 à +3 min), rotation +5 min.
-- De 0 à 200 Nm (pas de 0,1 Nm, arrondis compris) : plus loin n'est JAMAIS plus court (avant : une baisse à 50 Nm pour
-  la rotation, une à 70 Nm pour le temps de vol et le transit).
+   71  | 18' -> 20'   | 56 -> 60 min
+   75  | 19' -> 20'   | 58 -> 60 min
+   80  | 20' -> 20'   | 60 -> 60 min
+   81  | 20' -> 20'   | 61 -> 61 min (aller simple 20,3 min)
+   100 | 25' -> 25'   | 70 -> 70 min
+   150 | 38' -> 38'   | 95 -> 95 min (aller simple 37,5 min, affiché 38' à la minute)
+- Rotation (arrondie) : inchangée jusqu'à 50 Nm, plus longue de 51 à 78 Nm (+3 à +5 min, +5 min à 70 Nm) ; aller simple
+  des étiquettes : 18-19' -> 20' de 71 à 77 Nm ; à partir de 79 Nm (rotation) et 78 Nm (aller simple) : inchangé.
+- De 0 à 200 Nm (arrondis compris) : une distance plus grande ne donne JAMAIS un temps ni une rotation plus courts (avant :
+  une baisse à 50 Nm pour la rotation, une à 70 Nm pour le temps de vol et le transit).
 
 3. AUTRES USAGES CHERCHÉS (210 / 240 kt, 3,5 / 4 Nm/min, seuils 50 / 70 Nm)
 - Carburant, BINGO, conso transit, conso rotation (kg/Nm, seuil 70 Nm : calculateBingo, calculateFuelToGo,
@@ -2433,6 +2441,8 @@ distance NON arrondie (54,4 Nm affichés « 54 Nm » -> 16' au lieu de 15').
 
 4. TESTS PC (réseau coupé sauf localhost, VPS et NAS compris : run_win89.sh, run_switch89w.sh, run_vitesse89.sh,
    cdp_vitesse89.js ; carte V11 avec noms réellement installée dans le profil de test)
+- Tous les tests ci-dessous REFAITS le 20/10/2026 avec la règle corrigée : mêmes résultats (règle identique jusqu'à 70 Nm) ;
+  tableau et contrôle 0-200 Nm refaits (regle89/table89.js).
 - Feu Barret-sur-Méouge, point à 50 / 54 Nm : v17.88 « LFLU 50 Nm / 14' Rot. 49 min » et « LFML 54 Nm / 16' Rot. 47 min »
   (constat de l'iPad reproduit) ; v17.89 « LFLU 50 Nm / 14' Rot. 49 min » et « LFML 54 Nm / 15' Rot. 51 min ». Feu sur la
   mairie (recherche) : 51 / 55 Nm, v17.88 Rot. 46 / 48, v17.89 Rot. 49 / 51 min.
