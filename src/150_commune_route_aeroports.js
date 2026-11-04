@@ -166,6 +166,19 @@ function displayCommuneDetails(commune, shouldFitBounds = true) {
     document.dispatchEvent(new Event('communeSelected'));
 }
 
+/* v17.90 (décision de Bastien du 04/11/2026) — pendant un feu, un Go To vers un AUTRE pélicandrome que celui choisi en fait
+ * le pélicandrome choisi, exactement comme un choix à la main (selectPelicanOaciFromRoute) : calculateur, bandeau du feu,
+ * bordure verte ; son trait -> feu sert au calcul avec ses WP s'il en a. Le trait de l'ancien pélicandrome garde ses WP et
+ * reste dessiné. Comme le choix à la main : seulement parmi les routes PÉLIC affichées (les N plus proches du feu). */
+function choisirNpfPelicCibleGoto(oaci) {
+    const cible = normalizeOaciCodeInput(oaci);
+    if (!currentCommune || !cible || cible === selectedPelicanOACI || !isSelectablePelicanAirport(cible)) return false;
+    const affiches = typeof getNpfTraitsFeuPelicAffiches === 'function' ? getNpfTraitsFeuPelicAffiches() : [];
+    if (!affiches.includes(cible)) return false;
+    selectPelicanOaciFromRoute(cible);
+    return true;
+}
+
 function selectPelicanOaciFromRoute(oaci) {
     const normalizedOaci = String(oaci || '').trim().toUpperCase();
     if (!normalizedOaci) return;
@@ -559,6 +572,7 @@ function selectAirportDestination(airport) {
     /* v17.90 — un Go To vers un autre point ferme le feu, comme « Fermer » (WP de ses traits compris) ; un Go To vers
      * N'IMPORTE QUEL pélicandrome le garde, avec ses WP (décision de Bastien). */
     if (currentCommune && !isSelectablePelicanAirport(normalized.oaci)) clearCurrentSelection({ preserveMapView: true });
+    else if (currentCommune) choisirNpfPelicCibleGoto(normalized.oaci);
 
     /* Un GoTo aéroport/PÉLIC demandé manuellement suspend la navette automatique. */
     suspendNpfFirePelicAutoCycle();

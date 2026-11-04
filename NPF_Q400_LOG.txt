@@ -553,8 +553,8 @@ NON IMPLÉMENTÉ / OUVERT :
   (elle annonce « environ 1 minute ») ;
 - v17.90 : portage de NPF-Q400-RUN v1.10 à v1.16 (traits modifiables, WP perso, Go To pendant un feu, adresse postale,
   barre iPadOS, délai du manifeste) : À MESURER sur iPad (gestes sur les traits, WP perso, « Position actuelle » au vrai
-  GPS, adresse en ligne avec le vrai service, barre iPadOS en paysage et portrait, app installée) ; COMMIT LOCAL, NON
-  POUSSÉE ; À DÉCIDER : trait PÉLIC -> FEU quand le Go To vise un autre pélicandrome (voir entrée v17.90, § 3) ;
+  GPS, adresse en ligne avec le vrai service, barre iPadOS en paysage et portrait, app installée) ; COMMITS LOCAUX
+  (08696bd, puis ajout du 04/11 : Go To vers un autre pélicandrome = cible choisie, décision de Bastien), NON POUSSÉE ;
 - v17.89 : À MESURER sur iPad (feu Barret-sur-Méouge : LFLU 50 Nm / 14' / Rot. 49 min, LFML 54 Nm / 15' / Rot. 51 min ;
   même rotation dans l'étiquette et le calculateur ; 71 à 80 Nm = 20') ; POUSSÉE le 20/10/2026 (3025945 règle progressive
   ABANDONNÉE, puis 00224d2 règle corrigée) ;
@@ -2455,11 +2455,19 @@ src/010, src/218, style.css, sw.js) : ni lues pour ce portage, ni touchées. La 
 - EXCEPTION (décision de Bastien) : Go To vers N'IMPORTE QUEL pélicandrome (isSelectablePelicanAirport : liste des 27 +
   déclarés par l'utilisateur), y compris un WP de route qui est un pélicandrome : feu et WP de ses traits gardés. Navette
   automatique feu <-> pélicandrome (src/030) inchangée.
-- QUESTION OUVERTE (À DÉCIDER par Bastien, rien décidé) : Go To vers un AUTRE pélicandrome que celui d'un trait modifié
-  (ex. WP sur LFLU -> FEU, Go To LFML) : aujourd'hui le trait LFLU -> FEU garde ses WP et reste dessiné (comme toutes les
-  routes PÉLIC du feu) ; le pélicandrome choisi pour le calculateur ne change pas (le Go To ne le change pas) ; le trait
-  rouge va de l'avion à LFML. Options possibles : garder ainsi ; ou effacer les WP du trait d'un pélicandrome qui n'est
-  pas la cible ; ou choisir la cible comme pélicandrome du calculateur.
+- Question posée dans le premier commit (08696bd) : que devient le trait PÉLIC -> FEU quand le Go To vise un AUTRE
+  pélicandrome ? Comportement de 08696bd : le pélicandrome choisi ne changeait pas. DÉCIDÉ par Bastien le 04/11/2026
+  (ajout à la v17.90, même numéro, commit au-dessus de 08696bd) :
+  - pendant un feu, un Go To (liste, fiche terrain, WP de route) vers un AUTRE pélicandrome que celui choisi fait de la
+    cible le pélicandrome choisi, exactement comme un choix à la main (src/150 choisirNpfPelicCibleGoto ->
+    selectPelicanOaciFromRoute) : calculateur (Rot., transit, carburant, BINGO), bandeau du feu et bordure verte passent
+    sur la cible ; son trait -> feu sert au calcul avec ses WP s'il en a, sinon la ligne droite ;
+  - le trait de l'ancien pélicandrome GARDE ses WP et reste dessiné comme les autres routes PÉLIC -> FEU ; le feu reste
+    ouvert ; un Go To vers le pélicandrome déjà choisi ne change rien ;
+  - comme le choix à la main : seulement si la cible est une des routes PÉLIC affichées (les N plus proches du feu,
+    « Nbr Pélic. ») ; sinon le pélicandrome choisi ne change pas (feu et WP gardés) — À DÉCIDER si besoin ;
+  - navette automatique feu <-> pélicandrome (src/030) NON modifiée : le Go To la suspend (comme avant) ; quand elle
+    reprend, elle va vers le pélicandrome choisi, donc vers la NOUVELLE cible (constat, rien décidé).
 
 4. ADRESSE POSTALE (src/217_adresse.js, nouveau ; ligne dans src/110 ; sw.js : passage direct au réseau, jamais en cache)
 - Dernière ligne de la liste de la loupe : « Chercher l'adresse « … » » (4 caractères au moins) ; rien ne part à la frappe.
@@ -2527,6 +2535,15 @@ src/010, src/218, style.css, sw.js) : ni lues pour ce portage, ni touchées. La 
   médiane 88,5 images/s (10 % les plus lents 36), v17.90 avec 10 WP perso 93,5 (36) ; images > 100 ms par page 29 contre
   33,5, tâches longues 5,9 s contre 4,9 s : séries qui se recouvrent, pas de dégradation. (Un premier écart en défaveur
   de la v17.90 venait du bruit de la machine ; ombre des étoiles sans effet mesurable.)
+- AJOUT du 04/11 (Go To vers un autre pélicandrome = cible choisie, § 3), essais refaits APRÈS la dernière modification :
+  pw_v1790.js complet (avec le nouveau cas) WebKit 71/71, Chrome 71/71 : WP sur LFLU -> FEU puis Go To LFML (LFML choisi :
+  Rot. 51 min, BINGO 970 kg, bordure verte ; bandeau de la destination LFML pendant le Go To, puis bandeau du feu avec
+  « Rot. 51 min » après le × ; WP de LFLU gardés et trait dessiné), Go To LFLU (retour, calcul sur son trajet avec ses
+  WP), Go To LFLU de nouveau (rien ne change), GoTo WP de route LFML (même règle), Go To LFMO (feu fermé, tous les WP
+  effacés). Navette : suspendue par le Go To, réarmée vers le feu par le × ; vers un pélicandrome, elle irait à LFML.
+  Non-régression rapide (cdp_nr90.js) : v17.90 13/13 ; v17.89 même résultat sauf le bouton « WP perso » (absent en v17.89,
+  attendu) ; mise à jour v17.89 -> v17.90 sans interception puis hors ligne : v17.90 servie, seuls les caches
+  npf-q400-test-* touchés, pérenne intacte ; aucun « NPF » seul ; aucune requête externe aboutie.
 - Outillage : le profil Chrome d'essai avec la carte (Temp\npf89prof) avait été vidé par Windows le 29/10 ; carte V11
   réinstallée depuis le faux serveur (le téléchargement complet passe par le nouveau délai du manifeste).
 VERSION TEST v17.89 — RÈGLE DE VITESSE UNIQUE, SEUIL 70 NM (TEMPS DE VOL, TRANSIT, ROTATION)

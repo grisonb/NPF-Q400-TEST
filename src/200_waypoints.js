@@ -823,6 +823,7 @@ function activateNpfWaypointGoto(id) {
      * un WP de route qui est un pélicandrome (n'importe lequel) garde le feu et ses WP (décision de Bastien). */
     const versPelicandrome = wp.source === 'airport' && isSelectablePelicanAirport(wp.sourceRef);
     if (currentCommune && !versPelicandrome) clearCurrentSelection({ preserveMapView: true });
+    else if (currentCommune && typeof choisirNpfPelicCibleGoto === 'function') choisirNpfPelicCibleGoto(wp.sourceRef);   // cible = pélicandrome choisi
     suspendNpfFirePelicAutoCycle();
     npfWaypointRouteState.activeId = wp.id;
     npfWaypointRouteState.gotoActive = true;
