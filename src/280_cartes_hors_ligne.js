@@ -3406,6 +3406,11 @@ const NPF_SERVER_MAP_LOG_KEY = 'npfServerMapDownloadLogV1';
 const NPF_SERVER_MAP_SPACE_FACTOR = 1.15;
 const NPF_SERVER_MAP_SPACE_MARGIN_BYTES = 300 * 1024 * 1024;
 const NPF_SERVER_MAP_STALL_TIMEOUT_MS = 30000;
+/* v17.90 — lecture du manifeste (repris de la RUN v1.9 / v1.10) : délai maximal par essai, puis nouvel essai automatique
+ * (l'app ne reste jamais bloquée sur « Lecture du manifeste… »). */
+const NPF_SERVER_MAP_MANIFEST_TIMEOUT_MS = 20000;
+const NPF_SERVER_MAP_MANIFEST_ESSAIS = 3;
+const NPF_SERVER_MAP_MANIFEST_PAUSE_MS = 3000;
 const NPF_SERVER_MAP_RETRY_DELAYS_MS = [3000, 6000, 12000, 24000, 30000, 30000];
 const NPF_SERVER_SECTION_CHUNK_CACHE = 'npf-section-telechargement-v1';
 /* Code Doc FdF : saisi une fois, gardé sur cet iPad seulement ; jamais écrit au DIAG. */
@@ -3785,14 +3790,55 @@ async function deleteNpfServerSectionOldGroups(cfg, aEffacer) {
 
 /* --- Réseau ------------------------------------------------------------------ */
 
+/* v17.90 — jusqu'à 3 essais de 20 s au plus chacun (3 s entre deux) si le serveur ne répond pas, si le réseau échoue
+ * ou si le serveur répond 5xx ; code refusé, autre code ou manifeste illisible : erreur tout de suite (RUN v1.9). */
 async function fetchNpfServerMapManifest(cfg, code = '') {
-    const response = await fetch(`${cfg.manifestUrl}?t=${Date.now()}`, { cache: 'no-store', headers: buildNpfServerAuthHeaders(cfg, code) });
+    for (let essai = 1; ; essai += 1) {
+        try {
+            return await fetchNpfServerMapManifestOnce(cfg, code);
+        } catch (error) {
+            const reessayable = error && (error.delaiDepasse || error.name === 'TypeError' || error.serveur5xx);
+            if (!reessayable || essai >= NPF_SERVER_MAP_MANIFEST_ESSAIS) {
+                if (error && error.delaiDepasse) error.message = `délai dépassé, ${essai} essai${essai > 1 ? 's' : ''} de ${NPF_SERVER_MAP_MANIFEST_TIMEOUT_MS / 1000} s`;
+                throw error;
+            }
+            const message = error && error.message ? error.message : String(error);
+            addNpfServerMapLogEvent(`manifeste : essai ${essai} sans réponse (${message}), nouvel essai`, {}, cfg);
+            await new Promise(resolve => setTimeout(resolve, NPF_SERVER_MAP_MANIFEST_PAUSE_MS));
+            showNpfServerMapProgress(`${cfg.id === 'npf-q400' ? 'Lecture du manifeste de la carte…' : 'Lecture du manifeste…'} (nouvel essai ${essai + 1}/${NPF_SERVER_MAP_MANIFEST_ESSAIS})`, null, { advice: false, error: false }, cfg);
+        }
+    }
+}
+
+async function fetchNpfServerMapManifestOnce(cfg, code = '') {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), NPF_SERVER_MAP_MANIFEST_TIMEOUT_MS);
+    try {
+        return await readNpfServerMapManifest(cfg, code, controller.signal);
+    } catch (error) {
+        if (controller.signal.aborted) {
+            const delai = new Error(`délai dépassé (${NPF_SERVER_MAP_MANIFEST_TIMEOUT_MS / 1000} s)`);
+            delai.delaiDepasse = true;
+            throw delai;
+        }
+        throw error;
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+async function readNpfServerMapManifest(cfg, code, signal) {
+    const response = await fetch(`${cfg.manifestUrl}?t=${Date.now()}`, { cache: 'no-store', headers: buildNpfServerAuthHeaders(cfg, code), signal });
     if (response.status === 401) {
         const error = new Error('code refusé');
         error.codeRefuse = true;
         throw error;
     }
-    if (!response.ok) throw new Error(`serveur : code ${response.status}`);
+    if (!response.ok) {
+        const error = new Error(`serveur : code ${response.status}`);
+        error.serveur5xx = response.status >= 500;
+        throw error;
+    }
     const manifest = await response.json();
     const okTuiles = cfg.type !== 'tuiles' || Number(manifest.totalTuiles) > 0;
     /* v17.80 — carte avec noms : chaque morceau est du fond ou des noms, et il y a des noms. */

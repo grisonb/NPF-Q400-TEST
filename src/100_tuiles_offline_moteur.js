@@ -2751,6 +2751,8 @@ function clearCurrentSelection(options = {}) {
     lftwRouteLayer.clearLayers();
     drawPermanentAirportMarkers();
     currentCommune = null;
+    /* v17.90 — les WP des traits AVION / PÉLIC -> FEU partent avec le feu (src/205). */
+    if (typeof effacerNpfTraitsFeu === 'function') effacerNpfTraitsFeu();
     drawFireHistoryMarkers();
     localStorage.removeItem('currentCommune');
     updateBaseLabels();

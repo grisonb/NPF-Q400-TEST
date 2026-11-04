@@ -1342,6 +1342,17 @@ function updateCalculatorData() {
         CALCULATOR_DATA.distPelicFeu = Math.round(distPelicFeu);
         CALCULATOR_DATA.csFeu = csFeu;
         CALCULATOR_DATA.distGpsFeu = Math.round(distGpsFeu);
+        /* v17.90 — traits modifiés (WP, src/205) : PÉLIC -> FEU du pélicandrome choisi pour la rotation, le BINGO PÉLIC et
+         * la conso ; de la base si elle est un des pélicandromes affichés (transit, BINGO BASE) ; AVION -> FEU pour le
+         * transit avion (Dérout.). Carburant et BINGO : mêmes calculs qu'avant, sur la même distance (arrondie au Nm). */
+        if (typeof getNpfTraitFeuDistanceNm === 'function') {
+            const traitPelicNm = selectedPelicanOACI ? getNpfTraitFeuDistanceNm(`pelic:${selectedPelicanOACI}`) : null;
+            if (Number.isFinite(traitPelicNm)) CALCULATOR_DATA.distPelicFeu = Math.round(traitPelicNm);
+            const traitBaseNm = selectedBaseOACI ? getNpfTraitFeuDistanceNm(`pelic:${normalizeOaciCodeInput(selectedBaseOACI)}`) : null;
+            if (Number.isFinite(traitBaseNm)) CALCULATOR_DATA.distBaseFeu = Math.round(traitBaseNm);
+            const traitAvionNm = getNpfTraitFeuDistanceNm('avion');
+            if (Number.isFinite(traitAvionNm)) CALCULATOR_DATA.distGpsFeu = Math.round(traitAvionNm);
+        }
     }
     if (typeof masterRecalculate === 'function') { masterRecalculate(); }
 }

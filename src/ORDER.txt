@@ -21,7 +21,10 @@
 180_global_link.js
 190_pdf_terrains.js
 200_waypoints.js
+205_traits_feu.js
 210_pistes_notam_trace.js
+216_wp_perso.js
+217_adresse.js
 220_frequences_marqueurs_terrains.js
 230_calques_departements.js
 240_donnees_departements_embarquees.js

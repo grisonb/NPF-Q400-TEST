@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.89';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.90';
 
 
 /*
@@ -3309,7 +3309,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.89 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.90 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -17125,6 +17125,8 @@ function clearCurrentSelection(options = {}) {
     lftwRouteLayer.clearLayers();
     drawPermanentAirportMarkers();
     currentCommune = null;
+    /* v17.90 — les WP des traits AVION / PÉLIC -> FEU partent avec le feu (src/205). */
+    if (typeof effacerNpfTraitsFeu === 'function') effacerNpfTraitsFeu();
     drawFireHistoryMarkers();
     localStorage.removeItem('currentCommune');
     updateBaseLabels();
@@ -18095,7 +18097,7 @@ function displayResults(results) {
             const li = document.createElement('li');
             li.className = 'search-result-airport';
             li.innerHTML = `<span class="search-result-airport-oaci">${escapeHtml(airport.oaci)}</span><span class="search-result-airport-name">${escapeHtml(airport.name)}</span>`;
-            li.title = `Tracer la route GPS vers ${airport.oaci} — sans modifier le feu ni le pélicandrome`;
+            li.title = `Tracer la route GPS vers ${airport.oaci} — le feu en cours est fermé, sauf vers un pélicandrome`;
             li.addEventListener('click', (event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -18152,6 +18154,8 @@ function displayResults(results) {
             resultsList.style.display = 'none';
         }
     }
+    /* v17.90 — dernière ligne : chercher le texte tapé comme adresse postale (src/217, en ligne seulement). */
+    if (typeof ajouterNpfAdresseAuxResultats === 'function') ajouterNpfAdresseAuxResultats(resultsList);
 }
 
 
@@ -18614,8 +18618,18 @@ function updateCommuneGpsRouteDisplay() {
         userLatLng.lat, userLatLng.lng, target.lat, target.lon,
         { startDeclination: getNpfMagneticDeclination(userLatLng.lat, userLatLng.lng) }
     );
-    const distance = courseToTarget ? courseToTarget.distanceNm : NaN;
-    const magneticBearing = courseToTarget ? courseToTarget.magneticBearing : NaN;
+    let distance = courseToTarget ? courseToTarget.distanceNm : NaN;
+    let magneticBearing = courseToTarget ? courseToTarget.magneticBearing : NaN;
+    /* v17.90 — trait AVION -> FEU modifié (src/205) : cap vers le 1er WP, distance et temps jusqu'au feu par les WP. */
+    const traitAvion = !target.airport && (!automaticFirePelicTarget || automaticFirePelicTarget.kind === 'fire') && typeof getNpfTraitFeuAvionPremierWp === 'function' ? getNpfTraitFeuAvionPremierWp() : null;
+    if (traitAvion) {
+        const versWp = computeNpfConstantMagneticCourse(userLatLng.lat, userLatLng.lng, traitAvion.lat, traitAvion.lon,
+            { startDeclination: getNpfMagneticDeclination(userLatLng.lat, userLatLng.lng) });
+        if (versWp) {
+            distance = versWp.distanceNm + traitAvion.resteNm;
+            magneticBearing = versWp.magneticBearing;
+        }
+    }
 
     if (routeInfo) {
         routeInfo.textContent = `${formatRouteDegrees(magneticBearing)} / ${Math.round(distance)} Nm / ${formatGpsEtaMinutes(distance)}`;
@@ -30225,6 +30239,8 @@ function updateMapBingoDisplay() {
 }
 
 function displayCommuneDetails(commune, shouldFitBounds = true) {
+    /* v17.90 — nouveau feu : traits AVION / PÉLIC -> FEU en ligne droite ; même feu : WP gardés (src/205). */
+    if (typeof syncNpfTraitsFeuPourFeu === 'function') syncNpfTraitsFeuPourFeu(commune);
     saveFireHistory(commune);
     routesLayer.clearLayers();
     lftwRouteLayer.clearLayers();
@@ -30318,6 +30334,8 @@ function displayCommuneDetails(commune, shouldFitBounds = true) {
         /* v17.86 — le plus proche (liste triée par distance) garde sa bordure verte même si un autre est choisi. */
         drawRoute([lat, lon], [ap.lat, ap.lon], { oaci: ap.oaci, isNearest: index === 0 });
     });
+    /* v17.90 — WP des traits AVION / PÉLIC -> FEU (src/205). */
+    if (typeof drawNpfTraitsFeu === 'function') drawNpfTraitsFeu();
 
     drawWaterPointMarkersForCommune(commune);
 
@@ -30424,12 +30442,15 @@ function drawRoute(startLatLng, endLatLng, options = {}) {
     /* v17.57 — A : route avion -> cible et Feu -> BASE : chemin à cap constant
      * et distance fournis par l'appelant. Routes PÉLIC (sans cap affiché) :
      * orthodromie et distance inchangées (v17.18). */
-    const distance = Number.isFinite(Number(options.distanceNm))
+    /* v17.90 — trait PÉLIC -> FEU modifié (WP, src/205) : la route suit les WP ; distance totale pour l'étiquette
+     * (temps de vol, Rot.). Ni la route avion, ni la route BASE dédiée. */
+    const traitPelic = oaci && !isUser && !isLftwRoute && typeof getNpfTraitFeuRoutePelic === 'function' ? getNpfTraitFeuRoutePelic(oaci) : null;
+    const distance = traitPelic ? traitPelic.distanceNm : (Number.isFinite(Number(options.distanceNm))
         ? Number(options.distanceNm)
-        : calculateDistanceInNm(startLatLng[0], startLatLng[1], endLatLng[0], endLatLng[1]);
-    const routeLatLngs = Array.isArray(options.routeLatLngs) && options.routeLatLngs.length >= 2
+        : calculateDistanceInNm(startLatLng[0], startLatLng[1], endLatLng[0], endLatLng[1]));
+    const routeLatLngs = traitPelic ? traitPelic.latlngs : (Array.isArray(options.routeLatLngs) && options.routeLatLngs.length >= 2
         ? options.routeLatLngs
-        : buildNpfGreatCircleLatLngs(startLatLng, endLatLng, distance);
+        : buildNpfGreatCircleLatLngs(startLatLng, endLatLng, distance));
     let labelText, color = 'var(--primary-color)', dashArray = '', layer = routesLayer;
 
     if (isUser) {
@@ -30743,6 +30764,10 @@ window.activateCurrentFireGoto = activateCurrentFireGoto;
 function selectAirportDestination(airport) {
     const normalized = getAirportByOaci(airport?.oaci);
     if (!normalized) return false;
+
+    /* v17.90 — un Go To vers un autre point ferme le feu, comme « Fermer » (WP de ses traits compris) ; un Go To vers
+     * N'IMPORTE QUEL pélicandrome le garde, avec ses WP (décision de Bastien). */
+    if (currentCommune && !isSelectablePelicanAirport(normalized.oaci)) clearCurrentSelection({ preserveMapView: true });
 
     /* Un GoTo aéroport/PÉLIC demandé manuellement suspend la navette automatique. */
     suspendNpfFirePelicAutoCycle();
@@ -36075,6 +36100,7 @@ function buildNpfWaypointPopupHtml(wp, index) {
                 ${buildNpfWaypointActionsHtml(wp)}
             </div>
             ${buildNpfWaypointNotamsButtonHtml(wp)}
+            ${wp?.source === 'wpperso' ? `<button type="button" class="npf-wp-perso-btn npf-wp-perso-depuis-route" onclick="window.ouvrirNpfWpPersoFiche('${String(wp.sourceRef || '').replace(/[^A-Za-z0-9_-]/g, '')}')">Fiche WP perso</button>` : ''}
         </div>
     `;
 }
@@ -36383,6 +36409,10 @@ function ensureNpfWaypointGps() {
 function activateNpfWaypointGoto(id) {
     const wp = getNpfWaypointById(id);
     if (!wp) return false;
+    /* v17.90 — un Go To / Direct to vers un autre point ferme le feu, comme « Fermer » (WP de ses traits compris) ;
+     * un WP de route qui est un pélicandrome (n'importe lequel) garde le feu et ses WP (décision de Bastien). */
+    const versPelicandrome = wp.source === 'airport' && isSelectablePelicanAirport(wp.sourceRef);
+    if (currentCommune && !versPelicandrome) clearCurrentSelection({ preserveMapView: true });
     suspendNpfFirePelicAutoCycle();
     npfWaypointRouteState.activeId = wp.id;
     npfWaypointRouteState.gotoActive = true;
@@ -36785,11 +36815,14 @@ function positionNpfWaypointNavigationBanner() {
     const banner = document.getElementById('npf-waypoint-route-banner');
     if (!banner || banner.style.display === 'none') return;
 
+    /* v17.90 — --safe-area-top est un calcul (zone sûre, barre iPadOS) : valeur lue en pixels sur une sonde. */
     let safeAreaTop = 0;
     try {
-        safeAreaTop = parseFloat(
-            window.getComputedStyle(document.documentElement).getPropertyValue('--safe-area-top')
-        ) || 0;
+        const sonde = document.createElement('div');
+        sonde.style.cssText = 'position:fixed;top:var(--safe-area-top);left:0;width:0;height:0;visibility:hidden;';
+        document.body.appendChild(sonde);
+        safeAreaTop = sonde.getBoundingClientRect().top || 0;
+        sonde.remove();
     } catch (_) {}
 
     let top = Math.max(8, safeAreaTop + 4);
@@ -37149,7 +37182,7 @@ function startNpfWaypointMove(id) {
             wp.sourceRef = snap.sourceRef;
             wp.name = snap.name;
             try { handle.setLatLng(finalLatLng); } catch (_) {}
-        } else if (wp.source === 'airport' || wp.source === 'vfr') {
+        } else if (wp.source === 'airport' || wp.source === 'vfr' || wp.source === 'wpperso') {
             /*
              * Un WP déplacé franchement hors de son point d'origine devient
              * un WP libre. Le libellé est conservé, mais l'identité de source
@@ -37225,6 +37258,505 @@ window.npfWaypointDeleteRoute = deleteWholeNpfWaypointRoute;
 window.npfWaypointDisableGoto = disableNpfWaypointGoto;
 
 
+/* ==========================================================================
+   v17.90 — TRAITS VERS LE FEU MODIFIABLES : AVION -> FEU et PÉLIC -> FEU
+   (repris de NPF-Q400-RUN v1.11 / v1.16, adapté à la TEST : plusieurs pélicandromes)
+   --------------------------------------------------------------------------
+   Même mécanisme et mêmes gestes que les WP du mode navigation (src/200) :
+   - appui long près d'un trait : un WP y est inséré puis passe aussitôt en
+     « Déplacer » (poignée à faire glisser, relâcher pour poser) ;
+   - toucher un WP : sa fiche (Déplacer, Supprimer, Remettre en ligne droite) ;
+   - chaque branche affiche son cap magnétique et sa distance (étiquettes et
+     cap constant de src/200), le total est recalculé.
+   Traits : AVION -> FEU (trait rouge, quand il va de l'avion au feu) et chaque
+   route PÉLIC -> FEU affichée (les N pélicandromes les plus proches) ; les WP
+   sont gardés par pélicandrome. Calculs (src/270 updateCalculatorData) : trait du
+   pélicandrome choisi pour la rotation, le BINGO PÉLIC et les distances du
+   calculateur ; trait de la base si elle est un des pélicandromes affichés
+   (transit, BINGO BASE) ; AVION -> FEU pour le transit avion (Dérout.). Temps et
+   rotation : règle de vitesse unique de la TEST (src/050), sur la distance du
+   trait. Un nouveau feu repart en ligne droite ; les WP restent pour le feu
+   (clé propre à la TEST, relance comprise) et partent avec lui quand il est
+   fermé (src/100 clearCurrentSelection). Aucun réseau (hors ligne).
+   Le mode navigation (route WP, GoTo) n'est pas modifié : il garde la priorité.
+   ========================================================================== */
+
+const NPF_TRAITS_FEU_KEY = 'npfQ400TestTraitsFeuV1';
+let npfTraitsFeuState = { feuKey: '', avion: [], pelic: {} };
+let npfTraitsFeuLayer = null;
+let npfTraitsFeuLabelLayer = null;
+let npfTraitsFeuMarkers = new Map();        // id du WP -> marqueur
+let npfTraitsFeuMoveHandle = null;
+let npfTraitsFeuMoveOutsideHandler = null;
+
+function getNpfTraitsFeuKey(commune = (typeof currentCommune !== 'undefined' ? currentCommune : null)) {
+    const lat = Number(commune?.latitude_mairie);
+    const lon = Number(commune?.longitude_mairie);
+    return Number.isFinite(lat) && Number.isFinite(lon) ? `${lat.toFixed(5)}|${lon.toFixed(5)}` : '';
+}
+
+/* Trait : 'avion' ou 'pelic:OACI'. */
+function getNpfTraitFeuOaci(trait) {
+    const m = /^pelic:([A-Z0-9]{3,4})$/.exec(String(trait || ''));
+    return m ? m[1] : '';
+}
+
+function getNpfTraitFeuLibelle(trait) {
+    return trait === 'avion' ? 'AVION → FEU' : `${getNpfTraitFeuOaci(trait)} → FEU`;
+}
+
+function videNpfTraitsFeu() {
+    return { feuKey: '', avion: [], pelic: {} };
+}
+
+/* Feu fermé (×, Fermer, Go To ailleurs) : plus aucune trace de ses WP (carte, poignée, mémoire). */
+function effacerNpfTraitsFeu() {
+    if (npfTraitsFeuMoveHandle) { try { npfTraitsFeuMoveHandle.remove(); } catch (_) {} npfTraitsFeuMoveHandle = null; }
+    clearNpfTraitsFeuMoveOutside();
+    npfTraitsFeuState = videNpfTraitsFeu();
+    try { localStorage.removeItem(NPF_TRAITS_FEU_KEY); } catch (_) {}
+    npfTraitsFeuMarkers = new Map();
+    try { npfTraitsFeuLayer?.clearLayers(); npfTraitsFeuLabelLayer?.clearLayers(); } catch (_) {}
+}
+
+function normalizeNpfTraitsFeuWaypoints(list) {
+    return (Array.isArray(list) ? list : []).map((wp, index) => {
+        const lat = Number(wp?.lat);
+        const lon = Number(wp?.lon);
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+        return { id: String(wp?.id || `tf-${Date.now()}-${index}`), lat, lon };
+    }).filter(Boolean);
+}
+
+function restoreNpfTraitsFeu() {
+    try {
+        const raw = JSON.parse(localStorage.getItem(NPF_TRAITS_FEU_KEY) || 'null');
+        const pelic = {};
+        Object.entries(raw?.pelic && typeof raw.pelic === 'object' ? raw.pelic : {}).forEach(([oaci, list]) => {
+            const code = String(oaci || '').toUpperCase();
+            const wps = normalizeNpfTraitsFeuWaypoints(list);
+            if (/^[A-Z0-9]{3,4}$/.test(code) && wps.length) pelic[code] = wps;
+        });
+        npfTraitsFeuState = { feuKey: String(raw?.feuKey || ''), avion: normalizeNpfTraitsFeuWaypoints(raw?.avion), pelic };
+        /* WP restés en mémoire alors qu'aucun feu n'est ouvert : effacés. */
+        if (raw && !localStorage.getItem('currentCommune')) {
+            npfTraitsFeuState = videNpfTraitsFeu();
+            localStorage.removeItem(NPF_TRAITS_FEU_KEY);
+        }
+    } catch (_) {
+        npfTraitsFeuState = videNpfTraitsFeu();
+    }
+}
+
+function persistNpfTraitsFeu() {
+    try {
+        const vide = !npfTraitsFeuState.avion.length && !Object.values(npfTraitsFeuState.pelic).some(l => l.length);
+        if (vide) localStorage.removeItem(NPF_TRAITS_FEU_KEY);
+        else localStorage.setItem(NPF_TRAITS_FEU_KEY, JSON.stringify(npfTraitsFeuState));
+    } catch (_) {}
+}
+
+/* Feu affiché : un NOUVEAU feu repart en ligne droite ; le même feu (relance, réaffichage) garde ses WP. */
+function syncNpfTraitsFeuPourFeu(commune) {
+    const key = getNpfTraitsFeuKey(commune);
+    if (!key || key === npfTraitsFeuState.feuKey) return;
+    npfTraitsFeuState = { feuKey: key, avion: [], pelic: {} };
+    persistNpfTraitsFeu();
+}
+
+/* Liste modifiable des WP d'un trait (créée au besoin pour un pélicandrome). */
+function getNpfTraitsFeuListe(trait, creer = false) {
+    if (trait === 'avion') return npfTraitsFeuState.avion;
+    const oaci = getNpfTraitFeuOaci(trait);
+    if (!oaci) return [];
+    if (!npfTraitsFeuState.pelic[oaci] && creer) npfTraitsFeuState.pelic[oaci] = [];
+    return npfTraitsFeuState.pelic[oaci] || [];
+}
+
+function getNpfTraitsFeuWaypoints(trait) {
+    if (getNpfTraitsFeuKey() !== npfTraitsFeuState.feuKey || !npfTraitsFeuState.feuKey) return [];
+    return getNpfTraitsFeuListe(trait);
+}
+
+function getNpfTraitsFeuFeu() {
+    if (typeof currentCommune === 'undefined' || !currentCommune) return null;
+    const lat = Number(currentCommune.latitude_mairie);
+    const lon = Number(currentCommune.longitude_mairie);
+    return Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : null;
+}
+
+/* Pélicandromes dont la route PÉLIC -> FEU est dessinée (les N plus proches, src/150 displayCommuneDetails). */
+function getNpfTraitsFeuPelicAffiches() {
+    const feu = getNpfTraitsFeuFeu();
+    if (!feu) return [];
+    try {
+        const count = Number.parseInt(document.getElementById('airport-count')?.value || '0', 10);
+        const n = Number.isFinite(count) ? Math.max(0, Math.min(10, count)) : 0;
+        return getClosestAirports(feu.lat, feu.lon, n).map(ap => ap.oaci);
+    } catch (_) {
+        return [];
+    }
+}
+
+function getNpfTraitsFeuTraitsAffiches() {
+    return ['avion', ...getNpfTraitsFeuPelicAffiches().map(oaci => `pelic:${oaci}`)];
+}
+
+/* Trait AVION -> FEU présent seulement quand le trait rouge va de l'avion au feu (ni GoTo WP / terrain, ni cycle vers le pélic). */
+function isNpfTraitAvionVersFeu() {
+    if (!getNpfTraitsFeuFeu()) return false;
+    try {
+        if (window.__npfWaypointRouteReady === true && typeof isNpfWaypointGotoActive === 'function' && isNpfWaypointGotoActive()) return false;
+        if (typeof selectedAirportDestination !== 'undefined' && selectedAirportDestination) return false;
+        const cycle = typeof getNpfFirePelicAutoCycleTarget === 'function' ? getNpfFirePelicAutoCycleTarget() : null;
+        if (cycle && cycle.kind !== 'fire') return false;   // cycle armé vers le feu : c'est bien le trait AVION -> FEU
+    } catch (_) {}
+    return true;
+}
+
+function getNpfTraitsFeuAvionLatLng() {
+    try {
+        const p = userMarker?.getLatLng?.();
+        if (p && Number.isFinite(p.lat) && Number.isFinite(p.lng)) return { lat: p.lat, lon: p.lng };
+    } catch (_) {}
+    return null;
+}
+
+/* Points du trait : départ (pélicandrome ou avion), WP, feu ; null si le trait n'est pas affiché. */
+function getNpfTraitFeuPoints(trait) {
+    const feu = getNpfTraitsFeuFeu();
+    if (!feu) return null;
+    let depart = null;
+    if (trait === 'avion') {
+        if (!isNpfTraitAvionVersFeu()) return null;
+        depart = getNpfTraitsFeuAvionLatLng();
+    } else {
+        const oaci = getNpfTraitFeuOaci(trait);
+        if (!oaci || !getNpfTraitsFeuPelicAffiches().includes(oaci)) return null;
+        const ap = getAirportByOaci(oaci);
+        depart = ap ? { lat: Number(ap.lat), lon: Number(ap.lon) } : null;
+    }
+    if (!depart || !Number.isFinite(depart.lat) || !Number.isFinite(depart.lon)) return null;
+    return [depart, ...getNpfTraitsFeuWaypoints(trait).map(wp => ({ lat: wp.lat, lon: wp.lon, id: wp.id })), feu];
+}
+
+/* Branche au cap magnétique constant (src/200) ; la 1re branche du trait AVION part de l'avion. */
+function getNpfTraitFeuBranche(trait, from, to, index) {
+    return getNpfWaypointCourse(from.lat, from.lon, to.lat, to.lon, trait === 'avion' && index === 0);
+}
+
+/* Distance totale du trait MODIFIÉ (null en ligne droite : les calculs gardent alors la ligne droite). */
+function getNpfTraitFeuDistanceNm(trait) {
+    if (!getNpfTraitsFeuWaypoints(trait).length) return null;
+    const points = getNpfTraitFeuPoints(trait);
+    if (!points) return null;
+    let total = 0;
+    for (let i = 0; i < points.length - 1; i += 1) {
+        const c = getNpfTraitFeuBranche(trait, points[i], points[i + 1], i);
+        if (!c || !Number.isFinite(c.distanceNm)) return null;
+        total += c.distanceNm;
+    }
+    return total;
+}
+
+/* Trait PÉLIC -> FEU modifié : géométrie et distance pour la route PÉLIC (src/150 drawRoute). */
+function getNpfTraitFeuRoutePelic(oaci) {
+    const trait = `pelic:${String(oaci || '').toUpperCase()}`;
+    if (!getNpfTraitsFeuWaypoints(trait).length) return null;
+    const points = getNpfTraitFeuPoints(trait);
+    if (!points) return null;
+    const latlngs = [];
+    let total = 0;
+    for (let i = 0; i < points.length - 1; i += 1) {
+        const c = getNpfTraitFeuBranche(trait, points[i], points[i + 1], i);
+        total += c ? c.distanceNm : calculateDistanceInNm(points[i].lat, points[i].lon, points[i + 1].lat, points[i + 1].lon);
+        const seg = c && Array.isArray(c.latlngs) ? c.latlngs : [[points[i].lat, points[i].lon], [points[i + 1].lat, points[i + 1].lon]];
+        latlngs.push(...(i ? seg.slice(1) : seg));
+    }
+    return { latlngs, distanceNm: total };
+}
+
+/* Trait AVION -> FEU modifié : 1er WP (cible du trait rouge en direct) et reste fixe jusqu'au feu. */
+function getNpfTraitFeuAvionPremierWp() {
+    if (!isNpfTraitAvionVersFeu()) return null;
+    const wps = getNpfTraitsFeuWaypoints('avion');
+    if (!wps.length) return null;
+    const feu = getNpfTraitsFeuFeu();
+    const points = [...wps, feu];
+    let reste = 0;
+    for (let i = 0; i < points.length - 1; i += 1) {
+        const c = getNpfTraitFeuBranche('avion', points[i], points[i + 1], i + 1);
+        reste += c ? c.distanceNm : 0;
+    }
+    return { lat: wps[0].lat, lon: wps[0].lon, resteNm: reste };
+}
+
+/* ---------- dessin : branches fixes du trait AVION, étiquettes cap / distance, losanges WP ---------- */
+function ensureNpfTraitsFeuLayers() {
+    if (typeof map === 'undefined' || !map || typeof L === 'undefined') return false;
+    if (typeof ensureNpfWaypointRouteLayers === 'function') ensureNpfWaypointRouteLayers();   // panes WP (src/200)
+    if (!npfTraitsFeuLayer) npfTraitsFeuLayer = L.layerGroup();
+    if (!npfTraitsFeuLabelLayer) npfTraitsFeuLabelLayer = L.layerGroup();
+    if (!map.hasLayer(npfTraitsFeuLayer)) npfTraitsFeuLayer.addTo(map);
+    if (!map.hasLayer(npfTraitsFeuLabelLayer)) npfTraitsFeuLabelLayer.addTo(map);
+    return true;
+}
+
+function buildNpfTraitsFeuIcon(index) {
+    return L.divIcon({
+        className: 'npf-waypoint-marker npf-trait-feu-marker',
+        html: `<span class="npf-waypoint-diamond"><span class="npf-waypoint-diamond-label">WP${index + 1}</span></span>`,
+        iconSize: [48, 48],
+        iconAnchor: [24, 24],
+        popupAnchor: [0, -24]
+    });
+}
+
+function buildNpfTraitsFeuPopupHtml(trait, wp, index) {
+    const id = String(wp.id).replace(/[^A-Za-z0-9_-]/g, '');
+    const t = String(trait).replace(/[^A-Za-z0-9:]/g, '');
+    return `
+        <div class="npf-waypoint-popup npf-trait-feu-popup">
+            <div class="npf-waypoint-popup-title">WP${index + 1} — ${escapeHtml(getNpfTraitFeuLibelle(trait))}</div>
+            <div class="npf-waypoint-popup-actions">
+                <button type="button" class="npf-waypoint-action npf-waypoint-move" onclick="window.npfTraitFeuMove('${t}', '${id}')">Déplacer</button>
+                <button type="button" class="npf-waypoint-action npf-waypoint-delete" onclick="window.npfTraitFeuDelete('${t}', '${id}')">Supprimer</button>
+                <button type="button" class="npf-waypoint-action npf-trait-feu-ligne-droite" onclick="window.npfTraitFeuLigneDroite('${t}')">Remettre en ligne droite</button>
+            </div>
+        </div>`;
+}
+
+function drawNpfTraitsFeuLabels() {
+    if (!ensureNpfTraitsFeuLayers()) return;
+    npfTraitsFeuLabelLayer.clearLayers();
+    getNpfTraitsFeuTraitsAffiches().forEach(trait => {
+        if (!getNpfTraitsFeuWaypoints(trait).length) return;
+        const points = getNpfTraitFeuPoints(trait);
+        if (!points) return;
+        /* AVION : la 1re branche (en direct) est étiquetée par le trait rouge (src/260) ; ici les branches fixes. */
+        for (let i = trait === 'avion' ? 1 : 0; i < points.length - 1; i += 1) {
+            const label = buildNpfWaypointSegmentLabel(points[i], points[i + 1]);
+            if (!label) continue;
+            L.tooltip({ pane: 'npfWaypointLabelPane', permanent: true, direction: 'center', className: `npf-waypoint-segment-tooltip npf-trait-feu-segment ${label.zoomClass}`, opacity: 1, interactive: false })
+                .setLatLng(getNpfWaypointSegmentLabelLatLng(points[i], points[i + 1], label.metrics))
+                .setContent(label.text)
+                .addTo(npfTraitsFeuLabelLayer);
+        }
+    });
+}
+
+function drawNpfTraitsFeu() {
+    if (!ensureNpfTraitsFeuLayers()) return;
+    npfTraitsFeuLayer.clearLayers();
+    npfTraitsFeuMarkers = new Map();
+    getNpfTraitsFeuTraitsAffiches().forEach(trait => {
+        const wps = getNpfTraitsFeuWaypoints(trait);
+        if (!wps.length) return;
+        const points = getNpfTraitFeuPoints(trait);
+        if (!points) return;
+        if (trait === 'avion') {
+            /* branches fixes WP1 -> ... -> FEU, même dessin que le trait rouge avion -> feu */
+            const fixes = points.slice(1).map(p => [p.lat, p.lon]);
+            L.polyline(fixes, { color: '#ffffff', weight: 9, opacity: 0.95, interactive: false, lineCap: 'round', lineJoin: 'round' }).addTo(npfTraitsFeuLayer);
+            L.polyline(fixes, { color: 'var(--secondary-color)', weight: 5, opacity: 1, dashArray: '5, 10', interactive: false, lineCap: 'round', lineJoin: 'round' }).addTo(npfTraitsFeuLayer);
+        }
+        wps.forEach((wp, index) => {
+            const marker = L.marker([wp.lat, wp.lon], { pane: 'npfWaypointMarkerPane', icon: buildNpfTraitsFeuIcon(index), zIndexOffset: 3100, keyboard: false, draggable: false });
+            marker.bindPopup(buildNpfTraitsFeuPopupHtml(trait, wp, index), { maxWidth: 390, closeButton: true });
+            marker._npfTraitFeu = { trait, id: wp.id };
+            marker.addTo(npfTraitsFeuLayer);
+            npfTraitsFeuMarkers.set(wp.id, marker);
+        });
+    });
+    drawNpfTraitsFeuLabels();
+}
+
+/* Après un changement de WP : routes du feu, trait rouge, calculs, WP. */
+function refreshNpfTraitsFeuApresChangement() {
+    persistNpfTraitsFeu();
+    if (typeof currentCommune !== 'undefined' && currentCommune) displayCommuneDetails(currentCommune, false);
+    try { drawUserToTargetRoute(); } catch (_) {}
+    drawNpfTraitsFeu();
+}
+
+/* ---------- gestes (mêmes que la route WP du mode navigation) ---------- */
+function getNpfTraitFeuSegmentAtLatLng(latlng, tolerancePx = NPF_WAYPOINT_ROUTE_LONG_PRESS_TOLERANCE_PX) {
+    if (!map || !latlng) return null;
+    let p;
+    try { p = map.latLngToContainerPoint(latlng); } catch (_) { return null; }
+    let best = null;
+    getNpfTraitsFeuTraitsAffiches().forEach(trait => {
+        const points = getNpfTraitFeuPoints(trait);
+        if (!points) return;
+        for (let i = 0; i < points.length - 1; i += 1) {
+            let a;
+            let b;
+            try {
+                a = map.latLngToContainerPoint([points[i].lat, points[i].lon]);
+                b = map.latLngToContainerPoint([points[i + 1].lat, points[i + 1].lon]);
+            } catch (_) { continue; }
+            const vx = b.x - a.x;
+            const vy = b.y - a.y;
+            const len2 = vx * vx + vy * vy;
+            if (!Number.isFinite(len2) || len2 < 25) continue;
+            const t = ((p.x - a.x) * vx + (p.y - a.y) * vy) / len2;
+            if (t <= 0.05 || t >= 0.95) continue;   // « entre 2 points », comme src/200
+            const d = Math.hypot(p.x - (a.x + vx * t), p.y - (a.y + vy * t));
+            if (!Number.isFinite(d) || d > tolerancePx) continue;
+            if (!best || d < best.distancePx) best = { trait, insertIndex: i, distancePx: d };
+        }
+    });
+    return best;
+}
+
+function openNpfTraitFeuPopupNearLatLng(latlng, tolerancePx = NPF_WAYPOINT_SELECT_TOLERANCE_PX) {
+    if (!map || !latlng || !npfTraitsFeuMarkers.size) return false;
+    let p;
+    try { p = map.latLngToContainerPoint(latlng); } catch (_) { return false; }
+    let best = null;
+    npfTraitsFeuMarkers.forEach(marker => {
+        try {
+            const d = map.latLngToContainerPoint(marker.getLatLng()).distanceTo(p);
+            if (d <= tolerancePx && (!best || d < best.d)) best = { marker, d };
+        } catch (_) {}
+    });
+    if (!best) return false;
+    best.marker.openPopup();
+    return true;
+}
+
+/* Exécuter fn APRÈS la fin du toucher en cours : le trait PÉLIC touché est une route interactive (src/150) ; la
+ * redessiner pendant que le doigt est posé retirerait l'élément touché, Leaflet ne recevrait jamais la fin du toucher et
+ * le glisser suivant déplacerait la carte au lieu de la poignée. */
+function runNpfTraitsFeuApresToucher(fn) {
+    let fait = false;
+    const evenements = ['touchend', 'touchcancel', 'pointerup', 'mouseup'];
+    const lancer = () => {
+        if (fait) return;
+        fait = true;
+        evenements.forEach(type => document.removeEventListener(type, lancer, true));
+        setTimeout(fn, 0);
+    };
+    evenements.forEach(type => document.addEventListener(type, lancer, true));
+    setTimeout(lancer, 4000);
+}
+
+/* Appui long (src/320), après la route WP du mode navigation : sur un WP -> sa fiche ; près d'un trait -> nouveau WP. */
+function handleNpfTraitFeuLongPress(latlng) {
+    if (openNpfTraitFeuPopupNearLatLng(latlng)) return true;
+    const seg = getNpfTraitFeuSegmentAtLatLng(latlng);
+    if (!seg) return false;
+    const lat = Number(latlng.lat);
+    const lon = Number(latlng.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return false;
+    syncNpfTraitsFeuPourFeu(currentCommune);
+    const wp = { id: `tf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, lat, lon };
+    getNpfTraitsFeuListe(seg.trait, true).splice(seg.insertIndex, 0, wp);
+    persistNpfTraitsFeu();
+    /* comme src/200 : le WP passe aussitôt en « Déplacer » ; routes et calculs redessinés à la fin du toucher */
+    requestAnimationFrame(() => startNpfTraitFeuMove(seg.trait, wp.id));
+    runNpfTraitsFeuApresToucher(() => { if (npfTraitsFeuMoveHandle) return; refreshNpfTraitsFeuApresChangement(); });
+    return true;
+}
+
+function deleteNpfTraitFeuWaypoint(trait, id) {
+    const list = getNpfTraitsFeuListe(trait);
+    const index = list.findIndex(wp => wp.id === id);
+    if (index < 0) return false;
+    list.splice(index, 1);
+    try { map?.closePopup?.(); } catch (_) {}
+    refreshNpfTraitsFeuApresChangement();
+    return true;
+}
+
+function resetNpfTraitFeuLigneDroite(trait) {
+    if (trait === 'avion') npfTraitsFeuState.avion = [];
+    else { const oaci = getNpfTraitFeuOaci(trait); if (oaci) delete npfTraitsFeuState.pelic[oaci]; }
+    try { map?.closePopup?.(); } catch (_) {}
+    refreshNpfTraitsFeuApresChangement();
+    return true;
+}
+
+function clearNpfTraitsFeuMoveOutside() {
+    if (!npfTraitsFeuMoveOutsideHandler) return;
+    try { document.removeEventListener('pointerdown', npfTraitsFeuMoveOutsideHandler, true); } catch (_) {}
+    npfTraitsFeuMoveOutsideHandler = null;
+}
+
+/* « Déplacer » : même poignée tactile de 76 px que src/200 (startNpfWaypointMove) ; un appui ailleurs annule. */
+function startNpfTraitFeuMove(trait, id) {
+    const list = getNpfTraitsFeuListe(trait);
+    const index = list.findIndex(wp => wp.id === id);
+    const wp = list[index];
+    if (!wp || !map || typeof L === 'undefined' || !ensureNpfTraitsFeuLayers()) return false;
+    try { map.closePopup?.(); } catch (_) {}
+    if (npfTraitsFeuMoveHandle) { try { npfTraitsFeuMoveHandle.remove(); } catch (_) {} npfTraitsFeuMoveHandle = null; }
+    clearNpfTraitsFeuMoveOutside();
+    const handle = L.marker([wp.lat, wp.lon], {
+        icon: L.divIcon({ className: 'npf-waypoint-move-handle', html: `<span class="npf-waypoint-move-handle-ring"><span>WP${index + 1}</span></span>`, iconSize: [76, 76], iconAnchor: [38, 38] }),
+        pane: map.getPane('npfWaypointMovePane') ? 'npfWaypointMovePane' : 'markerPane',
+        zIndexOffset: 20000, keyboard: false, draggable: true, autoPan: true, autoPanPadding: [60, 60], autoPanSpeed: 10
+    }).addTo(map);
+    npfTraitsFeuMoveHandle = handle;
+    let apercu = null;
+    const syncPosition = latlng => {
+        if (!latlng) return;
+        wp.lat = Number(latlng.lat);
+        wp.lon = Number(latlng.lng);
+        const marker = npfTraitsFeuMarkers.get(id);
+        try { marker?.setLatLng(latlng); } catch (_) {}
+        const points = getNpfTraitFeuPoints(trait);
+        if (!points) return;
+        try { apercu?.remove(); } catch (_) {}
+        apercu = L.polyline(points.map(p => [p.lat, p.lon]), { color: '#1d4ed8', weight: 4, opacity: 0.9, dashArray: '6 6', interactive: false }).addTo(npfTraitsFeuLayer);
+        drawNpfTraitsFeuLabels();
+    };
+    const finish = () => {
+        clearNpfTraitsFeuMoveOutside();
+        syncPosition(handle.getLatLng());
+        try { handle.remove(); } catch (_) {}
+        if (npfTraitsFeuMoveHandle === handle) npfTraitsFeuMoveHandle = null;
+        refreshNpfTraitsFeuApresChangement();
+    };
+    handle.on('drag', event => syncPosition(event.target.getLatLng()));
+    handle.once('dragend', finish);
+    window.setTimeout(() => {
+        if (npfTraitsFeuMoveHandle !== handle) return;
+        npfTraitsFeuMoveOutsideHandler = event => {
+            const target = event?.target;
+            if (target instanceof Element && target.closest('.npf-waypoint-move-handle')) return;
+            clearNpfTraitsFeuMoveOutside();
+            try { handle.remove(); } catch (_) {}
+            if (npfTraitsFeuMoveHandle === handle) npfTraitsFeuMoveHandle = null;
+            /* ce toucher peut viser une route PÉLIC (appui long suivant) : redessin à la fin du toucher */
+            runNpfTraitsFeuApresToucher(() => { if (!npfTraitsFeuMoveHandle) refreshNpfTraitsFeuApresChangement(); });
+        };
+        document.addEventListener('pointerdown', npfTraitsFeuMoveOutsideHandler, true);
+    }, 0);
+    try {
+        handle.bindTooltip('Déplacer le WP puis relâcher', { permanent: false, direction: 'top', className: 'npf-waypoint-move-hint', offset: [0, -32] }).openTooltip();
+        setTimeout(() => { try { handle.closeTooltip(); } catch (_) {} }, 1800);
+    } catch (_) {}
+    return true;
+}
+
+restoreNpfTraitsFeu();
+/* La carte est créée après le chargement du script : on attend qu'elle existe (comme les WP perso, src/216). */
+(function attendreCarteTraitsFeu(essai = 0) {
+    if (typeof map !== 'undefined' && map && typeof map.whenReady === 'function') {
+        map.whenReady(() => {
+            if (!ensureNpfTraitsFeuLayers()) return;
+            map.on('zoomend', drawNpfTraitsFeuLabels);
+            drawNpfTraitsFeu();
+        });
+        return;
+    }
+    if (essai < 240) setTimeout(() => attendreCarteTraitsFeu(essai + 1), 500);
+})();
+
+window.npfTraitFeuMove = startNpfTraitFeuMove;
+window.npfTraitFeuDelete = deleteNpfTraitFeuWaypoint;
+window.npfTraitFeuLigneDroite = resetNpfTraitFeuLigneDroite;
 let npfRunwayLastRenderSignature = '';
 let npfRunwayRefreshTimer = null;
 
@@ -39164,6 +39696,683 @@ if (document.readyState === 'loading') {
 }
 
 
+/* ==========================================================================
+   v17.90 — WP PERSO (repères personnels : étoile magenta et nom sur la carte)
+   (repris de NPF-Q400-RUN v1.14 / v1.15, adapté à la France métropolitaine)
+   --------------------------------------------------------------------------
+   - création par l'appui long sur la carte (bouton « WP perso », src/320) ou
+     après une recherche d'adresse (src/217) : nom obligatoire, coordonnées du
+     point modifiables (tous formats : degrés minutes, degrés minutes secondes,
+     degrés décimaux, avec ou sans N/S/E/O, point ou virgule ; saisie incohérente
+     refusée) ; bouton « Position actuelle » (GPS, ou avion simulé) ;
+   - avertissement si le point n'est dans aucune commune de France métropolitaine
+     (Corse comprise) : en mer ou hors de France ; on peut continuer ;
+   - fiche : Direct to, Renommer, Déplacer (glisser ou saisir), Supprimer ;
+   - Direct to : le WP entre dans la route du mode navigation (src/200), comme un
+     terrain ; le feu en cours est fermé (règle du Go To, src/200) ;
+   - étoile au-dessus des losanges de navigation (z675 > z670) : elle reste
+     touchable après un Direct to ; sa fiche ouvre aussi le WP de route ;
+   - gardés après fermeture de l'app, clé propre à la TEST (npfQ400TestWpPersoV1) :
+     ni la pérenne ni la RUN ne la lisent.
+   Ce sont des repères : jamais dans les listes de terrains, pélicandromes, terrain
+   le plus proche, BINGO ni dégagements.
+   ========================================================================== */
+
+const NPF_WP_PERSO_CLE = 'npfQ400TestWpPersoV1';
+const NPF_WP_PERSO_PANE = 'npfWpPersoPane';
+const NPF_WP_PERSO_NOM_MAX = 40;
+const NPF_WP_PERSO_AIDE_COORD = 'Exemples : N 43°27.000\' E 005°22.500\' ; 43°27\'00"N 5°22\'30"E ; 43,45 5,375 ; N4327.000 E00522.500';
+let npfWpPersoListe = [];
+let npfWpPersoLayer = null;
+let npfWpPersoPoignee = null;
+
+/* ---------- coordonnées : lecture de tous les formats ---------- */
+
+function erreurNpfCoord(message) { return { erreur: message }; }
+
+function lireNpfCoordJetons(texte) {
+    const s = String(texte || '').toUpperCase()
+        .replace(/[−–—]/g, '-')
+        .replace(/[’′‘`´]/g, "'")
+        .replace(/[”″“]/g, '"')
+        .replace(/''/g, '"')
+        .replace(/[º˚]/g, '°')
+        .replace(/\b(LATITUDE|LONGITUDE|LAT|LONG|LON)\b/g, ' ')
+        .replace(/\bNORD\b/g, 'N').replace(/\bSUD\b/g, 'S').replace(/\bEST\b/g, 'E').replace(/\bOUEST\b/g, 'O')
+        .replace(/DEG\b/g, '°')
+        .replace(/[/;:|]/g, ' ');
+    const motif = /\s+|(\d+(?:[.,]\d+)?)|([NSEOW])|([°'"])|([-+])|(,)/y;
+    const items = [];
+    let signe = null;
+    let position = 0;
+    while (position < s.length) {
+        motif.lastIndex = position;
+        const m = motif.exec(s);
+        if (!m) return erreurNpfCoord(`Caractère non reconnu : « ${s[position]} ».`);
+        position = motif.lastIndex;
+        if (m[1]) {
+            items.push({ texte: m[1].replace(',', '.'), valeur: Number(m[1].replace(',', '.')), marque: null, signe });
+            signe = null;
+        } else if (m[2]) {
+            if (signe) return erreurNpfCoord('Signe mal placé.');
+            items.push({ hemisphere: m[2] === 'W' ? 'O' : m[2] });
+        } else if (m[3]) {
+            const dernier = items[items.length - 1];
+            if (!dernier || dernier.hemisphere || dernier.marque) return erreurNpfCoord(`Symbole « ${m[3]} » mal placé.`);
+            dernier.marque = m[3];
+        } else if (m[4]) {
+            if (signe) return erreurNpfCoord('Signe mal placé.');
+            signe = m[4];
+        }
+    }
+    if (signe) return erreurNpfCoord('Signe mal placé.');
+    return items.length ? { items } : erreurNpfCoord('Coordonnées vides.');
+}
+
+/* Partage en deux d'une suite de nombres sans hémisphère entre eux : au 2e symbole ° s'il existe, sinon en deux moitiés. */
+function couperNpfCoordNombres(nombres) {
+    const degres = nombres.map((n, i) => (n.marque === '°' ? i : -1)).filter(i => i >= 0);
+    if (degres.length === 2 && degres[0] === 0) return [nombres.slice(0, degres[1]), nombres.slice(degres[1])];
+    if (nombres.length === 2 || nombres.length === 4 || nombres.length === 6) {
+        return [nombres.slice(0, nombres.length / 2), nombres.slice(nombres.length / 2)];
+    }
+    return null;
+}
+
+/* Une coordonnée en degrés : D ; D M ; D M S ; compact DDMM(.m) / DDDMM(.m) / DDMMSS / DDDMMSS. */
+function lireNpfCoordValeur(nombres, axe) {
+    const nom = axe === 'lat' ? 'latitude' : 'longitude';
+    if (!nombres.length || nombres.length > 3) return erreurNpfCoord(`La ${nom} n'est pas lisible.`);
+    if (nombres.slice(1).some(n => n.signe)) return erreurNpfCoord('Signe mal placé.');
+    const attendues = ['°', "'", '"'];
+    let deg, min = 0, sec = 0;
+    if (nombres.length === 1) {
+        const n = nombres[0];
+        if (n.marque === "'" || n.marque === '"') return erreurNpfCoord(`La ${nom} n'a pas de degrés.`);
+        const [entier, decimales = ''] = n.texte.split('.');
+        const limite = axe === 'lat' ? 2 : 3;
+        const chiffres = entier.length;
+        if (chiffres <= limite || n.marque === '°') {
+            deg = n.valeur;
+        } else if (chiffres <= limite + 2) {
+            deg = Number(entier.slice(0, -2));
+            min = Number(`${entier.slice(-2)}${decimales ? `.${decimales}` : ''}`);
+        } else if (chiffres <= limite + 4 && !decimales) {
+            deg = Number(entier.slice(0, -4));
+            min = Number(entier.slice(-4, -2));
+            sec = Number(entier.slice(-2));
+        } else {
+            return erreurNpfCoord(`La ${nom} n'est pas lisible.`);
+        }
+    } else {
+        for (let i = 0; i < nombres.length; i += 1) {
+            if (nombres[i].marque && nombres[i].marque !== attendues[i]) return erreurNpfCoord(`Symbole « ${nombres[i].marque} » mal placé dans la ${nom}.`);
+            if (i < nombres.length - 1 && nombres[i].texte.includes('.')) return erreurNpfCoord(`Seul le dernier nombre de la ${nom} peut avoir des décimales.`);
+        }
+        deg = nombres[0].valeur;
+        min = nombres[1].valeur;
+        sec = nombres[2] ? nombres[2].valeur : 0;
+    }
+    if (min >= 60 || sec >= 60) return erreurNpfCoord(`Minutes ou secondes de la ${nom} incohérentes (60 ou plus).`);
+    const valeur = deg + min / 60 + sec / 3600;
+    if (valeur > (axe === 'lat' ? 90 : 180)) return erreurNpfCoord(`La ${nom} dépasse ${axe === 'lat' ? 90 : 180}°.`);
+    return { valeur };
+}
+
+function parseNpfCoordonnees(texte) {
+    const lu = lireNpfCoordJetons(texte);
+    if (lu.erreur) return lu;
+    const items = lu.items;
+    const places = items.map((x, i) => (x.hemisphere ? i : -1)).filter(i => i >= 0);
+    if (places.length !== 0 && places.length !== 2) return erreurNpfCoord('Il faut un hémisphère pour chaque coordonnée (N ou S, et E ou O), ou aucun.');
+    let parties;
+    let hemispheres = [null, null];
+    if (!places.length) {
+        parties = couperNpfCoordNombres(items);
+    } else {
+        const [p1, p2] = places;
+        hemispheres = [items[p1].hemisphere, items[p2].hemisphere];
+        if (p1 === 0 && p2 < items.length - 1) parties = [items.slice(1, p2), items.slice(p2 + 1)];
+        else if (p1 === 0) parties = couperNpfCoordNombres(items.slice(1, p2));
+        else if (p2 === items.length - 1) parties = [items.slice(0, p1), items.slice(p1 + 1, p2)];
+        else parties = null;
+    }
+    if (!parties || !parties[0].length || !parties[1].length) return erreurNpfCoord('Il faut une latitude et une longitude.');
+    let axes = ['lat', 'lon'];
+    if (places.length) {
+        const axe = h => (h === 'N' || h === 'S' ? 'lat' : 'lon');
+        axes = hemispheres.map(axe);
+        if (axes[0] === axes[1]) return erreurNpfCoord('Deux hémisphères du même axe : il faut N ou S, et E ou O.');
+    }
+    const resultat = {};
+    for (let i = 0; i < 2; i += 1) {
+        const nombres = parties[i];
+        const signe = nombres[0].signe;
+        if (signe && hemispheres[i]) return erreurNpfCoord('Signe et hémisphère en même temps : incohérent.');
+        const v = lireNpfCoordValeur(nombres, axes[i]);
+        if (v.erreur) return v;
+        const negatif = signe === '-' || hemispheres[i] === 'S' || hemispheres[i] === 'O';
+        resultat[axes[i]] = negatif ? -v.valeur : v.valeur;
+    }
+    return resultat;
+}
+
+/* Degrés minutes au millième : N 43°27.000' E 005°22.500' */
+function formatNpfCoordonnees(lat, lon) {
+    const partie = (valeur, positif, negatif) => {
+        const milliemes = Math.round(Math.abs(valeur) * 60000);
+        const degres = Math.floor(milliemes / 60000);
+        const minutes = (milliemes - degres * 60000) / 1000;
+        return `${valeur < 0 ? negatif : positif} ${String(degres).padStart(largeur, '0')}°${minutes.toFixed(3).padStart(6, '0')}'`;
+    };
+    let largeur = 2;
+    const latTexte = partie(lat, 'N', 'S');
+    largeur = 3;
+    return `${latTexte} ${partie(lon, 'E', 'O')}`;
+}
+
+/* ---------- stockage ---------- */
+
+function lireNpfWpPerso() {
+    try {
+        const brut = JSON.parse(localStorage.getItem(NPF_WP_PERSO_CLE) || '[]');
+        npfWpPersoListe = (Array.isArray(brut) ? brut : [])
+            .map(p => ({ id: String(p?.id || ''), nom: String(p?.nom || '').trim(), lat: Number(p?.lat), lon: Number(p?.lon) }))
+            .filter(p => p.id && p.nom && Number.isFinite(p.lat) && Number.isFinite(p.lon));
+    } catch (_) {
+        npfWpPersoListe = [];
+    }
+}
+
+function garderNpfWpPerso() {
+    try { localStorage.setItem(NPF_WP_PERSO_CLE, JSON.stringify(npfWpPersoListe)); } catch (_) {}
+}
+
+/* ---------- dessin : étoile magenta, nom toujours affiché ---------- */
+
+function refreshNpfWpPerso() {
+    if (typeof map === 'undefined' || !map || typeof L === 'undefined') return;
+    if (!map.getPane(NPF_WP_PERSO_PANE)) {
+        map.createPane(NPF_WP_PERSO_PANE);
+        const pane = map.getPane(NPF_WP_PERSO_PANE);
+        /* v17.90 — au-dessus des losanges de navigation (z670) : l'étoile reste touchable après un Direct to. */
+        if (pane) pane.style.zIndex = '675';
+    }
+    if (!npfWpPersoLayer) npfWpPersoLayer = L.layerGroup().addTo(map);
+    npfWpPersoLayer.clearLayers();
+    npfWpPersoListe.forEach(p => {
+        const marqueur = L.marker([p.lat, p.lon], {
+            pane: NPF_WP_PERSO_PANE,
+            keyboard: false,
+            icon: L.divIcon({
+                className: 'npf-wp-perso-marqueur',
+                html: `<span class="npf-wp-perso-etoile"><svg viewBox="0 0 24 24" aria-hidden="true"><polygon points="12,1.5 15.1,8.6 22.9,9.4 17,14.6 18.7,22.3 12,18.3 5.3,22.3 7,14.6 1.1,9.4 8.9,8.6" fill="#e6007e" stroke="#ffffff" stroke-width="1.4" stroke-linejoin="round"/></svg></span><span class="npf-wp-perso-nom">${escapeHtml(p.nom)}</span>`,
+                iconSize: [48, 48],
+                iconAnchor: [24, 24],
+                popupAnchor: [0, -20]
+            })
+        });
+        marqueur._npfWpPerso = p.id;
+        marqueur.on('click', () => ouvrirNpfWpPersoFiche(p.id));
+        npfWpPersoLayer.addLayer(marqueur);
+    });
+}
+
+/* ---------- fiche ---------- */
+
+function ouvrirNpfWpPersoFiche(id) {
+    const p = npfWpPersoListe.find(x => x.id === id);
+    if (!p || !map) return;
+    const fiche = document.createElement('div');
+    fiche.className = 'npf-wp-perso-fiche';
+    const nom = document.createElement('div');
+    nom.className = 'npf-wp-perso-fiche-nom';
+    nom.textContent = p.nom;
+    const coord = document.createElement('div');
+    coord.className = 'npf-wp-perso-fiche-coord';
+    coord.textContent = formatNpfCoordonnees(p.lat, p.lon);
+    const actions = document.createElement('div');
+    actions.className = 'npf-wp-perso-actions';
+    const bouton = (texte, classe, action) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = `npf-wp-perso-btn ${classe}`;
+        b.textContent = texte;
+        b.addEventListener('click', event => {
+            event.preventDefault();
+            event.stopPropagation();
+            try { map.closePopup(); } catch (_) {}
+            action();
+        });
+        actions.appendChild(b);
+    };
+    bouton('Direct to', 'npf-wp-perso-btn-direct', () => npfWpPersoDirectTo(id));
+    bouton('Renommer', 'npf-wp-perso-btn-renommer', () => renommerNpfWpPerso(id));
+    bouton('Déplacer', 'npf-wp-perso-btn-deplacer', () => deplacerNpfWpPerso(id));
+    bouton('Supprimer', 'npf-wp-perso-btn-suppr', () => supprimerNpfWpPerso(id));
+    /* v17.90 — WP de route issu de ce WP perso (Direct to) : sa fiche reste accessible, l'étoile étant au-dessus. */
+    const wpRoute = getNpfWpPersoRouteWp(id);
+    if (wpRoute) {
+        bouton('WP de route', 'npf-wp-perso-btn-route', () => {
+            try { openNpfWaypointPopupNearLatLng(L.latLng(wpRoute.lat, wpRoute.lon), NPF_WAYPOINT_SELECT_TOLERANCE_PX); } catch (_) {}
+        });
+    }
+    fiche.append(nom, coord, actions);
+    L.popup({ maxWidth: 300, closeButton: true, autoPan: !centerGpsFollowActive, offset: [0, -14] })
+        .setLatLng([p.lat, p.lon])
+        .setContent(fiche)
+        .openOn(map);
+}
+
+/* ---------- fenêtre de saisie ---------- */
+
+/* Position de l'avion (GPS, ou avion simulé en simulation). La position mémorisée à la fermeture de l'app
+ * (lastPosition.stored) sert à placer l'avion au démarrage mais n'est pas une position actuelle. */
+function getNpfWpPersoPositionAvion() {
+    const p = lastPosition;
+    if (!p) return null;
+    if (isSimulationMode ? p.simulation !== true : (p.simulation === true || p.stored === true)) return null;
+    const lat = Number(p.latitude);
+    const lon = Number(p.longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+    return { lat, lon, ageMinutes: p.simulation === true ? 0 : Math.floor((Date.now() - Number(p.timestamp)) / 60000) };
+}
+
+/* options : titre, nom (texte ou null si pas de champ), lat, lon (null si pas de champ), glisser (bouton « Glisser sur la carte »).
+ * Résultat : { nom, lat, lon }, 'glisser' ou null (Annuler). */
+function demanderNpfWpPerso(options) {
+    return new Promise(resolve => {
+        const avecNom = options.nom !== null;
+        const avecCoord = options.lat !== null;
+        let fond = document.getElementById('npf-wp-perso-modal');
+        if (!fond) {
+            fond = document.createElement('div');
+            fond.id = 'npf-wp-perso-modal';
+            fond.className = 'npf-confirm-modal';
+            fond.innerHTML = `
+                <div class="npf-confirm-card" role="dialog" aria-modal="true" aria-labelledby="npf-wp-perso-titre">
+                    <div id="npf-wp-perso-titre" class="npf-confirm-title"></div>
+                    <label class="npf-wp-perso-champ" id="npf-wp-perso-champ-nom">Nom
+                        <input id="npf-wp-perso-nom" type="text" maxlength="${NPF_WP_PERSO_NOM_MAX}" autocomplete="off" autocapitalize="characters">
+                    </label>
+                    <label class="npf-wp-perso-champ" id="npf-wp-perso-champ-coord">Coordonnées
+                        <input id="npf-wp-perso-coord" type="text" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false">
+                        <div class="npf-wp-perso-aide"></div>
+                    </label>
+                    <button type="button" id="npf-wp-perso-position" class="npf-wp-perso-btn npf-wp-perso-position">Position actuelle</button>
+                    <button type="button" id="npf-wp-perso-glisser" class="npf-wp-perso-btn npf-wp-perso-glisser">Glisser sur la carte</button>
+                    <div id="npf-wp-perso-erreur" class="npf-wp-perso-erreur" aria-live="polite"></div>
+                    <div class="npf-confirm-actions">
+                        <button type="button" class="npf-confirm-cancel">Annuler</button>
+                        <button type="button" class="npf-confirm-ok">Valider</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(fond);
+        }
+        const champNom = fond.querySelector('#npf-wp-perso-nom');
+        const champCoord = fond.querySelector('#npf-wp-perso-coord');
+        const erreur = fond.querySelector('#npf-wp-perso-erreur');
+        const glisser = fond.querySelector('#npf-wp-perso-glisser');
+        const position = fond.querySelector('#npf-wp-perso-position');
+        const coordInitiale = avecCoord ? formatNpfCoordonnees(options.lat, options.lon) : '';
+        fond.querySelector('#npf-wp-perso-titre').textContent = options.titre;
+        fond.querySelector('#npf-wp-perso-champ-nom').style.display = avecNom ? 'block' : 'none';
+        fond.querySelector('#npf-wp-perso-champ-coord').style.display = avecCoord ? 'block' : 'none';
+        fond.querySelector('.npf-wp-perso-aide').textContent = NPF_WP_PERSO_AIDE_COORD;
+        position.style.display = avecCoord ? 'block' : 'none';
+        glisser.style.display = options.glisser ? 'block' : 'none';
+        champNom.value = avecNom ? options.nom : '';
+        champCoord.value = coordInitiale;
+        erreur.textContent = '';
+        const fin = valeur => {
+            fond.style.display = 'none';
+            fond.querySelector('.npf-confirm-ok').onclick = null;
+            fond.querySelector('.npf-confirm-cancel').onclick = null;
+            glisser.onclick = null;
+            position.onclick = null;
+            resolve(valeur);
+        };
+        fond.querySelector('.npf-confirm-cancel').onclick = () => fin(null);
+        glisser.onclick = () => fin('glisser');
+        position.onclick = () => {
+            const avion = getNpfWpPersoPositionAvion();
+            if (!avion) { erreur.textContent = "Pas de position de l'avion disponible : coordonnées inchangées."; return; }
+            champCoord.value = formatNpfCoordonnees(avion.lat, avion.lon);
+            erreur.textContent = avion.ageMinutes >= 1 ? `Dernière position GPS reçue il y a ${avion.ageMinutes} min.` : '';
+        };
+        fond.querySelector('.npf-confirm-ok').onclick = async () => {
+            const nom = champNom.value.trim();
+            if (avecNom && !nom) { erreur.textContent = 'Le nom est obligatoire.'; return; }
+            let lat = options.lat;
+            let lon = options.lon;
+            if (avecCoord && champCoord.value.trim() !== coordInitiale) {
+                const lu = parseNpfCoordonnees(champCoord.value);
+                if (lu.erreur) { erreur.textContent = `Coordonnées refusées : ${lu.erreur} Rien n'est créé.`; return; }
+                lat = lu.lat;
+                lon = lu.lon;
+            }
+            if (avecCoord && !(await confirmerNpfWpPersoFrance(lat, lon))) return;
+            fin({ nom, lat, lon });
+        };
+        fond.style.display = 'flex';
+    });
+}
+
+/* v17.90 — en France métropolitaine (Corse comprise) = dans une commune (contours des communes, src/250). Hors de
+ * toute commune : en mer ou hors de France ; avertissement, on peut continuer. Contours indisponibles : commune la plus
+ * proche à 3 NM au plus. */
+async function estNpfWpPersoEnFrance(lat, lon) {
+    try {
+        if (typeof hasLoadedCommunes !== 'undefined' && !hasLoadedCommunes && typeof ensureCommunesLayerDataLoaded === 'function') {
+            await ensureCommunesLayerDataLoaded();
+        }
+    } catch (_) {}
+    try {
+        if (Array.isArray(communesPolygonData) && communesPolygonData.length) return !!findCommuneContainingPoint(lat, lon);
+    } catch (_) {}
+    try { return !!findClosestCommune(lat, lon, 3); } catch (_) { return true; }
+}
+
+async function confirmerNpfWpPersoFrance(lat, lon) {
+    if (await estNpfWpPersoEnFrance(lat, lon)) return true;
+    return npfConfirmInApp(`Ce point (${formatNpfCoordonnees(lat, lon)}) n'est dans aucune commune de France métropolitaine (Corse comprise) : en mer ou hors de France.\n\nContinuer quand même ?`);
+}
+
+/* ---------- actions ---------- */
+
+async function ouvrirNpfWpPersoCreation(latlng, nomInitial = '') {
+    const r = await demanderNpfWpPerso({ titre: 'Nouveau WP perso', nom: nomInitial.slice(0, NPF_WP_PERSO_NOM_MAX), lat: Number(latlng.lat), lon: Number(latlng.lng) });
+    if (!r || r === 'glisser') return false;
+    npfWpPersoListe.push({ id: `perso-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, nom: r.nom, lat: r.lat, lon: r.lon });
+    garderNpfWpPerso();
+    refreshNpfWpPerso();
+    return true;
+}
+
+/* WP de la route de navigation qui vient de ce WP perso (nom et position suivent le WP perso). */
+function getNpfWpPersoRouteWp(id) {
+    return npfWaypointRouteState.waypoints.find(wp => wp.source === 'wpperso' && wp.sourceRef === id) || null;
+}
+
+function appliquerNpfWpPersoChangement(p) {
+    garderNpfWpPerso();
+    refreshNpfWpPerso();
+    const wp = getNpfWpPersoRouteWp(p.id);
+    if (!wp) return;
+    wp.name = p.nom;
+    wp.lat = p.lat;
+    wp.lon = p.lon;
+    persistNpfWaypointRouteState();
+    redrawNpfWaypointRoute();
+    drawUserToTargetRoute();
+    syncNpfWaypointNavigationBanner();
+}
+
+async function renommerNpfWpPerso(id) {
+    const p = npfWpPersoListe.find(x => x.id === id);
+    if (!p) return false;
+    const r = await demanderNpfWpPerso({ titre: 'Renommer le WP perso', nom: p.nom, lat: null, lon: null });
+    if (!r) return false;
+    p.nom = r.nom;
+    appliquerNpfWpPersoChangement(p);
+    return true;
+}
+
+async function deplacerNpfWpPerso(id) {
+    const p = npfWpPersoListe.find(x => x.id === id);
+    if (!p) return false;
+    const r = await demanderNpfWpPerso({ titre: `Déplacer ${p.nom}`, nom: null, lat: p.lat, lon: p.lon, glisser: true });
+    if (!r) return false;
+    if (r === 'glisser') return glisserNpfWpPerso(p);
+    p.lat = r.lat;
+    p.lon = r.lon;
+    appliquerNpfWpPersoChangement(p);
+    return true;
+}
+
+function retirerNpfWpPersoPoignee() {
+    if (!npfWpPersoPoignee) return;
+    const poignee = npfWpPersoPoignee;
+    npfWpPersoPoignee = null;
+    setTimeout(() => { try { poignee.remove(); } catch (_) {} }, 0);
+}
+
+/* Poignée de 76 px, comme « Déplacer » d'un WP de navigation ; toucher ailleurs sur la carte annule. */
+function glisserNpfWpPerso(p) {
+    if (!map || !ensureNpfWaypointRouteLayers()) return false;
+    retirerNpfWpPersoPoignee();
+    const poignee = L.marker([p.lat, p.lon], {
+        icon: L.divIcon({
+            className: 'npf-waypoint-move-handle',
+            html: `<span class="npf-waypoint-move-handle-ring"><span>${escapeHtml(p.nom.slice(0, 6))}</span></span>`,
+            iconSize: [76, 76],
+            iconAnchor: [38, 38]
+        }),
+        pane: map.getPane('npfWaypointMovePane') ? 'npfWaypointMovePane' : 'markerPane',
+        zIndexOffset: 20000,
+        keyboard: false,
+        draggable: true,
+        autoPan: true,
+        autoPanPadding: [60, 60],
+        autoPanSpeed: 10
+    }).addTo(map);
+    npfWpPersoPoignee = poignee;
+    const annuler = () => retirerNpfWpPersoPoignee();
+    map.once('click', annuler);
+    poignee.on('dragend', () => {
+        map.off('click', annuler);
+        const position = poignee.getLatLng();
+        retirerNpfWpPersoPoignee();
+        p.lat = Number(position.lat);
+        p.lon = Number(position.lng);
+        appliquerNpfWpPersoChangement(p);
+    });
+    return true;
+}
+
+async function supprimerNpfWpPerso(id) {
+    const p = npfWpPersoListe.find(x => x.id === id);
+    if (!p) return false;
+    if (!(await npfConfirmInApp(`Supprimer le WP perso « ${p.nom} » ?`))) return false;
+    npfWpPersoListe = npfWpPersoListe.filter(x => x.id !== id);
+    garderNpfWpPerso();
+    refreshNpfWpPerso();
+    /* S'il est dans la route de navigation, il y reste comme WP libre : la navigation en cours n'est pas coupée. */
+    const wp = getNpfWpPersoRouteWp(id);
+    if (wp) {
+        wp.source = 'map';
+        wp.sourceRef = '';
+        persistNpfWaypointRouteState();
+    }
+    return true;
+}
+
+/* Direct to : comme un terrain en mode navigation (route WP, bandeau cap / distance / temps, WP intermédiaires). */
+function npfWpPersoDirectTo(id) {
+    const p = npfWpPersoListe.find(x => x.id === id);
+    if (!p) return false;
+    if (!getNpfWpPersoRouteWp(id)) addNpfWaypoint({ lat: p.lat, lon: p.lon, name: p.nom, source: 'wpperso', sourceRef: id });
+    const wp = getNpfWpPersoRouteWp(id);
+    return wp ? activateNpfWaypointGoto(wp.id) : false;
+}
+
+/* La carte est créée après le chargement du script : on attend qu'elle existe. */
+(function attendreCarteWpPerso(essai = 0) {
+    if (typeof map !== 'undefined' && map && typeof map.whenReady === 'function') {
+        map.whenReady(() => {
+            lireNpfWpPerso();
+            refreshNpfWpPerso();
+        });
+        return;
+    }
+    if (essai < 240) setTimeout(() => attendreCarteWpPerso(essai + 1), 500);
+})();
+
+window.ouvrirNpfWpPersoFiche = ouvrirNpfWpPersoFiche;
+window.parseNpfCoordonnees = parseNpfCoordonnees;
+window.formatNpfCoordonnees = formatNpfCoordonnees;
+/* ==========================================================================
+   v17.90 — RECHERCHE D'ADRESSE POSTALE (en ligne seulement)
+   (repris de NPF-Q400-RUN v1.16, adapté à la France métropolitaine, Corse comprise)
+   --------------------------------------------------------------------------
+   La recherche de la loupe reste locale (communes, lieux, terrains). Le texte
+   ne part au service d'adresses que sur un toucher de la dernière ligne de la
+   liste, jamais à la frappe. Service : géocodage de la Géoplateforme (IGN),
+   qui sert la Base Adresse Nationale depuis l'arrêt de api-adresse.data.gouv.fr.
+   Envoyé : le texte tapé seulement (jamais la position de l'avion ni de la carte).
+   Puis : Créer Feu, WP perso ou Direct to. Hors ligne : message, rien d'autre.
+   ========================================================================== */
+
+const NPF_ADRESSE_URL = 'https://data.geopf.fr/geocodage/search';
+const NPF_ADRESSE_TEXTE_MIN = 4;
+const NPF_ADRESSE_TEXTE_MAX = 200;
+const NPF_ADRESSE_DEMANDES = 20;   // le service répond aussi pour l'outre-mer : tri ci-dessous
+const NPF_ADRESSE_AFFICHEES = 8;
+const NPF_ADRESSE_DELAI_MS = 8000;
+const NPF_ADRESSE_ZOOM = 14;
+let npfAdresseSequence = 0;
+let npfAdressePoint = null;
+
+function ajouterNpfAdresseAuxResultats(liste) {
+    const texte = String(document.getElementById('search-input')?.value || '').trim();
+    if (texte.length < NPF_ADRESSE_TEXTE_MIN) return;
+    const li = document.createElement('li');
+    li.className = 'search-result-adresse';
+    li.textContent = `Chercher l'adresse « ${texte.slice(0, NPF_ADRESSE_TEXTE_MAX)} »`;
+    li.addEventListener('click', event => {
+        event.preventDefault();
+        event.stopPropagation();
+        chercherNpfAdresse(texte.slice(0, NPF_ADRESSE_TEXTE_MAX));
+    });
+    liste.appendChild(li);
+    liste.style.display = 'block';
+}
+
+function afficherNpfAdresseMessage(message) {
+    const liste = document.getElementById('results-list');
+    liste.innerHTML = '';
+    const li = document.createElement('li');
+    li.className = 'search-result-adresse-message';
+    li.textContent = message;
+    liste.appendChild(li);
+    liste.style.display = 'block';
+}
+
+/* Adresses de France métropolitaine, Corse comprise (code commune hors outre-mer 97x / 98x, position en métropole). */
+function lireNpfAdresses(donnees) {
+    return (Array.isArray(donnees?.features) ? donnees.features : []).map(f => ({
+        nom: String(f?.properties?.label || '').trim(),
+        commune: String(f?.properties?.citycode || ''),
+        lon: Number(f?.geometry?.coordinates?.[0]),
+        lat: Number(f?.geometry?.coordinates?.[1])
+    })).filter(a => a.nom && /^(\d{2}|2A|2B)/.test(a.commune) && !/^9[78]/.test(a.commune)
+        && Number.isFinite(a.lat) && Number.isFinite(a.lon) && a.lat > 41 && a.lat < 51.5 && a.lon > -5.5 && a.lon < 10)
+        .slice(0, NPF_ADRESSE_AFFICHEES);
+}
+
+async function chercherNpfAdresse(texte) {
+    const sequence = ++npfAdresseSequence;
+    namedPlacesSearchSequence += 1;   // la recherche locale en cours ne réécrit plus la liste
+    if (!navigator.onLine) {
+        afficherNpfAdresseMessage('Recherche d\'adresse disponible seulement en ligne.');
+        return;
+    }
+    afficherNpfAdresseMessage('Recherche de l\'adresse…');
+    const parametres = new URLSearchParams({ q: texte, index: 'address', limit: String(NPF_ADRESSE_DEMANDES) });
+    const controle = new AbortController();
+    const minuterie = setTimeout(() => controle.abort(), NPF_ADRESSE_DELAI_MS);
+    let adresses = null;
+    try {
+        const reponse = await fetch(`${NPF_ADRESSE_URL}?${parametres}`, { signal: controle.signal, credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store' });
+        if (reponse.ok) adresses = lireNpfAdresses(await reponse.json());
+    } catch (_) {}
+    clearTimeout(minuterie);
+    if (sequence !== npfAdresseSequence) return;
+    if (!adresses) {
+        afficherNpfAdresseMessage(navigator.onLine ? 'Service d\'adresses injoignable. Réessayez.' : 'Recherche d\'adresse disponible seulement en ligne.');
+        return;
+    }
+    if (!adresses.length) {
+        afficherNpfAdresseMessage('Aucune adresse trouvée en France métropolitaine.');
+        return;
+    }
+    const liste = document.getElementById('results-list');
+    liste.innerHTML = '';
+    adresses.forEach(a => {
+        const li = document.createElement('li');
+        li.textContent = a.nom;
+        li.addEventListener('click', event => {
+            event.preventDefault();
+            event.stopPropagation();
+            choisirNpfAdresse(a);
+        });
+        liste.appendChild(li);
+    });
+}
+
+/* Direct to : WP du mode navigation, comme un WP perso (le feu en cours est fermé par activateNpfWaypointGoto). */
+function npfAdresseDirectTo(a) {
+    const point = { lat: a.lat, lon: a.lon, name: a.nom, source: 'adresse', sourceRef: a.nom };
+    if (!findNpfWaypointForSource(point)) addNpfWaypoint(point);
+    const wp = findNpfWaypointForSource(point);
+    return wp ? activateNpfWaypointGoto(wp.id) : false;
+}
+
+function choisirNpfAdresse(a) {
+    if (!map) return;
+    const champ = document.getElementById('search-input');
+    const liste = document.getElementById('results-list');
+    const effacer = document.getElementById('clear-search');
+    if (champ) { champ.value = ''; champ.blur(); }
+    if (liste) liste.style.display = 'none';
+    if (effacer) effacer.style.display = 'none';
+    /* Barre de recherche refermée : la carte et la fiche restent libres. */
+    document.getElementById('ui-overlay').style.display = 'none';
+    document.body?.classList.remove('npf-main-search-open');
+    document.getElementById('toggle-search-button')?.classList.remove('active');
+    if (currentCommune || selectedAirportDestination) document.getElementById('commune-info-display').style.display = 'flex';
+    if (npfAdressePoint) { try { npfAdressePoint.remove(); } catch (_) {} }
+    if (centerGpsFollowActive) disableCenterGpsFollow({ keepLiveGps: true });
+    const latlng = L.latLng(a.lat, a.lon);
+    map.setView(latlng, Math.min(NPF_ADRESSE_ZOOM, map.getMaxZoom()), { animate: false });
+    const point = L.circleMarker(latlng, { radius: 8, color: '#ffffff', weight: 2, fillColor: '#e6007e', fillOpacity: 1, interactive: false }).addTo(map);
+    npfAdressePoint = point;
+
+    const fiche = document.createElement('div');
+    fiche.className = 'npf-adresse-popup';
+    const nom = document.createElement('div');
+    nom.className = 'npf-adresse-nom';
+    nom.textContent = a.nom;
+    fiche.appendChild(nom);
+    const bouton = (texte, classe, action) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = `npf-map-longpress-action ${classe}`;
+        b.textContent = texte;
+        b.addEventListener('click', event => {
+            event.preventDefault();
+            event.stopPropagation();
+            try { map.closePopup(); } catch (_) {}
+            action();
+        });
+        fiche.appendChild(b);
+    };
+    bouton('Créer Feu', 'npf-map-longpress-fire npf-adresse-feu', () => {
+        if (isSimulationMode) createSimulatedFireAtPoint(a.lat, a.lon);
+        else createManualFireAtLatLng(latlng);
+    });
+    bouton('WP perso', 'npf-map-longpress-wp-perso npf-adresse-wp', () => ouvrirNpfWpPersoCreation(latlng, a.nom.replace(/\s\d{5}\s/, ' ')));   // sans le code postal : le nom est limité à 40 caractères
+    bouton('Direct to', 'npf-adresse-direct', () => npfAdresseDirectTo(a));
+
+    L.popup({ maxWidth: 300, closeButton: true, autoPan: true, keepInView: true, offset: [0, -8] })
+        .setLatLng(latlng)
+        .setContent(fiche)
+        .on('remove', () => {
+            if (npfAdressePoint === point) npfAdressePoint = null;
+            try { point.remove(); } catch (_) {}
+        })
+        .openOn(map);
+}
 /* ========================================================================== 
    v16.66 — noms + fréquence opérationnelle des terrains à partir de 2 NM
    ========================================================================== */
@@ -43133,12 +44342,16 @@ function drawUserToTargetRoute() {
         ? getNpfFirePelicAutoCycleTarget()
         : null;
 
+    /* v17.90 — trait AVION -> FEU modifié (src/205) : le trait rouge va en direct au 1er WP. */
+    const traitAvionPremierWp = (!routeWaypointTarget && !selectedAirportDestination && (!automaticFirePelicTarget || automaticFirePelicTarget.kind === 'fire')
+        && typeof getNpfTraitFeuAvionPremierWp === 'function') ? getNpfTraitFeuAvionPremierWp() : null;
+
     const target = routeWaypointTarget
         ? {
             lat: Number(routeWaypointTarget.lat),
             lon: Number(routeWaypointTarget.lon)
         }
-        : (selectedAirportDestination
+        : traitAvionPremierWp ? { lat: traitAvionPremierWp.lat, lon: traitAvionPremierWp.lon } : (selectedAirportDestination
             ? {
                 lat: Number(selectedAirportDestination.lat),
                 lon: Number(selectedAirportDestination.lon)
@@ -45276,6 +46489,17 @@ function updateCalculatorData() {
         CALCULATOR_DATA.distPelicFeu = Math.round(distPelicFeu);
         CALCULATOR_DATA.csFeu = csFeu;
         CALCULATOR_DATA.distGpsFeu = Math.round(distGpsFeu);
+        /* v17.90 — traits modifiés (WP, src/205) : PÉLIC -> FEU du pélicandrome choisi pour la rotation, le BINGO PÉLIC et
+         * la conso ; de la base si elle est un des pélicandromes affichés (transit, BINGO BASE) ; AVION -> FEU pour le
+         * transit avion (Dérout.). Carburant et BINGO : mêmes calculs qu'avant, sur la même distance (arrondie au Nm). */
+        if (typeof getNpfTraitFeuDistanceNm === 'function') {
+            const traitPelicNm = selectedPelicanOACI ? getNpfTraitFeuDistanceNm(`pelic:${selectedPelicanOACI}`) : null;
+            if (Number.isFinite(traitPelicNm)) CALCULATOR_DATA.distPelicFeu = Math.round(traitPelicNm);
+            const traitBaseNm = selectedBaseOACI ? getNpfTraitFeuDistanceNm(`pelic:${normalizeOaciCodeInput(selectedBaseOACI)}`) : null;
+            if (Number.isFinite(traitBaseNm)) CALCULATOR_DATA.distBaseFeu = Math.round(traitBaseNm);
+            const traitAvionNm = getNpfTraitFeuDistanceNm('avion');
+            if (Number.isFinite(traitAvionNm)) CALCULATOR_DATA.distGpsFeu = Math.round(traitAvionNm);
+        }
     }
     if (typeof masterRecalculate === 'function') { masterRecalculate(); }
 }
@@ -48689,6 +49913,11 @@ const NPF_SERVER_MAP_LOG_KEY = 'npfServerMapDownloadLogV1';
 const NPF_SERVER_MAP_SPACE_FACTOR = 1.15;
 const NPF_SERVER_MAP_SPACE_MARGIN_BYTES = 300 * 1024 * 1024;
 const NPF_SERVER_MAP_STALL_TIMEOUT_MS = 30000;
+/* v17.90 — lecture du manifeste (repris de la RUN v1.9 / v1.10) : délai maximal par essai, puis nouvel essai automatique
+ * (l'app ne reste jamais bloquée sur « Lecture du manifeste… »). */
+const NPF_SERVER_MAP_MANIFEST_TIMEOUT_MS = 20000;
+const NPF_SERVER_MAP_MANIFEST_ESSAIS = 3;
+const NPF_SERVER_MAP_MANIFEST_PAUSE_MS = 3000;
 const NPF_SERVER_MAP_RETRY_DELAYS_MS = [3000, 6000, 12000, 24000, 30000, 30000];
 const NPF_SERVER_SECTION_CHUNK_CACHE = 'npf-section-telechargement-v1';
 /* Code Doc FdF : saisi une fois, gardé sur cet iPad seulement ; jamais écrit au DIAG. */
@@ -49068,14 +50297,55 @@ async function deleteNpfServerSectionOldGroups(cfg, aEffacer) {
 
 /* --- Réseau ------------------------------------------------------------------ */
 
+/* v17.90 — jusqu'à 3 essais de 20 s au plus chacun (3 s entre deux) si le serveur ne répond pas, si le réseau échoue
+ * ou si le serveur répond 5xx ; code refusé, autre code ou manifeste illisible : erreur tout de suite (RUN v1.9). */
 async function fetchNpfServerMapManifest(cfg, code = '') {
-    const response = await fetch(`${cfg.manifestUrl}?t=${Date.now()}`, { cache: 'no-store', headers: buildNpfServerAuthHeaders(cfg, code) });
+    for (let essai = 1; ; essai += 1) {
+        try {
+            return await fetchNpfServerMapManifestOnce(cfg, code);
+        } catch (error) {
+            const reessayable = error && (error.delaiDepasse || error.name === 'TypeError' || error.serveur5xx);
+            if (!reessayable || essai >= NPF_SERVER_MAP_MANIFEST_ESSAIS) {
+                if (error && error.delaiDepasse) error.message = `délai dépassé, ${essai} essai${essai > 1 ? 's' : ''} de ${NPF_SERVER_MAP_MANIFEST_TIMEOUT_MS / 1000} s`;
+                throw error;
+            }
+            const message = error && error.message ? error.message : String(error);
+            addNpfServerMapLogEvent(`manifeste : essai ${essai} sans réponse (${message}), nouvel essai`, {}, cfg);
+            await new Promise(resolve => setTimeout(resolve, NPF_SERVER_MAP_MANIFEST_PAUSE_MS));
+            showNpfServerMapProgress(`${cfg.id === 'npf-q400' ? 'Lecture du manifeste de la carte…' : 'Lecture du manifeste…'} (nouvel essai ${essai + 1}/${NPF_SERVER_MAP_MANIFEST_ESSAIS})`, null, { advice: false, error: false }, cfg);
+        }
+    }
+}
+
+async function fetchNpfServerMapManifestOnce(cfg, code = '') {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), NPF_SERVER_MAP_MANIFEST_TIMEOUT_MS);
+    try {
+        return await readNpfServerMapManifest(cfg, code, controller.signal);
+    } catch (error) {
+        if (controller.signal.aborted) {
+            const delai = new Error(`délai dépassé (${NPF_SERVER_MAP_MANIFEST_TIMEOUT_MS / 1000} s)`);
+            delai.delaiDepasse = true;
+            throw delai;
+        }
+        throw error;
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+async function readNpfServerMapManifest(cfg, code, signal) {
+    const response = await fetch(`${cfg.manifestUrl}?t=${Date.now()}`, { cache: 'no-store', headers: buildNpfServerAuthHeaders(cfg, code), signal });
     if (response.status === 401) {
         const error = new Error('code refusé');
         error.codeRefuse = true;
         throw error;
     }
-    if (!response.ok) throw new Error(`serveur : code ${response.status}`);
+    if (!response.ok) {
+        const error = new Error(`serveur : code ${response.status}`);
+        error.serveur5xx = response.status >= 500;
+        throw error;
+    }
     const manifest = await response.json();
     const okTuiles = cfg.type !== 'tuiles' || Number(manifest.totalTuiles) > 0;
     /* v17.80 — carte avec noms : chaque morceau est du fond ou des noms, et il y a des noms. */
@@ -56783,10 +58053,34 @@ function openMapLongPressActionPopup(latlng, zoneCandidates = [], options = {}) 
     container.appendChild(wpButton);
     container.appendChild(zoneButton);
 
+    /* v17.90 — WP perso (src/216) : repère personnel, à ce point ou aux coordonnées saisies (repris de la RUN v1.14). */
+    const wpPersoButton = document.createElement('button');
+    wpPersoButton.type = 'button';
+    wpPersoButton.className = 'npf-map-longpress-action npf-map-longpress-wp-perso';
+    wpPersoButton.textContent = 'WP perso';
+    wpPersoButton.addEventListener('click', event => {
+        event.preventDefault();
+        event.stopPropagation();
+        try { map.closePopup(); } catch (_) {}
+        ouvrirNpfWpPersoCreation(latlng);
+    });
+    container.appendChild(wpPersoButton);
+
+    /* v17.90 — menu plus haut (un bouton de plus) : la carte se décale pour qu'il reste sous les bandeaux du haut ; le
+     * bloc de recherche ne capte plus le toucher dans ses parties vides (style.css) : « Créer Feu » reste touchable. */
+    let hautOccupe = 0;
+    ['bingo-map-display', 'commune-info-display', 'npf-waypoint-route-banner'].forEach(id => {
+        const element = document.getElementById(id);
+        if (!element || window.getComputedStyle(element).display === 'none') return;
+        hautOccupe = Math.max(hautOccupe, element.getBoundingClientRect().bottom);
+    });
+    const carteHaut = map.getContainer().getBoundingClientRect().top;
+
     const actionPopup = L.popup({
         maxWidth: 280,
         closeButton: true,
         autoPan: !centerGpsFollowActive,
+        autoPanPaddingTopLeft: L.point(5, Math.max(5, Math.round(hautOccupe - carteHaut) + 10)),
         keepInView: !centerGpsFollowActive
     })
         .setLatLng(latlng)
@@ -56823,6 +58117,11 @@ async function executeMapLongPressAction(latlng) {
      * strictement inchangé.
      */
     if (window.__npfWaypointRouteReady === true && handleNpfWaypointRouteLongPress(latlng)) {
+        return;
+    }
+
+    /* v17.90 — traits AVION / PÉLIC -> FEU (src/205) : même geste, après la route WP du mode navigation. */
+    if (typeof handleNpfTraitFeuLongPress === 'function' && handleNpfTraitFeuLongPress(latlng)) {
         return;
     }
 

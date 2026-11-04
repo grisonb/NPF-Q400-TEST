@@ -510,6 +510,7 @@ function buildNpfWaypointPopupHtml(wp, index) {
                 ${buildNpfWaypointActionsHtml(wp)}
             </div>
             ${buildNpfWaypointNotamsButtonHtml(wp)}
+            ${wp?.source === 'wpperso' ? `<button type="button" class="npf-wp-perso-btn npf-wp-perso-depuis-route" onclick="window.ouvrirNpfWpPersoFiche('${String(wp.sourceRef || '').replace(/[^A-Za-z0-9_-]/g, '')}')">Fiche WP perso</button>` : ''}
         </div>
     `;
 }
@@ -818,6 +819,10 @@ function ensureNpfWaypointGps() {
 function activateNpfWaypointGoto(id) {
     const wp = getNpfWaypointById(id);
     if (!wp) return false;
+    /* v17.90 — un Go To / Direct to vers un autre point ferme le feu, comme « Fermer » (WP de ses traits compris) ;
+     * un WP de route qui est un pélicandrome (n'importe lequel) garde le feu et ses WP (décision de Bastien). */
+    const versPelicandrome = wp.source === 'airport' && isSelectablePelicanAirport(wp.sourceRef);
+    if (currentCommune && !versPelicandrome) clearCurrentSelection({ preserveMapView: true });
     suspendNpfFirePelicAutoCycle();
     npfWaypointRouteState.activeId = wp.id;
     npfWaypointRouteState.gotoActive = true;
@@ -1220,11 +1225,14 @@ function positionNpfWaypointNavigationBanner() {
     const banner = document.getElementById('npf-waypoint-route-banner');
     if (!banner || banner.style.display === 'none') return;
 
+    /* v17.90 — --safe-area-top est un calcul (zone sûre, barre iPadOS) : valeur lue en pixels sur une sonde. */
     let safeAreaTop = 0;
     try {
-        safeAreaTop = parseFloat(
-            window.getComputedStyle(document.documentElement).getPropertyValue('--safe-area-top')
-        ) || 0;
+        const sonde = document.createElement('div');
+        sonde.style.cssText = 'position:fixed;top:var(--safe-area-top);left:0;width:0;height:0;visibility:hidden;';
+        document.body.appendChild(sonde);
+        safeAreaTop = sonde.getBoundingClientRect().top || 0;
+        sonde.remove();
     } catch (_) {}
 
     let top = Math.max(8, safeAreaTop + 4);
@@ -1584,7 +1592,7 @@ function startNpfWaypointMove(id) {
             wp.sourceRef = snap.sourceRef;
             wp.name = snap.name;
             try { handle.setLatLng(finalLatLng); } catch (_) {}
-        } else if (wp.source === 'airport' || wp.source === 'vfr') {
+        } else if (wp.source === 'airport' || wp.source === 'vfr' || wp.source === 'wpperso') {
             /*
              * Un WP déplacé franchement hors de son point d'origine devient
              * un WP libre. Le libellé est conservé, mais l'identité de source

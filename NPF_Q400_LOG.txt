@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
-Mise à jour : 19/10/2026
-Version de travail actuelle : TEST v17.89
+Mise à jour : 04/11/2026
+Version de travail actuelle : TEST v17.90
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -551,9 +551,13 @@ NON IMPLÉMENTÉ / OUVERT :
   07/10/2026 : programme VPS bfg-sofia-notams 1.2.0 PRÊT, NON INSTALLÉ
   (~/vps-a-copier/). v17.60 à pousser APRÈS l'installation de la 1.2.0
   (elle annonce « environ 1 minute ») ;
+- v17.90 : portage de NPF-Q400-RUN v1.10 à v1.16 (traits modifiables, WP perso, Go To pendant un feu, adresse postale,
+  barre iPadOS, délai du manifeste) : À MESURER sur iPad (gestes sur les traits, WP perso, « Position actuelle » au vrai
+  GPS, adresse en ligne avec le vrai service, barre iPadOS en paysage et portrait, app installée) ; COMMIT LOCAL, NON
+  POUSSÉE ; À DÉCIDER : trait PÉLIC -> FEU quand le Go To vise un autre pélicandrome (voir entrée v17.90, § 3) ;
 - v17.89 : À MESURER sur iPad (feu Barret-sur-Méouge : LFLU 50 Nm / 14' / Rot. 49 min, LFML 54 Nm / 15' / Rot. 51 min ;
-  même rotation dans l'étiquette et le calculateur ; 71 à 80 Nm = 20') ; COMMITS LOCAUX (3025945 règle progressive
-  ABANDONNÉE, puis règle corrigée), NON POUSSÉE ;
+  même rotation dans l'étiquette et le calculateur ; 71 à 80 Nm = 20') ; POUSSÉE le 20/10/2026 (3025945 règle progressive
+  ABANDONNÉE, puis 00224d2 règle corrigée) ;
 - Fluidité des gestes (DIAG iPad v17.85 du 18/10/2026 10:20, 77 min de simulation : médiane 33 images/s) : ANALYSÉE le
   18/10/2026 (entrée v17.89, § 6), non reproduite sur PC ; cause probable = état de l'iPad en session longue (DÉDUIT,
   NON PROUVÉ) ; À MESURER (même session de 77 min en v17.88 ou plus, iPad redémarré) ; 2 pistes NON IMPLÉMENTÉES ;
@@ -813,27 +817,27 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.89
-Date : 19/10/2026
-Base : v17.88 (50647cf, poussée le 18/10/2026)
+Version : TEST v17.90
+Date : 04/11/2026
+Base : v17.89 (00224d2, poussée le 20/10/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.89.txt
-2_Index_v17.89.txt
-3_Manifest_v17.89.txt
-4_Script_v17.89.txt
-5_SIA_v17.89.txt
-6_Style_v17.89.txt
-7_Sw_v17.89.txt
+1_Modifications_v17.90.txt
+2_Index_v17.90.txt
+3_Manifest_v17.90.txt
+4_Script_v17.90.txt
+5_SIA_v17.90.txt
+6_Style_v17.90.txt
+7_Sw_v17.90.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.89 (et texte « TEST v17.89 » de l'écran de
+- Index : APP_VERSION = v17.90 (et texte « TEST v17.90 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.89
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.89
-- Style : NPF_STYLE_BUILD_VERSION = v17.89
-- Service Worker : `sw-v17-89_regle_vitesse_unique` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-89_regle_vitesse_unique`, `npf-q400-test-app-data-v1`,
+- Manifest : start_url = ./index.html?appv=v17.90
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.90
+- Style : NPF_STYLE_BUILD_VERSION = v17.90
+- Service Worker : `sw-v17-90_portage_run` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-90_portage_run`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-sia-2026-10-29-v02-g15`
 - SIA_DATA_REVISION (SW / Index sia.js?siav=) : sia-2026-10-29-v02-g15 (= NPF_SIA_DATA_REVISION
   de sia.js ; à changer à chaque nouveau sia.js)
@@ -846,15 +850,15 @@ Références de version cohérentes :
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.89 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.90 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
 - `sia.js` : par rapport à v17.70, outre-mer retiré, « a » de 34 VRP renseigné, table vrpAirportColors ajoutée (2 pastels), révision g6 ; zones, terrains et points de métropole identiques ; moteur tuiles (src/100) modifié en v17.66 sur demande
   explicite (limite de zoom propre à chaque carte, zoom 11 OACI 1/500 000) ;
-- tests v17.89 : entrée v17.89 ; sia.js strictement identique à la v17.81 ;
+- tests v17.90 : entrée v17.90 ; sia.js strictement identique à la v17.81 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82, v17.83, v17.84, v17.85, v17.86, v17.87, v17.88 et v17.89 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82, v17.83, v17.84, v17.85, v17.86, v17.87, v17.88, v17.89 et v17.90 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
   v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE ;
   v17.56 VALIDÉE en vol ; v17.57 VALIDÉE sur iPad.
 
@@ -2384,6 +2388,147 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
 
+VERSION TEST v17.90 — PORTAGE DE NPF-Q400-RUN v1.10 À v1.16 : TRAITS MODIFIABLES, WP PERSO, GO TO PENDANT UN FEU,
+ADRESSE POSTALE, BARRE iPadOS, DÉLAI DU MANIFESTE
+Date : 04/11/2026
+Base fonctionnelle : v17.89 (commits 3025945 + 00224d2, poussée le 20/10/2026). Une seule version pour tout. Seule la TEST
+change : pérenne, RUN et BFG inchangées. sia.js inchangé (strictement identique à la v17.81).
+Source : dépôt local ~/projects/NPF-Q400-RUN, en LECTURE SEULE, version v1.16 COMMITÉE (08b8497, extraite par git archive
+dans outils_tests/run116/) ; la RUN avait des modifications non commitées en cours (index.html, manifest.json, script.js,
+src/010, src/218, style.css, sw.js) : ni lues pour ce portage, ni touchées. La RUN v1.16 et la TEST v17.89 ont la même base
+(fiche de reprise « TEST v17.89 » dans le journal de la RUN) : comparaison fichier par fichier.
+
+0. ÉTAT DES LIEUX AVANT CODE (TEST v17.89 / RUN v1.16)
+- Traits : TEST = WP seulement en mode navigation (src/200 addNpfWaypoint, startNpfWaypointMove), traits droits PÉLIC ->
+  FEU (src/150 drawRoute) et AVION -> FEU (src/260 drawUserToTargetRoute) ; RUN = src/205_traits_feu.js (un seul terrain,
+  FMEP), branché dans 150, 110, 260, 270, 320, clé npfTraitsFeuV1.
+- WP perso : TEST = rien ; RUN = src/216_wp_perso.js (lecture de tous les formats de coordonnées, étoile SVG, fiche,
+  « Position actuelle ») + bouton dans src/320 + correctif du menu (« Créer Feu » intouchable sous le bloc de recherche).
+- Go To pendant un feu : TEST = le feu restait (src/150 selectAirportDestination, src/200 activateNpfWaypointGoto) ; RUN =
+  feu fermé sauf vers FMEP, WP des traits effacés avec le feu (src/100 clearCurrentSelection).
+- Adresse : TEST = rien (src/110 displayResults) ; RUN = src/217_adresse.js (data.geopf.fr, résultats 974).
+- Barre iPadOS : TEST = même meta (black-translucent, viewport-fit=cover), marge du haut fixe 22 px, env(safe-area-inset-top)
+  à 33 endroits ; RUN = variable --npf-barre-haut (au moins 32 px en app installée), bande sombre, sonde dans src/200.
+- Manifeste de la carte : TEST = AUCUN délai (src/280 fetchNpfServerMapManifest : une requête sans limite) ; RUN = 3 essais
+  de 20 s au plus, 3 s entre deux (délai dépassé, réseau, 5xx), erreur tout de suite sinon.
+- PDF : TEST = Doc FdF dans la visionneuse actuelle (fonctionne) ; RUN = PDF.js pour les cibles.
+
+1. TRAITS AVION -> FEU ET PÉLIC -> FEU MODIFIABLES (src/205_traits_feu.js, nouveau ; branché dans src/100, 110, 150, 260,
+   270, 320 ; ORDER.txt)
+- Mêmes gestes que le mode navigation : appui long près d'un trait -> WP inséré, aussitôt en « Déplacer » (poignée de
+  76 px à glisser) ; toucher un WP -> fiche Déplacer / Supprimer / Remettre en ligne droite ; cap et distance par branche.
+- Adaptation TEST (plusieurs pélicandromes) : CHAQUE route PÉLIC -> FEU affichée (les N plus proches) est modifiable, WP
+  gardés par pélicandrome ; l'étiquette de chaque pélicandrome (distance, temps de vol, Rot.) suit son trajet.
+- Calculs : règle de vitesse de la TEST (src/050, v17.89 : ≤ 70 Nm à 210 kt, > 70 Nm à 240 kt, jamais moins de 20 min) sur
+  la distance du trajet avec ses WP ; calculateur (src/270 updateCalculatorData) : trait du pélicandrome choisi pour la
+  rotation, la conso et le BINGO PÉLIC ; trait de la base si elle est un des pélicandromes affichés (transit, BINGO
+  BASE) ; AVION -> FEU pour le transit avion (Dérout.) et le bandeau du feu (cap vers le 1er WP, distance jusqu'au feu par
+  les WP ; temps à la vitesse GPS, comme avant). Carburant et BINGO : mêmes formules, sur la même distance.
+- Nouveau feu = ligne droite ; même feu (relance) = WP gardés (clé npfQ400TestTraitsFeuV1, propre à la TEST) ; feu fermé
+  (×, « Fermer », Go To ailleurs) = WP effacés (carte, poignée, mémoire) ; mémoire laissée sans feu ouvert : effacée au
+  démarrage. Aucun réseau. Mode navigation inchangé et prioritaire.
+
+2. WP PERSO (src/216_wp_perso.js, nouveau ; bouton dans src/320 ; styles dans style.css)
+- Appui long : bouton « WP perso » (menu Créer Feu / Ajout WP / Sélection Zone / WP perso). Menu placé sous les bandeaux du
+  haut et bloc de recherche transparent au toucher dans ses parties vides : « Créer Feu » reste touchable (défaut de la RUN).
+- Fenêtre : nom (obligatoire, 40 caractères), coordonnées du point touché modifiables ; tous formats (degrés minutes,
+  degrés minutes secondes, degrés décimaux, compact N4327.000, avec ou sans N/S/E/O/W, point ou virgule, « Latitude… ») ;
+  saisies incohérentes refusées avec un message (minutes ou secondes ≥ 60, un seul hémisphère, signe et hémisphère, deux
+  hémisphères du même axe, plus de 90° / 180°…) ; affichage « N 43°27.000' E 005°22.500' ».
+- « Position actuelle » sous les coordonnées (création et Déplacer) : GPS de l'avion, ou avion simulé en simulation ; âge
+  affiché si la dernière position a 1 min ou plus ; sans position (ou seulement la position mémorisée à la fermeture) :
+  message, coordonnées inchangées (comme la RUN v1.15).
+- Avertissement (on peut continuer) si le point n'est dans AUCUNE commune de France métropolitaine, Corse comprise (contours
+  des communes déjà chargés, src/250 findCommuneContainingPoint) : « en mer ou hors de France » ; remplace l'avertissement
+  à 100 NM de La Réunion. Choix : la mer (même près des côtes) déclenche l'avertissement ; contours indisponibles : commune
+  la plus proche à 3 NM au plus.
+- Carte : étoile magenta dessinée par l'app (SVG), nom TOUJOURS affiché à côté ; toucher -> nom, coordonnées, Direct to,
+  Renommer, Déplacer (saisie ou glisser), Supprimer (confirmation).
+- Gardés après fermeture de l'app : clé npfQ400TestWpPersoV1 (ni la pérenne ni la RUN ne la lisent ; RUN : préfixe
+  npf-q400-run:). Repères seulement : jamais pélicandrome, terrain, « plus proche », BINGO ni dégagement.
+- Étoile au-dessus des losanges de navigation (z675 > z670, sous la poignée z699) : touchable après un Direct to (la RUN la
+  laisse sous le losange) ; sa fiche a alors un bouton « WP de route » ; la fiche du WP de route a « Fiche WP perso ».
+
+3. GO TO PENDANT UN FEU (src/150 selectAirportDestination, src/200 activateNpfWaypointGoto)
+- Go To terrain (liste, fiche), GoTo WP de route, Direct to WP perso ou adresse vers un autre point : le feu est fermé
+  comme « Fermer » (clearCurrentSelection) ; ses WP de traits disparaissent (écran et mémoire, relance comprise).
+- EXCEPTION (décision de Bastien) : Go To vers N'IMPORTE QUEL pélicandrome (isSelectablePelicanAirport : liste des 27 +
+  déclarés par l'utilisateur), y compris un WP de route qui est un pélicandrome : feu et WP de ses traits gardés. Navette
+  automatique feu <-> pélicandrome (src/030) inchangée.
+- QUESTION OUVERTE (À DÉCIDER par Bastien, rien décidé) : Go To vers un AUTRE pélicandrome que celui d'un trait modifié
+  (ex. WP sur LFLU -> FEU, Go To LFML) : aujourd'hui le trait LFLU -> FEU garde ses WP et reste dessiné (comme toutes les
+  routes PÉLIC du feu) ; le pélicandrome choisi pour le calculateur ne change pas (le Go To ne le change pas) ; le trait
+  rouge va de l'avion à LFML. Options possibles : garder ainsi ; ou effacer les WP du trait d'un pélicandrome qui n'est
+  pas la cible ; ou choisir la cible comme pélicandrome du calculateur.
+
+4. ADRESSE POSTALE (src/217_adresse.js, nouveau ; ligne dans src/110 ; sw.js : passage direct au réseau, jamais en cache)
+- Dernière ligne de la liste de la loupe : « Chercher l'adresse « … » » (4 caractères au moins) ; rien ne part à la frappe.
+- Même service que la RUN : géocodage de la Géoplateforme IGN (https://data.geopf.fr/geocodage/search, Base Adresse
+  Nationale) ; envoyé : le texte tapé SEUL (ni position de l'avion ni de la carte ; RUN : centre de La Réunion) ;
+  résultats gardés : France métropolitaine et Corse (code commune hors 97x / 98x, position en métropole), 8 au plus.
+- Choix d'une adresse : carte centrée, point magenta, fiche Créer Feu / WP perso (nom = adresse sans code postal) /
+  Direct to (mode navigation ; le feu en cours est fermé, § 3). Hors ligne : « Recherche d'adresse disponible seulement
+  en ligne », aucune requête ; service en erreur : « Service d'adresses injoignable » ; rien en métropole : message.
+- Vrai service jamais appelé pendant les essais (faux service qui note chaque requête) : À MESURER sur l'iPad.
+
+5. BARRE iPadOS EN HAUT (style.css, index.html, src/200)
+- Comme la RUN v1.14 : variable --npf-barre-haut (zone sûre ; au moins 32 px dans l'app installée : navigator.standalone
+  ou display-mode standalone ; 0 dans Safari sans barre) ; --safe-area-top = max(22 px, barre + 6 px) ; les 33 marges du
+  haut passent par cette variable ; bande sombre derrière l'heure et la batterie (#npf-fond-barre-haut) ; calculateur
+  décalé de la barre + 8 px (ses onglets sont remontés de 8 px : à 29 px sinon, sous la barre) ; bandeau de navigation
+  placé par une sonde (src/200). Meta de barre INCHANGÉE (pas de réinstallation).
+- Mesures WebKit (pw_mesure90.js) : app installée v17.89 : bandeau BINGO à 26 px, calculateur et onglets à 13-30 px,
+  Gestion des Cartes à 20 px, SOUS la barre de 32 px ; v17.90 : plus rien sous 32 px, paysage et portrait. Safari sans
+  barre : positions identiques à la v17.89.
+
+6. VISIONNEUSE PDF : rien à faire, la Doc FdF marche. NOTE : si on ajoute des cibles en métropole, reprendre la
+   visionneuse PDF.js de la RUN (NPF-Q400-RUN v1.13 / v1.14, src/215_cibles.js, app/pdfjs/).
+
+7. DÉLAI DU MANIFESTE DE LA CARTE (src/280)
+- La TEST n'avait aucun équivalent : porté de la RUN v1.9 / v1.10 : 3 essais de 20 s au plus chacun, 3 s entre deux, si le
+  serveur ne répond pas, si le réseau échoue ou s'il répond 5xx (« nouvel essai 2/3 », « 3/3 » ; journal du
+  téléchargement) ; code refusé, autre code ou manifeste illisible : erreur tout de suite ; message final « délai
+  dépassé, 3 essais de 20 s ». La lecture discrète du manifeste au démarrage (v17.88, 8 s) est inchangée.
+
+8. ESSAIS (PC ; réseau coupé sauf localhost ; faux VPS et faux service d'adresses qui notent chaque requête ; NAS simulé ;
+   aucune requête n'a atteint le vrai VPS, le vrai NAS ni le vrai service d'adresses ; outils_tests : pw_v1790.js,
+   run_pw90.sh, pw_mesure90.js, cdp_nr90.js, run_nr90.sh, run_fin90.sh, geste89/fluidite90.sh, regle89/edit.py)
+- Essais ciblés des points 1 à 5 et 7 (pw_v1790.js, tactile iPad, service worker BLOQUÉ) : Playwright WebKit 27.2 63/63,
+  vrai Chrome 156 63/63. Traits : appui long + glisser de la poignée sur LFLU -> FEU et AVION -> FEU, étiquette, Rot.,
+  calculateur, BINGO et bandeau recalculés sur le trajet, fiche du WP, relance, « Remettre en ligne droite », × et relance
+  sans trace, nouveau feu en ligne droite. Go To : terrain non pélicandrome (LFMO, liste) et WP de route libre ferment le
+  feu (WP effacés, relance sans trace) ; LFML, LFLU et WP de route LFHO (pélicandromes) le gardent avec ses WP. WP perso :
+  menu, « Créer Feu » touchable avec les bandeaux affichés, nom obligatoire, 14 formats lus, 11 saisies refusées, étoile
+  SVG magenta et nom affiché aux zooms 8 / 10 / 13, fiche, Renommer, Déplacer, « Position actuelle » (GPS de 5 min : âge
+  affiché ; sans position : message ; simulation), Madrid / mer / Corse / Gap, jamais terrain ni pélicandrome, Direct to
+  pendant un feu, étoile touchable au-dessus du losange, Supprimer, relance (seule clé ajoutée : npfQ400TestWpPersoV1,
+  aucune clé de la pérenne ni de la RUN touchée). Adresse : rien à la frappe, résultats métropole + Corse seulement, envoyé
+  = texte seul, Créer Feu / WP perso / Direct to, messages (rien trouvé, erreur, hors ligne sans requête). Barre : app
+  installée 32 px, rien recouvert en paysage et portrait (carte, recherche, feu, navigation, calculateur, Gestion des
+  Cartes, fenêtre WP perso). Manifeste : 2 attentes puis réussi au 3e essai (46 s, 3 requêtes, « nouvel essai 3/3 ») ;
+  jamais servi : « délai dépassé, 3 essais de 20 s » (≈ 66 s) ; 503 puis réponse ; 404 tout de suite ; réseau coupé.
+- Premiers passages : KO de l'ESSAI corrigés (glisser WebKit, terrain LFNA absent de la base, fenêtre WP perso attendue à
+  tort, fiche hors écran, texte « 3/3 » trop bref pour un relevé toutes les 250 ms, ordre de la recherche locale) ; un VRAI
+  défaut trouvé et corrigé : onglets du calculateur à 29 px en paysage, sous la barre (calculateur décalé de 8 px de plus).
+- Positions du haut (pw_mesure90.js, WebKit) : Safari sans barre identique à la v17.89 (seul écart : écran « navigation »,
+  où le Go To vers un WP libre ferme maintenant le feu) ; app installée : v17.89 sous la barre (bandeau BINGO 26 px,
+  calculateur 13-30 px, Gestion des Cartes 20 px), v17.90 plus rien sous 32 px.
+- Non-régression rapide (cdp_nr90.js, Chrome, vrais touchers, profil avec la vraie carte V11) : 13/13 : lancement sans
+  erreur JS, V11 avec noms hors ligne, échelle en NM ; FdS / GAAR (BFG TEST connecté : silencieux ; refusé : mot de passe de
+  session ; mot de passe -> téléchargement ; NAS injoignable : bandeau) ; appui long « Créer Feu » au doigt ; Rot. LFLU
+  49 / LFML 51 ; calculateur et BINGO ; mode navigation (2 WP, GoTo, bandeau) ; Doc FdF et PDF Pélic qui s'ouvrent ; aucune
+  requête externe aboutie (toutes ERR_NAME_NOT_RESOLVED).
+- Non-régression habituelle (run_fin90.sh, v17.89 contre v17.90) : 17 essais sans erreur JS ; HT et clignotement (165
+  valeurs), « Fermer » (52), communes, fiche PÉLIC et Trafic Moyens Nationaux (67), popups (878), carte et GPS, retour sur
+  l'avion, parcs : identiques à la v17.89 (écarts : position de la fenêtre DIAG, qui varie d'un essai à l'autre ; caps à
+  0,01° près, déclinaison du jour) ; aucun « NPF » seul ; mise à jour v17.89 -> v17.90 SANS interception puis hors ligne,
+  RELANCÉE après la dernière modification : v17.90 servie, seuls les caches npf-q400-test-* touchés, pérenne intacte.
+- Fluidité CPU ×6 (simulation 300 kt, HT + Routes, V11 avec noms, gestes à 5 / 2 / 1 NM), 8 pages alternées : v17.89
+  médiane 88,5 images/s (10 % les plus lents 36), v17.90 avec 10 WP perso 93,5 (36) ; images > 100 ms par page 29 contre
+  33,5, tâches longues 5,9 s contre 4,9 s : séries qui se recouvrent, pas de dégradation. (Un premier écart en défaveur
+  de la v17.90 venait du bruit de la machine ; ombre des étoiles sans effet mesurable.)
+- Outillage : le profil Chrome d'essai avec la carte (Temp\npf89prof) avait été vidé par Windows le 29/10 ; carte V11
+  réinstallée depuis le faux serveur (le téléchargement complet passe par le nouveau délai du manifeste).
 VERSION TEST v17.89 — RÈGLE DE VITESSE UNIQUE, SEUIL 70 NM (TEMPS DE VOL, TRANSIT, ROTATION)
 Date : 19/10/2026, règle corrigée le 20/10/2026
 Base fonctionnelle : v17.88 (commit 50647cf, poussée le 18/10/2026). Noms v37 installés sur le VPS le 18/10/2026 (voir

@@ -30,6 +30,8 @@ function updateMapBingoDisplay() {
 }
 
 function displayCommuneDetails(commune, shouldFitBounds = true) {
+    /* v17.90 — nouveau feu : traits AVION / PÉLIC -> FEU en ligne droite ; même feu : WP gardés (src/205). */
+    if (typeof syncNpfTraitsFeuPourFeu === 'function') syncNpfTraitsFeuPourFeu(commune);
     saveFireHistory(commune);
     routesLayer.clearLayers();
     lftwRouteLayer.clearLayers();
@@ -123,6 +125,8 @@ function displayCommuneDetails(commune, shouldFitBounds = true) {
         /* v17.86 — le plus proche (liste triée par distance) garde sa bordure verte même si un autre est choisi. */
         drawRoute([lat, lon], [ap.lat, ap.lon], { oaci: ap.oaci, isNearest: index === 0 });
     });
+    /* v17.90 — WP des traits AVION / PÉLIC -> FEU (src/205). */
+    if (typeof drawNpfTraitsFeu === 'function') drawNpfTraitsFeu();
 
     drawWaterPointMarkersForCommune(commune);
 
@@ -229,12 +233,15 @@ function drawRoute(startLatLng, endLatLng, options = {}) {
     /* v17.57 — A : route avion -> cible et Feu -> BASE : chemin à cap constant
      * et distance fournis par l'appelant. Routes PÉLIC (sans cap affiché) :
      * orthodromie et distance inchangées (v17.18). */
-    const distance = Number.isFinite(Number(options.distanceNm))
+    /* v17.90 — trait PÉLIC -> FEU modifié (WP, src/205) : la route suit les WP ; distance totale pour l'étiquette
+     * (temps de vol, Rot.). Ni la route avion, ni la route BASE dédiée. */
+    const traitPelic = oaci && !isUser && !isLftwRoute && typeof getNpfTraitFeuRoutePelic === 'function' ? getNpfTraitFeuRoutePelic(oaci) : null;
+    const distance = traitPelic ? traitPelic.distanceNm : (Number.isFinite(Number(options.distanceNm))
         ? Number(options.distanceNm)
-        : calculateDistanceInNm(startLatLng[0], startLatLng[1], endLatLng[0], endLatLng[1]);
-    const routeLatLngs = Array.isArray(options.routeLatLngs) && options.routeLatLngs.length >= 2
+        : calculateDistanceInNm(startLatLng[0], startLatLng[1], endLatLng[0], endLatLng[1]));
+    const routeLatLngs = traitPelic ? traitPelic.latlngs : (Array.isArray(options.routeLatLngs) && options.routeLatLngs.length >= 2
         ? options.routeLatLngs
-        : buildNpfGreatCircleLatLngs(startLatLng, endLatLng, distance);
+        : buildNpfGreatCircleLatLngs(startLatLng, endLatLng, distance));
     let labelText, color = 'var(--primary-color)', dashArray = '', layer = routesLayer;
 
     if (isUser) {
@@ -548,6 +555,10 @@ window.activateCurrentFireGoto = activateCurrentFireGoto;
 function selectAirportDestination(airport) {
     const normalized = getAirportByOaci(airport?.oaci);
     if (!normalized) return false;
+
+    /* v17.90 — un Go To vers un autre point ferme le feu, comme « Fermer » (WP de ses traits compris) ; un Go To vers
+     * N'IMPORTE QUEL pélicandrome le garde, avec ses WP (décision de Bastien). */
+    if (currentCommune && !isSelectablePelicanAirport(normalized.oaci)) clearCurrentSelection({ preserveMapView: true });
 
     /* Un GoTo aéroport/PÉLIC demandé manuellement suspend la navette automatique. */
     suspendNpfFirePelicAutoCycle();

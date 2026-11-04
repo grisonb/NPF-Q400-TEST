@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v17-89_regle_vitesse_unique';
-const APP_VERSION = 'v17.89';
+const SW_VERSION = 'sw-v17-90_portage_run';
+const APP_VERSION = 'v17.90';
 const SIA_DATA_REVISION = 'sia-2026-10-29-v02-g15';
 const SIA_DATA_URL = './sia.js';
 /*
@@ -577,6 +577,12 @@ self.addEventListener('fetch', event => {
     // v17.65 — serveur des cartes NPF-Q400 (VPS) : passage direct au réseau,
     // sans délai de 8 s ni copie dans le cache du SW (morceaux de ~50 Mo).
     if (isNpfMapServerRequest(request.url)) {
+        return;
+    }
+
+    // v17.90 — recherche d'adresse (src/217, service de la Géoplateforme IGN) : passage direct au réseau, jamais copiée
+    // dans le cache (repris de la RUN v1.16).
+    if (request.url.startsWith('https://data.geopf.fr/geocodage/')) {
         return;
     }
 

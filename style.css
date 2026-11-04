@@ -1,4 +1,4 @@
-/* NPF_STYLE_BUILD_VERSION: v17.89 */
+/* NPF_STYLE_BUILD_VERSION: v17.90 */
 /* v14.83 — nettoyage des références techniques et limitation des cartouches routiers. */
 /* v14.81 — recherche phonétique nationale élargie aux fragments sur deux lettres. */
 /* v14.80 — Brive conservé uniquement sous LFSL. */
@@ -17,7 +17,10 @@
     --water-color: #007bff;
     --retardant-color: #ff5a3d;
     --base-color: #005a9c;
-    --safe-area-top: 22px; /* Marge supérieure pour les appareils mobiles */
+    /* v17.90 — hauteur de la barre iPadOS (heure, batterie…) : la page passe dessous (black-translucent + viewport-fit=cover,
+       meta inchangée). Toute la marge du haut de l'app part de cette variable (repris de la RUN v1.14). */
+    --npf-barre-haut: env(safe-area-inset-top, 0px);
+    --safe-area-top: max(22px, calc(var(--npf-barre-haut) + 6px)); /* Marge supérieure pour les appareils mobiles */
 }
 
 html, body {
@@ -1767,14 +1770,14 @@ body.fuel-keyboard-open .fuel-split-hint {
     overflow: hidden !important;
     align-items: center !important;
     justify-content: center !important;
-    padding: max(10px, env(safe-area-inset-top)) 10px max(10px, env(safe-area-inset-bottom)) !important;
+    padding: max(10px, var(--npf-barre-haut)) 10px max(10px, env(safe-area-inset-bottom)) !important;
     box-sizing: border-box !important;
 }
 
 #offline-map-modal .main-container {
     width: min(640px, calc(100vw - 20px)) !important;
-    height: calc(100dvh - max(20px, env(safe-area-inset-top)) - max(20px, env(safe-area-inset-bottom))) !important;
-    max-height: calc(100dvh - max(20px, env(safe-area-inset-top)) - max(20px, env(safe-area-inset-bottom))) !important;
+    height: calc(100dvh - max(20px, var(--npf-barre-haut)) - max(20px, env(safe-area-inset-bottom))) !important;
+    max-height: calc(100dvh - max(20px, var(--npf-barre-haut)) - max(20px, env(safe-area-inset-bottom))) !important;
     min-height: 0 !important;
     display: flex !important;
     flex-direction: column !important;
@@ -2050,7 +2053,7 @@ body.fuel-keyboard-open .fuel-split-hint {
 /* v11.48 — redimensionnement complet smartphone */
 @media (max-width: 760px) {
     :root {
-        --safe-area-top: 8px;
+        --safe-area-top: max(8px, calc(var(--npf-barre-haut) + 6px));
         --right-tools-size: 52px;
         --right-tools-gap: 7px;
         --right-tools-space: 66px;
@@ -2064,7 +2067,7 @@ body.fuel-keyboard-open .fuel-split-hint {
 
     /* Colonne droite : les icônes restent lisibles, mais n'écrasent plus la carte */
     #main-action-buttons {
-        top: calc(env(safe-area-inset-top, 0px) + 8px) !important;
+        top: calc(var(--npf-barre-haut) + 8px) !important;
         right: 7px !important;
         gap: var(--right-tools-gap) !important;
         z-index: 1001 !important;
@@ -2140,7 +2143,7 @@ body.fuel-keyboard-open .fuel-split-hint {
 
     /* Panneau recherche : refait pour smartphone, carte prioritaire */
     #ui-overlay {
-        top: calc(env(safe-area-inset-top, 0px) + 8px) !important;
+        top: calc(var(--npf-barre-haut) + 8px) !important;
         left: 7px !important;
         right: calc(var(--right-tools-space) + 7px) !important;
         width: auto !important;
@@ -2279,7 +2282,7 @@ body.fuel-keyboard-open .fuel-split-hint {
 
     /* Bandeau commune sélectionnée : compact, ne passe plus sous les icônes */
     #commune-info-display {
-        top: calc(env(safe-area-inset-top, 0px) + 58px) !important;
+        top: calc(var(--npf-barre-haut) + 58px) !important;
         left: 7px !important;
         right: calc(var(--right-tools-space) + 7px) !important;
         transform: none !important;
@@ -2370,7 +2373,7 @@ body.fuel-keyboard-open .fuel-split-hint {
     #team-chat-panel {
         left: 8px !important;
         right: 8px !important;
-        top: calc(env(safe-area-inset-top, 0px) + 8px) !important;
+        top: calc(var(--npf-barre-haut) + 8px) !important;
         transform: none !important;
         width: auto !important;
         height: calc(100dvh - 24px) !important;
@@ -2706,7 +2709,7 @@ body.fuel-keyboard-open .fuel-split-hint {
 
 /* v11.51 — smartphone : bandeaux et boutons compacts */
 @media (max-width: 760px) {
-    :root { --safe-area-top: 8px; }
+    :root { --safe-area-top: max(8px, calc(var(--npf-barre-haut) + 6px)); }
 
     #ui-overlay {
         top: 22px !important;
@@ -5302,7 +5305,7 @@ body {
 
 @media (max-width: 760px) {
     #left-map-action-buttons {
-        top: calc(env(safe-area-inset-top, 0px) + 8px) !important;
+        top: calc(var(--npf-barre-haut) + 8px) !important;
         left: 7px !important;
         gap: var(--right-tools-gap, 7px) !important;
         z-index: 1001 !important;
@@ -5632,7 +5635,7 @@ body {
     .traffic-button-count { top: 2px !important; right: 3px !important; min-width: 16px !important; height: 14px !important; font-size: 9px !important; line-height: 14px !important; padding: 0 3px !important; }
     .traffic-status-display {
         left: 68px;
-        top: calc(env(safe-area-inset-top, 0px) + 31px);
+        top: calc(var(--npf-barre-haut) + 31px);
         max-width: calc(100vw - 160px);
         padding: 5px 8px;
         font-size: 11px;
@@ -5670,7 +5673,7 @@ body {
 @media (max-width: 760px) {
     #main-action-buttons,
     #left-map-action-buttons {
-        top: calc(env(safe-area-inset-top, 0px) + 28px) !important;
+        top: calc(var(--npf-barre-haut) + 28px) !important;
     }
 }
 
@@ -5739,7 +5742,7 @@ body {
 
 .rlt-mass-modal:focus-within {
     align-items: flex-start !important;
-    padding-top: max(12px, calc(env(safe-area-inset-top, 0px) + 12px)) !important;
+    padding-top: max(12px, calc(var(--npf-barre-haut) + 12px)) !important;
     padding-bottom: max(42vh, calc(env(safe-area-inset-bottom, 0px) + 180px)) !important;
 }
 
@@ -7474,7 +7477,7 @@ body:not(.app-ready) #nearest-commune-display {
     display: flex;
     align-items: stretch;
     justify-content: center;
-    padding: calc(env(safe-area-inset-top, 0px) + 12px) 12px calc(env(safe-area-inset-bottom, 0px) + 12px);
+    padding: calc(var(--npf-barre-haut) + 12px) 12px calc(env(safe-area-inset-bottom, 0px) + 12px);
     box-sizing: border-box;
 }
 
@@ -7530,7 +7533,7 @@ body:not(.app-ready) #nearest-commune-display {
 
 @media (max-width: 760px) {
     #bloc-fuel-export-overlay {
-        padding: calc(env(safe-area-inset-top, 0px) + 6px) 6px calc(env(safe-area-inset-bottom, 0px) + 6px);
+        padding: calc(var(--npf-barre-haut) + 6px) 6px calc(env(safe-area-inset-bottom, 0px) + 6px);
     }
 
     .bloc-fuel-export-toolbar {
@@ -8350,12 +8353,12 @@ body:not(.app-ready) #nearest-commune-display {
 /* v13.61 — recherche nom point GAAR : panneau fixe en haut, indépendant du point/Leaflet */
 .gaar-point-search-overlay {
     position: fixed;
-    top: calc(env(safe-area-inset-top, 0px) + 12px);
+    top: calc(var(--npf-barre-haut) + 12px);
     left: 50%;
     transform: translateX(-50%);
     z-index: 2147483600;
     width: min(620px, calc(100vw - 20px));
-    max-height: calc(100vh - env(safe-area-inset-top, 0px) - 24px);
+    max-height: calc(100vh - var(--npf-barre-haut) - 24px);
     pointer-events: none;
 }
 
@@ -8435,7 +8438,7 @@ body:not(.app-ready) #nearest-commune-display {
 
 @media (max-height: 760px) {
     .gaar-point-search-overlay {
-        top: calc(env(safe-area-inset-top, 0px) + 6px);
+        top: calc(var(--npf-barre-haut) + 6px);
         width: calc(100vw - 12px);
     }
     .gaar-point-search-panel {
@@ -8455,7 +8458,7 @@ body:not(.app-ready) #nearest-commune-display {
 /* v13.64 — GAAR : bandeau clair de création/modification + sécurisation des clics suppression */
 .gaar-editing-banner {
     position: fixed;
-    top: calc(env(safe-area-inset-top, 0px) + 10px);
+    top: calc(var(--npf-barre-haut) + 10px);
     left: 50%;
     transform: translateX(-50%);
     z-index: 2147483300;
@@ -8488,7 +8491,7 @@ body.gaar-editing-active-ui #map {
 }
 
 body.gaar-point-search-open .gaar-editing-banner {
-    top: calc(env(safe-area-inset-top, 0px) + 84px);
+    top: calc(var(--npf-barre-haut) + 84px);
     opacity: .94;
 }
 
@@ -8499,7 +8502,7 @@ body.gaar-point-search-open .gaar-editing-banner {
 
 @media (max-height: 760px) {
     .gaar-editing-banner {
-        top: calc(env(safe-area-inset-top, 0px) + 5px);
+        top: calc(var(--npf-barre-haut) + 5px);
         padding: 8px 10px;
         font-size: 15px;
         border-radius: 13px;
@@ -8508,7 +8511,7 @@ body.gaar-point-search-open .gaar-editing-banner {
         font-size: 11px;
     }
     body.gaar-point-search-open .gaar-editing-banner {
-        top: calc(env(safe-area-inset-top, 0px) + 70px);
+        top: calc(var(--npf-barre-haut) + 70px);
     }
 }
 
@@ -10023,7 +10026,7 @@ body.gaar-point-search-open .gaar-editing-banner {
     z-index: 2147483500;
     align-items: center;
     justify-content: center;
-    padding: max(18px, env(safe-area-inset-top)) 18px max(18px, env(safe-area-inset-bottom));
+    padding: max(18px, var(--npf-barre-haut)) 18px max(18px, env(safe-area-inset-bottom));
     box-sizing: border-box;
     background: rgba(6, 24, 43, .58);
     backdrop-filter: blur(5px);
@@ -12301,7 +12304,7 @@ body.gaar-point-search-open .gaar-editing-banner {
 }
 .quick-offline-map-modal {
     position: fixed; inset: 0; z-index: 2147483550; align-items: center; justify-content: center;
-    padding: max(18px, env(safe-area-inset-top)) 18px max(18px, env(safe-area-inset-bottom)); box-sizing: border-box;
+    padding: max(18px, var(--npf-barre-haut)) 18px max(18px, env(safe-area-inset-bottom)); box-sizing: border-box;
     background: rgba(6,24,43,.58); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px);
 }
 .quick-offline-map-modal-content {
@@ -12474,7 +12477,7 @@ body.gaar-point-search-open .gaar-editing-banner {
     z-index: 2147483600;
     align-items: center;
     justify-content: center;
-    padding: max(18px, env(safe-area-inset-top)) 18px max(18px, env(safe-area-inset-bottom));
+    padding: max(18px, var(--npf-barre-haut)) 18px max(18px, env(safe-area-inset-bottom));
     box-sizing: border-box;
     background: rgba(6,24,43,.62);
     backdrop-filter: blur(5px);
@@ -12605,7 +12608,7 @@ body.gaar-point-search-open .gaar-editing-banner {
     z-index: 2147483610;
     align-items: center;
     justify-content: center;
-    padding: max(18px, env(safe-area-inset-top)) 18px max(18px, env(safe-area-inset-bottom));
+    padding: max(18px, var(--npf-barre-haut)) 18px max(18px, env(safe-area-inset-bottom));
     box-sizing: border-box;
     background: rgba(6,24,43,.62);
     backdrop-filter: blur(5px);
@@ -13611,7 +13614,7 @@ body.gaar-point-search-open .gaar-editing-banner {
     gap: 14px;
     min-height: 66px;
     padding:
-        calc(env(safe-area-inset-top, 0px) + 8px)
+        calc(var(--npf-barre-haut) + 8px)
         calc(env(safe-area-inset-right, 0px) + 12px)
         8px
         calc(env(safe-area-inset-left, 0px) + 14px);
@@ -13730,7 +13733,7 @@ body.gaar-point-search-open .gaar-editing-banner {
         gap: 8px;
         min-height: 58px;
         padding:
-            calc(env(safe-area-inset-top, 0px) + 6px)
+            calc(var(--npf-barre-haut) + 6px)
             calc(env(safe-area-inset-right, 0px) + 8px)
             6px
             calc(env(safe-area-inset-left, 0px) + 10px);
@@ -13903,7 +13906,7 @@ body.gaar-point-search-open .gaar-editing-banner {
     z-index: 2147483560;
     align-items: center;
     justify-content: center;
-    padding: max(18px, env(safe-area-inset-top)) 18px max(18px, env(safe-area-inset-bottom));
+    padding: max(18px, var(--npf-barre-haut)) 18px max(18px, env(safe-area-inset-bottom));
     box-sizing: border-box;
     background: rgba(6,24,43,.58);
     backdrop-filter: blur(5px);
@@ -14326,7 +14329,7 @@ body.gaar-point-search-open .gaar-editing-banner {
     align-items: center;
     justify-content: center;
     padding:
-        calc(16px + env(safe-area-inset-top))
+        calc(16px + var(--npf-barre-haut))
         calc(16px + env(safe-area-inset-right))
         calc(16px + env(safe-area-inset-bottom))
         calc(16px + env(safe-area-inset-left));
@@ -14449,7 +14452,7 @@ body.gaar-point-search-open .gaar-editing-banner {
 @media (max-width: 600px) {
     .chat-connect-modal {
         align-items: flex-start;
-        padding-top: calc(12px + env(safe-area-inset-top));
+        padding-top: calc(12px + var(--npf-barre-haut));
     }
 
     .chat-connect-modal-content {
@@ -14716,7 +14719,7 @@ body.gaar-point-search-open .gaar-editing-banner {
     align-items: center;
     justify-content: center;
     padding:
-        max(16px, env(safe-area-inset-top))
+        max(16px, var(--npf-barre-haut))
         max(14px, env(safe-area-inset-right))
         max(16px, env(safe-area-inset-bottom))
         max(14px, env(safe-area-inset-left));
@@ -16969,7 +16972,7 @@ body.pelic-notams-modal-open {
     align-items: center;
     justify-content: center;
     box-sizing: border-box;
-    padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
+    padding: max(12px, var(--npf-barre-haut)) 12px max(12px, env(safe-area-inset-bottom));
     background: rgba(6,24,43,.68);
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(4px);
@@ -17259,7 +17262,7 @@ body.pelic-notams-modal-open {
     }
     .pelic-notams-modal-card {
         width: 100%;
-        max-height: calc(100dvh - max(14px, env(safe-area-inset-top)) - max(14px, env(safe-area-inset-bottom)));
+        max-height: calc(100dvh - max(14px, var(--npf-barre-haut)) - max(14px, env(safe-area-inset-bottom)));
     }
     .pelic-notams-modal-prefilters {
         align-items: stretch;
@@ -18283,7 +18286,7 @@ body.npf-calculator-modal-open {
 /* v17.40 — bandeau d'information non bloquant (GLR, FdS, GAAR, BFG). */
 .npf-info-banner {
     position: fixed;
-    top: calc(env(safe-area-inset-top, 0px) + 8px);
+    top: calc(var(--npf-barre-haut) + 8px);
     left: 50%;
     transform: translateX(-50%);
     z-index: 100001;
@@ -18837,3 +18840,82 @@ body.npf-calculator-modal-open {
 .leaflet-tooltip.route-tooltip-other-pelic.route-tooltip-near-icon.route-tooltip-nearest-pelic {
     border-color: #39ff14 !important;
 }
+
+/* ==========================================================================
+   v17.90 — BARRE iPadOS EN HAUT (repris de la RUN v1.14) : app installée = barre toujours présente depuis iPadOS 26 (au
+   moins 32 px si le système n'annonce pas sa zone sûre) ; dans Safari, seulement la zone sûre annoncée (0 sans barre).
+   Bande sombre derrière la barre : l'heure et la batterie restent lisibles sur la carte. Meta de barre inchangée.
+   ========================================================================== */
+@media (display-mode: standalone) {
+    :root { --npf-barre-haut: max(env(safe-area-inset-top, 0px), 32px); }
+}
+:root.npf-app-installee { --npf-barre-haut: max(env(safe-area-inset-top, 0px), 32px); }
+#npf-fond-barre-haut {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--npf-barre-haut);
+    background: #0b1220;
+    z-index: 2147483647;
+    pointer-events: none;
+}
+
+/* v17.90 — le bloc de recherche (transparent) ne prend plus le toucher dans ses parties vides : le menu d'appui long,
+   plus haut avec « WP perso », passait dessous et « Créer Feu » devenait intouchable (défaut vu dans la RUN). Ses
+   éléments restent actifs. */
+#ui-overlay { pointer-events: none; }
+#ui-overlay > * { pointer-events: auto; }
+/* onglets remontés de 8 px au-dessus du cadre (margin-top: -8px) : 8 px de plus quand il y a une barre ; sans barre (Safari) : 0, comme avant. */
+#calculator-modal { box-sizing: border-box; padding-top: calc(var(--npf-barre-haut) + min(8px, var(--npf-barre-haut))); }
+#calculator-modal .calculator-modal-content { max-height: 100%; }
+
+/* ==========================================================================
+   v17.90 — WP PERSO (src/216) : étoile magenta, nom toujours affiché, fiche et fenêtre de saisie
+   ========================================================================== */
+.npf-wp-perso-marqueur { background: transparent; border: 0; }
+.npf-wp-perso-etoile { position: absolute; left: 8px; top: 8px; width: 32px; height: 32px; display: block; }
+.npf-wp-perso-etoile svg { display: block; width: 32px; height: 32px; filter: drop-shadow(0 1px 2px rgba(0,0,0,.5)); }
+.npf-wp-perso-nom {
+    position: absolute;
+    left: 42px;
+    top: 13px;
+    max-width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 1px 6px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, .92);
+    border: 1px solid #e6007e;
+    color: #7a0043;
+    font-size: 14px;
+    font-weight: bold;
+    line-height: 18px;
+}
+.npf-wp-perso-fiche { min-width: 230px; }
+.npf-wp-perso-fiche-nom { font-size: 17px; font-weight: bold; color: #7a0043; margin-bottom: 4px; }
+.npf-wp-perso-fiche-coord { font-size: 15px; margin-bottom: 10px; }
+.npf-wp-perso-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.npf-wp-perso-btn { min-height: 44px; padding: 6px 8px; border: 0; border-radius: 8px; background: #005a9c; color: #ffffff; font-size: 15px; font-weight: bold; }
+.npf-wp-perso-depuis-route { display: block; width: 100%; margin-top: 8px; background: #e6007e; }
+.npf-wp-perso-btn-direct { grid-column: 1 / -1; background: #e6007e; }
+.npf-wp-perso-btn-suppr { background: #d8232a; }
+.npf-wp-perso-btn-route { grid-column: 1 / -1; background: #1d4ed8; }
+.npf-map-longpress-wp-perso { background: #e6007e !important; color: #ffffff !important; }
+#npf-wp-perso-modal { z-index: 2147483630; }
+.npf-wp-perso-champ { display: block; margin-bottom: 12px; font-size: 15px; font-weight: bold; }
+.npf-wp-perso-champ input { display: block; width: 100%; box-sizing: border-box; min-height: 44px; margin-top: 4px; padding: 8px; border: 1px solid #9db7d7; border-radius: 8px; font-size: 17px; font-weight: normal; }
+.npf-wp-perso-aide { font-size: 13px; font-weight: normal; color: #486581; margin-top: 4px; }
+.npf-wp-perso-erreur { min-height: 20px; margin-bottom: 10px; font-size: 15px; font-weight: bold; color: #c1121f; }
+.npf-wp-perso-glisser { display: block; width: 100%; margin-bottom: 12px; }
+.npf-wp-perso-position { display: block; width: 100%; margin-bottom: 12px; }
+
+/* ==========================================================================
+   v17.90 — RECHERCHE D'ADRESSE (src/217)
+   ========================================================================== */
+#results-list li.search-result-adresse { position: sticky; bottom: 0; background: #e9f5ff; color: #005a9c; font-weight: bold; }
+#results-list li.search-result-adresse-message { color: #486581; cursor: default; }
+#results-list li.search-result-adresse-message:hover { background: transparent; }
+.npf-adresse-popup { min-width: 230px; }
+.npf-adresse-nom { font-size: 15px; font-weight: bold; margin-bottom: 8px; }

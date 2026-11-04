@@ -1723,12 +1723,16 @@ function drawUserToTargetRoute() {
         ? getNpfFirePelicAutoCycleTarget()
         : null;
 
+    /* v17.90 — trait AVION -> FEU modifié (src/205) : le trait rouge va en direct au 1er WP. */
+    const traitAvionPremierWp = (!routeWaypointTarget && !selectedAirportDestination && (!automaticFirePelicTarget || automaticFirePelicTarget.kind === 'fire')
+        && typeof getNpfTraitFeuAvionPremierWp === 'function') ? getNpfTraitFeuAvionPremierWp() : null;
+
     const target = routeWaypointTarget
         ? {
             lat: Number(routeWaypointTarget.lat),
             lon: Number(routeWaypointTarget.lon)
         }
-        : (selectedAirportDestination
+        : traitAvionPremierWp ? { lat: traitAvionPremierWp.lat, lon: traitAvionPremierWp.lon } : (selectedAirportDestination
             ? {
                 lat: Number(selectedAirportDestination.lat),
                 lon: Number(selectedAirportDestination.lon)

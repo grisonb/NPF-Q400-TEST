@@ -842,7 +842,7 @@ function displayResults(results) {
             const li = document.createElement('li');
             li.className = 'search-result-airport';
             li.innerHTML = `<span class="search-result-airport-oaci">${escapeHtml(airport.oaci)}</span><span class="search-result-airport-name">${escapeHtml(airport.name)}</span>`;
-            li.title = `Tracer la route GPS vers ${airport.oaci} — sans modifier le feu ni le pélicandrome`;
+            li.title = `Tracer la route GPS vers ${airport.oaci} — le feu en cours est fermé, sauf vers un pélicandrome`;
             li.addEventListener('click', (event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -899,6 +899,8 @@ function displayResults(results) {
             resultsList.style.display = 'none';
         }
     }
+    /* v17.90 — dernière ligne : chercher le texte tapé comme adresse postale (src/217, en ligne seulement). */
+    if (typeof ajouterNpfAdresseAuxResultats === 'function') ajouterNpfAdresseAuxResultats(resultsList);
 }
 
 
@@ -1361,8 +1363,18 @@ function updateCommuneGpsRouteDisplay() {
         userLatLng.lat, userLatLng.lng, target.lat, target.lon,
         { startDeclination: getNpfMagneticDeclination(userLatLng.lat, userLatLng.lng) }
     );
-    const distance = courseToTarget ? courseToTarget.distanceNm : NaN;
-    const magneticBearing = courseToTarget ? courseToTarget.magneticBearing : NaN;
+    let distance = courseToTarget ? courseToTarget.distanceNm : NaN;
+    let magneticBearing = courseToTarget ? courseToTarget.magneticBearing : NaN;
+    /* v17.90 — trait AVION -> FEU modifié (src/205) : cap vers le 1er WP, distance et temps jusqu'au feu par les WP. */
+    const traitAvion = !target.airport && (!automaticFirePelicTarget || automaticFirePelicTarget.kind === 'fire') && typeof getNpfTraitFeuAvionPremierWp === 'function' ? getNpfTraitFeuAvionPremierWp() : null;
+    if (traitAvion) {
+        const versWp = computeNpfConstantMagneticCourse(userLatLng.lat, userLatLng.lng, traitAvion.lat, traitAvion.lon,
+            { startDeclination: getNpfMagneticDeclination(userLatLng.lat, userLatLng.lng) });
+        if (versWp) {
+            distance = versWp.distanceNm + traitAvion.resteNm;
+            magneticBearing = versWp.magneticBearing;
+        }
+    }
 
     if (routeInfo) {
         routeInfo.textContent = `${formatRouteDegrees(magneticBearing)} / ${Math.round(distance)} Nm / ${formatGpsEtaMinutes(distance)}`;
