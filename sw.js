@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v17-91_export_carnet_vol';
-const APP_VERSION = 'v17.91';
+const SW_VERSION = 'sw-v17-92_carnet_format_2';
+const APP_VERSION = 'v17.92';
 const SIA_DATA_REVISION = 'sia-2026-10-29-v02-g15';
 const SIA_DATA_URL = './sia.js';
 /*

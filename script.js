@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.91';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.92';
 
 
 /*
@@ -3309,7 +3309,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.91 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.92 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -55382,6 +55382,8 @@ function initializeCalculator() {
 
         /* v17.91 — Export Carnet de Vol (src/315) : date notée quand le bloc départ change. */
         if (typeof noterNpfCarnetBlocDepart === 'function') noterNpfCarnetBlocDepart(activeFlight.id, activeFlight.state?.['bloc-depart'], nextState['bloc-depart']);
+        /* v17.92 — position GPS notée quand une heure BLOC Arrivée apparaît (escale sans terrain reconnu). */
+        if (typeof noterNpfCarnetLignes === 'function') noterNpfCarnetLignes(activeFlight.id, activeFlight.state, nextState);
         activeFlight.state = nextState;
         persistFlights();
         if (typeof rafraichirNpfCarnetBouton === 'function') rafraichirNpfCarnetBouton();
@@ -57950,12 +57952,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
 /* ==========================================================================
    v17.91 — EXPORT CARNET DE VOL (NPF-Q400 TEST)
+   v17.92 — format « carnet-vol-npf » version 2 (avion = « M » + numéro, copi,
+   escales ordonnées), zone « Carnet de vol » dépliante, export seulement
+   d'un vol clôturé, export dès le premier appui.
    --------------------------------------------------------------------------
-   Envoie le vol choisi dans BLOC/FUEL vers la copie NAS du Carnet de vol
-   (carnet-api/carnet.php v3, action vol-depot, protocole 2 : erreurs en
-   HTTP 200 + {"erreur":…, "code":…}). Format commun « carnet-vol-npf »,
-   version 1. Le même vol garde toujours le même id : un 2e export remplace
-   le précédent côté carnet.
+   Envoie un vol de BLOC/FUEL vers la copie NAS du Carnet de vol
+   (carnet-api/carnet.php, action vol-depot, protocole 2 : erreurs en
+   HTTP 200 + {"erreur":…, "code":…}). Le même vol garde toujours le même id :
+   un 2e export remplace le précédent côté carnet.
    - Mot de passe : réglage « Carnet de vol » (fenêtre Cartes), gardé
      seulement dans le stockage local de cet iPad, envoyé dans l'en-tête
      X-Carnet-Cle, jamais dans les exports ni le DIAG.
@@ -57965,17 +57969,24 @@ document.addEventListener('DOMContentLoaded', () => {
    - Heures du BLOC/FUEL = heure locale de l'iPad (saisie « maintenant » par
      getHours) ; converties ici en UTC. Le vol ne stockait pas sa date :
      elle est notée au moment où le bloc départ est saisi (stockage séparé,
-     les vols BLOC/FUEL ne changent pas de format).
+     les vols BLOC/FUEL ne changent pas de format). v17.92 : de la même
+     façon, la position GPS est notée quand l'heure d'une ligne est saisie
+     (escale sans terrain reconnu).
+   - v17.92, double appui (R41) : en v17.91 l'avion n'était enregistré qu'à
+     la sortie du champ (change / blur) ; sur iPad, toucher le bouton ne fait
+     pas sortir du champ avant le clic : le 1er appui lisait encore l'ancienne
+     valeur (« il manque … ») et seul le 2e partait. Les champs sont
+     maintenant enregistrés à chaque frappe, et relus juste avant l'export.
    ========================================================================== */
 
 const NPF_CARNET_URL = 'https://grisonb.synology.me/carnet-api/carnet.php';
 const NPF_CARNET_CLE_KEY = 'npfQ400TestCarnetCleV1';
 const NPF_CARNET_VOLS_KEY = 'npfQ400TestCarnetVolsV1';
-const NPF_CARNET_NOMS_KEY = 'npfQ400TestCarnetNomsAvionV1';
 const NPF_CARNET_DELAI_MS = 15000;
 const NPF_CARNET_RELANCE_MS = 60000;
 const NPF_CARNET_TAILLE_MAX = 64 * 1024;
 const NPF_CARNET_DUREE_MAX_MIN = 16 * 60;
+const NPF_CARNET_FORMAT_VERSION = 2;
 let npfCarnetVolsCache = null;
 let npfCarnetEnvoiEnCours = false;
 
@@ -58017,6 +58028,33 @@ function decalerNpfCarnetJour(date, jours) {
     return d;
 }
 
+/* « M » + numéro (v17.92) : seul nom d'avion accepté ; « 073 » -> « M73 ». */
+function normaliserNpfCarnetNomAvion(valeur) {
+    const chiffres = String(valeur || '').toUpperCase().replace(/^M/, '').replace(/\D/g, '').replace(/^0+(?=\d)/, '').slice(0, 4);
+    return chiffres ? `M${chiffres}` : '';
+}
+
+/* Trigramme du copilote : 3 lettres majuscules (accents retirés). */
+function normaliserNpfCarnetCopilote(valeur) {
+    return String(valeur || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3);
+}
+
+/* Position GPS du moment, comme la détection du terrain du BLOC/FUEL (src/310, getCurrentGpsLatLngForAirportDetection). */
+function lireNpfCarnetGps() {
+    try {
+        if (typeof userMarker !== 'undefined' && userMarker && userMarker.getLatLng) {
+            const p = userMarker.getLatLng();
+            if (p && Number.isFinite(p.lat) && Number.isFinite(p.lng)) return { lat: p.lat, lon: p.lng };
+        }
+        if (typeof lastPosition !== 'undefined' && lastPosition) {
+            const lat = Number.isFinite(lastPosition.lat) ? lastPosition.lat : lastPosition.latitude;
+            const lon = Number.isFinite(lastPosition.lng) ? lastPosition.lng : lastPosition.longitude;
+            if (Number.isFinite(lat) && Number.isFinite(lon)) return { lat, lon };
+        }
+    } catch (_) {}
+    return null;
+}
+
 /*
  * Appelée par updateActiveFlightStateFromDom (src/310) à chaque sauvegarde du
  * vol actif. Ne note une date que si le bloc départ vient de CHANGER : un vol
@@ -58051,8 +58089,36 @@ function noterNpfCarnetBlocDepart(flightId, ancien, nouveau, maintenant = new Da
     } catch (_) {}
 }
 
+/*
+ * v17.92 — appelée au même endroit : pour chaque heure de la colonne BLOC
+ * Arrivée qui vient d'APPARAÎTRE (absente de l'état précédent), note la
+ * position GPS du moment, c'est-à-dire au même moment que la détection du
+ * terrain de la ligne (src/310, updateRowAirportOaci forceDetect). Sert
+ * seulement quand aucun terrain n'est reconnu. Les heures déjà là avant
+ * la v17.92 ne reçoivent jamais de position au hasard.
+ */
+function noterNpfCarnetLignes(flightId, ancienEtat, nouvelEtat) {
+    try {
+        if (!flightId) return;
+        const heures = etat => (Array.isArray(etat?.calculator_table_data) ? etat.calculator_table_data : [])
+            .map(l => lireNpfCarnetHeure(l && l.time)).filter(Boolean).map(h => h.texte);
+        const avant = heures(ancienEtat);
+        const nouvelles = heures(nouvelEtat).filter(h => !avant.includes(h));
+        if (!nouvelles.length) return;
+        const gps = lireNpfCarnetGps();
+        const entree = getNpfCarnetEntree(flightId, true);
+        entree.positions = entree.positions && typeof entree.positions === 'object' ? entree.positions : {};
+        nouvelles.forEach(h => {
+            /* sans GPS à la saisie : noté aussi, un terrain venu ensuite ne peut venir que de la redétection */
+            entree.positions[h] = gps ? { lat: Math.round(gps.lat * 1e5) / 1e5, lon: Math.round(gps.lon * 1e5) / 1e5 } : { sansGps: true };
+        });
+        ecrireNpfCarnetVols();
+    } catch (_) {}
+}
+
 const formatNpfCarnetHeureUtc = d => d.toISOString().slice(11, 16);
 const formatNpfCarnetDateUtc = d => d.toISOString().slice(0, 10);
+const formatNpfCarnetInstantUtc = d => `${d.toISOString().slice(0, 16)}Z`;
 
 /* Feux de l'historique créés entre le bloc départ et le bloc arrivée (lecture brute, sans réécriture). */
 function lireNpfCarnetFeux(debutMs, finMs) {
@@ -58081,7 +58147,66 @@ function lireNpfCarnetFeux(debutMs, finMs) {
         });
 }
 
-/* Vol au format « carnet-vol-npf » v1, ou { manque: [...] }. */
+/*
+ * v17.92 — escales : toutes les lignes de la colonne BLOC Arrivée SAUF la
+ * dernière (l'arrivée finale), dans l'ordre du vol ; seules les lignes
+ * CONSÉCUTIVES sur le même terrain (même OACI) sont regroupées. Terrain =
+ * OACI détecté par NPF-Q400 (GPS à 2 Nm au plus) : nom et position du
+ * terrain ; sans terrain : position GPS notée à la saisie de l'heure, si connue.
+ */
+const NPF_CARNET_RAYON_TERRAIN_NM = 2;   // même distance que la détection du BLOC/FUEL (src/310, AIRPORT_DETECTION_RADIUS_NM)
+
+/*
+ * Le BLOC/FUEL redétecte, à chaque position GPS, le terrain des lignes restées
+ * sans terrain (src/270 -> refreshCalculatorAirportContext) : une ligne saisie
+ * loin de tout terrain peut recevoir plus tard le terrain d'un autre passage.
+ * Pour le carnet, le terrain d'une escale doit être à 2 Nm au plus de la
+ * position notée à la saisie de son heure (si elle est connue) ; sinon
+ * l'escale part sans code, avec cette position.
+ */
+function terrainNpfCarnetConfirme(terrain, position) {
+    if (!position) return true;                 // heure saisie avant la v17.92 : rien de noté, terrain gardé
+    if (position.sansGps) return false;         // pas de GPS à la saisie : terrain venu plus tard, pas envoyé
+    if (!terrain || typeof calculateDistanceInNm !== 'function') return true;
+    const d = calculateDistanceInNm(Number(position.lat), Number(position.lon), Number(terrain.lat), Number(terrain.lon));
+    return !Number.isFinite(d) || d <= NPF_CARNET_RAYON_TERRAIN_NM + 0.05;
+}
+
+function construireNpfCarnetEscales(lignes, positions) {
+    const escales = [];
+    lignes.forEach(l => {
+        const position = positions && positions[l.heure.texte];
+        if (l.oaci) {
+            let terrain = null;
+            try { terrain = typeof getAirportByOaci === 'function' ? getAirportByOaci(l.oaci) : null; } catch (_) { terrain = null; }
+            if (!terrainNpfCarnetConfirme(terrain, position)) l = { ...l, oaci: '' };
+        }
+        const derniere = escales[escales.length - 1];
+        if (l.oaci && derniere && derniere.oaci === l.oaci) {
+            derniere.atterrissages.push(formatNpfCarnetInstantUtc(l.instant));
+            return;
+        }
+        const escale = {};
+        if (l.oaci) {
+            escale.oaci = l.oaci;
+            let terrain = null;
+            try { terrain = typeof getAirportByOaci === 'function' ? getAirportByOaci(l.oaci) : null; } catch (_) { terrain = null; }
+            if (terrain && String(terrain.name || '').trim()) escale.nom = String(terrain.name).trim();
+            if (terrain && Number.isFinite(Number(terrain.lat)) && Number.isFinite(Number(terrain.lon))) {
+                escale.lat = Math.round(Number(terrain.lat) * 1e5) / 1e5;
+                escale.lon = Math.round(Number(terrain.lon) * 1e5) / 1e5;
+            }
+        } else if (position && Number.isFinite(Number(position.lat)) && Number.isFinite(Number(position.lon))) {
+            escale.lat = Number(position.lat);
+            escale.lon = Number(position.lon);
+        }
+        escale.atterrissages = [formatNpfCarnetInstantUtc(l.instant)];
+        escales.push(escale);
+    });
+    return escales;
+}
+
+/* Vol au format « carnet-vol-npf » v2, ou { manque: [...] }. */
 function construireNpfCarnetVol(flightId, exporteLe = new Date()) {
     const flight = (Array.isArray(dailyFlights) ? dailyFlights : []).find(f => f && f.id === flightId);
     if (!flight) return { manque: ['vol introuvable'] };
@@ -58100,8 +58225,10 @@ function construireNpfCarnetVol(flightId, exporteLe = new Date()) {
         .filter(l => l.heure);
     if (!lignes.length) manque.push('bloc arrivée (aucune heure dans la colonne BLOC Arrivée)');
 
-    const immat = String(entree.immat || '').trim().toUpperCase();
-    if (!immat) manque.push('immatriculation (champ « Immat. » sous la barre du vol)');
+    const nomAvion = normaliserNpfCarnetNomAvion(entree.nomAvion);
+    if (!nomAvion) manque.push('avion (numéro après le « M »)');
+    const copilote = normaliserNpfCarnetCopilote(entree.copilote);
+    if (copilote && copilote.length !== 3) manque.push('trigramme du copi complet (3 lettres, ou vide)');
 
     let arriveeLe = null;
     if (departLe && Number.isFinite(departLe.getTime()) && lignes.length) {
@@ -58110,6 +58237,7 @@ function construireNpfCarnetVol(flightId, exporteLe = new Date()) {
         lignes.forEach(l => {
             let instant = new Date(precedent.getFullYear(), precedent.getMonth(), precedent.getDate(), l.heure.hh, l.heure.mm, 0, 0);
             if (instant < precedent) instant = decalerNpfCarnetJour(instant, 1);
+            l.instant = instant;
             precedent = instant;
         });
         arriveeLe = precedent;
@@ -58122,22 +58250,37 @@ function construireNpfCarnetVol(flightId, exporteLe = new Date()) {
 
     const vol = {
         format: 'carnet-vol-npf',
-        version: 1,
+        version: NPF_CARNET_FORMAT_VERSION,
         id: flight.id,
         exporteLe: exporteLe.toISOString().replace(/\.\d{3}Z$/, 'Z'),
         date: formatNpfCarnetDateUtc(departLe),
         blocDepart: formatNpfCarnetHeureUtc(departLe),
         blocArrivee: formatNpfCarnetHeureUtc(arriveeLe),
         blocArriveeJ1: formatNpfCarnetDateUtc(arriveeLe) !== formatNpfCarnetDateUtc(departLe),
-        immat
+        nomAvion
     };
-    const nomAvion = String(entree.nomAvion || '').trim().toUpperCase();
-    if (nomAvion) vol.nomAvion = nomAvion;
+    if (copilote) vol.copilote = copilote;
     const oaciDepart = String(state['bloc-depart-oaci'] || '').trim().toUpperCase();
     if (oaciDepart) vol.depart = oaciDepart;
-    const oaciArrivee = lignes[lignes.length - 1].oaci;
+    /*
+     * v17.92 — arrivée : même vérification que les escales. Le terrain n'est
+     * envoyé que s'il est à 2 Nm au plus de la position notée à la saisie de la
+     * dernière heure BLOC Arrivée ; sinon l'arrivée part sans code, avec cette
+     * position si elle existe (arriveePosition). Le BLOC/FUEL n'est pas modifié.
+     */
+    const derniere = lignes[lignes.length - 1];
+    const positionArrivee = entree.positions && entree.positions[derniere.heure.texte];
+    let oaciArrivee = derniere.oaci;
+    if (oaciArrivee) {
+        let terrain = null;
+        try { terrain = typeof getAirportByOaci === 'function' ? getAirportByOaci(oaciArrivee) : null; } catch (_) { terrain = null; }
+        if (!terrainNpfCarnetConfirme(terrain, positionArrivee)) oaciArrivee = '';
+    }
     if (oaciArrivee) vol.arrivee = oaciArrivee;
-    vol.escales = lignes.slice(0, -1).map(l => l.oaci).filter((o, i, t) => o && o !== t[i - 1]);
+    else if (positionArrivee && Number.isFinite(Number(positionArrivee.lat)) && Number.isFinite(Number(positionArrivee.lon))) {
+        vol.arriveePosition = { lat: Number(positionArrivee.lat), lon: Number(positionArrivee.lon) };
+    }
+    vol.escales = construireNpfCarnetEscales(lignes.slice(0, -1), entree.positions);
     vol.feux = lireNpfCarnetFeux(departLe.getTime(), arriveeLe.getTime());
 
     const taille = new TextEncoder().encode(JSON.stringify(vol)).length;
@@ -58152,7 +58295,7 @@ function messageNpfCarnetErreur(erreur, detail, message) {
     const e = String(erreur || '');
     if (e === 'mot-de-passe') return 'Mot de passe du Carnet de vol refusé par le NAS : corrige-le dans les réglages (Cartes).';
     if (e === 'origine') return 'Le NAS refuse cette app (origine non autorisée).';
-    if (e === 'action' || e === 'methode') return 'Le NAS ne connaît pas encore l\'envoi de vol (carnet.php v3 à installer).';
+    if (e === 'action' || e === 'methode') return 'Le NAS ne connaît pas encore l\'envoi de vol (carnet.php à mettre à jour).';
     if (e === 'trop-gros') return 'Vol trop gros pour le NAS.';
     if (e === 'stockage') return 'Le NAS ne peut pas enregistrer pour l\'instant (stockage).';
     const precision = [detail, message].map(v => String(v || '').trim()).filter(Boolean).join(' — ');
@@ -58228,18 +58371,56 @@ async function envoyerNpfCarnetAttente() {
     }
 }
 
+/* Vol sans rien de saisi (le nouveau vol créé par « Clôturer ») ? */
+function estNpfCarnetVolVide(flight) {
+    const state = flight?.state || {};
+    if (lireNpfCarnetHeure(state['bloc-depart'])) return false;
+    return !(Array.isArray(state.calculator_table_data) ? state.calculator_table_data : []).some(l => lireNpfCarnetHeure(l && l.time));
+}
+
+/*
+ * v17.92 (R43) — vol exporté : le vol affiché s'il est clôturé ; si le vol
+ * affiché est le nouveau vol vide créé par « Clôturer », le vol clôturé juste
+ * avant (sinon il faudrait le rechoisir dans la liste). Vol en cours avec des
+ * heures : « Clôture le vol d'abord ».
+ */
+function getNpfCarnetVolCible() {
+    const liste = Array.isArray(dailyFlights) ? dailyFlights : [];
+    const index = liste.findIndex(f => f && f.id === activeFlightId);
+    if (index < 0) return null;
+    const actif = liste[index];
+    if (actif.closed) return { flight: actif, precedent: false };
+    if (index > 0 && estNpfCarnetVolVide(actif) && liste[index - 1]?.closed) return { flight: liste[index - 1], precedent: true };
+    return { flight: null, precedent: false };
+}
+
+/* Relit les champs de la zone (au cas où le dernier caractère n'a pas encore été enregistré). */
+function lireNpfCarnetChamps() {
+    if (!activeFlightId) return;
+    const champNom = document.getElementById('carnet-vol-nom');
+    const champCopi = document.getElementById('carnet-vol-copi');
+    if (!champNom && !champCopi) return;
+    const entree = getNpfCarnetEntree(activeFlightId, true);
+    entree.avionVu = true;
+    if (champNom) entree.nomAvion = normaliserNpfCarnetNomAvion(champNom.value);
+    if (champCopi) entree.copilote = normaliserNpfCarnetCopilote(champCopi.value);
+    ecrireNpfCarnetVols();
+}
+
 async function exporterNpfCarnetVolActif() {
-    const flightId = activeFlightId;
     const etat = document.getElementById('carnet-vol-etat');
-    if (!flightId || npfCarnetEnvoiEnCours) return;
-    if (!lireNpfCarnetCle()) {
+    if (!activeFlightId || npfCarnetEnvoiEnCours) return;
+    lireNpfCarnetChamps();
+    const cible = getNpfCarnetVolCible();
+    if (!lireNpfCarnetCle() || !cible || !cible.flight) {
         rafraichirNpfCarnetBouton();
         return;
     }
+    const flightId = cible.flight.id;
     const { vol, manque } = construireNpfCarnetVol(flightId);
     if (!vol) {
         if (etat) {
-            etat.textContent = `Pas envoyé, il manque : ${manque.join(' ; ')}.`;
+            etat.textContent = `${cible.precedent ? `Vol n°${cible.flight.number} pas envoyé` : 'Pas envoyé'}, il manque : ${manque.join(' ; ')}.`;
             etat.className = 'carnet-vol-etat carnet-vol-etat-erreur';
         }
         return;
@@ -58254,7 +58435,7 @@ async function exporterNpfCarnetVolActif() {
     rafraichirNpfCarnetBouton();
 }
 
-/* Avion du vol : saisi à la main ; un nouveau vol reprend celui du vol précédent (une seule fois). */
+/* Un nouveau vol reprend le « M » du vol précédent (une seule fois) ; le copi reste vide. */
 function preremplirNpfCarnetAvion(flightId) {
     const entree = getNpfCarnetEntree(flightId, true);
     if (entree.avionVu) return entree;
@@ -58262,12 +58443,13 @@ function preremplirNpfCarnetAvion(flightId) {
     const index = liste.findIndex(f => f && f.id === flightId);
     for (let i = index - 1; i >= 0; i -= 1) {
         const precedente = getNpfCarnetEntree(liste[i].id);
-        if (precedente && precedente.immat) {
-            entree.immat = precedente.immat;
-            entree.nomAvion = precedente.nomAvion || '';
+        const nom = normaliserNpfCarnetNomAvion(precedente?.nomAvion);
+        if (nom) {
+            entree.nomAvion = nom;
             break;
         }
     }
+    entree.copilote = '';
     entree.avionVu = true;
     ecrireNpfCarnetVols();
     return entree;
@@ -58277,41 +58459,67 @@ function rafraichirNpfCarnetBouton() {
     try {
         const bouton = document.getElementById('export-carnet-vol-btn');
         const etat = document.getElementById('carnet-vol-etat');
-        const champImmat = document.getElementById('carnet-vol-immat');
         const champNom = document.getElementById('carnet-vol-nom');
+        const champCopi = document.getElementById('carnet-vol-copi');
+        const resume = document.getElementById('carnet-vol-resume');
         if (!bouton || !etat || !activeFlightId) return;
-        const entree = preremplirNpfCarnetAvion(activeFlightId);
-        if (champImmat && document.activeElement !== champImmat) champImmat.value = entree.immat || '';
-        if (champNom && document.activeElement !== champNom) champNom.value = entree.nomAvion || '';
+        const entreeActive = preremplirNpfCarnetAvion(activeFlightId);
+        const nomActif = normaliserNpfCarnetNomAvion(entreeActive.nomAvion);
+        if (champNom && document.activeElement !== champNom) champNom.value = nomActif.replace(/^M/, '');
+        if (champCopi && document.activeElement !== champCopi) champCopi.value = normaliserNpfCarnetCopilote(entreeActive.copilote);
 
-        let libelle = 'Export Carnet de Vol', texte = '', classe = '';
-        if (!lireNpfCarnetCle()) {
+        const cible = getNpfCarnetVolCible();
+        const entree = cible && cible.flight ? (getNpfCarnetEntree(cible.flight.id) || {}) : {};
+        const prefixe = cible && cible.precedent ? `Vol n°${cible.flight.number} : ` : '';
+        let libelle = cible && cible.precedent ? `Export Carnet de Vol (vol n°${cible.flight.number})` : 'Export Carnet de Vol';
+        let texte = '', classe = '', court = '';
+        if (!cible || !cible.flight) {
+            libelle = 'Clôture le vol d\'abord';
+            texte = 'L\'export part quand le vol est clôturé (bouton « Clôturer »). Avion et copi peuvent être saisis dès maintenant.';
+            classe = 'attente';
+            court = 'vol en cours';
+        } else if (!lireNpfCarnetCle()) {
             texte = 'Saisis le mot de passe du Carnet de vol dans les réglages (bouton Cartes, section « Carnet de vol »).';
             classe = 'attention';
+            court = 'mot de passe à saisir';
         } else if (npfCarnetEnvoiEnCours && entree.etat === 'attente') {
             libelle = 'Envoi…';
+            court = 'envoi…';
         } else if (entree.etat === 'envoye') {
             libelle = 'Envoyé au carnet ✓';
-            const actuel = construireNpfCarnetVol(activeFlightId).vol;
+            const actuel = construireNpfCarnetVol(cible.flight.id).vol;
             const heure = entree.envoyeLe ? new Date(entree.envoyeLe).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '';
-            texte = actuel && entree.empreinteEnvoyee && empreinteNpfCarnetVol(actuel) !== entree.empreinteEnvoyee
-                ? 'Vol modifié depuis l\'envoi : touche le bouton pour remplacer la version du carnet.'
-                : `Envoyé au carnet${heure ? ` à ${heure}` : ''}. Un nouvel export remplace celui-ci.`;
-            classe = texte.startsWith('Vol modifié') ? 'attention' : 'ok';
+            const modifie = !!(actuel && entree.empreinteEnvoyee && empreinteNpfCarnetVol(actuel) !== entree.empreinteEnvoyee);
+            texte = modifie
+                ? `${prefixe}vol modifié depuis l'envoi : touche le bouton pour remplacer la version du carnet.`
+                : `${prefixe}envoyé au carnet${heure ? ` à ${heure}` : ''}. Un nouvel export remplace celui-ci.`;
+            classe = modifie ? 'attention' : 'ok';
+            court = modifie ? 'modifié depuis l\'envoi' : 'envoyé ✓';
         } else if (entree.etat === 'attente') {
             libelle = 'En attente d\'envoi';
-            texte = entree.message || 'Le vol partira tout seul dès que le NAS répond.';
+            texte = prefixe + (entree.message || 'Le vol partira tout seul dès que le NAS répond.');
             classe = 'attente';
+            court = 'en attente d\'envoi';
         } else if (entree.etat === 'erreur') {
             libelle = 'Export Carnet de Vol ⚠';
-            texte = entree.message || 'Erreur du NAS.';
+            texte = prefixe + (entree.message || 'Erreur du NAS.');
             classe = 'erreur';
+            court = 'erreur';
+        } else {
+            texte = cible.precedent ? `Vol n°${cible.flight.number} clôturé, prêt à envoyer.` : 'Vol clôturé, prêt à envoyer.';
+            court = 'prêt à envoyer';
         }
+        if (cible && cible.precedent && court) court = `vol n°${cible.flight.number} ${court}`;
         bouton.textContent = libelle;
         bouton.disabled = npfCarnetEnvoiEnCours;
-        bouton.dataset.etat = entree.etat || '';
+        bouton.dataset.etat = cible && cible.flight ? (entree.etat || '') : 'cloturer';
         etat.textContent = texte;
         etat.className = `carnet-vol-etat${classe ? ` carnet-vol-etat-${classe}` : ''}`;
+        if (resume) {
+            const copi = normaliserNpfCarnetCopilote(entreeActive.copilote);
+            resume.textContent = [nomActif || 'M ?', copi, court].filter(Boolean).join(' · ');
+            resume.className = `carnet-vol-resume${classe ? ` carnet-vol-etat-${classe}` : ''}`;
+        }
     } catch (_) {}
 }
 
@@ -58349,35 +58557,26 @@ function brancherNpfCarnetVol() {
         exporterNpfCarnetVolActif();
     });
 
-    const champImmat = document.getElementById('carnet-vol-immat');
     const champNom = document.getElementById('carnet-vol-nom');
-    const noterAvion = () => {
-        if (!activeFlightId) return;
-        const entree = getNpfCarnetEntree(activeFlightId, true);
-        entree.avionVu = true;
-        entree.immat = String(champImmat?.value || '').trim().toUpperCase().slice(0, 12);
-        entree.nomAvion = String(champNom?.value || '').trim().toUpperCase().slice(0, 12);
-        if (entree.immat && !entree.nomAvion) {
-            let noms = {};
-            try { noms = JSON.parse(localStorage.getItem(NPF_CARNET_NOMS_KEY) || '{}') || {}; } catch (_) { noms = {}; }
-            if (noms[entree.immat]) {
-                entree.nomAvion = String(noms[entree.immat]);
-                if (champNom) champNom.value = entree.nomAvion;
-            }
-        } else if (entree.immat && entree.nomAvion) {
-            try {
-                const noms = JSON.parse(localStorage.getItem(NPF_CARNET_NOMS_KEY) || '{}') || {};
-                noms[entree.immat] = entree.nomAvion;
-                localStorage.setItem(NPF_CARNET_NOMS_KEY, JSON.stringify(noms));
-            } catch (_) {}
+    const champCopi = document.getElementById('carnet-vol-copi');
+    /* R41 : enregistré à chaque frappe (et pas seulement à la sortie du champ). */
+    const noterChamps = () => {
+        if (champNom) {
+            const chiffres = normaliserNpfCarnetNomAvion(champNom.value).replace(/^M/, '');
+            if (champNom.value !== chiffres) champNom.value = chiffres;
         }
-        ecrireNpfCarnetVols();
+        if (champCopi) {
+            const tri = normaliserNpfCarnetCopilote(champCopi.value);
+            if (champCopi.value !== tri) champCopi.value = tri;
+        }
+        lireNpfCarnetChamps();
         rafraichirNpfCarnetBouton();
     };
-    [champImmat, champNom].forEach(champ => {
+    [champNom, champCopi].forEach(champ => {
         if (!champ) return;
-        champ.addEventListener('change', noterAvion);
-        champ.addEventListener('blur', noterAvion);
+        champ.addEventListener('input', noterChamps);
+        champ.addEventListener('change', noterChamps);
+        champ.addEventListener('blur', noterChamps);
     });
 
     const champCle = document.getElementById('carnet-vol-cle-input');

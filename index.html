@@ -7,8 +7,8 @@
     <script>/* v17.90 — app installée sur l'écran d'accueil (barre iPadOS du haut, style.css). */ try { if (window.navigator.standalone === true) document.documentElement.classList.add('npf-app-installee'); } catch (_) {}</script>
     <title>NPF-Q400</title>
     <link rel="stylesheet" href="leaflet.css">
-    <link rel="stylesheet" href="style.css?appv=v17.91">
-    <link rel="manifest" href="manifest.json?appv=v17.91">
+    <link rel="stylesheet" href="style.css?appv=v17.92">
+    <link rel="manifest" href="manifest.json?appv=v17.92">
     <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192x192.png?appv=v13.92">
     <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512x512.png?appv=v13.92">
     <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png?appv=v13.92">
@@ -67,7 +67,7 @@
     <div id="app-boot-screen" aria-live="polite">
         <div class="boot-card">
             <div>NPF-Q400 — démarrage…</div>
-            <div class="boot-version">TEST v17.91</div>
+            <div class="boot-version">TEST v17.92</div>
         </div>
     </div>
     <script>
@@ -640,7 +640,7 @@
             };
         } catch (_) {}
 
-        const APP_VERSION = 'v17.91';
+        const APP_VERSION = 'v17.92';
         const SERVICE_WORKER_URL = `./sw.js?appv=${encodeURIComponent(APP_VERSION)}`;
         const APP_VERSION_STORAGE_KEY = 'appVersion';
         const SW_CONTROLLER_RELOAD_GUARD_KEY = 'swControllerReloadGuard';
@@ -1483,7 +1483,7 @@
     <script src="suncalc.js"></script>
     <script src="jszip.min.js"></script>
     <script src="sia.js?siav=sia-2026-10-29-v02-g15"></script>
-    <script src="script.js?appv=v17.91"></script>
+    <script src="script.js?appv=v17.92"></script>
     
     <div id="fuel-split-modal" class="fuel-split-modal" style="display: none;">
         <div class="fuel-split-modal-content">
@@ -1579,13 +1579,17 @@
                         <span id="flight-duration-summary" class="flight-duration-summary" aria-live="polite"></span>
                         <span id="flight-lock-status" class="flight-lock-status" aria-live="polite"></span>
                     </div>
-                    <div class="carnet-vol-ligne" id="carnet-vol-ligne">
-                        <span class="carnet-vol-titre">Carnet de vol</span>
-                        <input type="text" id="carnet-vol-immat" class="carnet-vol-champ" placeholder="Immat." aria-label="Immatriculation de l'avion du vol" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false">
-                        <input type="text" id="carnet-vol-nom" class="carnet-vol-champ carnet-vol-champ-nom" placeholder="Nom" aria-label="Nom de l'avion (ex. M80)" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false">
-                        <button id="export-carnet-vol-btn" type="button" title="Envoyer ce vol au Carnet de vol (copie NAS)">Export Carnet de Vol</button>
-                        <span id="carnet-vol-etat" class="carnet-vol-etat" aria-live="polite"></span>
-                    </div>
+                    <details class="carnet-vol-zone" id="carnet-vol-zone">
+                        <summary class="carnet-vol-sommaire"><span class="carnet-vol-titre">Carnet de vol</span><span id="carnet-vol-resume" class="carnet-vol-resume"></span></summary>
+                        <div class="carnet-vol-ligne" id="carnet-vol-ligne">
+                            <label class="carnet-vol-etiquette" for="carnet-vol-nom">Avion</label>
+                            <span class="carnet-vol-avion"><span class="carnet-vol-avion-m" aria-hidden="true">M</span><input type="text" id="carnet-vol-nom" class="carnet-vol-champ carnet-vol-champ-nom" placeholder="73" aria-label="Numéro de l'avion (après le M)" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" spellcheck="false"></span>
+                            <label class="carnet-vol-etiquette" for="carnet-vol-copi">Copi</label>
+                            <input type="text" id="carnet-vol-copi" class="carnet-vol-champ carnet-vol-champ-copi" placeholder="ABC" aria-label="Trigramme du copilote (facultatif)" maxlength="3" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false">
+                            <button id="export-carnet-vol-btn" type="button" title="Envoyer le vol clôturé au Carnet de vol (copie NAS)">Export Carnet de Vol</button>
+                            <span id="carnet-vol-etat" class="carnet-vol-etat" aria-live="polite"></span>
+                        </div>
+                    </details>
                     <div class="table-wrapper"><table class="table-section"><thead><tr><th>BLOC Arrivée</th><th>FUEL Pélic.</th><th>OACI</th><th>Masse<br>Rlt</th><th>Durée<br>Rotations</th><th>Fuel<br>Rotations</th><th>Tps de Vol</th><th>Tps de Vol Restant</th></tr></thead><tbody></tbody></table></div>
                 </div>
                   

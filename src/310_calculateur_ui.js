@@ -668,6 +668,8 @@ function initializeCalculator() {
 
         /* v17.91 — Export Carnet de Vol (src/315) : date notée quand le bloc départ change. */
         if (typeof noterNpfCarnetBlocDepart === 'function') noterNpfCarnetBlocDepart(activeFlight.id, activeFlight.state?.['bloc-depart'], nextState['bloc-depart']);
+        /* v17.92 — position GPS notée quand une heure BLOC Arrivée apparaît (escale sans terrain reconnu). */
+        if (typeof noterNpfCarnetLignes === 'function') noterNpfCarnetLignes(activeFlight.id, activeFlight.state, nextState);
         activeFlight.state = nextState;
         persistFlights();
         if (typeof rafraichirNpfCarnetBouton === 'function') rafraichirNpfCarnetBouton();

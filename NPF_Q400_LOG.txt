@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
-Mise à jour : 06/11/2026
-Version de travail actuelle : TEST v17.91
+Mise à jour : 07/11/2026
+Version de travail actuelle : TEST v17.92
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -551,9 +551,15 @@ NON IMPLÉMENTÉ / OUVERT :
   07/10/2026 : programme VPS bfg-sofia-notams 1.2.0 PRÊT, NON INSTALLÉ
   (~/vps-a-copier/). v17.60 à pousser APRÈS l'installation de la 1.2.0
   (elle annonce « environ 1 minute ») ;
-- v17.91 : bouton « Export Carnet de Vol » (BLOC/FUEL -> NAS carnet-api/carnet.php v3, action vol-depot) : À MESURER
-  sur iPad avec le vrai NAS quand carnet.php v3 sera installé ; date du vol notée à la saisie du bloc départ, Immat. et
-  Nom saisis par vol ; COMMIT LOCAL, NON POUSSÉE. Incohérence signalée, non corrigée : « Tps de vol » ignore le passage
+- v17.92 : Export Carnet de Vol format 2 (export au 1er appui, zone dépliante, export d'un vol clôturé, « M » + numéro,
+  copi, escales ordonnées) : À MESURER sur iPad avec carnet.php v4 (1er appui, saisie avant vol, escales réelles) ;
+  COMMIT LOCAL, NON POUSSÉE. Signalé, non modifié : le BLOC/FUEL redétecte à chaque position GPS le terrain des lignes
+  restées sans terrain (src/270 -> src/310 refreshBlocFuelAirportOaciCells) : À DÉCIDER ; escales ET arrivée envoyées au
+  carnet vérifiées par la position notée (arrivée sans code -> nouveau champ arriveePosition : À CONFIRMER avec la
+  session Carnet) ;
+- v17.91 : bouton « Export Carnet de Vol » (BLOC/FUEL -> NAS carnet-api/carnet.php v3, action vol-depot) : 1er vrai envoi
+  iPad -> NAS -> Carnet RÉUSSI le 07/11/2026 (il fallait appuyer 2 fois : cause et correction en v17.92) ; POUSSÉE le
+  07/11/2026 (15f4ae2). Incohérence signalée, non corrigée : « Tps de vol » ignore le passage
   de minuit local (getFlightDurationFromState) : À DÉCIDER ;
 - v17.90 : portage de NPF-Q400-RUN v1.10 à v1.16 (traits modifiables, WP perso, Go To pendant un feu, adresse postale,
   barre iPadOS, délai du manifeste) : À MESURER sur iPad (gestes sur les traits, WP perso, « Position actuelle » au vrai
@@ -821,27 +827,27 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.91
-Date : 06/11/2026
-Base : v17.90 (08696bd + 30527ba, poussée le 04/11/2026)
+Version : TEST v17.92
+Date : 07/11/2026
+Base : v17.91 (15f4ae2, poussée le 07/11/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.91.txt
-2_Index_v17.91.txt
-3_Manifest_v17.91.txt
-4_Script_v17.91.txt
-5_SIA_v17.91.txt
-6_Style_v17.91.txt
-7_Sw_v17.91.txt
+1_Modifications_v17.92.txt
+2_Index_v17.92.txt
+3_Manifest_v17.92.txt
+4_Script_v17.92.txt
+5_SIA_v17.92.txt
+6_Style_v17.92.txt
+7_Sw_v17.92.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.91 (et texte « TEST v17.91 » de l'écran de
+- Index : APP_VERSION = v17.92 (et texte « TEST v17.92 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.91
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.91
-- Style : NPF_STYLE_BUILD_VERSION = v17.91
-- Service Worker : `sw-v17-91_export_carnet_vol` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-91_export_carnet_vol`, `npf-q400-test-app-data-v1`,
+- Manifest : start_url = ./index.html?appv=v17.92
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.92
+- Style : NPF_STYLE_BUILD_VERSION = v17.92
+- Service Worker : `sw-v17-92_carnet_format_2` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-92_carnet_format_2`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-sia-2026-10-29-v02-g15`
 - SIA_DATA_REVISION (SW / Index sia.js?siav=) : sia-2026-10-29-v02-g15 (= NPF_SIA_DATA_REVISION
   de sia.js ; à changer à chaque nouveau sia.js)
@@ -854,15 +860,15 @@ Références de version cohérentes :
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.91 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.92 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
 - `sia.js` : par rapport à v17.70, outre-mer retiré, « a » de 34 VRP renseigné, table vrpAirportColors ajoutée (2 pastels), révision g6 ; zones, terrains et points de métropole identiques ; moteur tuiles (src/100) modifié en v17.66 sur demande
   explicite (limite de zoom propre à chaque carte, zoom 11 OACI 1/500 000) ;
-- tests v17.91 : entrée v17.91 ; sia.js strictement identique à la v17.81 ;
+- tests v17.92 : entrée v17.92 ; sia.js strictement identique à la v17.81 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82, v17.83, v17.84, v17.85, v17.86, v17.87, v17.88, v17.89, v17.90 et v17.91 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82, v17.83, v17.84, v17.85, v17.86, v17.87, v17.88, v17.89, v17.90, v17.91 et v17.92 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
   v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE ;
   v17.56 VALIDÉE en vol ; v17.57 VALIDÉE sur iPad.
 
@@ -2392,6 +2398,113 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
 
+VERSION TEST v17.92 — EXPORT CARNET DE VOL, FORMAT 2 : 1er APPUI, ZONE DÉPLIANTE, VOL CLÔTURÉ, « M » + NUMÉRO, COPI, ESCALES
+Date : 07/11/2026
+Base fonctionnelle : v17.91 (commit 15f4ae2, poussée le 07/11/2026 ; 1er vrai envoi iPad -> NAS -> Carnet réussi le
+07/11). Seule la TEST change : pérenne, RUN, BFG, NAS et Carnet inchangés (la session Carnet adapte carnet.php v4 et le
+Carnet au même format). sia.js inchangé (strictement identique à la v17.81). Export PDF inchangé.
+Demandes de Bastien (07/11) : R41 export au 1er appui (cause demandée) ; R43 zone « Carnet de vol » dépliante, repliée
+par défaut, saisie avant le vol, export seulement d'un vol clôturé (« Clôture le vol d'abord ») ; R42 avion = « M » fixe +
+chiffres, plus d'immatriculation ; R45 trigramme du copi ; R44 escales ordonnées (passages consécutifs regroupés) ;
+format « carnet-vol-npf » version 2.
+
+0. AVANT DE CODER (lu dans le code ; lignes de la v17.92)
+- Une ligne du BLOC/FUEL = un bloc arrivée (atterrissage) avec son plein : colonnes BLOC Arrivée (heure), FUEL Pélic.,
+  OACI, Masse Rlt (addNewRow, src/310:2989) ; stockée dans state.calculator_table_data[] { time, fuel, oaci, rlt… }
+  (readCalculatorStateFromDom, src/310:463), dans l'ordre du tableau.
+- Heure d'atterrissage d'une ligne = son heure BLOC Arrivée, en heure LOCALE de l'iPad (bouton horloge = maintenant).
+- Terrain d'une ligne : getAirportAtCurrentPosition (src/310:194) = terrain (pélicandromes + autres) le plus proche de la
+  position GPS, s'il est à 2 Nm au plus (AIRPORT_DETECTION_RADIUS_NM, src/310:173) ; position = marqueur de l'avion, sinon
+  dernière position (src/310:175). Même fonction et même distance que le départ.
+- Moment où la position est relevée : quand l'heure de la ligne est saisie (recalculateAndSave -> updateRowAirportOaci
+  forceDetect, src/310:1495-1517). PUIS, si aucun terrain n'a été trouvé : de nouveau à chaque modification de la ligne
+  (src/310:3004) et À CHAQUE POSITION GPS pour le vol affiché (src/270:162-172 -> refreshCalculatorAirportContext ->
+  refreshBlocFuelAirportOaciCells, src/310:289). Une ligne saisie loin de tout terrain reçoit donc le terrain du prochain
+  passage à moins de 2 Nm (ex. l'arrivée). Comportement existant, NON MODIFIÉ ; signalé, À DÉCIDER. Pour le carnet, voir 1.
+- Clôturer : bouton index.html:1576, branché src/310:3139 : bascule closed (Clôturer / Réouvrir), compacte les lignes ;
+  si TOUS les vols sont clôturés, crée le vol suivant (TMD, limite HDV, fuel départ repris) et l'AFFICHE ; un vol clôturé
+  est verrouillé (updateActiveFlightLockState, src/310:1359).
+- Comportements concernés (non modifiés) : Export PDF (index.html:1578, src/310:3186 -> exportBlocFuelPdf src/310:1272) ;
+  onglet BLOC/FUEL (index.html:1564) ; historique des vols (dailyFlights, sélecteur refreshFlightSelector src/310:1330,
+  sauvegarde updateActiveFlightStateFromDom src/310:654) ; Export Carnet de Vol v17.91 (src/315).
+
+1. CODE (src/315_carnet_vol.js ; src/310 : 1 appel ajouté ; index.html ; style.css)
+- R41, CAUSE DU DOUBLE APPUI : en v17.91 l'avion (Immat./Nom) n'était enregistré qu'à la SORTIE du champ (change / blur).
+  Sur iPad, toucher un bouton ne fait pas sortir du champ avant le clic : le 1er appui lisait l'ancienne valeur (immat vide
+  -> « il manque : immatriculation », rien d'envoyé) ; le clavier se fermait, et le 2e appui partait. Reproduit sur la
+  v17.91 poussée (pw_carnet92.js, NPF_ESSAI=cause : 1er appui rien, 2e appui envoyé). CORRIGÉ : les champs sont enregistrés
+  à chaque frappe et relus juste avant l'export. Cause la plus probable, reproduite en essai, À MESURER sur l'iPad.
+- R43 : « Carnet de vol » dans une zone dépliante (<details>) juste sous la barre du vol, REPLIÉE par défaut ; la ligne
+  repliée montre « M73 · ABC · état ». Avion et copi se saisissent à tout moment (avant le vol aussi) et sont gardés avec
+  le vol (stockage séparé npfQ400TestCarnetVolsV1). Vol affiché en cours (avec des heures) : bouton « Clôture le vol
+  d'abord », rien n'est envoyé. Vol affiché clôturé : il est exporté. Après « Clôturer », NPF-Q400 affiche le nouveau vol
+  vide : le bouton vise alors le vol clôturé juste avant (« Export Carnet de Vol (vol n°N) »), sans avoir à le rechoisir.
+- R42 : case avion avec un « M » fixe (non effaçable) devant le champ, pavé numérique, chiffres seulement (« M73 »).
+  Champ Immat. retiré ; immat plus envoyée. Un nouveau vol reprend le M du vol précédent (une fois).
+- R45 : case Copi : 3 lettres, majuscules automatiques (accents retirés), facultatif, vide à chaque nouveau vol ; 1 ou
+  2 lettres : le bouton demande un trigramme complet ou vide.
+- R44 : escales = toutes les lignes BLOC Arrivée sauf la DERNIÈRE (arrivée finale), dans l'ordre ; seules les lignes
+  CONSÉCUTIVES de même OACI sont regroupées (LFHO, LFHO, LFLU, LFHO -> [LFHO 2 att.] [LFLU 1] [LFHO 1]). Escale =
+  { oaci, nom et lat/lon du terrain (base des terrains de NPF-Q400), atterrissages : heures ISO UTC « AAAA-MM-JJTHH:MMZ » }.
+  Nouveau : quand l'heure d'une ligne apparaît, la position GPS du moment est notée (noterNpfCarnetLignes, appelé avec
+  la date du bloc départ dans updateActiveFlightStateFromDom ; heures déjà saisies avant la v17.92 : jamais de position au
+  hasard). Sans terrain : escale sans code, avec cette position si elle est connue (sinon heures seules), jamais regroupée.
+  Terrain donné plus tard par la redétection du BLOC/FUEL (voir 0) à plus de 2 Nm de la position notée : ignoré pour le
+  carnet (escale sans code, position notée).
+- ARRIVÉE (ajout du 07/11, même v17.92, demande de Bastien) : même vérification que les escales. Le terrain d'arrivée n'est
+  envoyé (arrivee) que s'il est à 2 Nm au plus de la position notée à la saisie de la DERNIÈRE heure BLOC Arrivée ; sinon
+  l'arrivée part sans code, avec cette position si elle existe : NOUVEAU CHAMP « arriveePosition »: { lat, lon } (nom
+  choisi ici, sur le modèle des escales : À CONFIRMER avec la session Carnet / carnet.php v4). Le BLOC/FUEL lui-même
+  n'est pas modifié (il continue d'afficher le terrain redétecté).
+- Heure saisie SANS GPS (v17.92) : notée « sans GPS » ; un terrain apparu ensuite sur cette ligne ne peut venir que de la
+  redétection : il n'est envoyé ni en escale ni en arrivée (sans code, sans position). Heures saisies avant la v17.92
+  (rien de noté) : terrain du BLOC/FUEL gardé, comme en v17.91.
+- Format « carnet-vol-npf » version 2 : format, version 2, id, exporteLe, date, blocDepart, blocArrivee, blocArriveeJ1,
+  nomAvion (« M » + chiffres), copilote (si saisi), depart, arrivee (ou arriveePosition, voir plus haut), escales (liste
+  d'objets ci-dessus), feux ; immat
+  retiré ; remarques jamais envoyées. Envoi inchangé (POST …/carnet.php?action=vol-depot&v=2, X-Carnet-Cle, JSON, ≤ 64 Ko).
+  Champ manquant : date, bloc départ, bloc arrivée, M (+ copi incomplet) : le bouton explique, rien n'est envoyé.
+- Vols de la v17.91 : nomAvion « M80 » gardé ; immat ignorée ; un nom qui n'est pas « M » + chiffres est vide (à ressaisir).
+- Versions v17.92 partout ; service worker sw-v17-92_carnet_format_2 (rien d'autre à changer).
+
+2. ESSAIS (PC ; FAUX NAS LOCAL dans l'essai, autre port = vrai CORS, imite le Synology ; l'app demande la vraie adresse,
+   réécrite vers le faux NAS par l'essai ; tout le reste coupé ; vols, avions, trigrammes, mots de passe INVENTÉS ; aucune
+   requête au vrai NAS ni au vrai VPS ; outils_tests : carnet91/pw_carnet92.js + run_carnet92.sh, pw_pdf91.js, run_fin92.sh)
+- Cause du double appui, sur la v17.91 POUSSÉE (WebKit) : immat tapée, champ encore actif, 1er appui : rien d'envoyé
+  (« il manque : immatriculation ») ; après sortie du champ, 2e appui : envoyé. 4/4.
+- pw_carnet92.js, v17.92 (iPad tactile, fuseau Europe/Paris, service worker BLOQUÉ) : Playwright WebKit 31/31, vrai Chrome
+  31/31 (après l'ajout de l'arrivée ; avant : 26/26 et 26/26) : zone repliée par défaut (résumé visible, bouton caché) puis dépliée au toucher ; « M » fixe et pavé numérique ;
+  vol en cours : « Clôture le vol d'abord », rien d'envoyé ; saisie avant vol (« M8a1 » -> 81, « dé1f » -> DEF) gardée à
+  chaque frappe, après changement de vol et relance de l'app ; position GPS notée à chaque heure, LFHO trouvé par le GPS ;
+  Clôturer : vol n°7 affiché, M repris, copi vide, bouton « Export Carnet de Vol (vol n°6) » ; export au 1er appui ; 1re
+  escale saisie loin de tout terrain partie sans code avec sa position (alors que le BLOC/FUEL lui a donné LFHO ensuite) ;
+  R41 : champ M encore actif, 1er appui -> envoyé avec M79 ; vol sans escale ; LFHO, LFHO, LFLU, LFHO + arrivée LFTW ->
+  3 escales dans l'ordre, heures ISO UTC, nom et position du terrain ; format 2 (version 2, pas d'immat, seulement les
+  champs du format) ; envoi inchangé ; 2e export même id (remplacé) ; minuit UTC (23:30 -> 00:40, J1) ; escales sans
+  terrain non regroupées ; M absent et copi incomplet expliqués ; mot de passe refusé ; NAS injoignable puis retour du
+  réseau (envoi automatique) ; portrait ; mot de passe absent de l'Export PDF ; aucune fenêtre bloquante, aucune erreur JS,
+  aucune requête vers le vrai NAS / VPS / service d'adresses. ARRIVÉE : bonne (LFTW à ~0,2 Nm de la position notée ->
+  « LFTW », pas de position) ; redétectée trop loin (~11 Nm -> sans code, arriveePosition = position notée) ; sans GPS à la
+  saisie (arrivée et escale sans code ni position) ; parcours réel : dernière heure saisie loin de tout terrain, puis
+  l'avion passe sur LFHO, le BLOC/FUEL affiche LFHO sur la ligne, le carnet reçoit l'arrivée sans code avec la position
+  notée ; OACI des lignes du BLOC/FUEL inchangés.
+- Premiers passages : KO de l'ESSAI corrigés (WebKit sort du 1er champ quand on en touche un 2e ; erreur de la 1re page
+  coupée par le rechargement de l'essai ; visibilité du bouton dans une zone repliée mal mesurée) ; un comportement réel
+  trouvé : la redétection du terrain des lignes par le BLOC/FUEL (voir 0), d'où la vérification côté carnet.
+- Export PDF (pw_pdf91.js, mêmes vols inventés) : HTML identique à la v17.91, sauf « Version : v17.92 » (refait après
+  l'ajout de l'arrivée : même résultat).
+- Non-régression rapide (cdp_nr90.js, Chrome, vrais touchers, profil avec la vraie carte V11) : 13/13 : lancement sans
+  erreur JS, V11 avec noms hors ligne, échelle en NM ; FdS / GAAR (BFG TEST connecté : silencieux ; refusé : mot de passe de
+  session ; mot de passe -> téléchargement ; NAS injoignable : bandeau) ; appui long « Créer Feu » ; Rot. LFLU 49 / LFML
+  51 ; calculateur et BINGO ; mode navigation ; Doc FdF et PDF Pélic ; aucune requête externe aboutie. Relancée après
+  l'ajout de l'arrivée : 13/13.
+- Non-régression habituelle (run_fin92.sh, avant l'ajout de l'arrivée, qui ne touche que src/315, comparée à la v17.91) : carte et GPS, FdS / GAAR et règle GLR, popups terrain
+  (892 valeurs), retour du suivi GPS sur l'avion, mot « NPF-Q400 » (aucun « NPF » seul, textes ajoutés compris), bouton
+  Trafic Moyens Nationaux (93 valeurs) : identiques à la v17.91, aucune erreur JS (écarts : heures, coucher du soleil et
+  déclinaison du jour, durées, taille du DIAG) ; mise à jour v17.91 -> v17.92 puis hors ligne : v17.92 servie, carte,
+  communes et PÉLIC hors ligne, seuls les caches npf-q400-test-* touchés, 3 caches de la pérenne intacts.
+- À MESURER sur l'iPad : export au 1er appui (champ encore actif, clavier ouvert), zone dépliante au doigt, envoi réel
+  avec carnet.php v4 (vrai NAS jamais appelé), escales d'un vrai vol (GPS réel, terrains à 2 Nm), réception dans le Carnet.
 VERSION TEST v17.91 — BOUTON « EXPORT CARNET DE VOL » (ENVOI D'UN VOL BLOC/FUEL AU CARNET DE VOL PAR LE NAS)
 Date : 06/11/2026
 Base fonctionnelle : v17.90 (commits 08696bd + 30527ba, poussée le 04/11/2026). Seule la TEST change : pérenne, RUN, BFG,

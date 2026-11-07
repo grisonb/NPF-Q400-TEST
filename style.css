@@ -1,4 +1,4 @@
-/* NPF_STYLE_BUILD_VERSION: v17.91 */
+/* NPF_STYLE_BUILD_VERSION: v17.92 */
 /* v14.83 — nettoyage des références techniques et limitation des cartouches routiers. */
 /* v14.81 — recherche phonétique nationale élargie aux fragments sur deux lettres. */
 /* v14.80 — Brive conservé uniquement sous LFSL. */
@@ -18924,6 +18924,20 @@ body.npf-calculator-modal-open {
    v17.91 — EXPORT CARNET DE VOL (src/315) : ligne sous la barre du vol (BLOC/FUEL) et réglage du mot de passe (Cartes)
    ========================================================================== */
 #bloc-fuel .carnet-vol-ligne { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; padding: 8px 16px; background: #f8fbff; border-bottom: 1px solid var(--border-color); box-sizing: border-box; }
+/* v17.92 — zone dépliante (repliée par défaut), « M » fixe devant le numéro, copi */
+#bloc-fuel .carnet-vol-zone { background: #f8fbff; border-bottom: 1px solid var(--border-color); }
+#bloc-fuel .carnet-vol-zone[open] .carnet-vol-ligne { border-bottom: 0; padding-top: 2px; }
+#bloc-fuel .carnet-vol-sommaire { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 4px 16px; box-sizing: border-box; cursor: pointer; list-style: none; -webkit-user-select: none; user-select: none; }
+#bloc-fuel .carnet-vol-sommaire::-webkit-details-marker { display: none; }
+#bloc-fuel .carnet-vol-sommaire::before { content: "▸"; color: var(--primary-color); font-weight: 900; width: 12px; }
+#bloc-fuel .carnet-vol-zone[open] > .carnet-vol-sommaire::before { content: "▾"; }
+#bloc-fuel .carnet-vol-resume { font-size: 14px; font-weight: 800; color: #334e68; }
+#bloc-fuel .carnet-vol-etiquette { font-size: 14px; font-weight: 900; color: var(--primary-color); }
+#bloc-fuel .carnet-vol-avion { display: inline-flex; align-items: center; height: 36px; border: 1px solid var(--border-color); border-radius: 9px; background: #fff; box-sizing: border-box; overflow: hidden; }
+#bloc-fuel .carnet-vol-avion-m { padding: 0 2px 0 10px; font-size: 16px; font-weight: 900; color: #102a43; }
+#bloc-fuel .carnet-vol-avion .carnet-vol-champ-nom { width: 60px; height: 34px; border: 0; border-radius: 0; padding: 0 8px 0 0; }
+#bloc-fuel .carnet-vol-champ.carnet-vol-champ-copi { width: 72px; }
+#bloc-fuel #export-carnet-vol-btn[data-etat="cloturer"] { background: #fff; color: #b26a00; border-color: #b26a00; }
 #bloc-fuel .carnet-vol-titre { font-weight: 900; color: var(--primary-color); white-space: nowrap; }
 #bloc-fuel .carnet-vol-champ { width: 104px; height: 36px; border: 1px solid var(--border-color); border-radius: 9px; padding: 0 10px; font-size: 16px; font-weight: 800; text-transform: uppercase; background: #fff; box-sizing: border-box; }
 #bloc-fuel .carnet-vol-champ-nom { width: 72px; }
