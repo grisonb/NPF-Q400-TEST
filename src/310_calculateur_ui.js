@@ -666,8 +666,11 @@ function initializeCalculator() {
             nextState['limite-hdv'] = dailyFlights[0].state['limite-hdv'];
         }
 
+        /* v17.91 — Export Carnet de Vol (src/315) : date notée quand le bloc départ change. */
+        if (typeof noterNpfCarnetBlocDepart === 'function') noterNpfCarnetBlocDepart(activeFlight.id, activeFlight.state?.['bloc-depart'], nextState['bloc-depart']);
         activeFlight.state = nextState;
         persistFlights();
+        if (typeof rafraichirNpfCarnetBouton === 'function') rafraichirNpfCarnetBouton();
     }
 
 
@@ -1348,6 +1351,7 @@ function initializeCalculator() {
 
         updateActiveFlightLockState();
         updateFlightDurationSummary();
+        if (typeof rafraichirNpfCarnetBouton === 'function') rafraichirNpfCarnetBouton();   // v17.91 — Export Carnet de Vol (src/315)
     }
 
     function updateActiveFlightLockState() {

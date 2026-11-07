@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
-Mise à jour : 04/11/2026
-Version de travail actuelle : TEST v17.90
+Mise à jour : 06/11/2026
+Version de travail actuelle : TEST v17.91
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -551,10 +551,14 @@ NON IMPLÉMENTÉ / OUVERT :
   07/10/2026 : programme VPS bfg-sofia-notams 1.2.0 PRÊT, NON INSTALLÉ
   (~/vps-a-copier/). v17.60 à pousser APRÈS l'installation de la 1.2.0
   (elle annonce « environ 1 minute ») ;
+- v17.91 : bouton « Export Carnet de Vol » (BLOC/FUEL -> NAS carnet-api/carnet.php v3, action vol-depot) : À MESURER
+  sur iPad avec le vrai NAS quand carnet.php v3 sera installé ; date du vol notée à la saisie du bloc départ, Immat. et
+  Nom saisis par vol ; COMMIT LOCAL, NON POUSSÉE. Incohérence signalée, non corrigée : « Tps de vol » ignore le passage
+  de minuit local (getFlightDurationFromState) : À DÉCIDER ;
 - v17.90 : portage de NPF-Q400-RUN v1.10 à v1.16 (traits modifiables, WP perso, Go To pendant un feu, adresse postale,
   barre iPadOS, délai du manifeste) : À MESURER sur iPad (gestes sur les traits, WP perso, « Position actuelle » au vrai
-  GPS, adresse en ligne avec le vrai service, barre iPadOS en paysage et portrait, app installée) ; COMMITS LOCAUX
-  (08696bd, puis ajout du 04/11 : Go To vers un autre pélicandrome = cible choisie, décision de Bastien), NON POUSSÉE ;
+  GPS, adresse en ligne avec le vrai service, barre iPadOS en paysage et portrait, app installée) ; POUSSÉE le 04/11/2026
+  (08696bd, puis ajout du 04/11 30527ba : Go To vers un autre pélicandrome = cible choisie, décision de Bastien) ;
 - v17.89 : À MESURER sur iPad (feu Barret-sur-Méouge : LFLU 50 Nm / 14' / Rot. 49 min, LFML 54 Nm / 15' / Rot. 51 min ;
   même rotation dans l'étiquette et le calculateur ; 71 à 80 Nm = 20') ; POUSSÉE le 20/10/2026 (3025945 règle progressive
   ABANDONNÉE, puis 00224d2 règle corrigée) ;
@@ -817,27 +821,27 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.90
-Date : 04/11/2026
-Base : v17.89 (00224d2, poussée le 20/10/2026)
+Version : TEST v17.91
+Date : 06/11/2026
+Base : v17.90 (08696bd + 30527ba, poussée le 04/11/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.90.txt
-2_Index_v17.90.txt
-3_Manifest_v17.90.txt
-4_Script_v17.90.txt
-5_SIA_v17.90.txt
-6_Style_v17.90.txt
-7_Sw_v17.90.txt
+1_Modifications_v17.91.txt
+2_Index_v17.91.txt
+3_Manifest_v17.91.txt
+4_Script_v17.91.txt
+5_SIA_v17.91.txt
+6_Style_v17.91.txt
+7_Sw_v17.91.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.90 (et texte « TEST v17.90 » de l'écran de
+- Index : APP_VERSION = v17.91 (et texte « TEST v17.91 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.90
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.90
-- Style : NPF_STYLE_BUILD_VERSION = v17.90
-- Service Worker : `sw-v17-90_portage_run` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-90_portage_run`, `npf-q400-test-app-data-v1`,
+- Manifest : start_url = ./index.html?appv=v17.91
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.91
+- Style : NPF_STYLE_BUILD_VERSION = v17.91
+- Service Worker : `sw-v17-91_export_carnet_vol` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-91_export_carnet_vol`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-sia-2026-10-29-v02-g15`
 - SIA_DATA_REVISION (SW / Index sia.js?siav=) : sia-2026-10-29-v02-g15 (= NPF_SIA_DATA_REVISION
   de sia.js ; à changer à chaque nouveau sia.js)
@@ -850,15 +854,15 @@ Références de version cohérentes :
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.90 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.91 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
 - `sia.js` : par rapport à v17.70, outre-mer retiré, « a » de 34 VRP renseigné, table vrpAirportColors ajoutée (2 pastels), révision g6 ; zones, terrains et points de métropole identiques ; moteur tuiles (src/100) modifié en v17.66 sur demande
   explicite (limite de zoom propre à chaque carte, zoom 11 OACI 1/500 000) ;
-- tests v17.90 : entrée v17.90 ; sia.js strictement identique à la v17.81 ;
+- tests v17.91 : entrée v17.91 ; sia.js strictement identique à la v17.81 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82, v17.83, v17.84, v17.85, v17.86, v17.87, v17.88, v17.89 et v17.90 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82, v17.83, v17.84, v17.85, v17.86, v17.87, v17.88, v17.89, v17.90 et v17.91 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
   v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE ;
   v17.56 VALIDÉE en vol ; v17.57 VALIDÉE sur iPad.
 
@@ -2388,6 +2392,124 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
 
+VERSION TEST v17.91 — BOUTON « EXPORT CARNET DE VOL » (ENVOI D'UN VOL BLOC/FUEL AU CARNET DE VOL PAR LE NAS)
+Date : 06/11/2026
+Base fonctionnelle : v17.90 (commits 08696bd + 30527ba, poussée le 04/11/2026). Seule la TEST change : pérenne, RUN, BFG,
+NAS et Carnet de vol inchangés (le côté NAS — carnet-api/carnet.php v3 — et le côté Carnet sont préparés par une autre
+session, avec le même format). sia.js inchangé (strictement identique à la v17.81). Export PDF inchangé.
+Demande de Bastien (06/11) : pour chaque vol, à côté d'« Export PDF », un bouton « Export Carnet de Vol » qui envoie le vol
+au NAS (POST https://grisonb.synology.me/carnet-api/carnet.php?action=vol-depot&v=2, mot de passe de la copie NAS du
+carnet), format commun « carnet-vol-npf » version 1, mise en attente sans réseau, même id = remplacement côté carnet.
+
+0. OÙ NPF-Q400 GARDAIT LES DONNÉES (lu avant de coder ; numéros de ligne de la v17.91)
+- Vols : dailyFlights (src/290:28), stockés dans localStorage « calculator_flights_v12_28 » (src/290:25) par
+  persistFlights (src/310:646) ; un vol = { id « flight_<horodatage>_<hasard> » (createEmptyFlight, src/310:361), number,
+  closed, state }. id unique et stable : c'est l'id envoyé.
+- Bloc départ : state['bloc-depart'] « HH:MM » (readCalculatorStateFromDom, src/310:463) ; OACI du départ :
+  state['bloc-depart-oaci'], terrain à moins de 2 Nm de la position GPS au moment de la saisie (src/310:218-267).
+- Bloc arrivée : colonne « BLOC Arrivée » = state.calculator_table_data[].time ; OACI de chaque ligne : .oaci, détecté
+  de la même façon (updateRowAirportOaci, src/310:269).
+- Heures : HEURE LOCALE de l'iPad (bouton horloge : getHours/getMinutes, src/310:1524-1531). Converties en UTC à l'envoi.
+- Date : AUCUNE. Le vol ne gardait pas sa date (l'horodatage de l'id est celui de la création du vol, souvent bien avant
+  le vol : pas fiable). -> v17.91 note la date au moment où le bloc départ est saisi (voir 1).
+- Avion : AUCUNE immatriculation ni nom d'avion par vol. (« Mon avion » du calque trafic, src/130:931, est temporaire,
+  de session, souvent un indicatif sans immatriculation : pas utilisé.) -> champs « Immat. » et « Nom » par vol.
+- Feux : historique « fireHistoryV1 » (src/030:1319, 20 au plus), écrit par saveFireHistory (src/050:529) à chaque
+  affichage d'un feu (src/150:35) : savedAt = heure de CRÉATION du feu (gardée si on rouvre le feu), latitude_mairie /
+  longitude_mairie = point du feu pour un feu à la main, MAIRIE pour une commune choisie dans la recherche (position peu
+  fiable dans ce cas), nom_standard = commune (« Feu manuel » / « Feu SIM » hors commune), locality_* pour un lieu nommé.
+  Un feu effacé de l'historique, ou au-delà des 20 derniers, n'est plus connu.
+- Remarques : rien dans NPF-Q400 -> champ « remarques » jamais envoyé.
+
+COMPORTEMENTS EXISTANTS CONCERNÉS (non modifiés)
+- Export PDF : bouton index.html:1578, branché src/310:3184 ; exportBlocFuelPdf (src/310:1270) -> openBlocFuelExportPreview
+  (src/310:1199) -> buildBlocFuelExportHtml (tous les vols ayant un bloc départ).
+- Onglet BLOC/FUEL : index.html:1564-1590 ; barre des vols (Vol n°, Clôturer/Réouvrir, Supprimer, Export PDF, Tps de vol) ;
+  sauvegarde à chaque saisie : saveCalculatorState -> updateActiveFlightStateFromDom (src/310:654) ; sélecteur
+  refreshFlightSelector (src/310:1328) ; vols clôturés verrouillés.
+- Historique des vols : dailyFlights ; Supprimer / tout effacer (src/310:3169-3199) ; durée getFlightDurationFromState
+  (src/310:513).
+- INCOHÉRENCE SIGNALÉE, NON CORRIGÉE (règle des calculs) : getFlightDurationFromState ignore un écart négatif, donc un vol
+  qui passe minuit LOCAL perd ses minutes d'après minuit dans « Tps de vol » et l'Export PDF. Statut : À DÉCIDER.
+  L'export carnet, lui, compte un passage de minuit (heure plus petite que la précédente = lendemain).
+
+1. CODE (src/315_carnet_vol.js nouveau, ajouté après 310 dans ORDER.txt ; src/310 : 2 appels ; index.html ; style.css)
+- Ligne « Carnet de vol » JUSTE SOUS la barre d'Export PDF : Immat., Nom (ex. M80), bouton « Export Carnet de Vol »,
+  texte d'état. Pas dans la même barre : en portrait elle est déjà pleine (jusqu'à 784 px sur 820).
+- Réglage « Carnet de vol » en bas de la fenêtre Cartes (Gestion des Cartes, seule fenêtre de réglages de la TEST) : champ
+  mot de passe, Enregistrer, Tester (POST action=test&v=2), Oublier. Gardé dans localStorage « npfQ400TestCarnetCleV1 »
+  de cet iPad seulement ; jamais affiché, jamais dans le code, les exports ni le DIAG (le DIAG ne lit que noms et tailles
+  des clés). Sans mot de passe : « Saisis le mot de passe du Carnet de vol dans les réglages… », rien n'est envoyé.
+- Envoi : POST …/carnet.php?action=vol-depot&v=2, Content-Type application/json, mot de passe dans l'en-tête X-Carnet-Cle
+  (comme carnet.php v2), délai 15 s. Réponse { ok: true } = envoyé ; { erreur, code } (protocole 2) : code ≥ 500 = en
+  attente, sinon erreur lisible (mot-de-passe, origine, action/methode = « carnet.php v3 à installer », trop-gros, autre :
+  « Le NAS refuse le vol : … »). Pas de réseau, NAS éteint, page d'erreur HTML du Synology sans CORS, réponse illisible :
+  EN ATTENTE ; repart tout seul à l'ouverture de l'app (4 s), au retour du réseau, au retour au premier plan et toutes
+  les 60 s. Un nouveau mot de passe relance les vols refusés pour mot de passe. Jamais d'alert / confirm.
+- Bouton : « Export Carnet de Vol », « Envoi… », « Envoyé au carnet ✓ » (vert), « En attente d'envoi » (orange),
+  « Export Carnet de Vol ⚠ » (rouge) ; le texte complet (erreur du NAS, ce qui manque) est juste à côté. Vol modifié après
+  l'envoi : « Vol modifié depuis l'envoi : touche le bouton pour remplacer la version du carnet. »
+- Données (format « carnet-vol-npf » v1) : format, version 1, id (id du vol), exporteLe (UTC), date (UTC du bloc départ),
+  blocDepart, blocArrivee (DERNIÈRE heure de la colonne BLOC Arrivée), blocArriveeJ1, immat, nomAvion (si saisi), depart,
+  arrivee (si détectés), escales (OACI des lignes avant la dernière, doublons consécutifs retirés), feux (créés entre le
+  bloc départ et le bloc arrivée : heure UTC, lat, lon à 5 décimales, commune, nom pour un lieu nommé ; liste vide si
+  aucun). Taille vérifiée ≤ 64 Ko.
+- Date du vol : notée (stockage séparé « npfQ400TestCarnetVolsV1 », les vols BLOC/FUEL ne changent pas de format) quand
+  le bloc départ CHANGE : jour local de la saisie ; heure à plus de 3 h dans le futur = veille (ex. 23:50 saisi à 00:10) ;
+  correction d'une heure déjà datée = jour le plus proche de l'ancienne. Un vol dont le bloc départ a été saisi avant la
+  v17.91 n'est jamais daté au hasard : le bouton demande de l'effacer et de le ressaisir.
+- Champ obligatoire manquant (bloc départ, date, bloc arrivée, immat) ou plus de 16 h entre bloc départ et dernière heure
+  (heures dans le désordre) : « Pas envoyé, il manque : … », rien n'est envoyé.
+- Avion : Immat. et Nom gardés par vol (majuscules) ; un nouveau vol reprend ceux du vol précédent (une fois) ; le nom est
+  retenu pour une immatriculation (« npfQ400TestCarnetNomsAvionV1 ») et proposé ensuite.
+- Service worker : rien à changer (les POST passent déjà directement au réseau). Versions v17.91 partout ;
+  sw-v17-91_export_carnet_vol.
+
+2. CE QUI MANQUE / N'EST PAS FIABLE (À DÉCIDER si besoin)
+- immat et nomAvion : saisis à la main (NPF-Q400 ne les connaissait pas).
+- date : seulement pour les bloc départ saisis en v17.91 ou après ; heure locale = fuseau de l'iPad (Paris supposé).
+- depart / arrivee / escales : vides si le GPS n'était pas à moins de 2 Nm d'un terrain au moment de la saisie.
+- feux : position de la mairie pour un feu choisi par sa commune ; feux effacés ou au-delà des 20 derniers absents ; un
+  feu de simulation créé pendant un vol réel serait envoyé.
+- remarques : jamais envoyées.
+- Réponse attendue de carnet.php v3 à vol-depot : { ok: true } (supposé, côté NAS pas encore installé). Si le NAS répond
+  autrement, l'app met le vol en attente (« réponse illisible »).
+
+3. ESSAIS (PC ; FAUX NAS LOCAL dans l'essai, autre port = vrai CORS, qui imite le Synology : page d'erreur HTML sans CORS,
+   protocole 2 toujours 200 + {"erreur","code"} ; l'app demande bien la vraie adresse, réécrite vers le faux NAS par
+   l'essai ; tout le reste coupé ; vols, feux et mots de passe INVENTÉS ; aucune requête au vrai NAS ni au vrai VPS ;
+   outils_tests : carnet91/pw_carnet91.js + run_carnet91.sh, pw_pdf91.js + run_pdf91.sh, pw_barre91.js + run_barre91.sh,
+   run_fin91.sh)
+- pw_carnet91.js (iPad tactile, fuseau Europe/Paris, service worker BLOQUÉ) : Playwright WebKit 39/39, vrai Chrome 39/39 :
+  bouton sous Export PDF ; sans mot de passe (message, aucun envoi) ; réglage (Tester refusé / accepté, Enregistrer : champ
+  vidé, type mot de passe) ; envoi OK (vol 08:00 -> 11:30 locales en juillet = 06:00 -> 09:30 UTC, escales, 3 feux dont un
+  lieu nommé, 2 feux hors vol exclus, seulement des champs du format, en-têtes, taille) ; 2e export (même id, remplacé,
+  pas de doublon) ; minuit UTC seul (01:30 -> 02:40 locales l'été = 23:30 -> 00:40 UTC, date de la veille, J1, 1 feu en
+  mer sans commune) ; minuit local et UTC l'hiver (23:20 -> 01:30 = 22:20 -> 00:30, J1, 0 feu) ; minuit local sans minuit
+  UTC (J1 faux) et dernière heure de la colonne (ligne suivante sans heure ignorée) ; date manquante (bloc départ
+  d'avant) ; bloc arrivée + immat manquants ; date notée à la saisie dans BLOC/FUEL ; Immat./Nom par vol et nom retrouvé ;
+  mot de passe refusé puis corrigé (renvoi automatique) ; NAS éteint (en attente) puis envoi à la réouverture de l'app ;
+  hors ligne puis retour du réseau (envoi automatique) ; page HTML du Synology sans CORS (en attente) puis envoi ;
+  carnet.php sans vol-depot (erreur lisible) ; stockage 500 (en attente) ; vol modifié après envoi ; mot de passe absent
+  de l'Export PDF, des autres clés et de la page ; portrait ; aucune fenêtre bloquante, aucune erreur JS (WebKit signale
+  seulement le refus CORS VOULU de la page HTML), aucune requête vers le vrai NAS / VPS / service d'adresses.
+- Premiers passages : KO de l'ESSAI corrigés (compte d'envois, tuiles OSM de la carte en ligne comptées, toucher Chrome) ;
+  un VRAI défaut trouvé et corrigé : hors ligne, l'état disait « dès que le NAS répond » au lieu de « Pas de réseau ».
+- Barre des vols en portrait sous Chrome : déborde de 12 px EN v17.90 AUSSI (mesuré, run_barre91.sh) ; existant, pas
+  touché ; WebKit sans débordement.
+- Export PDF (pw_pdf91.js, mêmes vols inventés) : HTML identique à la v17.90, sauf la ligne « Version : v17.91 ».
+- Non-régression rapide (cdp_nr90.js, Chrome, vrais touchers, profil avec la vraie carte V11) : 13/13 : lancement sans
+  erreur JS, V11 avec noms hors ligne, échelle en NM ; FdS / GAAR (BFG TEST connecté : silencieux ; refusé : mot de passe de
+  session ; mot de passe -> téléchargement ; NAS injoignable : bandeau) ; appui long « Créer Feu » ; Rot. LFLU 49 / LFML
+  51 ; calculateur et BINGO ; mode navigation ; Doc FdF et PDF Pélic ; aucune requête externe aboutie.
+- Non-régression habituelle (run_fin91.sh, comparée à la v17.90) : carte et GPS, FdS / GAAR et règle GLR (première
+  connexion, OFF / ON, réseau coupé, session expirée), popups terrain (892 valeurs), retour du suivi GPS sur l'avion, mot
+  « NPF-Q400 » (aucun « NPF » seul, textes ajoutés compris), bouton Trafic Moyens Nationaux (93 valeurs) : identiques à la
+  v17.90, aucune erreur JS (écarts : heures, coucher du soleil et déclinaison du jour, durées, taille du DIAG) ; mise à
+  jour v17.90 -> v17.91 puis hors ligne : v17.91 servie, carte, échelle 50 NM, communes et PÉLIC hors ligne, seuls les
+  caches npf-q400-test-* touchés, 3 caches de la pérenne intacts (même comportement qu'en v17.90).
+- À MESURER sur l'iPad : envoi réel quand carnet.php v3 sera installé (vrai NAS jamais appelé), Tester avec le vrai mot
+  de passe, envoi après une coupure réseau en vol, réception dans le Carnet de vol (même id = remplacé).
 VERSION TEST v17.90 — PORTAGE DE NPF-Q400-RUN v1.10 À v1.16 : TRAITS MODIFIABLES, WP PERSO, GO TO PENDANT UN FEU,
 ADRESSE POSTALE, BARRE iPadOS, DÉLAI DU MANIFESTE
 Date : 04/11/2026

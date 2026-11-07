@@ -36,6 +36,7 @@
 290_calculateur_mission.js
 300_chat_equipe.js
 310_calculateur_ui.js
+315_carnet_vol.js
 320_appui_long_feu.js
 330_sia_donnees_embarquees.js
 340_sia_moteur.js

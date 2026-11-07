@@ -1,4 +1,4 @@
-/* NPF_STYLE_BUILD_VERSION: v17.90 */
+/* NPF_STYLE_BUILD_VERSION: v17.91 */
 /* v14.83 — nettoyage des références techniques et limitation des cartouches routiers. */
 /* v14.81 — recherche phonétique nationale élargie aux fragments sur deux lettres. */
 /* v14.80 — Brive conservé uniquement sous LFSL. */
@@ -18919,3 +18919,24 @@ body.npf-calculator-modal-open {
 #results-list li.search-result-adresse-message:hover { background: transparent; }
 .npf-adresse-popup { min-width: 230px; }
 .npf-adresse-nom { font-size: 15px; font-weight: bold; margin-bottom: 8px; }
+
+/* ==========================================================================
+   v17.91 — EXPORT CARNET DE VOL (src/315) : ligne sous la barre du vol (BLOC/FUEL) et réglage du mot de passe (Cartes)
+   ========================================================================== */
+#bloc-fuel .carnet-vol-ligne { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; padding: 8px 16px; background: #f8fbff; border-bottom: 1px solid var(--border-color); box-sizing: border-box; }
+#bloc-fuel .carnet-vol-titre { font-weight: 900; color: var(--primary-color); white-space: nowrap; }
+#bloc-fuel .carnet-vol-champ { width: 104px; height: 36px; border: 1px solid var(--border-color); border-radius: 9px; padding: 0 10px; font-size: 16px; font-weight: 800; text-transform: uppercase; background: #fff; box-sizing: border-box; }
+#bloc-fuel .carnet-vol-champ-nom { width: 72px; }
+#bloc-fuel #export-carnet-vol-btn { flex: 0 0 auto; height: 36px; border: 1px solid rgba(255,255,255,.5); border-radius: 9px; padding: 0 12px; background: #005a9c; color: #fff; font-size: 17px; font-weight: 950; line-height: 1; white-space: nowrap; cursor: pointer; }
+#bloc-fuel #export-carnet-vol-btn:active { transform: translateY(1px); }
+#bloc-fuel #export-carnet-vol-btn:disabled { opacity: .6; }
+#bloc-fuel #export-carnet-vol-btn[data-etat="envoye"] { background: #1e7e34; }
+#bloc-fuel #export-carnet-vol-btn[data-etat="attente"] { background: #b26a00; }
+#bloc-fuel #export-carnet-vol-btn[data-etat="erreur"] { background: #b00020; }
+.carnet-vol-etat, .carnet-vol-cle-etat { flex: 1 1 220px; min-width: 0; font-size: 14px; font-weight: 700; color: #334e68; }
+.carnet-vol-etat-ok { color: #1e7e34; }
+.carnet-vol-etat-attente, .carnet-vol-etat-attention { color: #b26a00; }
+.carnet-vol-etat-erreur { color: #b00020; }
+.carnet-vol-reglage-ligne { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 6px 0; }
+.carnet-vol-cle-input { flex: 1 1 200px; min-width: 160px; height: 40px; border: 1px solid #c8d3e0; border-radius: 9px; padding: 0 10px; font-size: 16px; box-sizing: border-box; }
+.carnet-vol-cle-etat { display: block; min-height: 18px; }
