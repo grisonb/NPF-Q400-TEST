@@ -1,4 +1,4 @@
-/* NPF_STYLE_BUILD_VERSION: v17.92 */
+/* NPF_STYLE_BUILD_VERSION: v17.93 */
 /* v14.83 — nettoyage des références techniques et limitation des cartouches routiers. */
 /* v14.81 — recherche phonétique nationale élargie aux fragments sur deux lettres. */
 /* v14.80 — Brive conservé uniquement sous LFSL. */
@@ -18954,3 +18954,19 @@ body.npf-calculator-modal-open {
 .carnet-vol-reglage-ligne { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 6px 0; }
 .carnet-vol-cle-input { flex: 1 1 200px; min-width: 160px; height: 40px; border: 1px solid #c8d3e0; border-radius: 9px; padding: 0 10px; font-size: 16px; box-sizing: border-box; }
 .carnet-vol-cle-etat { display: block; min-height: 18px; }
+
+/* ==========================================================================
+   v17.93 — BAS DE L'ÉCRAN EN APP INSTALLÉE (R54) : échelle, DIAG et Enregistrement étaient placés exactement sur la
+   zone sûre du bas annoncée par le système (env(safe-area-inset-bottom) + 0 px, src/080 et plus haut), inchangés de la
+   v17.89 à la v17.92. En app installée, l'iPad n'annonce pas sa zone (0 px), comme pour la barre du haut (v17.90) : ils
+   touchaient le bas de l'écran. App installée : au moins 20 px (leur place quand la zone était annoncée). Safari :
+   inchangé. Seuls ces trois éléments bougent.
+   ========================================================================== */
+:root { --npf-barre-bas: env(safe-area-inset-bottom, 0px); }
+@media (display-mode: standalone) {
+    :root { --npf-barre-bas: max(env(safe-area-inset-bottom, 0px), 20px); }
+}
+:root.npf-app-installee { --npf-barre-bas: max(env(safe-area-inset-bottom, 0px), 20px); }
+#npf-nautical-scale-fixed.npf-nautical-scale { bottom: var(--npf-barre-bas) !important; }
+#npf-startup-diag-button.npf-startup-diag-button { bottom: var(--npf-barre-bas) !important; }
+#yul-trace-button.npf-trace-record-button { bottom: var(--npf-barre-bas) !important; }

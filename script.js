@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.92';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.93';
 
 
 /*
@@ -3309,7 +3309,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.92 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.93 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -58435,21 +58435,24 @@ async function exporterNpfCarnetVolActif() {
     rafraichirNpfCarnetBouton();
 }
 
-/* Un nouveau vol reprend le « M » du vol précédent (une seule fois) ; le copi reste vide. */
+/* Un nouveau vol reprend le « M » et le copi du vol précédent (une seule fois ; toujours modifiables, effaçables).
+   v17.93 (R53) : le copi est repris comme l'avion (en v17.92 il restait vide). */
 function preremplirNpfCarnetAvion(flightId) {
     const entree = getNpfCarnetEntree(flightId, true);
     if (entree.avionVu) return entree;
     const liste = Array.isArray(dailyFlights) ? dailyFlights : [];
     const index = liste.findIndex(f => f && f.id === flightId);
+    entree.copilote = '';
     for (let i = index - 1; i >= 0; i -= 1) {
         const precedente = getNpfCarnetEntree(liste[i].id);
         const nom = normaliserNpfCarnetNomAvion(precedente?.nomAvion);
-        if (nom) {
+        const copi = normaliserNpfCarnetCopilote(precedente?.copilote);
+        if (nom || copi) {
             entree.nomAvion = nom;
+            entree.copilote = copi.length === 3 ? copi : '';
             break;
         }
     }
-    entree.copilote = '';
     entree.avionVu = true;
     ecrireNpfCarnetVols();
     return entree;
