@@ -5,10 +5,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
     <script>/* v17.90 — app installée sur l'écran d'accueil (barre iPadOS du haut, style.css). */ try { if (window.navigator.standalone === true) document.documentElement.classList.add('npf-app-installee'); } catch (_) {}</script>
-    <title>NPF-Q400</title>
+    <!-- v17.94 — nom « NPF-Q400 TEST » (titre de la fenêtre sur PC, nom sous l'icône de l'iPad, manifest), pour ne pas confondre avec la pérenne. -->
+    <title>NPF-Q400 TEST</title>
     <link rel="stylesheet" href="leaflet.css">
-    <link rel="stylesheet" href="style.css?appv=v17.93">
-    <link rel="manifest" href="manifest.json?appv=v17.93">
+    <link rel="stylesheet" href="style.css?appv=v17.94">
+    <link rel="manifest" href="manifest.json?appv=v17.94">
     <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192x192.png?appv=v13.92">
     <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512x512.png?appv=v13.92">
     <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png?appv=v13.92">
@@ -18,7 +19,7 @@
     <meta name="theme-color" content="#0b2f6b">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="NPF-Q400">
+    <meta name="apple-mobile-web-app-title" content="NPF-Q400 TEST">
 
     <style id="early-boot-style">
         /* v17.46 — écran de démarrage sombre, affiché avant le chargement des scripts.
@@ -67,7 +68,7 @@
     <div id="app-boot-screen" aria-live="polite">
         <div class="boot-card">
             <div>NPF-Q400 — démarrage…</div>
-            <div class="boot-version">TEST v17.93</div>
+            <div class="boot-version">TEST v17.94</div>
         </div>
     </div>
     <script>
@@ -640,7 +641,7 @@
             };
         } catch (_) {}
 
-        const APP_VERSION = 'v17.93';
+        const APP_VERSION = 'v17.94';
         const SERVICE_WORKER_URL = `./sw.js?appv=${encodeURIComponent(APP_VERSION)}`;
         const APP_VERSION_STORAGE_KEY = 'appVersion';
         const SW_CONTROLLER_RELOAD_GUARD_KEY = 'swControllerReloadGuard';
@@ -1483,7 +1484,7 @@
     <script src="suncalc.js"></script>
     <script src="jszip.min.js"></script>
     <script src="sia.js?siav=sia-2026-10-29-v02-g15"></script>
-    <script src="script.js?appv=v17.93"></script>
+    <script src="script.js?appv=v17.94"></script>
     
     <div id="fuel-split-modal" class="fuel-split-modal" style="display: none;">
         <div class="fuel-split-modal-content">

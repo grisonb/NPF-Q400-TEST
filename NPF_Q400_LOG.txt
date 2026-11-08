@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
-Mise à jour : 07/11/2026
-Version de travail actuelle : TEST v17.93
+Mise à jour : 08/11/2026
+Version de travail actuelle : TEST v17.94
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -551,9 +551,11 @@ NON IMPLÉMENTÉ / OUVERT :
   07/10/2026 : programme VPS bfg-sofia-notams 1.2.0 PRÊT, NON INSTALLÉ
   (~/vps-a-copier/). v17.60 à pousser APRÈS l'installation de la 1.2.0
   (elle annonce « environ 1 minute ») ;
+- v17.94 : nom « NPF-Q400 TEST » (manifest, titre de la page, nom sous l'icône de l'iPad) au lieu de « NPF-Q400 » ;
+  rien d'autre ne change. À MESURER (titre de la fenêtre sur PC, nom sous l'icône de l'iPad) ; COMMIT LOCAL, NON POUSSÉE ;
 - v17.93 : copi repris au vol suivant comme le M (R53) ; échelle, DIAG et Enregistrement à au moins 20 px du bas en app
   installée (R54 : inchangés de la v17.89 à la v17.92, cause probable : l'iPad n'annonce pas sa zone sûre du bas) :
-  À MESURER sur iPad (app installée, paysage et portrait) ; COMMIT LOCAL, NON POUSSÉE. Remarque non codée : en portrait,
+  À MESURER sur iPad (app installée, paysage et portrait) ; POUSSÉE le 08/11/2026 (753c93f). Remarque non codée : en portrait,
   Enregistrement chevauche la poignée du bas et « Survolée » (existant) : À DÉCIDER ;
 - v17.92 : Export Carnet de Vol format 2 (export au 1er appui, zone dépliante, export d'un vol clôturé, « M » + numéro,
   copi, escales ordonnées) : 1er vrai envoi iPad -> NAS v4 -> Carnet RÉUSSI le 07/11/2026 ; POUSSÉE le 07/11/2026
@@ -831,27 +833,28 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.93
-Date : 07/11/2026
-Base : v17.92 (8f0760c, poussée le 07/11/2026)
+Version : TEST v17.94
+Date : 08/11/2026
+Base : v17.93 (753c93f, poussée le 08/11/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.93.txt
-2_Index_v17.93.txt
-3_Manifest_v17.93.txt
-4_Script_v17.93.txt
-5_SIA_v17.93.txt
-6_Style_v17.93.txt
-7_Sw_v17.93.txt
+1_Modifications_v17.94.txt
+2_Index_v17.94.txt
+3_Manifest_v17.94.txt
+4_Script_v17.94.txt
+5_SIA_v17.94.txt
+6_Style_v17.94.txt
+7_Sw_v17.94.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.93 (et texte « TEST v17.93 » de l'écran de
+- Index : APP_VERSION = v17.94 (et texte « TEST v17.94 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.93
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.93
-- Style : NPF_STYLE_BUILD_VERSION = v17.93
-- Service Worker : `sw-v17-93_copi_bas_ecran` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-93_copi_bas_ecran`, `npf-q400-test-app-data-v1`,
+- Manifest : start_url = ./index.html?appv=v17.94
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.94
+- Style : NPF_STYLE_BUILD_VERSION = v17.94
+- Nom de l'app (v17.94) : « NPF-Q400 TEST » (manifest name et short_name, <title>, apple-mobile-web-app-title)
+- Service Worker : `sw-v17-94_nom_test` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-94_nom_test`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-sia-2026-10-29-v02-g15`
 - SIA_DATA_REVISION (SW / Index sia.js?siav=) : sia-2026-10-29-v02-g15 (= NPF_SIA_DATA_REVISION
   de sia.js ; à changer à chaque nouveau sia.js)
@@ -864,15 +867,15 @@ Références de version cohérentes :
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.93 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.94 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
 - `sia.js` : par rapport à v17.70, outre-mer retiré, « a » de 34 VRP renseigné, table vrpAirportColors ajoutée (2 pastels), révision g6 ; zones, terrains et points de métropole identiques ; moteur tuiles (src/100) modifié en v17.66 sur demande
   explicite (limite de zoom propre à chaque carte, zoom 11 OACI 1/500 000) ;
-- tests v17.93 : entrée v17.93 ; sia.js strictement identique à la v17.81 ;
+- tests v17.94 : entrée v17.94 ; sia.js strictement identique à la v17.81 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82, v17.83, v17.84, v17.85, v17.86, v17.87, v17.88, v17.89, v17.90, v17.91, v17.92 et v17.93 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82, v17.83, v17.84, v17.85, v17.86, v17.87, v17.88, v17.89, v17.90, v17.91, v17.92, v17.93 et v17.94 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
   v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE ;
   v17.56 VALIDÉE en vol ; v17.57 VALIDÉE sur iPad.
 
@@ -2401,6 +2404,42 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.94 — NOM « NPF-Q400 TEST » (FENÊTRE SUR PC, ICÔNE DE L'iPAD)
+Date : 08/11/2026
+Base fonctionnelle : v17.93 (commit 753c93f, poussée le 08/11/2026). Seule la TEST change : pérenne, RUN, BFG, NAS et
+Carnet inchangés. sia.js inchangé (strictement identique à la v17.81). Script inchangé (sauf numéro de version). Export
+PDF inchangé.
+Constat de Bastien (08/11) : sur PC, la TEST ouverte en app s'appelle « NPF-Q400 », sans TEST. Choix de Bastien : option 1,
+« NPF-Q400 TEST » partout (PC et iPad).
+
+0. AVANT DE CODER (lignes de la v17.93)
+- manifest.json:2-3 : name et short_name = « NPF-Q400 » (nom de l'app installée et de son raccourci).
+- index.html:8 : <title>NPF-Q400</title> (barre de la fenêtre sur PC).
+- index.html:21 : apple-mobile-web-app-title = « NPF-Q400 » (nom sous l'icône de l'iPad).
+- Historique : le manifest s'appelait « NPF-Q400-TEST » jusqu'au commit e0dc8c9 du 12/07/2026 (« Update manifest.json »,
+  modification faite sur GitHub) qui a remis « NPF-Q400 » ; <title> et nom iPad ont toujours été « NPF-Q400 ».
+- Le script ne lit pas le nom : l'Export PDF change le titre le temps de l'impression puis remet le titre d'avant
+  (src : « previousAppTitle || 'NPF-Q400' », inchangé).
+
+1. CODE
+- manifest.json : name et short_name = « NPF-Q400 TEST » ; id inchangé (./index.html?prod=1), donc l'app installée reste
+  la même (pas de deuxième app, données et réglages gardés).
+- index.html : <title>NPF-Q400 TEST</title> ; apple-mobile-web-app-title = « NPF-Q400 TEST ».
+- Versions v17.94 partout ; service worker sw-v17-94_nom_test (rien d'autre à changer).
+- Sur PC, le titre de la fenêtre change tout de suite ; le nom du raccourci déjà installé peut rester l'ancien jusqu'à ce
+  que Chrome relise le manifest (ou réinstallation). Sur l'iPad, le nom sous l'icône est fixé à l'ajout à l'écran
+  d'accueil : il faut retirer et remettre l'icône pour voir « NPF-Q400 TEST » (les données de l'app peuvent alors être
+  perdues : voir avant de le faire). Statut : À MESURER.
+
+2. ESSAIS (PC, réseau coupé sauf localhost ; outils_tests : run_fin94.sh, run_nr90.sh, carnet91/run_pdf91.sh)
+- Non-régression habituelle (run_fin94.sh, comparée à la v17.93) : carte et GPS, FdS / GAAR et règle GLR, popups terrain,
+  retour du suivi GPS, mot « NPF-Q400 » (aucun « NPF » seul), bouton Trafic Moyens Nationaux : identiques, aucune erreur JS
+  (écarts : heures, déclinaison du jour, taille du DIAG) ; mise à jour v17.93 -> v17.94 puis hors ligne : v17.94 servie,
+  carte (50 NM), communes et PÉLIC hors ligne, seuls les caches npf-q400-test-* touchés, 3 caches de la pérenne intacts.
+- Non-régression rapide (cdp_nr90.js, Chrome, vrais touchers, vraie carte V11) : 13/13.
+- Export PDF (pw_pdf91.js, vols inventés) : HTML identique à la v17.93, sauf le numéro de version.
+- À MESURER : titre de la fenêtre sur PC ; nom sous l'icône de l'iPad après réinstallation éventuelle.
 
 VERSION TEST v17.93 — COPI REPRIS AU VOL SUIVANT (R53) ; ÉCHELLE, DIAG ET ENREGISTREMENT REMONTÉS EN APP INSTALLÉE (R54)
 Date : 07/11/2026
