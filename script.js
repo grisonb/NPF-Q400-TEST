@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.94';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.95';
 
 
 /*
@@ -3309,7 +3309,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.94 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.95 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -20486,8 +20486,24 @@ async function clearRoadOverlayCacheAndManifest() {
     localStorage.removeItem(ROAD_OVERLAY_MANIFEST_KEY);
 }
 
+/* v17.95 — calque routier déjà installé (cache et description portent les mêmes noms dans la pérenne). */
+async function npfCalqueRoutierExiste() {
+    try { if (localStorage.getItem(ROAD_OVERLAY_MANIFEST_KEY)) return true; } catch (_) {}
+    try { if (typeof caches !== 'undefined' && await caches.has(ROAD_OVERLAY_CACHE_NAME)) return true; } catch (_) {}
+    return false;
+}
+
+function getNpfMessageCalqueRoutierCommun() {
+    return 'Le calque routier est commun à NPF-Q400 TEST et à NPF-Q400 (pérenne) : les deux apps utilisent ce navigateur (même stockage). '
+        + 'Le remplacer ou le supprimer depuis NPF-Q400 TEST l\'effacerait aussi pour NPF-Q400. Rien n\'a été effacé.';
+}
+
 async function importRoadOverlayFile(file) {
     if (!file) return;
+    /* v17.95 — garde-fou : pérenne dans le même stockage et calque déjà installé : rien n'est effacé ni remplacé. */
+    if (await detecterNpfStockageCommunPerenne() && await npfCalqueRoutierExiste()) {
+        throw new Error(getNpfMessageCalqueRoutierCommun());
+    }
     if (typeof JSZip === 'undefined' && /\.zip$/i.test(file.name)) {
         throw new Error('JSZip n’est pas disponible.');
     }
@@ -20626,6 +20642,11 @@ async function importRoadOverlayFile(file) {
 }
 
 async function deleteRoadOverlayData() {
+    /* v17.95 — garde-fou : pérenne dans le même stockage : le calque routier est aussi le sien, rien n'est effacé. */
+    if (await detecterNpfStockageCommunPerenne() && await npfCalqueRoutierExiste()) {
+        alert(getNpfMessageCalqueRoutierCommun());
+        return;
+    }
     showRoadOverlayLayer = false;
     localStorage.setItem(ROAD_OVERLAY_LAYER_KEY, 'false');
     clearRoadOverlayRenderedParts({ clearSources: true });
@@ -47864,6 +47885,8 @@ function pickFallbackOfflineMapGroup(excludedGroupName) {
 async function deleteOfflineMapGroupDatabase(groupName, options = {}) {
     const packNames = getInstalledPackNamesForGroup(groupName);
     const dbName = getOfflineMapDatabaseNameForGroup(groupName);
+    /* v17.95 — garde-fou : base commune avec la pérenne : ni effacée, ni retirée de la liste. */
+    if (await detecterNpfStockageCommunPerenne()) return { status: 'commune', dbName, packNames, wasActive: false };
     const wasActive = mapSourceMode === 'offline'
         && Array.isArray(activeOfflinePacks)
         && activeOfflinePacks.some(name => packNames.includes(name));
@@ -47976,6 +47999,11 @@ async function handleZipImport(file, options = {}) {
             || (existingForm.form === 'inconnue' && legacyPacksInGroup)
         );
         if (mustReplaceLegacy) {
+            /* v17.95 — garde-fou : remplacer la carte l'effacerait aussi pour la pérenne (même stockage). */
+            if (await detecterNpfStockageCommunPerenne()) {
+                alert(`${getNpfMessageCarteCommune(getOfflineMapGroupDisplayName(packGroupNameForImport) || packGroupNameForImport)}\nImport annulé : « ${file.name} » n'a pas été importé.`);
+                return;
+            }
             const label = getOfflineMapGroupDisplayName(packGroupNameForImport) || packGroupNameForImport;
             const sizeText = await describeOfflineMapGroupSize(packGroupNameForImport);
             const confirmed = confirm([
@@ -49322,7 +49350,98 @@ window.resetAllOfflineMapsStorage = async function() {
  * - désinscrit le service worker uniquement pendant le reset, puis recharge l'app
  *   pour qu'il soit réinstallé proprement.
  */
-function deleteIndexedDatabaseWithTimeoutForNpf(name, timeoutMs = 3200) {
+/*
+ * v17.95 — GARDE-FOU DES EFFACEMENTS DE CARTES.
+ * NPF-Q400 TEST, la pérenne (NPF-Q400) et NPF-Q400-RUN sont servies à la même adresse (grisonb.github.io). Dans un même
+ * navigateur (PC, onglets Safari), elles voient les mêmes bases IndexedDB, les mêmes caches et le même localStorage.
+ * La RUN a ses propres noms (npf-q400-run-…). La TEST et la pérenne utilisent LES MÊMES NOMS pour les cartes
+ * (OfflineTilesDB_v13_70_clean, OfflineMap_<carte>, installedMapPacks…, calque routier npf-road-overlay-data-v1) :
+ * ce sont alors les mêmes données. Sur l'iPad, chaque app installée a son propre stockage (vérifié le 30/09/2026).
+ * Règles :
+ * - la TEST n'efface que des bases dont le nom figure dans une liste précise (jamais par préfixe ou par motif) ;
+ * - pérenne dans le même stockage : aucune base ni donnée commune n'est effacée ; seulement ce qui n'existe que dans
+ *   la TEST (calque des noms des communes).
+ * Pérenne reconnue à son service worker (adresse /NPF-Q400/) ou à son cache d'app (npf-q400-app-shell-sw-v2026-…).
+ * La TEST a porté des noms sw-v2026 en juin-juillet 2026, mais ses activations suivantes (jusqu'à la v17.36) ont
+ * effacé ces anciens caches.
+ */
+const NPF_PERENNE_CHEMIN = '/NPF-Q400/';
+const NPF_PERENNE_CACHE_APP = 'npf-q400-app-shell-sw-v2026-';
+
+async function detecterNpfStockageCommunPerenne() {
+    try {
+        if ('serviceWorker' in navigator && typeof navigator.serviceWorker.getRegistrations === 'function') {
+            const inscriptions = await Promise.race([
+                navigator.serviceWorker.getRegistrations(),
+                new Promise(resolve => setTimeout(() => resolve([]), 1500))
+            ]);
+            const perenne = (inscriptions || []).some(inscription => {
+                try { return new URL(inscription.scope).pathname === NPF_PERENNE_CHEMIN; } catch (_) { return false; }
+            });
+            if (perenne) return true;
+        }
+    } catch (_) {}
+    try {
+        if (typeof caches !== 'undefined') {
+            const noms = await caches.keys();
+            if ((noms || []).some(nom => String(nom).indexOf(NPF_PERENNE_CACHE_APP) === 0)) return true;
+        }
+    } catch (_) {}
+    return false;
+}
+
+/* Bases qui n'existent que dans la TEST (aucune autre app ne porte ce nom). */
+function getNpfTestBasesPropres() {
+    return typeof NPF_CALQUE_NOMS_DB_NAME !== 'undefined' ? [NPF_CALQUE_NOMS_DB_NAME] : [];
+}
+
+/* Stockage propre à la TEST : liste précise des bases de cartes qu'elle connaît (noms exacts). */
+function getNpfTestBasesCartesConnues() {
+    const noms = new Set([OFFLINE_DB_NAME, 'OfflineTilesDB', 'OfflineTilesDB_v12_20', 'OfflineTilesDB_v12_21', 'OfflineTilesDB_v13_70_clean']);
+    getInstalledMapPacksSafe().forEach(pack => {
+        if (!pack) return;
+        if (pack.dbName) noms.add(String(pack.dbName));
+        if (pack.name) noms.add(getOfflineMapDatabaseNameForGroup(getOfflinePackGroupName(pack.name)));
+    });
+    try {
+        Object.values(NPF_SERVER_MAPS).forEach(cfg => {
+            if (cfg && cfg.type === 'tuiles' && cfg.groupName) noms.add(getOfflineMapDatabaseNameForGroup(cfg.groupName));
+        });
+    } catch (_) {}
+    const enAttente = readNpfJsonStorage(NPF_OFFLINE_PENDING_DB_DELETIONS_KEY, []);
+    if (Array.isArray(enAttente)) enAttente.forEach(nom => { if (nom) noms.add(String(nom)); });
+    const progression = readNpfJsonStorage(NPF_OFFLINE_IMPORT_PROGRESS_KEY, null);
+    if (progression && progression.dbName) noms.add(String(progression.dbName));
+    getNpfTestBasesPropres().forEach(nom => noms.add(nom));
+    return noms;
+}
+
+/* null = effacement permis ; sinon la raison du refus (« commune » ou « hors-liste »). */
+async function verifierNpfEffacementBase(name, listeAutorisee = null) {
+    if (await detecterNpfStockageCommunPerenne()) {
+        return getNpfTestBasesPropres().includes(name) ? null : 'commune';
+    }
+    const liste = listeAutorisee instanceof Set ? listeAutorisee : getNpfTestBasesCartesConnues();
+    return liste.has(name) ? null : 'hors-liste';
+}
+
+function getNpfMessageCarteCommune(label) {
+    return [
+        `« ${label} » est commune à NPF-Q400 TEST et à NPF-Q400 (pérenne) : les deux apps utilisent ce navigateur (même stockage, mêmes cartes).`,
+        'La supprimer depuis NPF-Q400 TEST l\'effacerait aussi pour NPF-Q400.',
+        '',
+        'Rien n\'a été effacé.'
+    ].join('\n');
+}
+
+function deleteIndexedDatabaseWithTimeoutForNpf(name, timeoutMs = 3200, listeAutorisee = null) {
+    /* v17.95 — tout effacement de base de la TEST passe ici : nom vérifié d'abord (garde-fou ci-dessus). */
+    return verifierNpfEffacementBase(name, listeAutorisee)
+        .catch(() => 'erreur-verification')
+        .then(refus => (refus ? { name, status: refus } : effacerNpfBaseIndexedDbAvecDelai(name, timeoutMs)));
+}
+
+function effacerNpfBaseIndexedDbAvecDelai(name, timeoutMs = 3200) {
     return new Promise((resolve) => {
         if (!name || typeof indexedDB === 'undefined') {
             resolve({ name, status: 'skipped' });
@@ -49347,35 +49466,29 @@ function deleteIndexedDatabaseWithTimeoutForNpf(name, timeoutMs = 3200) {
     });
 }
 
-async function getNpfOfflineDatabaseNamesForReset() {
-    const names = new Set([
-        OFFLINE_DB_NAME,
-        'OfflineTilesDB',
-        'OfflineTilesDB_v12_20',
-        'OfflineTilesDB_v12_21',
-        'OfflineTilesDB_v13_70_clean'
-    ]);
-    try {
-        if (indexedDB && typeof indexedDB.databases === 'function') {
-            const databases = await indexedDB.databases();
-            (databases || []).forEach((entry) => {
-                const name = entry && entry.name ? String(entry.name) : '';
-                if (/^OfflineTilesDB/i.test(name) || /^OfflineMap_/i.test(name)) names.add(name);
-                /* v17.80 — base du calque « Noms des communes » (src/285), effacée aussi. */
-                if (typeof NPF_CALQUE_NOMS_DB_NAME !== 'undefined' && name === NPF_CALQUE_NOMS_DB_NAME) names.add(name);
-            });
-        }
-    } catch (_) {}
-    return Array.from(names).filter(Boolean);
+async function getNpfOfflineDatabaseNamesForReset(commun = false) {
+    /* v17.95 — liste précise, jamais de motif (avant : tout nom commençant par OfflineTilesDB ou OfflineMap_, donc
+     * aussi les cartes de la pérenne dans un même navigateur). Pérenne dans le même stockage : seulement les bases qui
+     * n'existent que dans la TEST (calque des noms des communes, v17.80). */
+    return Array.from(commun ? new Set(getNpfTestBasesPropres()) : getNpfTestBasesCartesConnues()).filter(Boolean);
 }
 
 window.resetAllOfflineMapsStorage = async function() {
-    const confirmed = confirm(
-        'Réinitialisation profonde des cartes offline ?\n\n' +
-        'Cette action désactive la carte offline, ferme IndexedDB, nettoie les bases de tuiles et recharge NPF-Q400.\n' +
-        'Elle remplace la suppression complète de la PWA dans la plupart des cas.'
+    /* v17.95 — garde-fou : la TEST n'efface que ses propres bases (liste précise). Pérenne dans le même stockage : les
+     * cartes et la liste des cartes sont communes, rien de commun n'est effacé ni changé. */
+    const commun = await detecterNpfStockageCommunPerenne();
+    const confirmed = confirm(commun
+        ? 'Réinitialisation profonde des cartes offline de NPF-Q400 TEST ?\n\n' +
+          'NPF-Q400 (pérenne) utilise aussi ce navigateur : les cartes et la liste des cartes sont communes aux deux apps. Elles ne seront PAS effacées.\n' +
+          'Seules les données propres à NPF-Q400 TEST seront effacées (calque des noms des communes). NPF-Q400 et NPF-Q400-RUN ne sont pas touchées.'
+        : 'Réinitialisation profonde des cartes offline de NPF-Q400 TEST ?\n\n' +
+          'Seules les cartes de NPF-Q400 TEST seront effacées : NPF-Q400 (pérenne) et NPF-Q400-RUN ne sont pas touchées.\n' +
+          'Cette action désactive la carte offline, ferme IndexedDB, efface les bases de cartes de NPF-Q400 TEST et recharge NPF-Q400 TEST.\n' +
+          'Elle remplace la suppression complète de la PWA dans la plupart des cas.'
     );
     if (!confirmed) return;
+    /* Liste relevée AVANT de vider la liste des cartes installées (elle donne le nom des bases). */
+    const basesAEffacer = await getNpfOfflineDatabaseNamesForReset(commun);
 
     const progressSection = document.getElementById('import-progress-section');
     const statusMessage = document.getElementById('import-status-message') || document.getElementById('offline-status');
@@ -49394,14 +49507,17 @@ window.resetAllOfflineMapsStorage = async function() {
         await setProgress('Réinitialisation profonde : suspension carte offline...', 5);
         try {
             mapSourceMode = 'online';
-            localStorage.setItem(MAP_SOURCE_MODE_KEY, 'online');
             offlineTilesMode = false;
             activeOfflinePacks = [];
-            localStorage.setItem(OFFLINE_TILES_ENABLED_KEY, 'false');
-            localStorage.setItem(OFFLINE_ACTIVE_PACKS_KEY, JSON.stringify([]));
-            localStorage.setItem(OFFLINE_ACTIVE_PACK_DATABASES_KEY, JSON.stringify([]));
-            localStorage.setItem(OFFLINE_ONLINE_FALLBACK_KEY, 'false');
-            localStorage.removeItem('installedMapPacks');
+            /* v17.95 — clés communes avec la pérenne (même stockage) : inchangées. */
+            if (!commun) {
+                localStorage.setItem(MAP_SOURCE_MODE_KEY, 'online');
+                localStorage.setItem(OFFLINE_TILES_ENABLED_KEY, 'false');
+                localStorage.setItem(OFFLINE_ACTIVE_PACKS_KEY, JSON.stringify([]));
+                localStorage.setItem(OFFLINE_ACTIVE_PACK_DATABASES_KEY, JSON.stringify([]));
+                localStorage.setItem(OFFLINE_ONLINE_FALLBACK_KEY, 'false');
+                localStorage.removeItem('installedMapPacks');
+            }
             notifyServiceWorkerOfflineTilesPreference(false);
             notifyServiceWorkerOfflineOnlineFallback(false);
             notifyServiceWorkerActivePacks([]);
@@ -49424,8 +49540,9 @@ window.resetAllOfflineMapsStorage = async function() {
         } catch (_) {}
         db = null;
 
-        await setProgress('Nettoyage caches de tuiles...', 35);
-        try { await clearTileCaches(); } catch (_) {}
+        /* v17.95 — plus d'effacement des caches « npf-communes-tile-cache-* » (effacement par préfixe, nom commun avec la
+         * pérenne) : ni la TEST ni la pérenne n'écrivent ces caches depuis mai 2026 (persistTilesBatchToCache jamais appelée). */
+        await setProgress('Caches de tuiles : rien à effacer...', 35);
 
         await setProgress('Service worker conservé pour le mode hors ligne...', 48);
         /*
@@ -49439,27 +49556,31 @@ window.resetAllOfflineMapsStorage = async function() {
         await setProgress('Suppression bases offline...', 62);
         /* v17.80 — calque des noms retiré de la carte et sa base fermée avant l'effacement (sinon verrouillée). */
         try { if (typeof prepareNpfCalqueNomsDownload === 'function') prepareNpfCalqueNomsDownload(); } catch (_) {}
-        const dbNames = await getNpfOfflineDatabaseNamesForReset();
+        const listeAutorisee = new Set(basesAEffacer);
         const results = [];
-        for (const name of dbNames) {
-            const result = await deleteIndexedDatabaseWithTimeoutForNpf(name, 3200);
+        for (const name of basesAEffacer) {
+            const result = await deleteIndexedDatabaseWithTimeoutForNpf(name, 3200, listeAutorisee);
             results.push(result);
         }
         const blockedOrTimedOut = results.filter(r => r && (r.status === 'blocked' || r.status === 'timeout'));
 
-        try {
-            localStorage.removeItem('installedMapPacks');
-            localStorage.removeItem(OFFLINE_ACTIVE_PACKS_KEY);
-            localStorage.removeItem(OFFLINE_ACTIVE_PACK_DATABASES_KEY);
-            localStorage.removeItem(OFFLINE_ACTIVE_PACK_ALIASES_KEY);
-            localStorage.setItem(OFFLINE_TILES_ENABLED_KEY, 'false');
-            localStorage.setItem(MAP_SOURCE_MODE_KEY, 'online');
-            localStorage.setItem('npfOfflineDeepResetAt', String(Date.now()));
-        } catch (_) {}
+        if (!commun) {
+            try {
+                localStorage.removeItem('installedMapPacks');
+                localStorage.removeItem(OFFLINE_ACTIVE_PACKS_KEY);
+                localStorage.removeItem(OFFLINE_ACTIVE_PACK_DATABASES_KEY);
+                localStorage.removeItem(OFFLINE_ACTIVE_PACK_ALIASES_KEY);
+                localStorage.setItem(OFFLINE_TILES_ENABLED_KEY, 'false');
+                localStorage.setItem(MAP_SOURCE_MODE_KEY, 'online');
+                localStorage.setItem('npfOfflineDeepResetAt', String(Date.now()));
+            } catch (_) {}
+        }
 
-        await setProgress(blockedOrTimedOut.length
-            ? 'Reset profond terminé avec bases verrouillées ignorées. Rechargement sur base neuve...'
-            : 'Reset profond terminé. Rechargement sur base neuve...', 100);
+        await setProgress(commun
+            ? 'Données propres à NPF-Q400 TEST effacées ; cartes communes avec NPF-Q400 gardées. Rechargement...'
+            : (blockedOrTimedOut.length
+                ? 'Reset profond terminé avec bases verrouillées ignorées. Rechargement sur base neuve...'
+                : 'Reset profond terminé. Rechargement sur base neuve...'), 100);
 
         try {
             await ensureServiceWorkerControlsPageForOffline();
@@ -49485,6 +49606,13 @@ window.deleteMapGroup = async function(groupName) {
     if (!packNames.length) {
         alert(`Aucun pack trouvé pour ${groupName}.`);
         displayInstalledMaps();
+        return;
+    }
+
+    /* v17.95 — garde-fou : pérenne dans le même stockage, la carte est aussi la sienne (base et liste communes) :
+     * rien n'est effacé, ni la base, ni les tuiles, ni la ligne de la liste. */
+    if (await detecterNpfStockageCommunPerenne()) {
+        alert(getNpfMessageCarteCommune(getOfflineMapGroupDisplayName(groupName) || groupName));
         return;
     }
 
@@ -50832,6 +50960,18 @@ async function runNpfServerMapDownload(mapId) {
                 oldBytes = await getNpfServerSectionOldBytes(cfg);
                 oldUnknown = cfg.id === 'calque-routier' && getRoadOverlayManifest().parts.length > 0;
                 needed = Math.round(cfg.besoinOctets);
+            }
+            /* v17.95 — garde-fou : pérenne dans le même stockage. Effacer l'ancienne carte (ou une base cible déjà là) ou
+             * remplacer le calque routier l'effacerait aussi pour NPF-Q400 : rien n'est effacé ni téléchargé. */
+            if ((cfg.type === 'tuiles' || cfg.id === 'calque-routier') && await detecterNpfStockageCommunPerenne()) {
+                const effacementCommun = cfg.type === 'tuiles'
+                    ? (oldGroups.aEffacer.length > 0 || await doesNpfIndexedDatabaseExist(targetDbName) !== false)
+                    : await npfCalqueRoutierExiste();
+                if (effacementCommun) {
+                    showNpfServerMapProgress(`NPF-Q400 (pérenne) utilise aussi ce navigateur (même stockage) : remplacer ${cfg.ancienne} depuis NPF-Q400 TEST l'effacerait aussi pour NPF-Q400. Rien n'a été effacé ni téléchargé.`, 0, { advice: false, error: true }, cfg);
+                    addNpfServerMapLogEvent('arrêt : stockage commun avec NPF-Q400 (pérenne), rien effacé ni téléchargé', {}, cfg);
+                    return;
+                }
             }
             const free = await estimateNpfServerMapFreeBytes();
             addNpfServerMapLogEvent(`place avant effacement : ${free === null ? 'inconnue (le navigateur ne la donne pas)' : `${formatNpfStorageSizeForUser(free)} libres`} + ${oldUnknown ? `taille inconnue pour ${cfg.ancienne}` : `${formatNpfServerMapBytes(oldBytes)} occupés par ${cfg.ancienne}`}, ${formatNpfStorageSizeForUser(needed)} nécessaires`, {}, cfg);

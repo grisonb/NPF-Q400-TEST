@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
-Mise à jour : 08/11/2026
-Version de travail actuelle : TEST v17.94
+Mise à jour : 09/11/2026
+Version de travail actuelle : TEST v17.95
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -551,8 +551,16 @@ NON IMPLÉMENTÉ / OUVERT :
   07/10/2026 : programme VPS bfg-sofia-notams 1.2.0 PRÊT, NON INSTALLÉ
   (~/vps-a-copier/). v17.60 à pousser APRÈS l'installation de la 1.2.0
   (elle annonce « environ 1 minute ») ;
+- v17.95 : garde-fou des effacements de cartes (choix 1 de Bastien, 09/11) : la TEST n'efface plus que des bases au nom
+  exact d'une liste précise (plus de motif OfflineTilesDB* / OfflineMap_*) ; si la pérenne partage le stockage (même
+  navigateur : PC, onglets Safari), aucune base, carte, liste ou calque routier commun n'est effacé (réinitialisation
+  profonde, suppression d'une carte, anciennes versions au téléchargement, remplacement à l'import, calque routier).
+  À MESURER sur iPad (réinitialisation en app installée) et sur PC ; COMMIT LOCAL, NON POUSSÉE. Constaté, NON corrigé
+  (hors périmètre) : la pérenne a le même défaut (sa réinitialisation efface les cartes de la TEST dans un même
+  navigateur) ; la RUN ne l'a pas. À DÉCIDER : voir l'entrée v17.95 ;
 - v17.94 : nom « NPF-Q400 TEST » (manifest, titre de la page, nom sous l'icône de l'iPad) au lieu de « NPF-Q400 » ;
-  rien d'autre ne change. À MESURER (titre de la fenêtre sur PC, nom sous l'icône de l'iPad) ; COMMIT LOCAL, NON POUSSÉE ;
+  rien d'autre ne change. À MESURER (titre de la fenêtre sur PC, nom sous l'icône de l'iPad) ; POUSSÉE le 08/11/2026
+  (9137dc8) ;
 - v17.93 : copi repris au vol suivant comme le M (R53) ; échelle, DIAG et Enregistrement à au moins 20 px du bas en app
   installée (R54 : inchangés de la v17.89 à la v17.92, cause probable : l'iPad n'annonce pas sa zone sûre du bas) :
   À MESURER sur iPad (app installée, paysage et portrait) ; POUSSÉE le 08/11/2026 (753c93f). Remarque non codée : en portrait,
@@ -833,28 +841,28 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.94
-Date : 08/11/2026
-Base : v17.93 (753c93f, poussée le 08/11/2026)
+Version : TEST v17.95
+Date : 09/11/2026
+Base : v17.94 (9137dc8, poussée le 08/11/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.94.txt
-2_Index_v17.94.txt
-3_Manifest_v17.94.txt
-4_Script_v17.94.txt
-5_SIA_v17.94.txt
-6_Style_v17.94.txt
-7_Sw_v17.94.txt
+1_Modifications_v17.95.txt
+2_Index_v17.95.txt
+3_Manifest_v17.95.txt
+4_Script_v17.95.txt
+5_SIA_v17.95.txt
+6_Style_v17.95.txt
+7_Sw_v17.95.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.94 (et texte « TEST v17.94 » de l'écran de
+- Index : APP_VERSION = v17.95 (et texte « TEST v17.95 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.94
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.94
-- Style : NPF_STYLE_BUILD_VERSION = v17.94
+- Manifest : start_url = ./index.html?appv=v17.95
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.95
+- Style : NPF_STYLE_BUILD_VERSION = v17.95
 - Nom de l'app (v17.94) : « NPF-Q400 TEST » (manifest name et short_name, <title>, apple-mobile-web-app-title)
-- Service Worker : `sw-v17-94_nom_test` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-94_nom_test`, `npf-q400-test-app-data-v1`,
+- Service Worker : `sw-v17-95_garde_fou_cartes` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-95_garde_fou_cartes`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-sia-2026-10-29-v02-g15`
 - SIA_DATA_REVISION (SW / Index sia.js?siav=) : sia-2026-10-29-v02-g15 (= NPF_SIA_DATA_REVISION
   de sia.js ; à changer à chaque nouveau sia.js)
@@ -867,15 +875,15 @@ Références de version cohérentes :
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.94 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.95 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
 - `sia.js` : par rapport à v17.70, outre-mer retiré, « a » de 34 VRP renseigné, table vrpAirportColors ajoutée (2 pastels), révision g6 ; zones, terrains et points de métropole identiques ; moteur tuiles (src/100) modifié en v17.66 sur demande
   explicite (limite de zoom propre à chaque carte, zoom 11 OACI 1/500 000) ;
-- tests v17.94 : entrée v17.94 ; sia.js strictement identique à la v17.81 ;
+- tests v17.95 : entrée v17.95 ; sia.js strictement identique à la v17.81 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82, v17.83, v17.84, v17.85, v17.86, v17.87, v17.88, v17.89, v17.90, v17.91, v17.92, v17.93 et v17.94 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82, v17.83, v17.84, v17.85, v17.86, v17.87, v17.88, v17.89, v17.90, v17.91, v17.92, v17.93, v17.94 et v17.95 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
   v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE ;
   v17.56 VALIDÉE en vol ; v17.57 VALIDÉE sur iPad.
 
@@ -2404,6 +2412,156 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.95 — GARDE-FOU DES EFFACEMENTS DE CARTES (TEST SEULEMENT ; PÉRENNE, RUN, BFG INCHANGÉES)
+Date : 09/11/2026
+Base fonctionnelle : v17.94 (commit 9137dc8, poussée le 08/11/2026). Seule la TEST change : pérenne, RUN, BFG, NAS et
+VPS inchangés (pérenne et RUN lues seulement). sia.js inchangé (strictement identique à la v17.81). Export PDF inchangé.
+Demande de Bastien (09/11) : la « Réinitialisation profonde des cartes offline » ne doit effacer QUE les cartes de la
+TEST ; d'abord l'état des lieux des 3 apps, arrêt avant de coder si une base est réellement partagée. Base réellement
+partagée trouvée -> choix proposés ; choix de Bastien : 1 (garde-fou sans rien renommer), SANS mesure DIAG (séparation
+TEST / pérenne sur l'iPad déjà vérifiée le 30/09), appliqué aussi à la suppression d'une carte, aux effacements
+d'anciennes versions et au réimport du calque routier.
+
+0. ÉTAT DES LIEUX (lecture seule ; pérenne = NPF-Q400 origin/main 9888a74, v2026.67 ; RUN = NPF-Q400-RUN-OUTILS
+   origin/main dacb8d1, app/ v1.18 ; TEST = v17.94, lignes de script.js v17.94)
+- Les 3 apps sont servies par grisonb.github.io (/NPF-Q400/, /NPF-Q400-TEST/, /NPF-Q400-RUN/) : même origine, donc
+  dans un même navigateur (PC Chrome, onglets Safari) mêmes bases IndexedDB, mêmes caches, même localStorage. Sur
+  l'iPad, chaque app installée a son propre stockage (vérifié par Bastien le 30/09 ; journal v17.37 « sans lien
+  constaté sur iPad »).
+- Noms utilisés pour les cartes :
+  | stockage                          | TEST (script.js)                  | pérenne (script.js)        | RUN (app/script.js)                   |
+  | base historique                   | OfflineTilesDB_v13_70_clean :6722 | MÊME NOM :686              | npf-q400-run-tuiles :6731             |
+  | base d'une carte                  | OfflineMap_<carte> :6734, 46761   | MÊME PRÉFIXE, MÊME FORMULE | npf-q400-run-carte-<carte> :6743      |
+  |                                   |                                   | :698, 23418                |                                       |
+  | calque des noms                   | CalqueNomsCommunes :51390         | absent                     | npf-q400-run-calque-noms :51882       |
+  | cache de tuiles                   | npf-communes-tile-cache-* :8696   | MÊME PRÉFIXE :2372         | npf-q400-run-communes-tile-cache-*    |
+  | liste et réglages des cartes      | installedMapPacks, offlineActive- | MÊMES CLÉS :687-697        | mêmes noms rangés sous « npf-q400-    |
+  | (localStorage)                    | Packs, …PackDatabases, …Aliases,  |                            | run: » (app/index.html:6-30)          |
+  |                                   | offlineTilesEnabled, mapSource-   |                            |                                       |
+  |                                   | Mode, offlineOnlineFallback       |                            |                                       |
+  |                                   | :6723-6733                        |                            |                                       |
+  | calque routier                    | npf-road-overlay-data-v1 :6864,   | MÊMES NOMS :786-787        | npf-q400-run-road-overlay-*           |
+  |                                   | npfRoadOverlayManifestV1 :6865 ;  |                            |                                       |
+  |                                   | npf-road-overlay-spatial-v1 :6666 | (spatial absent)           |                                       |
+  | caches du service worker          | npf-q400-test-* (sw.js:11-28)     | npf-q400-app-* (sw.js)     | npf-q400-run-* (app/sw.js)            |
+  Autres bases au nom identique TEST / pérenne (hors cartes) : AirportPdfsDB, NpfVacDB, NpfBriefingDocsDB.
+- PARTAGE RÉEL (pas une ressemblance) : TEST et pérenne forment le nom d'une base de carte avec la même fonction
+  (sanitizeOfflineDatabaseToken, identique) ; une même carte (ex. NPF_France) chargée dans les deux apps est la MÊME base
+  OfflineMap_NPF_France, et la liste installedMapPacks est la même. La RUN ne partage rien (préfixes propres).
+- Effacements de la TEST (v17.94) :
+  - réinitialisation profonde (script.js:49350-49480) : liste fixe + TOUT nom commençant par OfflineTilesDB ou
+    OfflineMap_ (MOTIF, indexedDB.databases()) + CalqueNomsCommunes ; caches de tuiles par PRÉFIXE (clearTileCaches,
+    8735) ; clés communes retirées (installedMapPacks…). Dans un même navigateur : efface toutes les cartes de la
+    pérenne et vide sa liste ; RUN non touchée.
+  - première définition de la réinitialisation (49224, efface « OfflineTilesDB ») : jamais exécutée (remplacée par la
+    seconde définition, 49372).
+  - suppression d'une carte (49483) : base entière par nom exact (deleteOfflineMapGroupDatabase 47864) — nom commun avec
+    la pérenne ; ancienne base commune : tuiles du pack effacées dans OfflineTilesDB_v13_70_clean (49647).
+  - anciennes versions au téléchargement depuis le serveur (50273-50310) et effacement reporté au lancement suivant
+    (47825-47838) : noms exacts, mais OfflineMap_… communs ; remplacement d'une carte à l'ancien format à l'import ZIP
+    (47991) : même fonction.
+  - réimport et suppression du calque routier (20477-20487) : npf-road-overlay-data-v1 et npfRoadOverlayManifestV1,
+    communs avec la pérenne.
+  - service worker TEST : n'efface que npf-q400-test-* (correct).
+- PÉRENNE : MÊME DÉFAUT (CONSTATÉ, NON CORRIGÉ) : sa réinitialisation profonde efface le même motif OfflineTilesDB* /
+  OfflineMap_* (pérenne script.js:25584-25602) et les mêmes clés ; lancée dans un même navigateur (PC), elle efface les
+  cartes de la TEST. Statut : À DÉCIDER (aucune modification de la pérenne sans demande).
+- RUN : PAS DE DÉFAUT : sa réinitialisation n'efface que ses bases npf-q400-run- (RUN app/script.js:49754-49772) ;
+  localStorage isolé (préfixe npf-q400-run:) ; son effacement de « OfflineTilesDB » n'est que dans une première
+  définition jamais exécutée (49687).
+
+1. CODE (src/280_cartes_hors_ligne.js, src/120_routes_offline.js)
+- Garde-fou commun (src/280, avant deleteIndexedDatabaseWithTimeoutForNpf) :
+  - detecterNpfStockageCommunPerenne() : pérenne reconnue à son service worker (portée /NPF-Q400/, getRegistrations,
+    1,5 s au plus) ou à son cache d'app « npf-q400-app-shell-sw-v2026-… » (la TEST a porté des noms sw-v2026 en
+    juin-juillet 2026, mais ses activations suivantes, jusqu'à la v17.36, ont effacé ces anciens caches ; ses anciens
+    shells restants sont en sw-v17).
+  - getNpfTestBasesCartesConnues() : liste précise (noms exacts) : OfflineTilesDB_v13_70_clean et les 3 anciens noms
+    fixes, dbName et nom de base de chaque carte de installedMapPacks, bases des cartes du serveur (NPF_France, OACI
+    1-500 000, OACI), effacements en attente, import en cours, CalqueNomsCommunes.
+  - getNpfTestBasesPropres() : bases qui n'existent que dans la TEST : CalqueNomsCommunes.
+  - deleteIndexedDatabaseWithTimeoutForNpf : TOUT effacement de base de la TEST passe par la vérification : pérenne dans
+    le même stockage -> seulement les bases propres à la TEST (sinon refus « commune ») ; sinon -> seulement un nom de la
+    liste précise (sinon refus « hors-liste »). L'effacement lui-même est inchangé (effacerNpfBaseIndexedDbAvecDelai).
+- Réinitialisation profonde :
+  - confirmation : « Réinitialisation profonde des cartes offline de NPF-Q400 TEST ? » + « Seules les cartes de NPF-Q400
+    TEST seront effacées : NPF-Q400 (pérenne) et NPF-Q400-RUN ne sont pas touchées. » ; pérenne dans le même stockage :
+    « … les cartes et la liste des cartes sont communes aux deux apps. Elles ne seront PAS effacées. Seules les données
+    propres à NPF-Q400 TEST seront effacées (calque des noms des communes). »
+  - liste des bases relevée AVANT de vider la liste des cartes (la liste donne les noms) ; plus de motif.
+  - plus d'effacement des caches « npf-communes-tile-cache-* » (préfixe, nom commun) : ni la TEST ni la pérenne n'écrivent
+    ces caches depuis mai 2026 (persistTilesBatchToCache jamais appelée) ; clearTileCaches n'est plus appelée que par la
+    première définition, jamais exécutée.
+  - pérenne dans le même stockage : clés communes (liste des cartes, réglages carte) inchangées.
+- Suppression d'une carte (window.deleteMapGroup) : pérenne dans le même stockage -> message « « … » est commune à
+  NPF-Q400 TEST et à NPF-Q400 (pérenne) … Rien n'a été effacé. », rien effacé (ni base, ni tuiles, ni ligne de liste).
+- deleteOfflineMapGroupDatabase : pérenne dans le même stockage -> rien (statut « commune »).
+- Import ZIP qui remplacerait une carte à l'ancien format : refusé avec le même message, « Import annulé ».
+- Téléchargement depuis le serveur (carte OACI, OACI 1/500 000, NPF-Q400, calque routier) : pérenne dans le même
+  stockage ET une ancienne version à effacer (ou une base cible déjà là, ou un calque routier installé) -> « NPF-Q400
+  (pérenne) utilise aussi ce navigateur (même stockage) : remplacer … depuis NPF-Q400 TEST l'effacerait aussi pour
+  NPF-Q400. Rien n'a été effacé ni téléchargé. » Sans rien à effacer : téléchargement comme avant.
+- Calque routier (src/120) : réimport (fichier ou serveur) et suppression refusés si la pérenne est dans le même stockage
+  et qu'un calque est installé (npfCalqueRoutierExiste : description ou cache).
+- NON MODIFIÉ (signalé) : la mise à jour partielle de la carte V11 (v17.88) efface des tuiles devenues inutiles à
+  l'intérieur de la carte ; dans un même navigateur, c'est la carte commune avec la pérenne qui est mise à jour (pas un
+  effacement de carte). Statut : À DÉCIDER.
+- Versions v17.95 partout ; service worker sw-v17-95_garde_fou_cartes (rien d'autre à changer).
+- CONSÉQUENCE SUR PC (pérenne ouverte dans le même navigateur) : la TEST ne peut plus effacer ni remplacer les cartes ni
+  le calque routier ; elle peut encore télécharger une carte qui n'existe pas encore. Sa réinitialisation profonde y
+  efface seulement le calque des noms des communes : la carte V11 commune reste, sans ses noms dans la TEST, et la
+  retélécharger depuis la TEST est refusé (base déjà là) tant que la pérenne partage le stockage. Sur l'iPad (apps séparées) :
+  comportement d'avant, sauf la liste précise (une base OfflineMap_… dans aucune liste n'est plus effacée).
+
+2. ESSAIS (PC ; bases, caches et clés de FAUSSES pérenne et RUN avec leurs VRAIS noms, contenu inventé ; faux VPS local ;
+   aucune requête au vrai VPS ni au vrai NAS ; outils_tests : garde95/pw_garde95.js + run_garde95.sh, run_fin95.sh,
+   run_nr90.sh, run_maj88.sh, carnet91/run_pdf91.sh)
+- Essai ciblé pw_garde95.js (Playwright, service worker bloqué, tout coupé sauf localhost, adresse du VPS réécrite vers
+  un faux VPS local) : WebKit 24/24, Chrome 26/26.
+  A. Stockage commun (fausse pérenne : OfflineTilesDB_v13_70_clean, OfflineMap_NPF_France, OfflineMap_OACI,
+     OfflineMap_OACI_1_500_000, caches npf-q400-app-shell-sw-v2026-67_…, npf-q400-app-data-v1, npf-communes-tile-cache-…,
+     npf-road-overlay-data-v1, clés installedMapPacks… ; fausse RUN : npf-q400-run-tuiles, npf-q400-run-carte-NPF_France,
+     npf-q400-run-calque-noms, ses caches et clés npf-q400-run:… ; TEST : CalqueNomsCommunes) :
+     pérenne reconnue ; effacement en attente au lancement : base commune gardée et laissée en attente ; supprimer une
+     carte : refusé, message « commune … Rien n'a été effacé », base et liste intactes ; import ZIP remplaçant une carte
+     à l'ancien format : « Import annulé », base intacte (Chrome ; WebKit refuse les Blob en contexte privé) ;
+     téléchargement OACI 1/500 000 et calque routier : « Rien n'a été effacé ni téléchargé », seul le manifeste lu ;
+     réimport et suppression du calque routier : refusés, cache et description intacts ; réinitialisation profonde :
+     texte « … de NPF-Q400 TEST … Elles ne seront PAS effacées … NPF-Q400-RUN ne sont pas touchées » ; après : 4 bases
+     pérenne et 3 bases RUN intactes CONTENU COMPRIS, CalqueNomsCommunes effacée, caches pérenne et RUN intacts
+     (contenu vérifié sous Chrome ; sous WebKit présence seulement : Playwright y perd le contenu des caches à chaque
+     navigation, essai pw_cache_essai.js), clés communes et clés RUN inchangées.
+  B. Stockage propre à la TEST (comme l'app installée sur l'iPad) : garde-fou inactif ; effacement en attente au
+     lancement fait ; base OfflineMap_Inconnue (dans aucune liste) jamais effacée ; supprimer la carte OACI : base effacée
+     et retirée de la liste, autres cartes et RUN intactes ; téléchargement OACI 1/500 000 : ancienne version effacée
+     comme avant ; suppression du calque routier comme avant ; réinitialisation profonde : texte « Seules les cartes de
+     NPF-Q400 TEST seront effacées », liste précise relevée avant (noms exacts), bases de cartes TEST effacées,
+     OfflineMap_Inconnue et RUN (bases, caches, clés) intactes, liste TEST vidée.
+  C. (Chrome) pérenne reconnue à son seul service worker /NPF-Q400/ (sans son cache) ; non reconnue sans lui.
+  Constaté pendant l'essai (code non modifié) : au premier lancement, l'app remet en cohérence un état semé
+  incohérent (carte en ligne + tuiles hors ligne actives : offlineTilesEnabled et offlineOnlineFallback -> false) ;
+  référence prise après ce premier lancement.
+- Non-régression rapide (cdp_nr90.js, Chrome, vrais touchers, vraie carte V11) : 13/13 : lancement sans erreur JS, V11
+  avec noms hors ligne, échelle en NM ; FdS / GAAR (BFG connecté silencieux, refusé : mot de passe de session,
+  téléchargement, NAS injoignable : bandeau) ; appui long « Créer Feu » ; Rot. LFLU 49 / LFML 51 ; calculateur et BINGO ;
+  mode navigation ; Doc FdF et PDF Pélic.
+- Mise à jour partielle de la carte (cdp_maj88.js mode réel, faux serveur local, adresse du VPS redirigée, VPS
+  introuvable pour Chrome) : vraie V11 complète (30 morceaux, 174 s), « Mise à jour de la carte : 50 Mo », coupure puis
+  « Reprendre », seul noms-001 retéléchargé, tuile changée / supprimée / ajoutée justes, 0 différence sur 208 tuiles de
+  noms et 206 du fond, Gestion des Cartes « Carte NPF-Q400 — V11, 1,4 Go », aucune erreur : identique à la v17.88.
+- Non-régression habituelle (run_fin95.sh, comparée à la v17.94) : carte et GPS, FdS / GAAR et règle GLR, popups
+  terrain, retour du suivi GPS, mot « NPF-Q400 » (aucun « NPF » seul), Trafic Moyens Nationaux : identiques, aucune
+  erreur JS (écarts : heures, déclinaison du jour, taille du DIAG) ; mise à jour v17.94 -> v17.95 (sans interception)
+  puis hors ligne, relancée sur le code final : v17.95 servie, carte (50 NM), communes et PÉLIC hors ligne, seuls les
+  caches npf-q400-test-* touchés, 3 caches de la pérenne intacts.
+- Export PDF (pw_pdf91.js, vols inventés) : HTML identique à la v17.94, sauf le numéro de version.
+- À MESURER : réinitialisation profonde en app installée sur l'iPad (cartes de la TEST effacées, puis retéléchargement) ;
+  sur PC avec la pérenne ouverte : messages du garde-fou.
+- À DÉCIDER : même garde-fou dans la pérenne (sa réinitialisation efface les cartes de la TEST dans un même
+  navigateur) ; mise à jour partielle de la carte commune depuis la TEST sur PC ; bases communes hors cartes
+  (AirportPdfsDB, NpfVacDB, NpfBriefingDocsDB) ; une base OfflineMap_… restée hors de toute liste n'est plus effacée par
+  la réinitialisation de la TEST (avant : effacée par le motif).
 
 VERSION TEST v17.94 — NOM « NPF-Q400 TEST » (FENÊTRE SUR PC, ICÔNE DE L'iPAD)
 Date : 08/11/2026

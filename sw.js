@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v17-94_nom_test';
-const APP_VERSION = 'v17.94';
+const SW_VERSION = 'sw-v17-95_garde_fou_cartes';
+const APP_VERSION = 'v17.95';
 const SIA_DATA_REVISION = 'sia-2026-10-29-v02-g15';
 const SIA_DATA_URL = './sia.js';
 /*

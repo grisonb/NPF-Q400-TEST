@@ -362,8 +362,24 @@ async function clearRoadOverlayCacheAndManifest() {
     localStorage.removeItem(ROAD_OVERLAY_MANIFEST_KEY);
 }
 
+/* v17.95 — calque routier déjà installé (cache et description portent les mêmes noms dans la pérenne). */
+async function npfCalqueRoutierExiste() {
+    try { if (localStorage.getItem(ROAD_OVERLAY_MANIFEST_KEY)) return true; } catch (_) {}
+    try { if (typeof caches !== 'undefined' && await caches.has(ROAD_OVERLAY_CACHE_NAME)) return true; } catch (_) {}
+    return false;
+}
+
+function getNpfMessageCalqueRoutierCommun() {
+    return 'Le calque routier est commun à NPF-Q400 TEST et à NPF-Q400 (pérenne) : les deux apps utilisent ce navigateur (même stockage). '
+        + 'Le remplacer ou le supprimer depuis NPF-Q400 TEST l\'effacerait aussi pour NPF-Q400. Rien n\'a été effacé.';
+}
+
 async function importRoadOverlayFile(file) {
     if (!file) return;
+    /* v17.95 — garde-fou : pérenne dans le même stockage et calque déjà installé : rien n'est effacé ni remplacé. */
+    if (await detecterNpfStockageCommunPerenne() && await npfCalqueRoutierExiste()) {
+        throw new Error(getNpfMessageCalqueRoutierCommun());
+    }
     if (typeof JSZip === 'undefined' && /\.zip$/i.test(file.name)) {
         throw new Error('JSZip n’est pas disponible.');
     }
@@ -502,6 +518,11 @@ async function importRoadOverlayFile(file) {
 }
 
 async function deleteRoadOverlayData() {
+    /* v17.95 — garde-fou : pérenne dans le même stockage : le calque routier est aussi le sien, rien n'est effacé. */
+    if (await detecterNpfStockageCommunPerenne() && await npfCalqueRoutierExiste()) {
+        alert(getNpfMessageCalqueRoutierCommun());
+        return;
+    }
     showRoadOverlayLayer = false;
     localStorage.setItem(ROAD_OVERLAY_LAYER_KEY, 'false');
     clearRoadOverlayRenderedParts({ clearSources: true });
