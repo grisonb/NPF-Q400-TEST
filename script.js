@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.96';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.97';
 
 
 /*
@@ -3309,7 +3309,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.96 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.97 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -27259,6 +27259,31 @@ function getTrafficRelativeAltitudeState(aircraft) {
 }
 
 
+/*
+ * v17.97 (repris tel quel de NPF-Q400-RUN v1.5) — cercle rouge clignotant autour d'un trafic ROUGE (même tranche d'altitude ±500 ft : règle
+ * getTrafficRelativeAltitudeState ci-dessus, inchangée) ET à moins de 4 NM de la position GPS de l'iPad. Rien sans
+ * position valable (coordonnées finies, reçue il y a moins de 60 s). Le cercle est un élément de l'icône du trafic
+ * animé en CSS (opacité / échelle, sans redessin de la carte) ; il disparaît au rendu suivant dès que la condition cesse.
+ */
+const NPF_TRAFFIC_PROXIMITY_NM = 4;
+const NPF_TRAFFIC_PROXIMITY_GPS_MAX_AGE_MS = 60000;
+
+function isTrafficProximityAlert(aircraft, altitudeState) {
+    if (!altitudeState || altitudeState.className !== 'traffic-altitude-same') return false;
+    const pos = lastPosition;
+    if (!pos) return false;
+    const lat = Number(pos.lat);
+    const lon = Number(pos.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return false;
+    const ts = Number(pos.timestamp);
+    if (Number.isFinite(ts) && ts > 0 && Date.now() - ts > NPF_TRAFFIC_PROXIMITY_GPS_MAX_AGE_MS) return false;
+    const acLat = Number(aircraft && aircraft.lat);
+    const acLon = Number(aircraft && aircraft.lon);
+    if (!Number.isFinite(acLat) || !Number.isFinite(acLon)) return false;
+    const distanceNm = calculateDistanceInNm(lat, lon, acLat, acLon);
+    return Number.isFinite(distanceNm) && distanceNm < NPF_TRAFFIC_PROXIMITY_NM;
+}
+
 function resolveTrafficVisualType(aircraft) {
     const safeSkyType = String(aircraft?.beaconType || '').trim().toUpperCase();
     const emitterCategory = String(aircraft?.emitterCategory || '').trim().toUpperCase();
@@ -28854,6 +28879,7 @@ function buildTrafficMarkerIcon(aircraft) {
     const track = hasTrack ? aircraft.track : 0;
     const settings = sanitizeTrafficSettings(trafficSettings);
     const altitudeState = getTrafficRelativeAltitudeState(aircraft);
+    const proximityAlert = isTrafficProximityAlert(aircraft, altitudeState);
     const visual = getTrafficAircraftVisualDefinition(aircraft);
     const isTrackedAircraft = isTrafficAircraftTracked(aircraft);
     const shouldBlinkSource = (
@@ -28966,7 +28992,7 @@ function buildTrafficMarkerIcon(aircraft) {
 
     return L.divIcon({
         className: 'traffic-aircraft-icon',
-        html: `<span class="traffic-aircraft-symbol-wrap ${altitudeState.className} ${aircraft.isGrounded ? 'traffic-status-grounded' : 'traffic-status-airborne'} traffic-type-${visual.className}${isTrackedAircraft ? ' traffic-aircraft-tracked' : ''}">${vectorHtml}<span class="traffic-aircraft-arrow${shouldBlinkSource ? ' traffic-aircraft-source-blink' : ''}" aria-label="${escapeHtml(visual.label)}" style="transform: translate(-50%, -50%) rotate(${symbolRotation}deg);">${symbolSvg}</span>${altitudeHtml}</span>`,
+        html: `<span class="traffic-aircraft-symbol-wrap ${altitudeState.className} ${aircraft.isGrounded ? 'traffic-status-grounded' : 'traffic-status-airborne'} traffic-type-${visual.className}${isTrackedAircraft ? ' traffic-aircraft-tracked' : ''}${proximityAlert ? ' traffic-proximity-alert' : ''}">${proximityAlert ? '<span class="traffic-proximity-ring" aria-hidden="true"></span>' : ''}${vectorHtml}<span class="traffic-aircraft-arrow${shouldBlinkSource ? ' traffic-aircraft-source-blink' : ''}" aria-label="${escapeHtml(visual.label)}" style="transform: translate(-50%, -50%) rotate(${symbolRotation}deg);">${symbolSvg}</span>${altitudeHtml}</span>`,
         iconSize: [42, 42],
         iconAnchor: [21, 21],
         popupAnchor: [0, -13]

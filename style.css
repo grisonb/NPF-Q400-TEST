@@ -1,4 +1,4 @@
-/* NPF_STYLE_BUILD_VERSION: v17.96 */
+/* NPF_STYLE_BUILD_VERSION: v17.97 */
 /* v14.83 — nettoyage des références techniques et limitation des cartouches routiers. */
 /* v14.81 — recherche phonétique nationale élargie aux fragments sur deux lettres. */
 /* v14.80 — Brive conservé uniquement sous LFSL. */
@@ -19028,3 +19028,29 @@ body.npf-calculator-modal-open {
 .npf-pdf-page canvas { display: block; width: 100%; height: 100%; }
 .npf-pdf-etat { padding: 14px; font-size: 16px; color: #102a43; text-align: center; }
 .npf-pdf-etat:empty { display: none; }
+
+/* v17.97 (repris tel quel de NPF-Q400-RUN v1.5) — trafic SafeSky rouge (±500 ft) à moins de 4 NM : cercle rouge clignotant autour du symbole (src/140).
+   Animation d'opacité / d'échelle seulement (compositeur du navigateur, pas de redessin de la carte). */
+.traffic-proximity-ring {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 58px;
+    height: 58px;
+    margin: -29px 0 0 -29px;
+    border: 4px solid #dc2626;
+    border-radius: 50%;
+    background: rgba(220,38,38,.12);
+    box-shadow: 0 0 0 2px rgba(255,255,255,.9), inset 0 0 0 2px rgba(255,255,255,.6);
+    pointer-events: none;
+    z-index: -1;
+    will-change: opacity, transform;
+    animation: npfTrafficProximityBlink 1s ease-in-out infinite;
+}
+@keyframes npfTrafficProximityBlink {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: .35; transform: scale(1.12); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .traffic-proximity-ring { animation-duration: 2s; }
+}

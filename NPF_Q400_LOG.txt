@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 12/11/2026
-Version de travail actuelle : TEST v17.96
+Version de travail actuelle : TEST v17.97
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -551,10 +551,13 @@ NON IMPLÉMENTÉ / OUVERT :
   07/10/2026 : programme VPS bfg-sofia-notams 1.2.0 PRÊT, NON INSTALLÉ
   (~/vps-a-copier/). v17.60 à pousser APRÈS l'installation de la 1.2.0
   (elle annonce « environ 1 minute ») ;
+- v17.97 : cercle rouge clignotant autour d'un trafic SafeSky rouge (±500 ft) à moins de 4 NM, repris tel quel de la RUN
+  v1.5 (Moyens Nationaux : pas de cercle, comme la RUN : À DÉCIDER si voulu) ; À MESURER sur iPad ; COMMIT LOCAL, NON
+  POUSSÉE ;
 - v17.96 : portage de NPF-Q400-RUN (v1.20 Carnet en simulation : feux exportés, "simulation": true ; v1.21-v1.22
   étiquettes trafics Alt. + Immat. / Alt. / aucune, SafeSky et MN, clé npfQ400TestTraficEtiquettesV1 ; v1.19 carte
   « superposée » sans risque ; v1.14 visionneuse PDF.js sans cible) et recentrage sur la métropole (GPS hors du rectangle
-  métropole + Corse + 15 NM : ni centrage ni suivi ni cadrage vers lui). À MESURER sur iPad ; COMMIT LOCAL, NON POUSSÉE ;
+  métropole + Corse + 15 NM : ni centrage ni suivi ni cadrage vers lui). À MESURER sur iPad ; POUSSÉE le 12/11/2026 (9c51343) ;
 - v17.95 : garde-fou des effacements de cartes (choix 1 de Bastien, 09/11) : la TEST n'efface plus que des bases au nom
   exact d'une liste précise (plus de motif OfflineTilesDB* / OfflineMap_*) ; si la pérenne partage le stockage (même
   navigateur : PC, onglets Safari), aucune base, carte, liste ou calque routier commun n'est effacé (réinitialisation
@@ -845,30 +848,30 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.96
+Version : TEST v17.97
 Date : 12/11/2026
-Base : v17.95 (0100dbb, poussée le 09/11/2026)
+Base : v17.96 (9c51343, poussée le 12/11/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.96.txt
-2_Index_v17.96.txt
-3_Manifest_v17.96.txt
-4_Script_v17.96.txt
-5_SIA_v17.96.txt
-6_Style_v17.96.txt
-7_Sw_v17.96.txt
+1_Modifications_v17.97.txt
+2_Index_v17.97.txt
+3_Manifest_v17.97.txt
+4_Script_v17.97.txt
+5_SIA_v17.97.txt
+6_Style_v17.97.txt
+7_Sw_v17.97.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.96 (et texte « TEST v17.96 » de l'écran de
+- Index : APP_VERSION = v17.97 (et texte « TEST v17.97 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.96
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.96
-- Style : NPF_STYLE_BUILD_VERSION = v17.96
+- Manifest : start_url = ./index.html?appv=v17.97
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.97
+- Style : NPF_STYLE_BUILD_VERSION = v17.97
 - Nom de l'app (v17.94) : « NPF-Q400 TEST » (manifest name et short_name, <title>, apple-mobile-web-app-title)
 - PDF.js (v17.96) : dossier pdfjs/ (pdf.min.mjs, pdf.worker.min.mjs 4.10.38, LICENSE Apache-2.0, LISEZMOI.txt), à livrer
   avec les 7 fichiers ; fichiers indispensables du service worker.
-- Service Worker : `sw-v17-96_portage_run_recentrage` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-96_portage_run_recentrage`, `npf-q400-test-app-data-v1`,
+- Service Worker : `sw-v17-97_cercle_trafic` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-97_cercle_trafic`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-sia-2026-10-29-v02-g15`
 - SIA_DATA_REVISION (SW / Index sia.js?siav=) : sia-2026-10-29-v02-g15 (= NPF_SIA_DATA_REVISION
   de sia.js ; à changer à chaque nouveau sia.js)
@@ -881,15 +884,15 @@ Références de version cohérentes :
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.96 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.97 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
 - `sia.js` : par rapport à v17.70, outre-mer retiré, « a » de 34 VRP renseigné, table vrpAirportColors ajoutée (2 pastels), révision g6 ; zones, terrains et points de métropole identiques ; moteur tuiles (src/100) modifié en v17.66 sur demande
   explicite (limite de zoom propre à chaque carte, zoom 11 OACI 1/500 000) ;
-- tests v17.96 : entrée v17.96 ; sia.js strictement identique à la v17.81 ;
+- tests v17.97 : entrée v17.97 ; sia.js strictement identique à la v17.81 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82, v17.83, v17.84, v17.85, v17.86, v17.87, v17.88, v17.89, v17.90, v17.91, v17.92, v17.93, v17.94, v17.95 et v17.96 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82, v17.83, v17.84, v17.85, v17.86, v17.87, v17.88, v17.89, v17.90, v17.91, v17.92, v17.93, v17.94, v17.95, v17.96 et v17.97 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
   v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE ;
   v17.56 VALIDÉE en vol ; v17.57 VALIDÉE sur iPad.
 
@@ -2418,6 +2421,64 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.97 — CERCLE ROUGE CLIGNOTANT AUTOUR D'UN TRAFIC SAFESKY PROCHE (REPRIS DE NPF-Q400-RUN v1.5)
+Date : 12/11/2026
+Base fonctionnelle : v17.96 (commit 9c51343, poussée le 12/11/2026). Seule la TEST change : pérenne, RUN (lue seulement,
+NPF-Q400-RUN-OUTILS origin/main 27a3f7c = v1.23 poussée), BFG, NAS et VPS inchangés. sia.js inchangé (strictement identique
+à la v17.81). Demande de Bastien (12/11) : porter le cercle rouge clignotant à l'identique.
+
+0. ÉTAT DES LIEUX (RUN v1.23 poussée, lecture seule ; journal RUN v1.5 point B)
+- Trafics : SafeSky SEULEMENT (cercle ajouté dans l'icône SafeSky : app/src/140_trafic_rendu.js:2417, 2530). Moyens
+  Nationaux : PAS de cercle (app/src/180_global_link.js n'en a pas ; journal RUN : « Seul SafeSky utilise cette règle »).
+- Distance : isTrafficProximityAlert (app/src/140:806) : calculateDistanceInNm entre la dernière position de l'avion
+  (lastPosition) et le trafic, strictement moins de 4 NM ; position valable (coordonnées finies) reçue il y a moins de
+  60 s ; sans position : pas de cercle.
+- Altitude : OUI : seulement un trafic « rouge », même tranche ±500 ft que l'avion (getTrafficRelativeAltitudeState,
+  app/src/140:752) ; altitude de l'avion et du trafic connues ; trafic au sol : jamais.
+- Aspect (app/style.css:18907-18931) : anneau rouge #dc2626 de 4 px, 58 px de diamètre, fond rouge léger, liseré blanc,
+  sous le symbole ; clignotement 1 s (opacité 1 -> 0,35, échelle 1 -> 1,12), 2 s si l'iPad demande moins d'animations ;
+  animation du navigateur seule (pas de redessin de la carte).
+- Apparition / disparition : à chaque rendu du trafic (icône recalculée, remplacée si elle change : TEST src/140:3166-3183).
+- Réglage pour le couper : aucun (seul l'arrêt du calque trafic).
+- Simulation : même règle avec la position et l'altitude simulées (lastPosition, src/270:80) ; rien de particulier.
+- TEST v17.96 : src/140 identique à la RUN v1.23 sauf le cercle.
+
+1. CODE
+- src/140_trafic_rendu.js : NPF_TRAFFIC_PROXIMITY_NM, NPF_TRAFFIC_PROXIMITY_GPS_MAX_AGE_MS et isTrafficProximityAlert
+  repris tels quels de la RUN ; dans buildTrafficMarkerIcon : proximityAlert, classe traffic-proximity-alert et
+  <span class="traffic-proximity-ring"> dans l'icône (même HTML que la RUN). style.css : bloc .traffic-proximity-ring et
+  @keyframes npfTrafficProximityBlink identiques à la RUN. Rien d'autre ne change dans le trafic.
+- Moyens Nationaux : pas de cercle, comme la RUN (demande « à l'identique »). Si Bastien le veut pour eux aussi : À DÉCIDER.
+- Versions v17.97 partout ; service worker sw-v17-97_cercle_trafic.
+
+2. ESSAIS (PC ; faux SafeSky local, positions Moyens Nationaux injectées, trafics INVENTÉS ; aucune requête au vrai VPS, au
+   vrai NAS ni à SafeSky réel ; outils_tests : v96/pw_cercle97.js, pw_flu97.js, run_cercle97.sh, run_flu97.sh, tout97.sh,
+   run_fin97.sh)
+- Cercle (pw_cercle97.js ; WebKit tactile service worker bloqué / Chrome hôtes extérieurs introuvables) : WebKit 7/7,
+  Chrome 7/7 (1er lancement de Chrome : navigateur fermé dès son ouverture, incident du PC, relancé) : avion à 5 000 ft ;
+  SafeSky à 3,9 NM même altitude = cercle (anneau rouge, clignotement 1 s) ; 4,1 NM = pas de cercle ; 3 NM mais +1 000 ft =
+  pas de cercle ; Moyens Nationaux à 3,9 NM = pas de cercle (comme la RUN) ; vrai pour « Alt. + Immat. », « Alt. » et
+  aucune étiquette ; trafic éloigné à 4,5 NM : cercle parti au rendu suivant ; revenu à 3,9 NM : cercle revenu ; un seul
+  cercle dans la page. Capture : out/v97/cercle97-webkit.png.
+- Fluidité, CPU x6 (pw_flu97.js, Chrome, 40 trafics SafeSky dont 3 à moins de 4 NM dans la même tranche = 3 cercles en
+  v17.97, 3 MN ; 3 passages par version, alternés ; le PC varie beaucoup d'un passage à l'autre) : médianes v17.96 /
+  v17.97 : redessin 797 / 487 ms ; images par seconde au repos 86,6 / 89,8 ; en déplaçant la carte 21,4 / 27,9 images/s,
+  31 / 7 images > 50 ms ; 6 / 6 tâches > 100 ms. Pas moins bonne. (Premier essai : 6 cercles = 3 voulus + 3 trafics du
+  paquet de fond aussi à moins de 4 NM dans la tranche ; paquet de fond écarté ensuite.)
+- Étiquettes, 3 états (pw_v96.js rejoué sur la v17.97) : WebKit 17/17, Chrome 18/18 (Alt. + Immat. identique à la v17.95,
+  Alt., aucune, exclusives, reprise, relance, ordre des cases) ; Carnet, PDF, recentrage de la v17.96 inchangés.
+- Non-régression rapide (cdp_nr90.js, profil P11 reconstruit le 12/11) : 13/13 (lancement sans erreur JS, V11 avec noms
+  hors ligne, échelle en NM, FdS / GAAR, Créer Feu, Rot. / BINGO, mode navigation, Doc FdF).
+- Non-régression habituelle (run_fin97.sh, comparée à la v17.96) : identique, aucune erreur JS, mot « NPF-Q400 » (aucun
+  « NPF » seul) ; écarts : heures, déclinaison, taille du DIAG ; fenêtre terrain avec WP placée 214 px plus haut au 1er
+  passage seulement (taille et contenu identiques) : relancé 2 fois sur v17.96 et v17.97 : relevés complets IDENTIQUES
+  (effet de délai du recadrage de la carte dans l'essai). Mise à jour v17.96 -> v17.97 sans interception puis hors ligne,
+  sur le code final : v17.97 servie, carte (50 NM), communes et PÉLIC hors ligne, seuls les caches npf-q400-test-*
+  touchés, 3 caches de la pérenne intacts.
+- Réseau : tentatives coupées par les essais (rien n'est sorti) : tuiles OSM, fichiers ULM, vérification des VAC, NOTAM
+  SOFIA au démarrage (Chrome, existe avant).
+- À MESURER sur iPad : cercle en vol (trafic rouge à moins de 4 NM), fluidité avec plusieurs cercles.
 
 VERSION TEST v17.96 — PORTAGE DE NPF-Q400-RUN (v1.14, v1.19 à v1.22) ET RECENTRAGE SUR LA MÉTROPOLE
 Date : 12/11/2026

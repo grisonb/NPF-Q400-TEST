@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v17-96_portage_run_recentrage';
-const APP_VERSION = 'v17.96';
+const SW_VERSION = 'sw-v17-97_cercle_trafic';
+const APP_VERSION = 'v17.97';
 const SIA_DATA_REVISION = 'sia-2026-10-29-v02-g15';
 const SIA_DATA_URL = './sia.js';
 /*
