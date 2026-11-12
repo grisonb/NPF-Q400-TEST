@@ -1390,9 +1390,20 @@ function renderGlobalLinkPositions(positions) {
 
         const glrVisual = getGlobalLinkVisualDefinition(item);
         const glrSymbolSvg = `<svg viewBox="0 0 64 64" preserveAspectRatio="xMidYMid meet" focusable="false" aria-hidden="true">${glrVisual.svg}</svg>`;
+        /*
+         * v17.97 — cercle rouge clignotant aussi pour les Moyens Nationaux : MÊME règle, même fonction et même style que SafeSky
+         * (isTrafficProximityAlert et getTrafficRelativeAltitudeState, src/140 ; .traffic-proximity-ring, style.css) :
+         * moins de 4 NM d'une position de l'avion de moins de 60 s, même tranche ±500 ft. Altitude inconnue : pas de cercle
+         * (undefined, jamais 0 ft). Trafic Off (position et altitude non renouvelées depuis plus de 180 s, ou Off annoncé) :
+         * altitude trop ancienne, pas de cercle. Le relais ne transmet aucun état « au sol » (Off ne veut pas dire au sol).
+         */
+        const glrAltitudeFeet = getGlobalLinkAltitudeFeet(item.altitude);
+        const glrProximityAlert = !item.off && isTrafficProximityAlert(item, getTrafficRelativeAltitudeState({
+            altitudeFeet: Number.isFinite(glrAltitudeFeet) ? glrAltitudeFeet : undefined
+        }));
         const symbolIcon = L.divIcon({
             className: 'global-link-aircraft-marker',
-            html: `<div class="global-link-aircraft-symbol${item.stale ? ' stale' : ''} glr-type-${escapeGlobalLinkHtml(glrVisual.className)}"><span class="global-link-aircraft-silhouette" aria-label="${escapeGlobalLinkHtml(glrVisual.label)}">${glrSymbolSvg}</span></div>`,
+            html: `<div class="global-link-aircraft-symbol${item.stale ? ' stale' : ''} glr-type-${escapeGlobalLinkHtml(glrVisual.className)}${glrProximityAlert ? ' traffic-proximity-alert' : ''}">${glrProximityAlert ? '<span class="traffic-proximity-ring" aria-hidden="true"></span>' : ''}<span class="global-link-aircraft-silhouette" aria-label="${escapeGlobalLinkHtml(glrVisual.label)}">${glrSymbolSvg}</span></div>`,
             iconSize: [38,38],
             iconAnchor: [19,19]
         });

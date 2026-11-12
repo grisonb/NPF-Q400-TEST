@@ -552,8 +552,10 @@ NON IMPLÉMENTÉ / OUVERT :
   (~/vps-a-copier/). v17.60 à pousser APRÈS l'installation de la 1.2.0
   (elle annonce « environ 1 minute ») ;
 - v17.97 : cercle rouge clignotant autour d'un trafic SafeSky rouge (±500 ft) à moins de 4 NM, repris tel quel de la RUN
-  v1.5 (Moyens Nationaux : pas de cercle, comme la RUN : À DÉCIDER si voulu) ; À MESURER sur iPad ; COMMIT LOCAL, NON
-  POUSSÉE ;
+  v1.5 ; 2e commit (même version, décision de Bastien du 12/11) : même cercle aussi pour les Moyens Nationaux (même
+  fonction, même style ; altitude inconnue ou trafic Off : pas de cercle). À DÉCIDER : Moyens Nationaux posés (le relais
+  n'annonce pas « au sol ») ; image au repos un peu plus basse sur PC avec 6 cercles clignotants (À MESURER sur iPad).
+  À MESURER sur iPad ; 2 COMMITS LOCAUX, NON POUSSÉE ;
 - v17.96 : portage de NPF-Q400-RUN (v1.20 Carnet en simulation : feux exportés, "simulation": true ; v1.21-v1.22
   étiquettes trafics Alt. + Immat. / Alt. / aucune, SafeSky et MN, clé npfQ400TestTraficEtiquettesV1 ; v1.19 carte
   « superposée » sans risque ; v1.14 visionneuse PDF.js sans cible) et recentrage sur la métropole (GPS hors du rectangle
@@ -2423,7 +2425,63 @@ HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
 
 VERSION TEST v17.97 — CERCLE ROUGE CLIGNOTANT AUTOUR D'UN TRAFIC SAFESKY PROCHE (REPRIS DE NPF-Q400-RUN v1.5)
+                     + 2e COMMIT : MÊME CERCLE POUR LES MOYENS NATIONAUX
 Date : 12/11/2026
+
+3. AJOUT DANS LA MÊME VERSION (2e commit local, sans amend ; v17.97 non poussée) : CERCLE AUSSI POUR LES MOYENS NATIONAUX
+Demande de Bastien (12/11) : la remarque « Moyens Nationaux : pas de cercle, À DÉCIDER » (point 1 ci-dessous) est DÉCIDÉE :
+même cercle, même règle que SafeSky. Uniquement la TEST.
+- État des lieux : symbole MN construit dans renderGlobalLinkPositions (src/180_global_link.js) ; altitude du relais en
+  centimètres (getGlobalLinkAltitudeFeet) ; état Off (isGlobalLinkOffTraffic : Off annoncé, ou position non renouvelée
+  depuis plus de 180 s) ; AUCUN état « au sol » transmis par le relais (v15.92 : Off ne veut pas dire au sol) ; rendu MN
+  refait à chaque lecture MN (15 s) et à chaque rendu SafeSky (src/140), donc même rythme d'apparition / disparition.
+- Code (src/180 seulement) : dans renderGlobalLinkPositions, glrProximityAlert = !item.off && isTrafficProximityAlert(item,
+  getTrafficRelativeAltitudeState({ altitudeFeet })) : MÊMES fonctions que SafeSky (aucune nouvelle), même HTML
+  (<span class="traffic-proximity-ring">, classe traffic-proximity-alert) dans le symbole MN ; style.css INCHANGÉ (même
+  .traffic-proximity-ring). Moins de 4 NM d'une position de l'avion de moins de 60 s, même tranche ±500 ft, même aspect,
+  même clignotement, même comportement en simulation (lastPosition simulée).
+- Altitude MN inconnue (absente, vide, non numérique) : pas de cercle (passée comme inconnue, jamais comme 0 ft) — choix
+  proposé par Bastien. Altitude « trop ancienne » : j'ai pris le seuil qui existe déjà, l'état Off (plus de 180 s sans
+  nouvelle position, ou Off annoncé) : pas de cercle. Aucun autre seuil créé.
+- « Au sol » : le relais MN ne dit pas si un appareil est posé. Un MN posé n'a pas de cercle tant que l'avion vole (hors
+  tranche), MAIS avion posé et MN posé à la même altitude à moins de 4 NM (ex. même base) : cercle MN (constaté en essai).
+  SafeSky, lui, connaît l'état au sol (jamais de cercle). À DÉCIDER par Bastien (rien de décidé seul).
+- Constat sans correction (existant, SafeSky) : un trafic SafeSky sans altitude est traité comme à 0 ft par
+  getTrafficRelativeAltitudeState (Number(null) = 0) : rouge, donc cercle possible, si l'avion est à moins de 500 ft
+  (au sol près de la mer). Même code dans la RUN. À DÉCIDER.
+- Rien d'autre ne change : symboles, étiquettes (3 états), cercles SafeSky.
+- Essais (PC ; faux SafeSky local, FAUX service Moyens Nationaux v96/nas_stub_mn.js lu par la vraie fonction
+  refreshGlobalLinkPositions, trafics INVENTÉS ; aucune requête au vrai VPS, au vrai NAS, à SafeSky réel ni au vrai service
+  MN ; outils_tests : v96/pw_cercle97b.js, run_cercle97b.sh, pw_flu97b.js, pw_flu97c.js, tout97b.sh, run_fin97b.sh) :
+  . Cercle MN (pw_cercle97b.js) : WebKit tactile service worker bloqué 14/14, Chrome 14/14 : avion à 5 000 ft ; MN à 3,9 NM
+    même altitude = cercle ; 4,1 NM, +1 000 ft, altitude 0 (au sol), sans altitude, altitude vide, Off (200 s) = pas de
+    cercle ; pour « Alt. + Immat. », « Alt. » et aucune étiquette ; même aspect que SafeSky (animation, 1 s, 58 px, bord
+    4 px rouge, même position par rapport au symbole) ; MN éloigné à 4,5 NM : cercle parti, revenu à 3,9 NM : revenu ;
+    position de l'avion de plus de 60 s : pas de cercle ; cercles SafeSky inchangés (3,9 NM oui, 4,1 NM et +1 000 ft non).
+    Capture : out/v97/cercle97b-new-webkit.png.
+  . Symboles MN, étiquettes MN (3 états) et icônes SafeSky : HTML identique à la v17.96 et au 1er commit v17.97 (cercle
+    mis à part), WebKit et Chrome.
+  . Fluidité CPU x6 (Chrome, 40 SafeSky dont 3 cercles + 6 MN dont 3 cercles) contre la v17.96 (dernière poussée), passages
+    alternés (v17.97 : 5 valables, 1 interrompu au chargement ; v17.96 : 6) : médianes v17.96 / v17.97 : redessin 825 / 824
+    ms ; déplacement de la carte 17,7 / 16,9 images/s, 40,5 / 41 images > 50 ms ; 6 / 6 tâches > 100 ms ; image au repos
+    77,1 / 50,8 images/s. Le PC varie énormément d'un passage à l'autre (même version : 39 à 85). Mesure dans la MÊME page,
+    cercles animés / figés en alternance (pw_flu97c.js, 4 pages x 4 tours) : au repos médiane ≈ 63 animés / ≈ 75 figés
+    (2 pages sur 4 sans écart) ; en déplaçant la carte : aucun écart (animés ≥ figés). Le coût au repos vient du clignotement
+    lui-même (déjà présent avec les 3 cercles SafeSky du 1er commit, masqué par la variation des passages). Sur PC sans
+    vraie carte graphique ; À MESURER sur iPad (image au repos avec plusieurs cercles). À DÉCIDER par Bastien.
+  . Étiquettes 3 états (pw_v96.js sur le code final) : WebKit 17/17, Chrome 18/18.
+  . Non-régression rapide (cdp_nr90.js, profil P11, vraie V11 avec noms) : 13/13 (lancement sans erreur JS, V11 hors ligne,
+    échelle en NM, FdS/GAAR, Créer Feu, Rot./BINGO, mode navigation, Doc FdF, aucune requête externe).
+  . Non-régression habituelle (run_fin97b.sh, comparée au 1er commit v17.97) : identique, aucune erreur JS ; écarts : temps
+    et taille du DIAG ; fenêtre terrain avec WP 214 px plus haut au 1er passage : 2 passages appariés ensuite IDENTIQUES
+    (même effet de délai qu'au 1er commit) ; map et nr : 1er lancement de Chrome sans port de débogage (incident du PC),
+    relancés. Mise à jour v17.96 -> v17.97 sans interception puis hors ligne, sur le code final : v17.97 servie, carte
+    (50 NM), communes et PÉLIC hors ligne, seuls les caches npf-q400-test-* touchés, 3 caches de la pérenne intacts.
+    Aucun texte affiché ajouté (aucun « NPF » seul).
+  . Réseau : appels « positions » au faux service MN seulement ; tentatives coupées (rien n'est sorti) : tuiles OSM,
+    fichiers ULM, vérification des VAC, NOTAM SOFIA au démarrage (existe avant).
+- À MESURER sur iPad : cercle MN en vol ; image au repos et fluidité avec plusieurs cercles.
+
 Base fonctionnelle : v17.96 (commit 9c51343, poussée le 12/11/2026). Seule la TEST change : pérenne, RUN (lue seulement,
 NPF-Q400-RUN-OUTILS origin/main 27a3f7c = v1.23 poussée), BFG, NAS et VPS inchangés. sia.js inchangé (strictement identique
 à la v17.81). Demande de Bastien (12/11) : porter le cercle rouge clignotant à l'identique.
