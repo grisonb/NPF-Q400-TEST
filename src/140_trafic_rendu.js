@@ -2456,7 +2456,9 @@ function buildTrafficMarkerIcon(aircraft) {
         : ((aircraft.altitude && aircraft.altitude !== '--') ? aircraft.altitude : '');
     const verticalTrend = getTrafficVerticalTrend(aircraft);
 
-    const firstLineParts = [
+    /* v17.96 (RUN v1.21) — « Étiquettes Trafics Alt. » : ni immatriculation ni type, altitude + tendance seules. */
+    const labelAltOnly = settings.labelStyle === 'alt';
+    const firstLineParts = labelAltOnly ? [] : [
         permanentIdentifier,
         permanentType
     ].filter(Boolean);
@@ -2470,7 +2472,7 @@ function buildTrafficMarkerIcon(aircraft) {
         settings.showAltitudeLabel
         && (firstLineParts.length || secondLineParts.length)
     ) ? `
-        <span class="traffic-aircraft-altitude-label ${labelAnchorClass}"
+        <span class="traffic-aircraft-altitude-label ${labelAnchorClass}${labelAltOnly ? ' traffic-label-alt-seule' : ''}"
               style="--traffic-alt-left:${altitudeLabelLeft.toFixed(1)}px;--traffic-alt-top:${altitudeLabelTop.toFixed(1)}px;">
             ${firstLineParts.length ? `
                 <span class="traffic-label-line traffic-label-line-primary">

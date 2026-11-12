@@ -30,7 +30,8 @@ function initMap() {
     if (!startupInitialViewApplied) {
         try {
             const storedStartupGps = getStoredGpsPosition();
-            if (storedStartupGps) {
+            /* v17.96 — position mémorisée hors de la métropole : vue de la métropole (plus bas). */
+            if (storedStartupGps && isNpfPositionCentrable(storedStartupGps.lat, storedStartupGps.lng)) {
                 map.setView(
                     [storedStartupGps.lat, storedStartupGps.lng],
                     STARTUP_GPS_CENTER_ZOOM,

@@ -148,7 +148,8 @@ function displayCommuneDetails(commune, shouldFitBounds = true) {
 
     if (shouldFitBounds) {
         setTimeout(() => {
-            if (userMarker && userMarker.getLatLng()) {
+            /* v17.96 — avion hors de la métropole (src/030) : pas dans le cadre du feu (pas de vue vers une position lointaine). */
+            if (userMarker && userMarker.getLatLng() && isNpfPositionCentrable(userMarker.getLatLng().lat, userMarker.getLatLng().lng)) {
                 allPoints.push(userMarker.getLatLng());
             }
             if (allPoints.length > 1) {
@@ -614,7 +615,8 @@ function selectAirportDestination(airport) {
         const gps = userMarker && typeof userMarker.getLatLng === 'function'
             ? userMarker.getLatLng()
             : null;
-        if (gps && Number.isFinite(gps.lat) && Number.isFinite(gps.lng)) {
+        /* v17.96 — avion hors de la métropole (src/030) : la carte va sur le terrain seul (pas de vue vers une position lointaine). */
+        if (gps && Number.isFinite(gps.lat) && Number.isFinite(gps.lng) && isNpfPositionCentrable(gps.lat, gps.lng)) {
             map.fitBounds(L.latLngBounds([[gps.lat, gps.lng], target]).pad(0.25), {
                 animate: false
             });

@@ -1,4 +1,4 @@
-/* NPF_STYLE_BUILD_VERSION: v17.95 */
+/* NPF_STYLE_BUILD_VERSION: v17.96 */
 /* v14.83 — nettoyage des références techniques et limitation des cartouches routiers. */
 /* v14.81 — recherche phonétique nationale élargie aux fragments sur deux lettres. */
 /* v14.80 — Brive conservé uniquement sous LFSL. */
@@ -18970,3 +18970,61 @@ body.npf-calculator-modal-open {
 #npf-nautical-scale-fixed.npf-nautical-scale { bottom: var(--npf-barre-bas) !important; }
 #npf-startup-diag-button.npf-startup-diag-button { bottom: var(--npf-barre-bas) !important; }
 #yul-trace-button.npf-trace-record-button { bottom: var(--npf-barre-bas) !important; }
+
+/* ==========================================================================
+   v17.96 (repris de NPF-Q400-RUN v1.21) — « Étiquettes Trafics Alt. » : altitude + tendance seules, étiquette plus petite
+   (SafeSky et Trafic Moyens Nationaux). Le style « Alt. + Immat. » reste inchangé.
+   ========================================================================== */
+.traffic-aircraft-altitude-label.traffic-label-alt-seule {
+    width: max-content !important;
+    min-width: 0 !important;
+    padding: 1px 4px !important;
+    border-radius: 5px !important;
+}
+.traffic-aircraft-altitude-label.traffic-label-alt-seule .traffic-label-line-secondary .traffic-label-altitude-value {
+    font-size: 10.5px !important;
+    line-height: 12px !important;
+}
+.traffic-aircraft-altitude-label.traffic-label-alt-seule .traffic-label-line-secondary {
+    gap: 4px !important;
+    min-height: 12px !important;
+    line-height: 12px !important;
+}
+.traffic-aircraft-altitude-label.traffic-label-alt-seule .traffic-vertical-trend,
+.global-link-aircraft-label.glr-label-alt-seule .traffic-vertical-trend {
+    flex: 0 0 14px !important;
+    width: 14px !important;
+    min-width: 14px !important;
+    height: 11px !important;
+    font-size: 14px !important;
+    line-height: 10px !important;
+}
+.global-link-aircraft-label-marker .global-link-aircraft-label.glr-label-alt-seule {
+    flex-direction: row !important;
+    gap: 3px !important;
+    padding: 1px 4px !important;
+    border-radius: 4px !important;
+}
+.global-link-aircraft-label.glr-label-alt-seule .glr-label-altitude {
+    font-size: 10.5px !important;
+}
+
+/* ==========================================================================
+   v17.96 (repris de NPF-Q400-RUN v1.14) — VISIONNEUSE PDF (PDF.js, src/218) : largeur de la fenêtre, zoom à deux doigts,
+   déplacement au doigt. Fenêtre = celle de FdS / GAAR (briefing-doc-viewer-modal), contenu propre.
+   ========================================================================== */
+.npf-pdf-scroll {
+    position: relative;
+    flex: 1 1 auto;
+    width: 100%;
+    min-height: 0;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x pan-y;
+    background: #dfe4ea;
+}
+.npf-pdf-pages { display: block; transform-origin: 0 0; }
+.npf-pdf-page { position: relative; background: #ffffff; margin: 0 0 8px; overflow: hidden; }
+.npf-pdf-page canvas { display: block; width: 100%; height: 100%; }
+.npf-pdf-etat { padding: 14px; font-size: 16px; color: #102a43; text-align: center; }
+.npf-pdf-etat:empty { display: none; }

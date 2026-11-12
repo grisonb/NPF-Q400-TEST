@@ -465,6 +465,8 @@ async function createSimulatedFireAtPoint(lat, lng) {
     localStorage.setItem('currentCommune', JSON.stringify(simulatedFire));
     displayCommuneDetails(simulatedFire, false);
     armNpfFirePelicAutoCycle('fire');
+    /* v17.96 (RUN v1.20) — feu de simulation noté avec le vol en cours pour l'export Carnet de vol (src/315). */
+    if (typeof noterNpfCarnetFeuSimulation === 'function') noterNpfCarnetFeuSimulation(simulatedFire);
 }
 
 function openSimulationActionPopup(latlng) {
@@ -587,7 +589,7 @@ function enableSimulationMode() {
      * La position est capturée AVANT de couper le watch GPS afin que l'utilisateur
      * n'ait plus à repositionner manuellement l'avion pour commencer un scénario.
      */
-    const knownGpsBeforeSimulation = getKnownGpsLatLngForCentering();
+    const knownGpsBeforeSimulation = getKnownGpsLatLngRaw();   /* v17.96 : simulation non concernée par la zone */
 
     simulationWasLiveGpsActiveBeforeSimulation = (localStorage.getItem('liveGpsActive') === 'true') || !!watchId;
     isSimulationMode = true;

@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.95';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.96';
 
 
 /*
@@ -3309,7 +3309,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.95 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.96 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -7183,11 +7183,20 @@ window.getNpfPerformanceDiagnostics = () => ({
 });
 
 const TRAFFIC_SETTINGS_STORAGE_KEY = 'trafficLayerSettingsV1';
+/* v17.96 (RUN v1.21) — choix de l'étiquette des trafics, dans une clé PROPRE à la TEST (trafficLayerSettingsV1 est commune
+ * avec la pérenne dans un même navigateur, et la pérenne ne connaît pas ce choix). */
+const NPF_TEST_TRAFIC_ETIQUETTES_KEY = 'npfQ400TestTraficEtiquettesV1';
 const DEFAULT_TRAFFIC_SETTINGS = Object.freeze({
     radiusNm: TRAFFIC_RADIUS_NM,
     minAltitudeFt: 0,
     maxAltitudeFt: null,
-    showAltitudeLabel: false,
+    showAltitudeLabel: true,
+    /*
+     * v17.96 (RUN v1.21) — étiquettes trafics (SafeSky + Moyens Nationaux) : 'alt-immat' = étiquette
+     * historique inchangée ; 'alt' = altitude + tendance seules ; 'none' = aucune étiquette.
+     * showAltitudeLabel (ancienne case) est déduit de labelStyle.
+     */
+    labelStyle: 'alt-immat',
     altitudeFilterMode: 'absolute',
     relativeAltitudeEnabled: false,
     relativeAltitudeBandFt: 1500,
@@ -7267,6 +7276,27 @@ const UPDATE_REMINDER_INTERVAL_MS = 5 * 24 * 60 * 60 * 1000;
 let startupGpsAutoCenteredWithRealPosition = false;
 let startupGpsStoredCenterAppliedAt = 0;
 let isSimulationMode = false;
+/* v17.96 (sur le modèle de NPF-Q400-RUN v1.11) — « LA MÉTROPOLE TOUJOURS À L'ÉCRAN » : une position GPS RÉELLE ne sert au
+ * centrage et au suivi de la carte que dans cette zone : rectangle de la métropole et de la Corse (côtes de 41,33° N —
+ * Lavezzi — à 51,09° N — Bray-Dunes —, de 5,14° W — Ouessant — à 9,56° E — Corse —) élargi de 15 NM (0,25° en latitude ;
+ * 0,38° en longitude à l'ouest, 0,34° à l'est). Hors zone (La Réunion, l'étranger lointain), la carte reste sur la métropole
+ * (NPF_VUE_METROPOLE = vue de démarrage sans GPS, src/090). Rectangle : il contient aussi les bords des pays voisins
+ * (Espagne près de la frontière, Belgique, Suisse, nord de l'Italie). Simulation : non concernée. */
+const NPF_ZONE_GPS_METROPOLE = Object.freeze({ latMin: 41.08, latMax: 51.34, lonMin: -5.52, lonMax: 9.90 });
+const NPF_VUE_METROPOLE = Object.freeze({ lat: 46.6, lon: 2.2, zoom: 5.5 });
+function isNpfPositionCentrable(lat, lng) {
+    if (isSimulationMode) return true;
+    const y = Number(lat);
+    const x = Number(lng);
+    return Number.isFinite(y) && Number.isFinite(x)
+        && y >= NPF_ZONE_GPS_METROPOLE.latMin && y <= NPF_ZONE_GPS_METROPOLE.latMax
+        && x >= NPF_ZONE_GPS_METROPOLE.lonMin && x <= NPF_ZONE_GPS_METROPOLE.lonMax;
+}
+function centerNpfMapOnMetropole() {
+    if (typeof map === 'undefined' || !map) return false;
+    map.setView([NPF_VUE_METROPOLE.lat, NPF_VUE_METROPOLE.lon], NPF_VUE_METROPOLE.zoom, { animate: false });
+    return true;
+}
 let simulationMapClickHandler = null;
 let simulationSuppressNextClickUntil = 0;
 let simulationActionPopup = null;
@@ -13335,7 +13365,8 @@ function initMap() {
     if (!startupInitialViewApplied) {
         try {
             const storedStartupGps = getStoredGpsPosition();
-            if (storedStartupGps) {
+            /* v17.96 — position mémorisée hors de la métropole : vue de la métropole (plus bas). */
+            if (storedStartupGps && isNpfPositionCentrable(storedStartupGps.lat, storedStartupGps.lng)) {
                 map.setView(
                     [storedStartupGps.lat, storedStartupGps.lng],
                     STARTUP_GPS_CENTER_ZOOM,
@@ -23465,7 +23496,14 @@ function sanitizeTrafficSettings(candidate = {}) {
         maxAltitudeFt = minAltitudeFt;
     }
 
-    const showAltitudeLabel = asBool(candidate.showAltitudeLabel, fallback.showAltitudeLabel);
+    /*
+     * v17.96 (RUN v1.21) — reprise de l'ancien réglage : sans labelStyle enregistré, l'ancienne case
+     * « Etiquette Alt. Trafics » cochée donne « Alt. + Immat. », décochée donne « aucune ».
+     */
+    const labelStyle = ['alt-immat', 'alt', 'none'].includes(candidate.labelStyle)
+        ? candidate.labelStyle
+        : (asBool(candidate.showAltitudeLabel, false) ? 'alt-immat' : 'none');
+    const showAltitudeLabel = labelStyle !== 'none';
 
     const validAltitudeModes = new Set(['absolute', 'around', 'ground']);
     let altitudeFilterMode = String(candidate.altitudeFilterMode || '').toLowerCase();
@@ -23533,6 +23571,7 @@ function sanitizeTrafficSettings(candidate = {}) {
         minAltitudeFt,
         maxAltitudeFt,
         showAltitudeLabel,
+        labelStyle,
         altitudeFilterMode,
         /*
          * Propriété conservée pour compatibilité avec d'anciens réglages ou
@@ -24606,13 +24645,20 @@ function clearOwnTrafficAircraftSession() {
 }
 
 
+/* v17.96 — choix de l'étiquette lu dans la clé propre à la TEST (sinon : reprise de l'ancienne case, voir sanitize). */
+function withNpfTestTrafficLabelStyle(candidate) {
+    let style = null;
+    try { style = localStorage.getItem(NPF_TEST_TRAFIC_ETIQUETTES_KEY); } catch (_) {}
+    return ['alt-immat', 'alt', 'none'].includes(style) ? { ...candidate, labelStyle: style } : candidate;
+}
+
 function loadTrafficSettings() {
     try {
         const raw = localStorage.getItem(TRAFFIC_SETTINGS_STORAGE_KEY);
-        if (!raw) return sanitizeTrafficSettings(DEFAULT_TRAFFIC_SETTINGS);
-        return sanitizeTrafficSettings(JSON.parse(raw));
+        if (!raw) return sanitizeTrafficSettings(withNpfTestTrafficLabelStyle(DEFAULT_TRAFFIC_SETTINGS));
+        return sanitizeTrafficSettings(withNpfTestTrafficLabelStyle(JSON.parse(raw)));
     } catch (_) {
-        return sanitizeTrafficSettings(DEFAULT_TRAFFIC_SETTINGS);
+        return sanitizeTrafficSettings(withNpfTestTrafficLabelStyle(DEFAULT_TRAFFIC_SETTINGS));
     }
 }
 
@@ -24621,6 +24667,8 @@ function saveTrafficSettings(settings) {
     try {
         localStorage.setItem(TRAFFIC_SETTINGS_STORAGE_KEY, JSON.stringify(trafficSettings));
     } catch (_) {}
+    /* v17.96 — choix de l'étiquette retenu dans la clé propre à la TEST. */
+    try { localStorage.setItem(NPF_TEST_TRAFIC_ETIQUETTES_KEY, trafficSettings.labelStyle); } catch (_) {}
     return trafficSettings;
 }
 
@@ -24657,6 +24705,12 @@ function getTrafficSettingsSummary() {
         : 'tous types';
 
     return `Rayon ${settings.radiusNm} Nm · ${altitudeFilterLabel} · ${altitudeLabel} · ${referenceLabel} · ${groundLabel} · ${trackedLabel} · ${typeFilterLabel} · ${advisoryLabel}`;
+}
+
+function setTrafficLabelStyleInputs(modal, labelStyle) {
+    modal.querySelectorAll('.traffic-label-style-input').forEach(input => {
+        input.checked = input.value === labelStyle;
+    });
 }
 
 function ensureTrafficSettingsModal() {
@@ -24716,17 +24770,25 @@ function ensureTrafficSettingsModal() {
                     </div>
                 </label>
 
+                <!-- v17.96 (RUN v1.21 / v1.22) — deux cases d'étiquettes exclusives (1re ligne), puis trafics au sol. -->
                 <label class="traffic-settings-field traffic-settings-checkbox-field">
                     <div class="traffic-settings-check-row">
-                        <input id="traffic-show-ground-input" type="checkbox">
-                        <em>Afficher les trafics au sol</em>
+                        <input id="traffic-label-style-alt" type="checkbox" class="traffic-label-style-input" value="alt">
+                        <em>Etiquettes Trafics Alt.</em>
                     </div>
                 </label>
 
                 <label class="traffic-settings-field traffic-settings-checkbox-field">
                     <div class="traffic-settings-check-row">
-                        <input id="traffic-altitude-label-input" type="checkbox">
-                        <em>Etiquette Alt. Trafics</em>
+                        <input id="traffic-label-style-alt-immat" type="checkbox" class="traffic-label-style-input" value="alt-immat">
+                        <em>Etiquettes Trafics Alt. + Immat.</em>
+                    </div>
+                </label>
+
+                <label class="traffic-settings-field traffic-settings-checkbox-field">
+                    <div class="traffic-settings-check-row">
+                        <input id="traffic-show-ground-input" type="checkbox">
+                        <em>Afficher les trafics au sol</em>
                     </div>
                 </label>
 
@@ -24893,7 +24955,7 @@ function ensureTrafficSettingsModal() {
         modal.querySelector(`#traffic-altitude-mode-${defaults.altitudeFilterMode}`).checked = true;
         modal.querySelector('#traffic-relative-band-input').value = String(defaults.relativeAltitudeBandFt);
         modal.querySelector('#traffic-ground-band-input').value = String(defaults.groundToAboveBandFt);
-        modal.querySelector('#traffic-altitude-label-input').checked = !!defaults.showAltitudeLabel;
+        setTrafficLabelStyleInputs(modal, defaults.labelStyle);
         modal.querySelector('#traffic-drone-advisories-input').checked = !!defaults.showDroneAdvisories;
         modal.querySelector('#traffic-only-tracked-input').checked = !!defaults.onlyTrackedIdentifiers;
         modal.querySelector('#traffic-only-light-types-input').checked = !!defaults.onlyNonAirplaneHelicopterTraffic;
@@ -24908,7 +24970,7 @@ function ensureTrafficSettingsModal() {
         const altitudeModeInput = modal.querySelector('input[name="traffic-altitude-mode"]:checked');
         const relativeBandInput = modal.querySelector('#traffic-relative-band-input');
         const groundBandInput = modal.querySelector('#traffic-ground-band-input');
-        const altitudeLabelInput = modal.querySelector('#traffic-altitude-label-input');
+        const labelStyleInput = modal.querySelector('.traffic-label-style-input:checked');
         const droneAdvisoriesInput = modal.querySelector('#traffic-drone-advisories-input');
         const onlyTrackedInput = modal.querySelector('#traffic-only-tracked-input');
         const onlyLightTypesInput = modal.querySelector('#traffic-only-light-types-input');
@@ -24925,7 +24987,7 @@ function ensureTrafficSettingsModal() {
             altitudeFilterMode: altitudeModeInput?.value || 'absolute',
             relativeAltitudeBandFt: relativeBandInput.value,
             groundToAboveBandFt: groundBandInput.value,
-            showAltitudeLabel: !!altitudeLabelInput.checked,
+            labelStyle: labelStyleInput ? labelStyleInput.value : 'none',
             showDroneAdvisories: !!droneAdvisoriesInput.checked,
             onlyTrackedIdentifiers: !!onlyTrackedInput.checked,
             onlyNonAirplaneHelicopterTraffic: !!onlyLightTypesInput.checked
@@ -24938,6 +25000,14 @@ function ensureTrafficSettingsModal() {
 
         if (showTrafficLayer) {
             refreshTrafficLayer({ force: true, reason });
+        }
+        /* v17.96 (RUN v1.21) — le style d'étiquette s'applique aussi tout de suite aux Moyens Nationaux. */
+        if (
+            typeof renderGlobalLinkPositions === 'function'
+            && Array.isArray(npfGlobalLinkLastPositions)
+            && npfGlobalLinkLastPositions.length
+        ) {
+            renderGlobalLinkPositions(npfGlobalLinkLastPositions);
         }
         scheduleBaseMapStabilityRefresh(reason);
     };
@@ -24955,6 +25025,16 @@ function ensureTrafficSettingsModal() {
      * la saisie est validée à la fin de l'édition sans lancer une requête réseau
      * à chaque chiffre. Les cases/radios restent immédiates.
      */
+    /* v17.96 (RUN v1.21) — deux cases d'étiquettes : cocher l'une décoche l'autre ; aucune = aucune étiquette. */
+    modal.querySelectorAll('.traffic-label-style-input').forEach(input => {
+        input.addEventListener('change', () => {
+            if (!input.checked) return;
+            modal.querySelectorAll('.traffic-label-style-input').forEach(other => {
+                if (other !== input) other.checked = false;
+            });
+        });
+    });
+
     modal.querySelectorAll(
         '.traffic-settings-grid input:not([name="traffic-altitude-mode"])'
     ).forEach(input => {
@@ -25058,7 +25138,7 @@ function openTrafficSettingsDialog() {
     modal.querySelector(`#traffic-altitude-mode-${current.altitudeFilterMode}`).checked = true;
     modal.querySelector('#traffic-relative-band-input').value = String(current.relativeAltitudeBandFt);
     modal.querySelector('#traffic-ground-band-input').value = String(current.groundToAboveBandFt);
-    modal.querySelector('#traffic-altitude-label-input').checked = !!current.showAltitudeLabel;
+    setTrafficLabelStyleInputs(modal, current.labelStyle);
     modal.querySelector('#traffic-drone-advisories-input').checked = !!current.showDroneAdvisories;
     modal.querySelector('#traffic-only-tracked-input').checked = !!current.onlyTrackedIdentifiers;
     modal.querySelector('#traffic-only-light-types-input').checked = !!current.onlyNonAirplaneHelicopterTraffic;
@@ -28840,7 +28920,9 @@ function buildTrafficMarkerIcon(aircraft) {
         : ((aircraft.altitude && aircraft.altitude !== '--') ? aircraft.altitude : '');
     const verticalTrend = getTrafficVerticalTrend(aircraft);
 
-    const firstLineParts = [
+    /* v17.96 (RUN v1.21) — « Étiquettes Trafics Alt. » : ni immatriculation ni type, altitude + tendance seules. */
+    const labelAltOnly = settings.labelStyle === 'alt';
+    const firstLineParts = labelAltOnly ? [] : [
         permanentIdentifier,
         permanentType
     ].filter(Boolean);
@@ -28854,7 +28936,7 @@ function buildTrafficMarkerIcon(aircraft) {
         settings.showAltitudeLabel
         && (firstLineParts.length || secondLineParts.length)
     ) ? `
-        <span class="traffic-aircraft-altitude-label ${labelAnchorClass}"
+        <span class="traffic-aircraft-altitude-label ${labelAnchorClass}${labelAltOnly ? ' traffic-label-alt-seule' : ''}"
               style="--traffic-alt-left:${altitudeLabelLeft.toFixed(1)}px;--traffic-alt-top:${altitudeLabelTop.toFixed(1)}px;">
             ${firstLineParts.length ? `
                 <span class="traffic-label-line traffic-label-line-primary">
@@ -30378,7 +30460,8 @@ function displayCommuneDetails(commune, shouldFitBounds = true) {
 
     if (shouldFitBounds) {
         setTimeout(() => {
-            if (userMarker && userMarker.getLatLng()) {
+            /* v17.96 — avion hors de la métropole (src/030) : pas dans le cadre du feu (pas de vue vers une position lointaine). */
+            if (userMarker && userMarker.getLatLng() && isNpfPositionCentrable(userMarker.getLatLng().lat, userMarker.getLatLng().lng)) {
                 allPoints.push(userMarker.getLatLng());
             }
             if (allPoints.length > 1) {
@@ -30844,7 +30927,8 @@ function selectAirportDestination(airport) {
         const gps = userMarker && typeof userMarker.getLatLng === 'function'
             ? userMarker.getLatLng()
             : null;
-        if (gps && Number.isFinite(gps.lat) && Number.isFinite(gps.lng)) {
+        /* v17.96 — avion hors de la métropole (src/030) : la carte va sur le terrain seul (pas de vue vers une position lointaine). */
+        if (gps && Number.isFinite(gps.lat) && Number.isFinite(gps.lng) && isNpfPositionCentrable(gps.lat, gps.lng)) {
             map.fitBounds(L.latLngBounds([[gps.lat, gps.lng], target]).pad(0.25), {
                 animate: false
             });
@@ -34380,9 +34464,55 @@ function formatGlobalLinkAltitudeFeet(rawAltitude) {
     return formatNpfAltitudeFeetLabel(roundedFeet);
 }
 
+/*
+ * v17.96 (repris de NPF-Q400-RUN v1.21) — « Étiquettes Trafics Alt. » : altitude + flèche de tendance seules.
+ * La tendance est déduite de l'altitude précédente reçue pour le même appareil,
+ * uniquement à l'arrivée de nouvelles positions (pas aux simples redessins).
+ */
+const npfGlobalLinkAltitudeTrends = new Map();
+
+function getGlobalLinkTrendKey(item) {
+    return String(item?.groupId || item?.missionId || String(item?.name || 'Appareil').trim());
+}
+
+function noteGlobalLinkAltitudeTrends(positions) {
+    (Array.isArray(positions) ? positions : []).forEach(item => {
+        const feet = getGlobalLinkAltitudeFeet(item?.altitude);
+        if (!Number.isFinite(feet)) return;
+        const key = getGlobalLinkTrendKey(item);
+        const previous = npfGlobalLinkAltitudeTrends.get(key);
+        let trend = previous ? previous.trend : 'level';
+        if (previous && feet !== previous.feet) {
+            trend = feet > previous.feet ? 'climb' : 'descent';
+        }
+        npfGlobalLinkAltitudeTrends.set(key, { feet, trend });
+    });
+}
+
+function getGlobalLinkTrendHtml(item) {
+    const trend = npfGlobalLinkAltitudeTrends.get(getGlobalLinkTrendKey(item))?.trend;
+    if (trend === 'climb') return '<span class="traffic-vertical-trend traffic-trend-climb" aria-label="Montée">↗︎</span>';
+    if (trend === 'descent') return '<span class="traffic-vertical-trend traffic-trend-descent" aria-label="Descente">↘︎</span>';
+    return '';
+}
+
+function getGlobalLinkLabelStyle() {
+    try {
+        return sanitizeTrafficSettings(trafficSettings).labelStyle;
+    } catch (_) {
+        return 'alt-immat';
+    }
+}
+
+function isGlobalLinkLabelAltOnly() {
+    return getGlobalLinkLabelStyle() === 'alt';
+}
+
 function buildGlobalLinkLabelLayout(items) {
     const placements = new Map();
     if (!map?.latLngToContainerPoint || !map?.getSize) return placements;
+    /* v17.96 (RUN v1.21) — aucune case d'étiquette cochée : aucune étiquette Moyens Nationaux. */
+    if (getGlobalLinkLabelStyle() === 'none') return placements;
     const size = map.getSize();
     const edge = 8;
     const occupiedLabels = [];
@@ -34405,15 +34535,19 @@ function buildGlobalLinkLabelLayout(items) {
         top: y - height / 2, bottom: y + height / 2
     });
 
+    const altOnly = isGlobalLinkLabelAltOnly();
     items.forEach((item, index) => {
         const p = map.latLngToContainerPoint([item.lat, item.lon]);
+        if (altOnly && !formatGlobalLinkAltitudeFeet(item.altitude)) return;
         const altitudeLabel = formatGlobalLinkAltitudeFeet(item.altitude);
         const longestLabelLength = Math.max(
             String(item.name || '').length,
             altitudeLabel.length
         );
-        const width = Math.max(68, Math.min(178, 20 + longestLabelLength * 8.4));
-        const height = altitudeLabel ? 42 : 25;
+        const width = altOnly
+            ? Math.max(40, Math.min(110, 22 + altitudeLabel.length * 6))
+            : Math.max(68, Math.min(178, 20 + longestLabelLength * 8.4));
+        const height = altOnly ? 20 : (altitudeLabel ? 42 : 25);
         const hGap = 27 + width / 2;
         const vGap = 27 + height / 2;
         const shifts = [0, -30, 30, -60, 60, -90, 90, -120, 120];
@@ -34663,9 +34797,12 @@ function renderGlobalLinkPositions(positions) {
             const safeAltitudeLabel = altitudeLabel
                 ? escapeGlobalLinkHtml(altitudeLabel)
                 : '';
+            const labelHtml = isGlobalLinkLabelAltOnly()
+                ? `<div class="global-link-aircraft-label glr-label-alt-seule${item.stale ? ' stale' : ''}"><span class="glr-label-altitude">${safeAltitudeLabel}</span>${getGlobalLinkTrendHtml(item)}</div>`
+                : `<div class="global-link-aircraft-label${item.stale ? ' stale' : ''}${safeAltitudeLabel ? ' glr-with-altitude' : ''}"><span class="glr-label-name">${safeName}</span>${safeAltitudeLabel ? `<span class="glr-label-altitude">${safeAltitudeLabel}</span>` : ''}</div>`;
             const labelIcon = L.divIcon({
                 className: 'global-link-aircraft-label-marker',
-                html: `<div class="global-link-aircraft-label${item.stale ? ' stale' : ''}${safeAltitudeLabel ? ' glr-with-altitude' : ''}"><span class="glr-label-name">${safeName}</span>${safeAltitudeLabel ? `<span class="glr-label-altitude">${safeAltitudeLabel}</span>` : ''}</div>`,
+                html: labelHtml,
                 iconSize: [placement.width, placement.height],
                 iconAnchor: [placement.width / 2, placement.height / 2]
             });
@@ -34779,6 +34916,7 @@ async function refreshGlobalLinkPositions(options = {}) {
         npfGlobalLinkNasConfirmedAt = Date.now();
         npfGlobalLinkConsecutiveFailures = 0;
         npfGlobalLinkSeriesDiagnosticMessage = '';
+        noteGlobalLinkAltitudeTrends(payload.positions || []);
         renderGlobalLinkPositions(payload.positions || []);
         return true;
     } catch (error) {
@@ -40409,6 +40547,222 @@ function choisirNpfAdresse(a) {
         })
         .openOn(map);
 }
+/* ==========================================================================
+   v17.96 — VISIONNEUSE PDF (repris de NPF-Q400-RUN v1.14, src/215 « lecteur PDF des cibles »).
+   PDF.js 4.10.38 (Apache-2.0, dossier pdfjs/ de l'app, mis en cache par le service worker, aucun appel extérieur) :
+   chaque page est dessinée sur un canvas à la largeur de la fenêtre ; zoom à deux doigts (x1 à x6) ; déplacement au doigt
+   par le défilement natif ; toutes les pages ; redessinée nette après le zoom ou une rotation ; en ligne et hors ligne.
+   Prête pour de futures cibles en métropole : AUCUNE cible ici (ni points, ni PDF). Entrée : ouvrirNpfVisionneusePdf(titre,
+   blob). La Doc FdF, FdS / GAAR et les PDF terrains gardent leur ouverture actuelle (inchangée).
+   Code de la RUN gardé tel quel, seuls les noms changent (npf-cible-… -> npf-pdf-…).
+   ========================================================================== */
+const NPF_PDF_ZOOM_MAX = 6;
+const NPF_PDF_PIXELS_MAX = 8000000;   // pixels par page (mémoire de l'iPad)
+let npfPdfBiblio = null;
+let npfPdfCourant = null;
+let npfPdfOuverture = 0;
+
+function getNpfPdfBiblio() {
+    if (!npfPdfBiblio) {
+        npfPdfBiblio = (async () => {
+            const lib = await import(new URL('pdfjs/pdf.min.mjs', window.location.href).toString());
+            lib.GlobalWorkerOptions.workerSrc = new URL('pdfjs/pdf.worker.min.mjs', window.location.href).toString();
+            return { lib, worker: new lib.PDFWorker() };
+        })().catch(error => { npfPdfBiblio = null; throw error; });
+    }
+    return npfPdfBiblio;
+}
+
+function setNpfPdfEtat(texte) {
+    const etat = document.getElementById('npf-pdf-etat');
+    if (etat) etat.textContent = texte || '';
+}
+
+/* Tailles à l'écran de toutes les pages pour le zoom courant (zoom 1 = largeur de la fenêtre). */
+function placerNpfPdfPages(pdf) {
+    const zone = document.getElementById('npf-pdf-scroll');
+    const largeur = zone.clientWidth;
+    if (!largeur) return;
+    pdf.pages.forEach(p => {
+        p.largeur = largeur * pdf.zoom;
+        p.hauteur = p.base.height * (p.largeur / p.base.width);
+        p.boite.style.width = `${p.largeur}px`;
+        p.boite.style.height = `${p.hauteur}px`;
+    });
+    const pages = document.getElementById('npf-pdf-pages');
+    pages.style.width = `${largeur * pdf.zoom}px`;
+}
+
+/* Dessin net : sur un canvas à part, qui remplace l'ancien une fois fini (l'ancien reste affiché, agrandi, en attendant). */
+async function dessinerNpfPdfPage(pdf, p) {
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    const echelleVoulue = (p.largeur / p.base.width) * dpr;
+    const echelle = Math.min(echelleVoulue, Math.sqrt(NPF_PDF_PIXELS_MAX / (p.base.width * p.base.height)));
+    if (p.tache) { try { p.tache.cancel(); } catch (_) {} }
+    const viewport = p.page.getViewport({ scale: echelle });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.floor(viewport.width);
+    canvas.height = Math.floor(viewport.height);
+    const tache = p.page.render({ canvasContext: canvas.getContext('2d', { alpha: false }), viewport });
+    p.tache = tache;
+    try {
+        await tache.promise;
+    } catch (error) {
+        if (error && error.name === 'RenderingCancelledException') return false;
+        throw error;
+    }
+    if (p.tache !== tache || npfPdfCourant !== pdf) return false;
+    p.tache = null;
+    p.boite.replaceChildren(canvas);
+    p.dessinee = true;
+    return true;
+}
+
+async function dessinerNpfPdf(pdf) {
+    const modal = document.getElementById('npf-pdf-viewer-modal');
+    const tour = (pdf.tour = (pdf.tour || 0) + 1);
+    for (const p of pdf.pages) {
+        if (npfPdfCourant !== pdf || pdf.tour !== tour) return;
+        await dessinerNpfPdfPage(pdf, p);
+        if (modal && npfPdfCourant === pdf) modal.dataset.pagesDessinees = String(pdf.pages.filter(x => x.dessinee).length);
+    }
+}
+
+function fermerNpfVisionneusePdf() {
+    const modal = document.getElementById('npf-pdf-viewer-modal');
+    const pdf = npfPdfCourant;
+    npfPdfCourant = null;
+    npfPdfOuverture += 1;
+    if (pdf) {
+        pdf.pages.forEach(p => { if (p.tache) { try { p.tache.cancel(); } catch (_) {} } });
+        try { pdf.doc.destroy(); } catch (_) {}
+    }
+    document.getElementById('npf-pdf-pages')?.replaceChildren();
+    setNpfPdfEtat('');
+    if (modal) {
+        modal.style.display = 'none';
+        modal.setAttribute('aria-hidden', 'true');
+        delete modal.dataset.pages;
+        delete modal.dataset.pagesDessinees;
+    }
+}
+
+/* Ouvre un PDF (Blob) dans la visionneuse. Retour : true une fois toutes les pages dessinées. */
+async function ouvrirNpfVisionneusePdf(titre, blob) {
+    const modal = document.getElementById('npf-pdf-viewer-modal');
+    const pagesEl = document.getElementById('npf-pdf-pages');
+    if (!modal || !pagesEl) throw new Error('visionneuse PDF indisponible');
+    if (!blob) throw new Error('PDF absent');
+    fermerNpfVisionneusePdf();
+    const ouverture = npfPdfOuverture;
+    try { map?.closePopup?.(); } catch (_) {}
+    const titreEl = document.getElementById('npf-pdf-viewer-title');
+    if (titreEl) titreEl.textContent = String(titre || 'PDF');
+    modal.style.display = 'flex';
+    modal.setAttribute('aria-hidden', 'false');
+    setNpfPdfEtat('Ouverture du PDF…');
+    try {
+        const { lib, worker } = await getNpfPdfBiblio();
+        const data = new Uint8Array(await blob.arrayBuffer());
+        const doc = await lib.getDocument({ data, worker, isEvalSupported: false }).promise;
+        if (ouverture !== npfPdfOuverture) { try { doc.destroy(); } catch (_) {} return false; }
+        const pdf = { titre, doc, zoom: 1, pages: [] };
+        for (let n = 1; n <= doc.numPages; n += 1) {
+            const page = await doc.getPage(n);
+            const boite = document.createElement('div');
+            boite.className = 'npf-pdf-page';
+            pagesEl.appendChild(boite);
+            pdf.pages.push({ page, boite, base: page.getViewport({ scale: 1 }), dessinee: false, tache: null });
+        }
+        npfPdfCourant = pdf;
+        modal.dataset.pages = String(doc.numPages);
+        setNpfPdfEtat('');
+        document.getElementById('npf-pdf-scroll').scrollTo(0, 0);
+        placerNpfPdfPages(pdf);
+        await dessinerNpfPdf(pdf);
+        return true;
+    } catch (error) {
+        fermerNpfVisionneusePdf();
+        throw error;
+    }
+}
+
+/* Zoom : facteur appliqué à partir du point (x, y) de la zone, qui reste sous les doigts. */
+function appliquerNpfPdfZoom(pdf, zoom, x, y) {
+    const zone = document.getElementById('npf-pdf-scroll');
+    const avant = pdf.zoom;
+    const nouveau = Math.max(1, Math.min(NPF_PDF_ZOOM_MAX, zoom));
+    const contenuX = zone.scrollLeft + x;
+    const contenuY = zone.scrollTop + y;
+    pdf.zoom = nouveau;
+    placerNpfPdfPages(pdf);
+    zone.scrollLeft = (contenuX * nouveau) / avant - x;
+    zone.scrollTop = (contenuY * nouveau) / avant - y;
+    dessinerNpfPdf(pdf).catch(() => {});
+}
+
+/* Deux doigts : agrandissement immédiat par transform, tailles réelles et dessin net au lâcher. Un doigt : défilement natif. */
+function brancherNpfPdfGestes() {
+    const zone = document.getElementById('npf-pdf-scroll');
+    const pages = document.getElementById('npf-pdf-pages');
+    if (!zone || !pages) return;
+    let pince = null;
+    const ecart = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+    const centre = t => {
+        const r = zone.getBoundingClientRect();
+        return { x: (t[0].clientX + t[1].clientX) / 2 - r.left, y: (t[0].clientY + t[1].clientY) / 2 - r.top };
+    };
+    zone.addEventListener('touchstart', event => {
+        if (event.touches.length !== 2 || !npfPdfCourant) return;
+        event.preventDefault();
+        const c = centre(event.touches);
+        pince = { d0: ecart(event.touches), x: c.x, y: c.y, facteur: 1 };
+        pages.style.transformOrigin = `${zone.scrollLeft + c.x}px ${zone.scrollTop + c.y}px`;
+    }, { passive: false });
+    zone.addEventListener('touchmove', event => {
+        if (!pince || event.touches.length < 2) return;
+        event.preventDefault();
+        const pdf = npfPdfCourant;
+        if (!pdf || !pince.d0) return;
+        const zoom = Math.max(1, Math.min(NPF_PDF_ZOOM_MAX, pdf.zoom * (ecart(event.touches) / pince.d0)));
+        pince.facteur = zoom / pdf.zoom;
+        pages.style.transform = `scale(${pince.facteur})`;
+    }, { passive: false });
+    const finir = event => {
+        if (!pince || event.touches.length >= 2) return;
+        const { x, y, facteur } = pince;
+        pince = null;
+        pages.style.transform = '';
+        pages.style.transformOrigin = '';
+        if (npfPdfCourant && facteur !== 1) appliquerNpfPdfZoom(npfPdfCourant, npfPdfCourant.zoom * facteur, x, y);
+    };
+    zone.addEventListener('touchend', finir);
+    zone.addEventListener('touchcancel', finir);
+    /* Safari : pas de zoom de la page entière */
+    ['gesturestart', 'gesturechange', 'gestureend'].forEach(type => zone.addEventListener(type, event => event.preventDefault(), { passive: false }));
+    window.addEventListener('resize', () => {
+        const pdf = npfPdfCourant;
+        if (!pdf) return;
+        placerNpfPdfPages(pdf);
+        dessinerNpfPdf(pdf).catch(() => {});
+    });
+}
+
+(function brancherNpfVisionneusePdf() {
+    const brancher = () => {
+        document.getElementById('npf-pdf-viewer-close')?.addEventListener('click', fermerNpfVisionneusePdf);
+        brancherNpfPdfGestes();
+        document.addEventListener('keydown', event => {
+            if (event.key !== 'Escape') return;
+            if (document.getElementById('npf-pdf-viewer-modal')?.style.display === 'flex') fermerNpfVisionneusePdf();
+        });
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', brancher, { once: true });
+    else brancher();
+})();
+
+window.ouvrirNpfVisionneusePdf = ouvrirNpfVisionneusePdf;
+window.fermerNpfVisionneusePdf = fermerNpfVisionneusePdf;
 /* ========================================================================== 
    v16.66 — noms + fréquence opérationnelle des terrains à partir de 2 NM
    ========================================================================== */
@@ -42951,6 +43305,8 @@ function applyStartupGpsAutoCenter(lat, lng, { source = 'real', force = false } 
     const numericLat = Number(lat);
     const numericLng = Number(lng);
     if (!Number.isFinite(numericLat) || !Number.isFinite(numericLng)) return false;
+    /* v17.96 — position hors de la métropole : ni centrage ni suivi, la carte reste sur la métropole. */
+    if (!isNpfPositionCentrable(numericLat, numericLng)) return false;
 
     const isRealPosition = source !== 'stored';
 
@@ -43022,6 +43378,8 @@ function centerMapOnGpsOverviewAfterClear() {
         const numericLat = Number(lat);
         const numericLng = Number(lng);
         if (!Number.isFinite(numericLat) || !Number.isFinite(numericLng)) return false;
+        /* v17.96 — position hors de la métropole : vue de la métropole. */
+        if (!isNpfPositionCentrable(numericLat, numericLng)) return centerNpfMapOnMetropole();
         map.setView([numericLat, numericLng], zoom, { animate: false });
         return true;
     };
@@ -43150,7 +43508,13 @@ function setupGpsResumeHandlers() {
 }
 
 
+/* v17.96 — position connue utilisable pour centrer / suivre : seulement dans la zone de la métropole (src/030). */
 function getKnownGpsLatLngForCentering() {
+    const pos = getKnownGpsLatLngRaw();
+    return pos && isNpfPositionCentrable(pos.lat, pos.lng) ? pos : null;
+}
+
+function getKnownGpsLatLngRaw() {
     if (userMarker && typeof userMarker.getLatLng === 'function') {
         try {
             const pos = userMarker.getLatLng();
@@ -43624,7 +43988,11 @@ function getCenterGpsFollowMapCenter(pos, zoom) {
 function recenterMapOnKnownGpsPosition(reason = 'manual') {
     if (!map) return false;
     const pos = getKnownGpsLatLngForCentering();
-    if (!pos) return false;
+    if (!pos) {
+        /* v17.96 — position connue hors de la métropole : un recentrage demandé ramène la métropole ; le suivi ne bouge rien. */
+        if (String(reason || '') !== 'gps-update' && getKnownGpsLatLngRaw()) return centerNpfMapOnMetropole();
+        return false;
+    }
 
     /*
      * v13.40 — retour base v13.34 : le bouton Suivi ne doit plus provoquer
@@ -45648,6 +46016,8 @@ async function createSimulatedFireAtPoint(lat, lng) {
     localStorage.setItem('currentCommune', JSON.stringify(simulatedFire));
     displayCommuneDetails(simulatedFire, false);
     armNpfFirePelicAutoCycle('fire');
+    /* v17.96 (RUN v1.20) — feu de simulation noté avec le vol en cours pour l'export Carnet de vol (src/315). */
+    if (typeof noterNpfCarnetFeuSimulation === 'function') noterNpfCarnetFeuSimulation(simulatedFire);
 }
 
 function openSimulationActionPopup(latlng) {
@@ -45770,7 +46140,7 @@ function enableSimulationMode() {
      * La position est capturée AVANT de couper le watch GPS afin que l'utilisateur
      * n'ait plus à repositionner manuellement l'avion pour commencer un scénario.
      */
-    const knownGpsBeforeSimulation = getKnownGpsLatLngForCentering();
+    const knownGpsBeforeSimulation = getKnownGpsLatLngRaw();   /* v17.96 : simulation non concernée par la zone */
 
     simulationWasLiveGpsActiveBeforeSimulation = (localStorage.getItem('liveGpsActive') === 'true') || !!watchId;
     isSimulationMode = true;
@@ -49979,7 +50349,10 @@ const NPF_SERVER_MAPS = {
         ancienne: 'l\'ancienne carte NPF-Q400',
         /* ‑ : trait d'union insécable, « NPF-Q400 » jamais coupé en fin de ligne.
          * v17.80 — taille réelle lue dans le manifeste (avant : « 2,7 Go » figé). */
-        confirmation: manifest => `Carte NPF‑Q400 ${manifest.versionCarte || ''} de ${formatNpfStorageSizeForUser(manifest.totalOctets)} (avec les noms des communes) : utilise le Wi-Fi. L'ancienne carte NPF‑Q400 sera d'abord effacée. Pas de carte hors ligne pendant le téléchargement.`,
+        confirmation: manifest => getNpfCarteSuperposee(manifest)
+            /* v17.96 (RUN v1.19) — nouvelle carte qui contient toute la carte installée (future V12) : rien n'est effacé avant la fin. */
+            ? `Carte NPF‑Q400 ${manifest.versionCarte || ''} de ${formatNpfStorageSizeForUser(manifest.totalOctets)} (avec les noms des communes) : utilise le Wi-Fi. La carte actuelle (${getNpfCarteSuperposee(manifest)}) reste utilisable pendant le téléchargement ; elle n'est remplacée qu'à la fin, après vérification. Si le téléchargement s'arrête, elle reste en place et le téléchargement reprend plus tard.`
+            : `Carte NPF‑Q400 ${manifest.versionCarte || ''} de ${formatNpfStorageSizeForUser(manifest.totalOctets)} (avec les noms des communes) : utilise le Wi-Fi. L'ancienne carte NPF‑Q400 sera d'abord effacée. Pas de carte hors ligne pendant le téléchargement.`,
         estAncienGroupe: name => isNpfOfflinePackSelection([name])
     },
     'oaci-500000': {
@@ -50821,6 +51194,21 @@ async function estimateNpfServerMapFreeBytes() {
 
 /* --- Déroulé commun ------------------------------------------------------------ */
 
+/* v17.96 (repris de NPF-Q400-RUN v1.19) — CARTE « SUPERPOSÉE » (future V12 qui remplace la V11) : le manifeste annonce
+ * « superpose » = il contient TOUTES les tuiles de la carte qu'il remplace (remplace.versionCarte), mêmes noms de tuiles. Si
+ * c'est la carte installée (même groupe, même base), le téléchargement complet n'efface RIEN avant : les tuiles sont écrites
+ * par-dessus, la carte installée reste affichée et utilisable pendant tout le téléchargement ; une coupure la laisse en place
+ * (reprise au morceau en cours) ; la carte n'est déclarée installée dans sa nouvelle version qu'à la fin, après la
+ * vérification des nombres de tuiles. Sans « superpose » dans le manifeste : comportement d'avant (ancienne carte effacée
+ * d'abord). Mise à jour partielle (v17.88, même version) et garde-fou v17.95 inchangés. Retour : version installée, ou ''. */
+function getNpfCarteSuperposee(manifest, cfg = getNpfServerSection('npf-q400')) {
+    if (!cfg || cfg.id !== 'npf-q400' || !manifest || manifest.superpose !== true) return '';
+    const ancienne = manifest.remplace && manifest.remplace.versionCarte;
+    const pack = getInstalledMapPacksSafe().find(p => p && getOfflinePackGroupName(p.name) === cfg.groupName);
+    if (!ancienne || !pack || pack.versionCarte !== ancienne || pack.dbName !== getOfflineMapDatabaseNameForGroup(cfg.groupName)) return '';
+    return ancienne;
+}
+
 async function runNpfServerMapDownload(mapId) {
     const cfg = getNpfServerSection(mapId);
     if (!cfg) return;
@@ -50932,6 +51320,9 @@ async function runNpfServerMapDownload(mapId) {
 
         if (!state) {
             const previousOffline = mapSourceMode === 'offline' || !!offlineTilesMode;
+            /* v17.96 (RUN v1.19) — carte superposée : la carte installée n'est ni effacée ni retirée (voir getNpfCarteSuperposee). */
+            const superposee = cfg.type === 'tuiles' ? getNpfCarteSuperposee(manifest, cfg) : '';
+            const nomsPresents = superposee && cfg.avecNoms ? await doesNpfIndexedDatabaseExist(NPF_CALQUE_NOMS_DB_NAME) !== false : true;
             writeNpfJsonStorage(cfg.logKey, {
                 mapId, version: APP_VERSION, startedAt: Date.now(),
                 versionCarte: manifest.versionCarte || manifest.versionContenu,
@@ -50949,7 +51340,10 @@ async function runNpfServerMapDownload(mapId) {
             /* v17.67 — DIAG : « taille inconnue » quand une ancienne version existe sans taille connue. */
             let oldUnknown = false;
             let needed = 0;
-            if (cfg.type === 'tuiles') {
+            if (cfg.type === 'tuiles' && superposee && nomsPresents) {
+                addNpfServerMapLogEvent(`superposition : ${manifest.versionCarte || '?'} contient toute la carte ${superposee} installée ; rien n'est effacé, ${superposee} reste utilisable pendant le téléchargement`, {}, cfg);
+                needed = Math.max(0, Math.round((Number(manifest.totalOctets) - (Number(getInstalledMapPacksSafe().find(p => p && getOfflinePackGroupName(p.name) === cfg.groupName)?.sizeBytes) || 0)) * NPF_SERVER_MAP_SPACE_FACTOR + NPF_SERVER_MAP_SPACE_MARGIN_BYTES));
+            } else if (cfg.type === 'tuiles') {
                 oldGroups = await findNpfServerSectionOldGroups(cfg);
                 oldGroups.gardes.forEach(item => addNpfServerMapLogEvent(`gardée (pas effacée) : ${item.groupName} — ${item.raison}`, {}, cfg));
                 oldGroups.aEffacer.filter(item => item.controle).forEach(item => addNpfServerMapLogEvent(`contrôle du contenu : ${item.groupName} — ${item.controle} — ancienne version reconnue`, {}, cfg));
@@ -50985,7 +51379,9 @@ async function runNpfServerMapDownload(mapId) {
                 return;
             }
 
-            if (cfg.type === 'tuiles') {
+            if (cfg.type === 'tuiles' && superposee && nomsPresents) {
+                showNpfServerMapProgress(`Téléchargement de la carte ${manifest.versionCarte || ''} : la carte ${superposee} reste utilisable.`, 0, {}, cfg);
+            } else if (cfg.type === 'tuiles') {
                 showNpfServerMapProgress(`Effacement de ${cfg.ancienne}…`, 0, {}, cfg);
                 const deletions = await deleteNpfServerSectionOldGroups(cfg, oldGroups.aEffacer);
                 const statusText = { deleted: 'effacée', blocked: 'bloquée par Safari (effacée au prochain lancement)', timeout: 'effacement trop long (effacée au prochain lancement)' };
@@ -51005,7 +51401,8 @@ async function runNpfServerMapDownload(mapId) {
                 versionCarte: manifest.versionCarte || manifest.versionContenu,
                 total: manifest.morceaux.length, totalOctets: Number(manifest.totalOctets),
                 totalTuiles: Number(manifest.totalTuiles) || 0, totalTuilesNoms: Number(manifest.totalTuilesNoms) || 0, next: 0, doneOctets: 0,
-                dbName: targetDbName, previousOffline, startedAt: Date.now()
+                dbName: targetDbName, previousOffline, startedAt: Date.now(),
+                superpose: !!(superposee && nomsPresents)
             };
             writeNpfServerMapState(state, cfg);
         } else {
@@ -51055,13 +51452,17 @@ async function runNpfServerMapDownload(mapId) {
         if (cfg.avecNoms && countNoms !== Number(manifest.totalTuilesNoms)) {
             addNpfServerMapLogEvent(`vérification ÉCHOUÉE : ${countNoms === null ? 'comptage impossible' : countNoms} tuiles de noms au lieu de ${manifest.totalTuilesNoms}`, {}, cfg);
             writeNpfServerMapState(null, cfg);
-            showNpfServerMapProgress(`Vérification échouée (noms des communes : ${countNoms === null ? 'comptage impossible' : `${countNoms} tuiles au lieu de ${manifest.totalTuilesNoms}`}). La carte n'est pas utilisable : appuie de nouveau sur « ${cfg.libelle} ».`, null, { advice: false, error: true }, cfg);
+            showNpfServerMapProgress(state.superpose
+                ? `Vérification échouée (noms des communes : ${countNoms === null ? 'comptage impossible' : `${countNoms} tuiles au lieu de ${manifest.totalTuilesNoms}`}). La carte installée reste en place : appuie de nouveau sur « ${cfg.libelle} ».`
+                : `Vérification échouée (noms des communes : ${countNoms === null ? 'comptage impossible' : `${countNoms} tuiles au lieu de ${manifest.totalTuilesNoms}`}). La carte n'est pas utilisable : appuie de nouveau sur « ${cfg.libelle} ».`, null, { advice: false, error: true }, cfg);
             return;
         }
         if (count !== Number(manifest.totalTuiles)) {
             addNpfServerMapLogEvent(`vérification ÉCHOUÉE : ${count === null ? 'comptage impossible' : count} tuiles au lieu de ${manifest.totalTuiles}`, {}, cfg);
             writeNpfServerMapState(null, cfg);
-            showNpfServerMapProgress(`Vérification échouée (${count === null ? 'comptage impossible' : `${count} tuiles au lieu de ${manifest.totalTuiles}`}). La carte n'est pas utilisable : appuie de nouveau sur « ${cfg.libelle} ».`, null, { advice: false, error: true }, cfg);
+            showNpfServerMapProgress(state.superpose
+                ? `Vérification échouée (${count === null ? 'comptage impossible' : `${count} tuiles au lieu de ${manifest.totalTuiles}`}). La carte installée reste en place : appuie de nouveau sur « ${cfg.libelle} ».`
+                : `Vérification échouée (${count === null ? 'comptage impossible' : `${count} tuiles au lieu de ${manifest.totalTuiles}`}). La carte n'est pas utilisable : appuie de nouveau sur « ${cfg.libelle} ».`, null, { advice: false, error: true }, cfg);
             return;
         }
 
@@ -58215,6 +58616,7 @@ function noterNpfCarnetBlocDepart(flightId, ancien, nouveau, maintenant = new Da
         const ancre = entree.blocDepartLe ? new Date(entree.blocDepartLe) : null;
         const base = ancre && Number.isFinite(ancre.getTime()) ? ancre : maintenant;
         let instant = new Date(base.getFullYear(), base.getMonth(), base.getDate(), heure.hh, heure.mm, 0, 0);
+        if (typeof isSimulationMode !== 'undefined' && isSimulationMode) entree.simulation = true;   // v17.96 (RUN v1.20)
         if (base === ancre) {
             /* correction d'une heure déjà datée : jour le plus proche de l'ancienne */
             if (instant - ancre > 12 * 3600e3) instant = decalerNpfCarnetJour(instant, -1);
@@ -58247,6 +58649,7 @@ function noterNpfCarnetLignes(flightId, ancienEtat, nouvelEtat) {
         if (!nouvelles.length) return;
         const gps = lireNpfCarnetGps();
         const entree = getNpfCarnetEntree(flightId, true);
+        if (typeof isSimulationMode !== 'undefined' && isSimulationMode) entree.simulation = true;   // v17.96 (RUN v1.20)
         entree.positions = entree.positions && typeof entree.positions === 'object' ? entree.positions : {};
         nouvelles.forEach(h => {
             /* sans GPS à la saisie : noté aussi, un terrain venu ensuite ne peut venir que de la redétection */
@@ -58260,14 +58663,37 @@ const formatNpfCarnetHeureUtc = d => d.toISOString().slice(11, 16);
 const formatNpfCarnetDateUtc = d => d.toISOString().slice(0, 10);
 const formatNpfCarnetInstantUtc = d => `${d.toISOString().slice(0, 16)}Z`;
 
-/* Feux de l'historique créés entre le bloc départ et le bloc arrivée (lecture brute, sans réécriture). */
-function lireNpfCarnetFeux(debutMs, finMs) {
+/* v17.96 (repris de NPF-Q400-RUN v1.20) — MODE SIMULATION : les feux sont enregistrés à l'heure RÉELLE de l'iPad, alors que les
+ * heures BLOC d'un vol simulé ne correspondent pas à cette heure : le filtre « entre le bloc départ et le bloc arrivée » les
+ * écartait tous. Un feu créé en simulation est donc noté avec le vol en cours (src/270 createSimulatedFireAtPoint) et exporté
+ * avec lui, comme un feu de vrai vol (même format). Le vol est marqué « simulation » (bloc, heure ou feu saisi en simulation) :
+ * champ "simulation": true dans le vol envoyé ; ABSENT pour un vrai vol (envoi identique à la v17.95). */
+function noterNpfCarnetFeuSimulation(feu) {
+    try {
+        if (!activeFlightId || !feu) return;
+        const flight = (Array.isArray(dailyFlights) ? dailyFlights : []).find(f => f && f.id === activeFlightId);
+        if (!flight || flight.closed) return;
+        const entree = getNpfCarnetEntree(activeFlightId, true);
+        entree.simulation = true;
+        entree.feuxSimulation = Array.isArray(entree.feuxSimulation) ? entree.feuxSimulation : [];
+        entree.feuxSimulation.push({ savedAt: Number(feu.savedAt) || Date.now(), latitude_mairie: Number(feu.latitude_mairie), longitude_mairie: Number(feu.longitude_mairie),
+            nom_standard: String(feu.nom_standard || ''), locality_match: !!feu.locality_match, locality_commune_name: String(feu.locality_commune_name || '') });
+        ecrireNpfCarnetVols();
+    } catch (_) {}
+}
+
+/* Feux de l'historique créés entre le bloc départ et le bloc arrivée (lecture brute, sans réécriture) ;
+ * v17.96 (RUN v1.20) : + feux notés avec un vol simulé (sans doublon). */
+function lireNpfCarnetFeux(debutMs, finMs, feuxSimulation = []) {
     let historique = [];
     try { historique = JSON.parse(localStorage.getItem(FIRE_HISTORY_STORAGE_KEY) || '[]'); } catch (_) { historique = []; }
-    if (!Array.isArray(historique)) return [];
-    return historique
-        .filter(f => f && Number.isFinite(Number(f.savedAt)) && Number(f.savedAt) >= debutMs && Number(f.savedAt) <= finMs
-            && Number.isFinite(Number(f.latitude_mairie)) && Number.isFinite(Number(f.longitude_mairie)))
+    if (!Array.isArray(historique)) historique = [];
+    const dansLeVol = historique.filter(f => f && Number.isFinite(Number(f.savedAt)) && Number(f.savedAt) >= debutMs && Number(f.savedAt) <= finMs);
+    const cle = f => `${Number(f.savedAt)}|${Number(f.latitude_mairie).toFixed(5)}|${Number(f.longitude_mairie).toFixed(5)}`;
+    const vus = new Set(dansLeVol.map(cle));
+    (Array.isArray(feuxSimulation) ? feuxSimulation : []).forEach(f => { if (f && !vus.has(cle(f))) { vus.add(cle(f)); dansLeVol.push(f); } });
+    return dansLeVol
+        .filter(f => Number.isFinite(Number(f.latitude_mairie)) && Number.isFinite(Number(f.longitude_mairie)))
         .sort((a, b) => Number(a.savedAt) - Number(b.savedAt))
         .map(f => {
             const feu = {
@@ -58421,7 +58847,8 @@ function construireNpfCarnetVol(flightId, exporteLe = new Date()) {
         vol.arriveePosition = { lat: Number(positionArrivee.lat), lon: Number(positionArrivee.lon) };
     }
     vol.escales = construireNpfCarnetEscales(lignes.slice(0, -1), entree.positions);
-    vol.feux = lireNpfCarnetFeux(departLe.getTime(), arriveeLe.getTime());
+    vol.feux = lireNpfCarnetFeux(departLe.getTime(), arriveeLe.getTime(), entree.feuxSimulation);
+    if (entree.simulation === true) vol.simulation = true;   // v17.96 (RUN v1.20) — vrai vol : champ absent
 
     const taille = new TextEncoder().encode(JSON.stringify(vol)).length;
     if (taille > NPF_CARNET_TAILLE_MAX) return { manque: [`vol plus petit que 64 Ko (${Math.round(taille / 1024)} Ko)`] };

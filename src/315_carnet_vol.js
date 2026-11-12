@@ -123,6 +123,7 @@ function noterNpfCarnetBlocDepart(flightId, ancien, nouveau, maintenant = new Da
         const ancre = entree.blocDepartLe ? new Date(entree.blocDepartLe) : null;
         const base = ancre && Number.isFinite(ancre.getTime()) ? ancre : maintenant;
         let instant = new Date(base.getFullYear(), base.getMonth(), base.getDate(), heure.hh, heure.mm, 0, 0);
+        if (typeof isSimulationMode !== 'undefined' && isSimulationMode) entree.simulation = true;   // v17.96 (RUN v1.20)
         if (base === ancre) {
             /* correction d'une heure déjà datée : jour le plus proche de l'ancienne */
             if (instant - ancre > 12 * 3600e3) instant = decalerNpfCarnetJour(instant, -1);
@@ -155,6 +156,7 @@ function noterNpfCarnetLignes(flightId, ancienEtat, nouvelEtat) {
         if (!nouvelles.length) return;
         const gps = lireNpfCarnetGps();
         const entree = getNpfCarnetEntree(flightId, true);
+        if (typeof isSimulationMode !== 'undefined' && isSimulationMode) entree.simulation = true;   // v17.96 (RUN v1.20)
         entree.positions = entree.positions && typeof entree.positions === 'object' ? entree.positions : {};
         nouvelles.forEach(h => {
             /* sans GPS à la saisie : noté aussi, un terrain venu ensuite ne peut venir que de la redétection */
@@ -168,14 +170,37 @@ const formatNpfCarnetHeureUtc = d => d.toISOString().slice(11, 16);
 const formatNpfCarnetDateUtc = d => d.toISOString().slice(0, 10);
 const formatNpfCarnetInstantUtc = d => `${d.toISOString().slice(0, 16)}Z`;
 
-/* Feux de l'historique créés entre le bloc départ et le bloc arrivée (lecture brute, sans réécriture). */
-function lireNpfCarnetFeux(debutMs, finMs) {
+/* v17.96 (repris de NPF-Q400-RUN v1.20) — MODE SIMULATION : les feux sont enregistrés à l'heure RÉELLE de l'iPad, alors que les
+ * heures BLOC d'un vol simulé ne correspondent pas à cette heure : le filtre « entre le bloc départ et le bloc arrivée » les
+ * écartait tous. Un feu créé en simulation est donc noté avec le vol en cours (src/270 createSimulatedFireAtPoint) et exporté
+ * avec lui, comme un feu de vrai vol (même format). Le vol est marqué « simulation » (bloc, heure ou feu saisi en simulation) :
+ * champ "simulation": true dans le vol envoyé ; ABSENT pour un vrai vol (envoi identique à la v17.95). */
+function noterNpfCarnetFeuSimulation(feu) {
+    try {
+        if (!activeFlightId || !feu) return;
+        const flight = (Array.isArray(dailyFlights) ? dailyFlights : []).find(f => f && f.id === activeFlightId);
+        if (!flight || flight.closed) return;
+        const entree = getNpfCarnetEntree(activeFlightId, true);
+        entree.simulation = true;
+        entree.feuxSimulation = Array.isArray(entree.feuxSimulation) ? entree.feuxSimulation : [];
+        entree.feuxSimulation.push({ savedAt: Number(feu.savedAt) || Date.now(), latitude_mairie: Number(feu.latitude_mairie), longitude_mairie: Number(feu.longitude_mairie),
+            nom_standard: String(feu.nom_standard || ''), locality_match: !!feu.locality_match, locality_commune_name: String(feu.locality_commune_name || '') });
+        ecrireNpfCarnetVols();
+    } catch (_) {}
+}
+
+/* Feux de l'historique créés entre le bloc départ et le bloc arrivée (lecture brute, sans réécriture) ;
+ * v17.96 (RUN v1.20) : + feux notés avec un vol simulé (sans doublon). */
+function lireNpfCarnetFeux(debutMs, finMs, feuxSimulation = []) {
     let historique = [];
     try { historique = JSON.parse(localStorage.getItem(FIRE_HISTORY_STORAGE_KEY) || '[]'); } catch (_) { historique = []; }
-    if (!Array.isArray(historique)) return [];
-    return historique
-        .filter(f => f && Number.isFinite(Number(f.savedAt)) && Number(f.savedAt) >= debutMs && Number(f.savedAt) <= finMs
-            && Number.isFinite(Number(f.latitude_mairie)) && Number.isFinite(Number(f.longitude_mairie)))
+    if (!Array.isArray(historique)) historique = [];
+    const dansLeVol = historique.filter(f => f && Number.isFinite(Number(f.savedAt)) && Number(f.savedAt) >= debutMs && Number(f.savedAt) <= finMs);
+    const cle = f => `${Number(f.savedAt)}|${Number(f.latitude_mairie).toFixed(5)}|${Number(f.longitude_mairie).toFixed(5)}`;
+    const vus = new Set(dansLeVol.map(cle));
+    (Array.isArray(feuxSimulation) ? feuxSimulation : []).forEach(f => { if (f && !vus.has(cle(f))) { vus.add(cle(f)); dansLeVol.push(f); } });
+    return dansLeVol
+        .filter(f => Number.isFinite(Number(f.latitude_mairie)) && Number.isFinite(Number(f.longitude_mairie)))
         .sort((a, b) => Number(a.savedAt) - Number(b.savedAt))
         .map(f => {
             const feu = {
@@ -329,7 +354,8 @@ function construireNpfCarnetVol(flightId, exporteLe = new Date()) {
         vol.arriveePosition = { lat: Number(positionArrivee.lat), lon: Number(positionArrivee.lon) };
     }
     vol.escales = construireNpfCarnetEscales(lignes.slice(0, -1), entree.positions);
-    vol.feux = lireNpfCarnetFeux(departLe.getTime(), arriveeLe.getTime());
+    vol.feux = lireNpfCarnetFeux(departLe.getTime(), arriveeLe.getTime(), entree.feuxSimulation);
+    if (entree.simulation === true) vol.simulation = true;   // v17.96 (RUN v1.20) — vrai vol : champ absent
 
     const taille = new TextEncoder().encode(JSON.stringify(vol)).length;
     if (taille > NPF_CARNET_TAILLE_MAX) return { manque: [`vol plus petit que 64 Ko (${Math.round(taille / 1024)} Ko)`] };

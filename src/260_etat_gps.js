@@ -296,6 +296,8 @@ function applyStartupGpsAutoCenter(lat, lng, { source = 'real', force = false } 
     const numericLat = Number(lat);
     const numericLng = Number(lng);
     if (!Number.isFinite(numericLat) || !Number.isFinite(numericLng)) return false;
+    /* v17.96 — position hors de la métropole : ni centrage ni suivi, la carte reste sur la métropole. */
+    if (!isNpfPositionCentrable(numericLat, numericLng)) return false;
 
     const isRealPosition = source !== 'stored';
 
@@ -367,6 +369,8 @@ function centerMapOnGpsOverviewAfterClear() {
         const numericLat = Number(lat);
         const numericLng = Number(lng);
         if (!Number.isFinite(numericLat) || !Number.isFinite(numericLng)) return false;
+        /* v17.96 — position hors de la métropole : vue de la métropole. */
+        if (!isNpfPositionCentrable(numericLat, numericLng)) return centerNpfMapOnMetropole();
         map.setView([numericLat, numericLng], zoom, { animate: false });
         return true;
     };
@@ -495,7 +499,13 @@ function setupGpsResumeHandlers() {
 }
 
 
+/* v17.96 — position connue utilisable pour centrer / suivre : seulement dans la zone de la métropole (src/030). */
 function getKnownGpsLatLngForCentering() {
+    const pos = getKnownGpsLatLngRaw();
+    return pos && isNpfPositionCentrable(pos.lat, pos.lng) ? pos : null;
+}
+
+function getKnownGpsLatLngRaw() {
     if (userMarker && typeof userMarker.getLatLng === 'function') {
         try {
             const pos = userMarker.getLatLng();
@@ -969,7 +979,11 @@ function getCenterGpsFollowMapCenter(pos, zoom) {
 function recenterMapOnKnownGpsPosition(reason = 'manual') {
     if (!map) return false;
     const pos = getKnownGpsLatLngForCentering();
-    if (!pos) return false;
+    if (!pos) {
+        /* v17.96 — position connue hors de la métropole : un recentrage demandé ramène la métropole ; le suivi ne bouge rien. */
+        if (String(reason || '') !== 'gps-update' && getKnownGpsLatLngRaw()) return centerNpfMapOnMetropole();
+        return false;
+    }
 
     /*
      * v13.40 — retour base v13.34 : le bouton Suivi ne doit plus provoquer

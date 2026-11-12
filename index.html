@@ -8,8 +8,8 @@
     <!-- v17.94 — nom « NPF-Q400 TEST » (titre de la fenêtre sur PC, nom sous l'icône de l'iPad, manifest), pour ne pas confondre avec la pérenne. -->
     <title>NPF-Q400 TEST</title>
     <link rel="stylesheet" href="leaflet.css">
-    <link rel="stylesheet" href="style.css?appv=v17.95">
-    <link rel="manifest" href="manifest.json?appv=v17.95">
+    <link rel="stylesheet" href="style.css?appv=v17.96">
+    <link rel="manifest" href="manifest.json?appv=v17.96">
     <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192x192.png?appv=v13.92">
     <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512x512.png?appv=v13.92">
     <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png?appv=v13.92">
@@ -68,7 +68,7 @@
     <div id="app-boot-screen" aria-live="polite">
         <div class="boot-card">
             <div>NPF-Q400 — démarrage…</div>
-            <div class="boot-version">TEST v17.95</div>
+            <div class="boot-version">TEST v17.96</div>
         </div>
     </div>
     <script>
@@ -419,6 +419,28 @@
         </div>
     </div>
 
+    <!-- v17.96 (repris de NPF-Q400-RUN v1.14) — visionneuse PDF (src/218) : lecteur PDF.js intégré (largeur de la fenêtre,
+         zoom à deux doigts, toutes les pages, hors ligne). Aucune cible pour l'instant ; la Doc FdF garde son ouverture. -->
+    <div id="npf-pdf-viewer-modal"
+         class="briefing-doc-viewer-modal npf-pdf-viewer-modal"
+         style="display: none;"
+         aria-hidden="true">
+        <div class="briefing-doc-viewer-toolbar">
+            <div class="briefing-doc-viewer-heading">
+                <strong id="npf-pdf-viewer-title">PDF</strong>
+            </div>
+            <div class="briefing-doc-viewer-actions">
+                <button id="npf-pdf-viewer-close"
+                        type="button"
+                        class="briefing-doc-viewer-close">Fermer</button>
+            </div>
+        </div>
+        <div id="npf-pdf-scroll" class="npf-pdf-scroll">
+            <div id="npf-pdf-etat" class="npf-pdf-etat" aria-live="polite"></div>
+            <div id="npf-pdf-pages" class="npf-pdf-pages"></div>
+        </div>
+    </div>
+
     <div id="quick-offline-map-modal"
          class="quick-offline-map-modal"
          style="display: none;"
@@ -641,7 +663,7 @@
             };
         } catch (_) {}
 
-        const APP_VERSION = 'v17.95';
+        const APP_VERSION = 'v17.96';
         const SERVICE_WORKER_URL = `./sw.js?appv=${encodeURIComponent(APP_VERSION)}`;
         const APP_VERSION_STORAGE_KEY = 'appVersion';
         const SW_CONTROLLER_RELOAD_GUARD_KEY = 'swControllerReloadGuard';
@@ -1484,7 +1506,7 @@
     <script src="suncalc.js"></script>
     <script src="jszip.min.js"></script>
     <script src="sia.js?siav=sia-2026-10-29-v02-g15"></script>
-    <script src="script.js?appv=v17.95"></script>
+    <script src="script.js?appv=v17.96"></script>
     
     <div id="fuel-split-modal" class="fuel-split-modal" style="display: none;">
         <div class="fuel-split-modal-content">

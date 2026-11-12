@@ -1,0 +1,2 @@
+PDF.js (paquet pdfjs-dist 4.10.38, version legacy), Mozilla — licence Apache-2.0 (fichier LICENSE).
+Fichiers repris tels quels de NPF-Q400-RUN v1.14 (legacy/build/) ; visionneuse PDF de la TEST (src/218) uniquement.

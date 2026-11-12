@@ -1093,9 +1093,55 @@ function formatGlobalLinkAltitudeFeet(rawAltitude) {
     return formatNpfAltitudeFeetLabel(roundedFeet);
 }
 
+/*
+ * v17.96 (repris de NPF-Q400-RUN v1.21) — « Étiquettes Trafics Alt. » : altitude + flèche de tendance seules.
+ * La tendance est déduite de l'altitude précédente reçue pour le même appareil,
+ * uniquement à l'arrivée de nouvelles positions (pas aux simples redessins).
+ */
+const npfGlobalLinkAltitudeTrends = new Map();
+
+function getGlobalLinkTrendKey(item) {
+    return String(item?.groupId || item?.missionId || String(item?.name || 'Appareil').trim());
+}
+
+function noteGlobalLinkAltitudeTrends(positions) {
+    (Array.isArray(positions) ? positions : []).forEach(item => {
+        const feet = getGlobalLinkAltitudeFeet(item?.altitude);
+        if (!Number.isFinite(feet)) return;
+        const key = getGlobalLinkTrendKey(item);
+        const previous = npfGlobalLinkAltitudeTrends.get(key);
+        let trend = previous ? previous.trend : 'level';
+        if (previous && feet !== previous.feet) {
+            trend = feet > previous.feet ? 'climb' : 'descent';
+        }
+        npfGlobalLinkAltitudeTrends.set(key, { feet, trend });
+    });
+}
+
+function getGlobalLinkTrendHtml(item) {
+    const trend = npfGlobalLinkAltitudeTrends.get(getGlobalLinkTrendKey(item))?.trend;
+    if (trend === 'climb') return '<span class="traffic-vertical-trend traffic-trend-climb" aria-label="Montée">↗︎</span>';
+    if (trend === 'descent') return '<span class="traffic-vertical-trend traffic-trend-descent" aria-label="Descente">↘︎</span>';
+    return '';
+}
+
+function getGlobalLinkLabelStyle() {
+    try {
+        return sanitizeTrafficSettings(trafficSettings).labelStyle;
+    } catch (_) {
+        return 'alt-immat';
+    }
+}
+
+function isGlobalLinkLabelAltOnly() {
+    return getGlobalLinkLabelStyle() === 'alt';
+}
+
 function buildGlobalLinkLabelLayout(items) {
     const placements = new Map();
     if (!map?.latLngToContainerPoint || !map?.getSize) return placements;
+    /* v17.96 (RUN v1.21) — aucune case d'étiquette cochée : aucune étiquette Moyens Nationaux. */
+    if (getGlobalLinkLabelStyle() === 'none') return placements;
     const size = map.getSize();
     const edge = 8;
     const occupiedLabels = [];
@@ -1118,15 +1164,19 @@ function buildGlobalLinkLabelLayout(items) {
         top: y - height / 2, bottom: y + height / 2
     });
 
+    const altOnly = isGlobalLinkLabelAltOnly();
     items.forEach((item, index) => {
         const p = map.latLngToContainerPoint([item.lat, item.lon]);
+        if (altOnly && !formatGlobalLinkAltitudeFeet(item.altitude)) return;
         const altitudeLabel = formatGlobalLinkAltitudeFeet(item.altitude);
         const longestLabelLength = Math.max(
             String(item.name || '').length,
             altitudeLabel.length
         );
-        const width = Math.max(68, Math.min(178, 20 + longestLabelLength * 8.4));
-        const height = altitudeLabel ? 42 : 25;
+        const width = altOnly
+            ? Math.max(40, Math.min(110, 22 + altitudeLabel.length * 6))
+            : Math.max(68, Math.min(178, 20 + longestLabelLength * 8.4));
+        const height = altOnly ? 20 : (altitudeLabel ? 42 : 25);
         const hGap = 27 + width / 2;
         const vGap = 27 + height / 2;
         const shifts = [0, -30, 30, -60, 60, -90, 90, -120, 120];
@@ -1376,9 +1426,12 @@ function renderGlobalLinkPositions(positions) {
             const safeAltitudeLabel = altitudeLabel
                 ? escapeGlobalLinkHtml(altitudeLabel)
                 : '';
+            const labelHtml = isGlobalLinkLabelAltOnly()
+                ? `<div class="global-link-aircraft-label glr-label-alt-seule${item.stale ? ' stale' : ''}"><span class="glr-label-altitude">${safeAltitudeLabel}</span>${getGlobalLinkTrendHtml(item)}</div>`
+                : `<div class="global-link-aircraft-label${item.stale ? ' stale' : ''}${safeAltitudeLabel ? ' glr-with-altitude' : ''}"><span class="glr-label-name">${safeName}</span>${safeAltitudeLabel ? `<span class="glr-label-altitude">${safeAltitudeLabel}</span>` : ''}</div>`;
             const labelIcon = L.divIcon({
                 className: 'global-link-aircraft-label-marker',
-                html: `<div class="global-link-aircraft-label${item.stale ? ' stale' : ''}${safeAltitudeLabel ? ' glr-with-altitude' : ''}"><span class="glr-label-name">${safeName}</span>${safeAltitudeLabel ? `<span class="glr-label-altitude">${safeAltitudeLabel}</span>` : ''}</div>`,
+                html: labelHtml,
                 iconSize: [placement.width, placement.height],
                 iconAnchor: [placement.width / 2, placement.height / 2]
             });
@@ -1492,6 +1545,7 @@ async function refreshGlobalLinkPositions(options = {}) {
         npfGlobalLinkNasConfirmedAt = Date.now();
         npfGlobalLinkConsecutiveFailures = 0;
         npfGlobalLinkSeriesDiagnosticMessage = '';
+        noteGlobalLinkAltitudeTrends(payload.positions || []);
         renderGlobalLinkPositions(payload.positions || []);
         return true;
     } catch (error) {

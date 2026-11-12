@@ -1290,11 +1290,20 @@ window.getNpfPerformanceDiagnostics = () => ({
 });
 
 const TRAFFIC_SETTINGS_STORAGE_KEY = 'trafficLayerSettingsV1';
+/* v17.96 (RUN v1.21) — choix de l'étiquette des trafics, dans une clé PROPRE à la TEST (trafficLayerSettingsV1 est commune
+ * avec la pérenne dans un même navigateur, et la pérenne ne connaît pas ce choix). */
+const NPF_TEST_TRAFIC_ETIQUETTES_KEY = 'npfQ400TestTraficEtiquettesV1';
 const DEFAULT_TRAFFIC_SETTINGS = Object.freeze({
     radiusNm: TRAFFIC_RADIUS_NM,
     minAltitudeFt: 0,
     maxAltitudeFt: null,
-    showAltitudeLabel: false,
+    showAltitudeLabel: true,
+    /*
+     * v17.96 (RUN v1.21) — étiquettes trafics (SafeSky + Moyens Nationaux) : 'alt-immat' = étiquette
+     * historique inchangée ; 'alt' = altitude + tendance seules ; 'none' = aucune étiquette.
+     * showAltitudeLabel (ancienne case) est déduit de labelStyle.
+     */
+    labelStyle: 'alt-immat',
     altitudeFilterMode: 'absolute',
     relativeAltitudeEnabled: false,
     relativeAltitudeBandFt: 1500,
@@ -1374,6 +1383,27 @@ const UPDATE_REMINDER_INTERVAL_MS = 5 * 24 * 60 * 60 * 1000;
 let startupGpsAutoCenteredWithRealPosition = false;
 let startupGpsStoredCenterAppliedAt = 0;
 let isSimulationMode = false;
+/* v17.96 (sur le modèle de NPF-Q400-RUN v1.11) — « LA MÉTROPOLE TOUJOURS À L'ÉCRAN » : une position GPS RÉELLE ne sert au
+ * centrage et au suivi de la carte que dans cette zone : rectangle de la métropole et de la Corse (côtes de 41,33° N —
+ * Lavezzi — à 51,09° N — Bray-Dunes —, de 5,14° W — Ouessant — à 9,56° E — Corse —) élargi de 15 NM (0,25° en latitude ;
+ * 0,38° en longitude à l'ouest, 0,34° à l'est). Hors zone (La Réunion, l'étranger lointain), la carte reste sur la métropole
+ * (NPF_VUE_METROPOLE = vue de démarrage sans GPS, src/090). Rectangle : il contient aussi les bords des pays voisins
+ * (Espagne près de la frontière, Belgique, Suisse, nord de l'Italie). Simulation : non concernée. */
+const NPF_ZONE_GPS_METROPOLE = Object.freeze({ latMin: 41.08, latMax: 51.34, lonMin: -5.52, lonMax: 9.90 });
+const NPF_VUE_METROPOLE = Object.freeze({ lat: 46.6, lon: 2.2, zoom: 5.5 });
+function isNpfPositionCentrable(lat, lng) {
+    if (isSimulationMode) return true;
+    const y = Number(lat);
+    const x = Number(lng);
+    return Number.isFinite(y) && Number.isFinite(x)
+        && y >= NPF_ZONE_GPS_METROPOLE.latMin && y <= NPF_ZONE_GPS_METROPOLE.latMax
+        && x >= NPF_ZONE_GPS_METROPOLE.lonMin && x <= NPF_ZONE_GPS_METROPOLE.lonMax;
+}
+function centerNpfMapOnMetropole() {
+    if (typeof map === 'undefined' || !map) return false;
+    map.setView([NPF_VUE_METROPOLE.lat, NPF_VUE_METROPOLE.lon], NPF_VUE_METROPOLE.zoom, { animate: false });
+    return true;
+}
 let simulationMapClickHandler = null;
 let simulationSuppressNextClickUntil = 0;
 let simulationActionPopup = null;

@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
-Mise à jour : 09/11/2026
-Version de travail actuelle : TEST v17.95
+Mise à jour : 12/11/2026
+Version de travail actuelle : TEST v17.96
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -551,11 +551,15 @@ NON IMPLÉMENTÉ / OUVERT :
   07/10/2026 : programme VPS bfg-sofia-notams 1.2.0 PRÊT, NON INSTALLÉ
   (~/vps-a-copier/). v17.60 à pousser APRÈS l'installation de la 1.2.0
   (elle annonce « environ 1 minute ») ;
+- v17.96 : portage de NPF-Q400-RUN (v1.20 Carnet en simulation : feux exportés, "simulation": true ; v1.21-v1.22
+  étiquettes trafics Alt. + Immat. / Alt. / aucune, SafeSky et MN, clé npfQ400TestTraficEtiquettesV1 ; v1.19 carte
+  « superposée » sans risque ; v1.14 visionneuse PDF.js sans cible) et recentrage sur la métropole (GPS hors du rectangle
+  métropole + Corse + 15 NM : ni centrage ni suivi ni cadrage vers lui). À MESURER sur iPad ; COMMIT LOCAL, NON POUSSÉE ;
 - v17.95 : garde-fou des effacements de cartes (choix 1 de Bastien, 09/11) : la TEST n'efface plus que des bases au nom
   exact d'une liste précise (plus de motif OfflineTilesDB* / OfflineMap_*) ; si la pérenne partage le stockage (même
   navigateur : PC, onglets Safari), aucune base, carte, liste ou calque routier commun n'est effacé (réinitialisation
   profonde, suppression d'une carte, anciennes versions au téléchargement, remplacement à l'import, calque routier).
-  À MESURER sur iPad (réinitialisation en app installée) et sur PC ; COMMIT LOCAL, NON POUSSÉE. Constaté, NON corrigé
+  À MESURER sur iPad (réinitialisation en app installée) et sur PC ; POUSSÉE le 09/11/2026 (0100dbb). Constaté, NON corrigé
   (hors périmètre) : la pérenne a le même défaut (sa réinitialisation efface les cartes de la TEST dans un même
   navigateur) ; la RUN ne l'a pas. À DÉCIDER : voir l'entrée v17.95 ;
 - v17.94 : nom « NPF-Q400 TEST » (manifest, titre de la page, nom sous l'icône de l'iPad) au lieu de « NPF-Q400 » ;
@@ -841,28 +845,30 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.95
-Date : 09/11/2026
-Base : v17.94 (9137dc8, poussée le 08/11/2026)
+Version : TEST v17.96
+Date : 12/11/2026
+Base : v17.95 (0100dbb, poussée le 09/11/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.95.txt
-2_Index_v17.95.txt
-3_Manifest_v17.95.txt
-4_Script_v17.95.txt
-5_SIA_v17.95.txt
-6_Style_v17.95.txt
-7_Sw_v17.95.txt
+1_Modifications_v17.96.txt
+2_Index_v17.96.txt
+3_Manifest_v17.96.txt
+4_Script_v17.96.txt
+5_SIA_v17.96.txt
+6_Style_v17.96.txt
+7_Sw_v17.96.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.95 (et texte « TEST v17.95 » de l'écran de
+- Index : APP_VERSION = v17.96 (et texte « TEST v17.96 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.95
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.95
-- Style : NPF_STYLE_BUILD_VERSION = v17.95
+- Manifest : start_url = ./index.html?appv=v17.96
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.96
+- Style : NPF_STYLE_BUILD_VERSION = v17.96
 - Nom de l'app (v17.94) : « NPF-Q400 TEST » (manifest name et short_name, <title>, apple-mobile-web-app-title)
-- Service Worker : `sw-v17-95_garde_fou_cartes` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-95_garde_fou_cartes`, `npf-q400-test-app-data-v1`,
+- PDF.js (v17.96) : dossier pdfjs/ (pdf.min.mjs, pdf.worker.min.mjs 4.10.38, LICENSE Apache-2.0, LISEZMOI.txt), à livrer
+  avec les 7 fichiers ; fichiers indispensables du service worker.
+- Service Worker : `sw-v17-96_portage_run_recentrage` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-96_portage_run_recentrage`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-sia-2026-10-29-v02-g15`
 - SIA_DATA_REVISION (SW / Index sia.js?siav=) : sia-2026-10-29-v02-g15 (= NPF_SIA_DATA_REVISION
   de sia.js ; à changer à chaque nouveau sia.js)
@@ -875,15 +881,15 @@ Références de version cohérentes :
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.95 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.96 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
 - `sia.js` : par rapport à v17.70, outre-mer retiré, « a » de 34 VRP renseigné, table vrpAirportColors ajoutée (2 pastels), révision g6 ; zones, terrains et points de métropole identiques ; moteur tuiles (src/100) modifié en v17.66 sur demande
   explicite (limite de zoom propre à chaque carte, zoom 11 OACI 1/500 000) ;
-- tests v17.95 : entrée v17.95 ; sia.js strictement identique à la v17.81 ;
+- tests v17.96 : entrée v17.96 ; sia.js strictement identique à la v17.81 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82, v17.83, v17.84, v17.85, v17.86, v17.87, v17.88, v17.89, v17.90, v17.91, v17.92, v17.93, v17.94 et v17.95 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82, v17.83, v17.84, v17.85, v17.86, v17.87, v17.88, v17.89, v17.90, v17.91, v17.92, v17.93, v17.94, v17.95 et v17.96 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
   v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE ;
   v17.56 VALIDÉE en vol ; v17.57 VALIDÉE sur iPad.
 
@@ -2412,6 +2418,133 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.96 — PORTAGE DE NPF-Q400-RUN (v1.14, v1.19 à v1.22) ET RECENTRAGE SUR LA MÉTROPOLE
+Date : 12/11/2026
+Base fonctionnelle : v17.95 (commit 0100dbb, poussée le 09/11/2026). Seule la TEST change : pérenne, RUN (lue seulement,
+NPF-Q400-RUN-OUTILS origin/main 2fc352c = v1.22 poussée), BFG, NAS et VPS inchangés. sia.js inchangé (strictement identique
+à la v17.81). Export PDF inchangé. Demande de Bastien (12/11) : une seule version pour 6 points.
+
+0. ÉTAT DES LIEUX (lignes de la v17.95)
+1. Carnet en simulation : MÊME DÉFAUT que la RUN avant v1.20 (src/315 identique à la RUN v1.19 aux noms de clés et au
+   préfixe « run- » près) : un feu est enregistré à l'heure RÉELLE de l'iPad (src/050:408), l'export ne garde que les feux
+   entre les heures BLOC (src/315:172 lireNpfCarnetFeux, 332) ; en simulation (createSimulatedFireAtPoint, src/270:457) les
+   heures BLOC ne correspondent pas : aucun feu exporté (mesuré : 0 feu sur 2 en v17.95).
+2. Étiquettes : une case « Etiquette Alt. Trafics » (src/130:1288-1293) pour SafeSky seulement (src/140:2470) ; étiquette
+   Moyens Nationaux toujours affichée (src/180:1381) ; réglage dans trafficLayerSettingsV1, clé COMMUNE avec la pérenne
+   dans un même navigateur (src/030:1292).
+3. Ordre : « Afficher les trafics au sol » puis « Etiquette Alt. Trafics » (src/130:1281).
+4. Changement de carte : une nouvelle carte complète efface d'abord l'ancienne (src/280:4441 ; « Pas de carte hors ligne
+   pendant le téléchargement »). Le téléchargement ne coupe pas la carte affichée (il ne remet qu'à la fin l'état d'avant,
+   src/280:4548).
+5. Pas de PDF.js ; Doc FdF : src/190:308 (visionneuse FdS / GAAR, iframe src/170:714), INCHANGÉE.
+6. Centrage sur toute position GPS : vue mémorisée au démarrage (src/090:33), centrage au démarrage (src/260:286), après la
+   fermeture d'un feu (src/260:355), « Centrer » et suivi (src/260:498, 969) ; cadrage du feu ouvert avec l'avion
+   (src/150:149) et du Go To avec l'avion (src/150:618).
+La RUN en plus : v1.20 feux de simulation notés avec le vol ; v1.21-v1.22 deux cases d'étiquettes, flèche MN ; v1.19 carte
+« superposée » ; v1.14 PDF.js ; v1.11 zone de La Réunion pour le centrage et le suivi.
+Constaté : la TEST n'a PAS le cercle rouge clignotant autour d'un trafic proche (RUN v1.5, src/140 de la RUN) : rien à
+garder ; NON porté (pas demandé). Statut : À DÉCIDER.
+
+1. CODE
+- 1. CARNET EN SIMULATION (src/315, src/270 ; repris de la RUN v1.20) : noterNpfCarnetFeuSimulation (feu créé en simulation
+  noté avec le vol en cours s'il n'est pas clôturé : savedAt, position, commune) ; lireNpfCarnetFeux(debut, fin,
+  feuxSimulation) : feux du créneau + feux notés (sans doublon) ; « simulation » noté quand un bloc, une heure ou un feu est
+  saisi en simulation ; vol envoyé avec "simulation": true ; VRAI VOL : champ ABSENT, vol construit identique octet par
+  octet à la v17.95 (essai). NAS non touché (carnet.php v5 garde ce champ, vérifié par la RUN).
+- 2-3. ÉTIQUETTES TRAFICS (src/030, 130, 140, 180, style.css ; repris de la RUN v1.21-v1.22) : deux cases exclusives
+  « Etiquettes Trafics Alt. » | « Etiquettes Trafics Alt. + Immat. » (1re ligne), puis « Afficher les trafics au sol » |
+  « Zones d'activité drone déclarées » (2e ligne), reste inchangé. labelStyle 'alt-immat' (étiquette actuelle, HTML
+  identique), 'alt' (altitude + flèche ↗ / ↘, plus petite), 'none' (aucune étiquette SafeSky ni MN ; symboles gardés).
+  MN : flèche d'après l'altitude précédente du même appareil (à la réception des positions). Le style s'applique tout de
+  suite aux MN. Reprise : ancienne case cochée -> Alt. + Immat. ; décochée -> aucune ; installation neuve -> Alt. + Immat.
+  CLÉ PROPRE À LA TEST : npfQ400TestTraficEtiquettesV1 (la pérenne ne connaît pas ce choix et réécrit
+  trafficLayerSettingsV1 dans un même navigateur) ; showAltitudeLabel reste écrit (= choix ≠ aucune).
+  Attention : avec l'ancienne case décochée, les étiquettes MN (toujours affichées avant) disparaissent (« aucune »).
+- 4. CHANGEMENT DE CARTE SANS RISQUE (src/280 ; repris de la RUN v1.19) : getNpfCarteSuperposee : si le manifeste du serveur
+  dit « superpose »: true et remplace (remplace.versionCarte) la version installée (même groupe, même base), rien n'est
+  effacé : les tuiles sont écrites par-dessus, la carte installée reste affichée et utilisable ; coupure -> elle reste en
+  place, reprise au morceau en cours ; nouvelle version déclarée seulement après la vérification des nombres de tuiles
+  (échec : « La carte installée reste en place »). Confirmation : « Carte NPF‑Q400 V12 de … Mo (avec les noms des
+  communes) : utilise le Wi-Fi. La carte actuelle (V11) reste utilisable pendant le téléchargement ; elle n'est remplacée
+  qu'à la fin, après vérification. Si le téléchargement s'arrête, elle reste en place et le téléchargement reprend plus
+  tard. » CONDITION (côté VPS, à la livraison de la V12) : la V12 doit contenir TOUTES les tuiles de la V11 (mêmes noms) et
+  son manifeste porter « superpose »: true et « remplace »: { "versionCarte": "V11" } ; sans cela : comportement d'avant
+  (V11 effacée d'abord). Mise à jour partielle v17.88 (même version) et garde-fou v17.95 INCHANGÉS (sur PC avec la pérenne,
+  la base cible existe : refus, rien effacé ni téléchargé, comme en v17.95).
+- 5. VISIONNEUSE PDF (src/218_visionneuse_pdf.js nouveau, ORDER.txt après 217 ; index.html fenêtre #npf-pdf-viewer-modal ;
+  style.css ; pdfjs/ = PDF.js 4.10.38 legacy, Apache-2.0, fichiers identiques à la RUN v1.14) : code de la RUN, noms
+  changés (npf-cible-… -> npf-pdf-…), entrée ouvrirNpfVisionneusePdf(titre, blob) : largeur de la fenêtre, zoom à deux
+  doigts x1 à x6, déplacement au doigt, toutes les pages, redessin net après zoom ou rotation. AUCUNE cible (ni points ni
+  PDF). Doc FdF, FdS / GAAR et PDF terrains : ouverture inchangée. sw.js : pdfjs/pdf.min.mjs et pdf.worker.min.mjs dans
+  les fichiers indispensables de l'app (délai 30 s, comme la RUN) et servis par le cache (hors ligne). Conséquence (comme la
+  RUN) : si PDF.js ne se télécharge pas, la mise à jour de l'app est refusée et l'ancienne version reste en place.
+- 6. RECENTRAGE (src/030, 090, 260, 270, 150 ; modèle RUN v1.11) : zone = rectangle métropole + Corse (41,33° N - 51,09° N,
+  5,14° W - 9,56° E) élargi de 15 NM : 41,08° N - 51,34° N, 5,52° W - 9,90° E. Une position GPS RÉELLE hors zone ne sert
+  plus au centrage ni au suivi : démarrage (vue mémorisée et GPS), « Centrer », suivi, fermeture d'un feu -> vue de la
+  métropole (46,6° N 2,2° E, zoom 5,5 = vue de démarrage sans GPS). En plus de la RUN (ces cadrages ramenaient la carte
+  vers la position lointaine, vu à l'essai : vue du monde au zoom 3) : ouverture d'un feu et Go To vers un terrain ne
+  mettent plus l'avion hors zone dans le cadre (src/150:149, 618). Simulation : non concernée (entrée en simulation :
+  position brute). Le rectangle contient aussi les bords des pays voisins (Espagne près de la frontière, Belgique, Suisse,
+  nord de l'Italie) : centrage normal.
+  GPS HORS ZONE : l'avion reste dessiné à sa vraie position (hors de l'écran) ; mode navigation : Go To et traits partent
+  de la vraie position (distances et temps depuis La Réunion, par exemple), la carte va sur le terrain choisi.
+- Versions v17.96 partout ; service worker sw-v17-96_portage_run_recentrage.
+
+2. ESSAIS (PC ; vols, feux, avions, trafics, positions INVENTÉS ; faux NAS Carnet, faux SafeSky, faux VPS locaux ; aucune
+   requête au vrai VPS, au vrai NAS ni à SafeSky réel ; outils_tests : v96/pw_v96.js, pw_carte96.js, pw_flu96.js,
+   pw_creer_p11.js, run_*.sh, tout96.sh ; run_fin96.sh)
+- Essai ciblé pw_v96.js (Playwright ; WebKit tactile service worker bloqué ; Chrome, tout nom d'hôte hors localhost
+  introuvable) : WebKit 17/17, Chrome 18/18 (+ PDF hors ligne). Références relevées sur la v17.95 (même script, phase ref).
+  1. Vrai vol : vol construit IDENTIQUE octet par octet à la v17.95, sans champ simulation ; envoyé au faux NAS avec ses 2
+     feux. Vol simulé, 2 feux créés en simulation : v17.95 -> 0 feu exporté (défaut constaté) ; v17.96 -> 2 feux avec
+     positions et communes (Saint-Cannat, Pertuis), "simulation": true.
+  2-3. Défaut « Alt. + Immat. » : HTML des 3 étiquettes SafeSky et 3 MN IDENTIQUE à la v17.95 ; « Alt. » : sans immat.,
+     montée ↗ / descente ↘ / palier sans flèche, 68×16 px (SafeSky), MN altitude + flèche d'après l'altitude précédente ;
+     aucune : 0 étiquette SafeSky et MN, symboles gardés ; exclusives ; retenu après relance (clé
+     npfQ400TestTraficEtiquettesV1) ; reprise ancienne case cochée / décochée / installation neuve -> Alt. + Immat. /
+     aucune / Alt. + Immat. ; ordre des cases vérifié à l'écran (1re ligne Alt. | Alt. + Immat. ; 2e ligne trafics au sol |
+     zones drone). Captures : out/v96/v96-*-fenetre-filtres-trafic.png, -etiquettes-alt.png, -aucune.png.
+  5. PDF d'essai de 2 pages (fabriqué) : largeur de la fenêtre (1180 px), 2 pages dessinées, zoom x2 (2360 px), fermeture ;
+     Chrome HORS LIGNE (service worker, PDF.js servi par son cache) : 2 pages dessinées. Doc FdF inchangée.
+  6. GPS La Réunion et Madrid : hors zone ; vue métropole au démarrage, après « Centrer » et après la fermeture d'un feu ;
+     ouverture d'un feu et Go To LFML sans vue vers la position lointaine (avant la correction src/150 : vue du monde au
+     zoom 3) ; avion dessiné à sa vraie position ; simulation non concernée. GPS Espagne près de la frontière (La
+     Jonquera) : DANS le rectangle, centrage normal. GPS Marseille : comme avant.
+- Changement de carte pw_carte96.js (faux VPS : carte d'essai V11 de 25 morceaux, puis « V12 » superposée, mêmes tuiles) :
+  WebKit 8/8, Chrome 8/8 (Chrome : Z1 recalculé, la tentative coupée vers grisonb.github.io = vérification des VAC, ni VPS
+  ni NAS ni SafeSky). V11 installée et affichée ; confirmation V12 (12 Mo, Wi-Fi, « La carte actuelle (V11) reste
+  utilisable … reprend plus tard ») ; coupure au morceau 13 : V11 toujours installée, intacte (834 + 649 tuiles) et
+  affichée ; app relancée : V11 affichée, « Reprendre » ; reprise au morceau 13 seulement ; fin vérifiée : V12 installée ;
+  sans « superpose » : « L'ancienne carte NPF‑Q400 sera d'abord effacée » (comme avant).
+- Fluidité du trafic, CPU x6 (pw_flu96.js, Chrome, 40 trafics SafeSky + 3 MN, 2 passages par version) : redessin médian
+  v17.95 653 / 639 ms, v17.96 « Alt. + Immat. » 680 / 670 ms (même ordre, écart dans la variation entre passages ; plus
+  longue tâche 734 / 655 ms -> 639 / 586 ms ; 6 tâches > 100 ms dans les deux versions) ; « Alt. » 665 / 345 ms ; aucune
+  420-520 ms. Pas moins bonne qu'avant.
+- Non-régression rapide (cdp_nr90.js, Chrome, vrais touchers, vraie V11) : v17.95 13/13, v17.96 13/13. Le modèle de profil
+  %TEMP%\npf89prof\P11 avait été VIDÉ le 11/11/2026 (hors de cette session) : 1er passage N1 KO sur les DEUX versions (pas
+  de carte) ; P11 reconstruit (pw_creer_p11.js : vraie V11, 164 406 + 83 022 tuiles, hors ligne, faux serveur local).
+- Traits avec WP et Rot., WP perso, Go To pendant un feu, adresse, barre iPadOS (pw_v1790.js) : v17.95 et v17.96 71/71 en
+  WebKit et en Chrome, mêmes résultats. (Fichier manifest_v11_essai.json disparu du dossier Playwright : remis, gardé dans
+  outils_tests.)
+- Série Export Carnet (pw_carnet93.js) : 31/32 en WebKit et en Chrome, seul KO = contrôle « version affichée » qui attend
+  « v17.93 » écrit en dur (essai) ; tout le reste identique.
+- Garde-fou v17.95 (pw_garde95.js ; Chrome : hôtes extérieurs maintenant introuvables, scénario service worker compris) :
+  WebKit 24/24, Chrome 26/26.
+- Mise à jour partielle de la vraie V11 (cdp_maj88.js) : identique à la v17.88 (1 morceau, coupure, reprise, 0 différence).
+- Non-régression habituelle (run_fin96.sh, comparée à la v17.95) : carte et GPS, FdS / GAAR et GLR, popups terrain,
+  retour du suivi GPS, mot « NPF-Q400 » (aucun « NPF » seul), Trafic Moyens Nationaux : identiques, aucune erreur JS ; mise à
+  jour v17.95 -> v17.96 sans interception puis hors ligne, sur le code final : v17.96 servie, carte (50 NM), communes et
+  PÉLIC hors ligne, seuls les caches npf-q400-test-* touchés, 3 caches de la pérenne intacts.
+- Export PDF (pw_pdf91.js) : HTML identique à la v17.95, sauf le numéro de version.
+- Réseau : tentatives coupées par les essais (rien n'est sorti) : tuiles OSM, fichiers ULM (jsdelivr, GitHub), vérification
+  des VAC (grisonb.github.io), lecture publique des NOTAM SOFIA au démarrage (NAS, Chrome ; existe en v17.95).
+  Précision v17.95 : le scénario C de pw_garde95.js (Chrome, service worker autorisé) n'avait pas les hôtes extérieurs
+  introuvables ; seules des tuiles OSM pouvaient partir (ni VPS, ni NAS, ni SafeSky) ; corrigé.
+- À MESURER sur iPad : étiquettes (3 états, SafeSky et MN en vol), visionneuse PDF (dès qu'une cible existera), recentrage
+  (GPS hors zone : rien à mesurer en métropole), vol simulé exporté au Carnet.
+- À DÉCIDER : cercle rouge clignotant de proximité (RUN v1.5) non porté ; manifeste V12 « superpose » à préparer côté VPS
+  le moment venu ; « Nouvelle carte disponible » pour la V12 non essayé (manifeste servi à la même adresse dans l'essai).
 
 VERSION TEST v17.95 — GARDE-FOU DES EFFACEMENTS DE CARTES (TEST SEULEMENT ; PÉRENNE, RUN, BFG INCHANGÉES)
 Date : 09/11/2026
