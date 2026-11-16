@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
-Mise à jour : 12/11/2026
-Version de travail actuelle : TEST v17.97
+Mise à jour : 16/11/2026
+Version de travail actuelle : TEST v17.98
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -551,11 +551,14 @@ NON IMPLÉMENTÉ / OUVERT :
   07/10/2026 : programme VPS bfg-sofia-notams 1.2.0 PRÊT, NON INSTALLÉ
   (~/vps-a-copier/). v17.60 à pousser APRÈS l'installation de la 1.2.0
   (elle annonce « environ 1 minute ») ;
+- v17.98 : BLOC/FUEL, feu concerné par chaque ligne (en-tête « OACI / Feu », liste native au toucher du terrain, héritage
+  de la ligne précédente) et champ facultatif « suiteFeux » envoyé au Carnet, repris tel quel de la RUN v1.23 ; NAS non
+  touché ; Export PDF inchangé. À MESURER sur iPad ; COMMIT LOCAL, NON POUSSÉE ;
 - v17.97 : cercle rouge clignotant autour d'un trafic SafeSky rouge (±500 ft) à moins de 4 NM, repris tel quel de la RUN
   v1.5 ; 2e commit (même version, décision de Bastien du 12/11) : même cercle aussi pour les Moyens Nationaux (même
-  fonction, même style ; altitude inconnue ou trafic Off : pas de cercle). À DÉCIDER : Moyens Nationaux posés (le relais
-  n'annonce pas « au sol ») ; image au repos un peu plus basse sur PC avec 6 cercles clignotants (À MESURER sur iPad).
-  À MESURER sur iPad ; 2 COMMITS LOCAUX, NON POUSSÉE ;
+  fonction, même style ; altitude inconnue ou trafic Off : pas de cercle). Décisions de Bastien (12/11) : Moyens Nationaux
+  posés (le relais n'annonce pas « au sol ») : ON LAISSE COMME ÇA (VALIDÉ) ; image au repos un peu plus basse sur PC avec
+  6 cercles clignotants : À MESURER sur iPad. À MESURER sur iPad ; POUSSÉE le 12/11/2026 (1884639) ;
 - v17.96 : portage de NPF-Q400-RUN (v1.20 Carnet en simulation : feux exportés, "simulation": true ; v1.21-v1.22
   étiquettes trafics Alt. + Immat. / Alt. / aucune, SafeSky et MN, clé npfQ400TestTraficEtiquettesV1 ; v1.19 carte
   « superposée » sans risque ; v1.14 visionneuse PDF.js sans cible) et recentrage sur la métropole (GPS hors du rectangle
@@ -850,30 +853,30 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.97
-Date : 12/11/2026
-Base : v17.96 (9c51343, poussée le 12/11/2026)
+Version : TEST v17.98
+Date : 16/11/2026
+Base : v17.97 (1884639, poussée le 12/11/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.97.txt
-2_Index_v17.97.txt
-3_Manifest_v17.97.txt
-4_Script_v17.97.txt
-5_SIA_v17.97.txt
-6_Style_v17.97.txt
-7_Sw_v17.97.txt
+1_Modifications_v17.98.txt
+2_Index_v17.98.txt
+3_Manifest_v17.98.txt
+4_Script_v17.98.txt
+5_SIA_v17.98.txt
+6_Style_v17.98.txt
+7_Sw_v17.98.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.97 (et texte « TEST v17.97 » de l'écran de
+- Index : APP_VERSION = v17.98 (et texte « TEST v17.98 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.97
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.97
-- Style : NPF_STYLE_BUILD_VERSION = v17.97
+- Manifest : start_url = ./index.html?appv=v17.98
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.98
+- Style : NPF_STYLE_BUILD_VERSION = v17.98
 - Nom de l'app (v17.94) : « NPF-Q400 TEST » (manifest name et short_name, <title>, apple-mobile-web-app-title)
 - PDF.js (v17.96) : dossier pdfjs/ (pdf.min.mjs, pdf.worker.min.mjs 4.10.38, LICENSE Apache-2.0, LISEZMOI.txt), à livrer
   avec les 7 fichiers ; fichiers indispensables du service worker.
-- Service Worker : `sw-v17-97_cercle_trafic` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-97_cercle_trafic`, `npf-q400-test-app-data-v1`,
+- Service Worker : `sw-v17-98_feu_par_ligne` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-98_feu_par_ligne`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-sia-2026-10-29-v02-g15`
 - SIA_DATA_REVISION (SW / Index sia.js?siav=) : sia-2026-10-29-v02-g15 (= NPF_SIA_DATA_REVISION
   de sia.js ; à changer à chaque nouveau sia.js)
@@ -886,15 +889,15 @@ Références de version cohérentes :
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.97 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.98 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
 - `sia.js` : par rapport à v17.70, outre-mer retiré, « a » de 34 VRP renseigné, table vrpAirportColors ajoutée (2 pastels), révision g6 ; zones, terrains et points de métropole identiques ; moteur tuiles (src/100) modifié en v17.66 sur demande
   explicite (limite de zoom propre à chaque carte, zoom 11 OACI 1/500 000) ;
-- tests v17.97 : entrée v17.97 ; sia.js strictement identique à la v17.81 ;
+- tests v17.98 : entrée v17.98 ; sia.js strictement identique à la v17.81 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82, v17.83, v17.84, v17.85, v17.86, v17.87, v17.88, v17.89, v17.90, v17.91, v17.92, v17.93, v17.94, v17.95, v17.96 et v17.97 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82, v17.83, v17.84, v17.85, v17.86, v17.87, v17.88, v17.89, v17.90, v17.91, v17.92, v17.93, v17.94, v17.95, v17.96, v17.97 et v17.98 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
   v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE ;
   v17.56 VALIDÉE en vol ; v17.57 VALIDÉE sur iPad.
 
@@ -2423,6 +2426,77 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.98 — BLOC/FUEL : FEU CONCERNÉ PAR CHAQUE LIGNE ET « suiteFeux » ENVOYÉ AU CARNET (REPRIS DE NPF-Q400-RUN v1.23)
+Date : 16/11/2026
+Base fonctionnelle : v17.97 (commit 1884639, poussée le 12/11/2026 ; décisions du 12/11 : Moyens Nationaux posés : on laisse
+comme ça ; image au repos avec plusieurs cercles : À MESURER sur iPad). Seule la TEST change : pérenne, RUN (lue seulement,
+NPF-Q400-RUN-OUTILS origin/main 27a3f7c = v1.23 poussée, commit du changement 8694fcd), BFG, NAS et VPS inchangés. sia.js
+inchangé (strictement identique à la v17.81). Demande de Bastien (16/11) : porter de la RUN v1.23 le feu sur chaque ligne de
+l'onglet BLOC / FUEL et son envoi au Carnet de vol.
+
+0. ÉTAT DES LIEUX
+- RUN v1.23 (8694fcd) : src/310_calculateur_ui.js (setAirportOaciCellText, attribuerFeuLigneSaisie, resoudreFeuxLignes,
+  remplirListeFeuLigne, changerFeuLigne, rafraichirFeuxLignes, afficherRotationsParFeu ; enregistrement feu / feuChoix dans
+  la ligne du vol ; addNewRow), src/315_carnet_vol.js (cleNpfCarnetFeu, listerNpfCarnetFeuxBruts, formaterNpfCarnetFeu,
+  instantaneNpfCarnetFeu, listerNpfCarnetFeuxDuVol, construireNpfCarnetSuiteFeux ; construireNpfCarnetVol : suiteFeux),
+  src/290_calculateur_mission.js:657 (lecture du terrain dans .airport-oaci-text), index.html (en-tête OACI<br>Feu),
+  style.css (liste invisible posée sur la case, ligne « Rotations par feu »).
+- TEST v17.97 : ces 3 fichiers sont ceux de la RUN v1.22 aux écarts près déjà connus (fuseau horaire, titre, commentaires,
+  BINGO de la RUN, règle de vitesse, clés et id Carnet sans « run- ») : 10 / 32 / 42 lignes, aucune dans les zones
+  modifiées par la v1.23. Lecteurs de la case OACI identiques (src/310:271, 504 ; src/290:650). Export PDF : lit les valeurs
+  enregistrées (getBlocFuelExportRowCalculations, src/310:1056), pas la case affichée : inchangé.
+- NAS (copie locale de carnet.php du 08/11, lecture seule) : un champ inconnu (suiteFeux) n'est pas refusé ; vrai NAS non
+  vérifié, non touché.
+
+1. CODE (repris à l'identique de la RUN v1.23)
+- src/290 et src/310 : correctif de la RUN appliqué tel quel ; src/315 : mêmes fonctions, même code (2 morceaux remis à la
+  main : commentaires « v17.96 (RUN v1.20) » de la TEST conservés). Après portage, chaque fichier a exactement les mêmes
+  écarts avec la RUN v1.23 qu'avant (10 / 32 / 42 lignes). Commentaires « RUN v1.23 » notés « v17.98 (RUN v1.23) ».
+- index.html : en-tête « OACI<br>Feu » (aucune colonne en plus) ; style.css : bloc de la RUN tel quel en fin de fichier.
+- Comportement : toucher le terrain d'une ligne remplie ouvre la liste native (feux du vol, le plus récent en premier,
+  « Feu n°N · commune (créé HH:MM) » ; feu de la ligne créé avant le vol : « … (créé HH:MM, avant ce vol) » ; « Aucun feu »),
+  feu de la ligne coché ; 1re ligne = feu sélectionné sur la carte à la saisie de l'heure (sinon aucun), suivantes = feu de
+  la ligne précédente ; un changement ne modifie que les lignes suivantes héritées ; gardé dans la ligne du vol (feu,
+  feuChoix) ; liste fermée (désactivée) quand le vol est clôturé ; « Rotations par feu : … » sous le tableau (sans la
+  dernière ligne une fois le vol clôturé). Carnet : « suiteFeux » facultatif (lignes sauf la dernière, consécutives sur le
+  même feu regroupées, { feu: n°, largages } ou { feuHorsVol: {…}, largages }, « Aucun feu » ignoré, 1 ligne = 1 largage) ;
+  vol sans feu : champ absent. Vols d'avant la v17.98 : aucun feu, rien n'est deviné.
+- Adaptation TEST : aucune nécessaire (plusieurs pélicandromes et terrains : le terrain de chaque ligne est détecté comme
+  avant ; le feu ne dépend ni de la base ni du pélicandrome). Rien d'autre décidé.
+- Versions v17.98 partout ; service worker sw-v17-98_feu_par_ligne.
+
+2. ESSAIS (PC ; FAUX NAS local dans l'essai, faux VPS : tout coupé sauf localhost ; vols, feux, avions INVENTÉS ;
+   outils_tests : v98/pw_v98_blocfeu.js (repris de NPF-Q400-RUN tests/carnet/pw_v123_blocfeu.js, adapté : réglages sans
+   préfixe, heure de Paris, LFML, feux de simulation en métropole, id sans « run- »), run_v98_blocfeu.sh, tout98.sh,
+   run_fin98.sh ; référence relevée sur la v17.97 poussée, par moteur)
+- Feu par ligne : Chrome 24/24, WebKit tactile service worker bloqué 24/24 :
+  . en-tête OACI / Feu ; tableau 1 000 px, colonnes et hauteur d'en-tête identiques à la v17.97, pas de défilement ;
+  . la liste couvre exactement la case du terrain sur chaque ligne (WebKit 60 × 58 px, Chrome 60 × 60) ;
+  . toucher LFML ligne 1 : « Feu n°2 · … », « Feu n°1 · … » (coché), « Aucun feu » ; feu créé avant le vol : « (créé HH:MM,
+    avant ce vol) » coché ;
+  . héritage, même après création d'un nouveau feu ; changement propagé aux lignes héritées seulement ;
+  . choix gardé après relance, clôture et réouverture, en simulation ; liste désactivée sur vol clôturé ;
+  . « Rotations par feu » : vol en cours « Ventabren (13) 5 · Aubagne (13) 1 », clôturé « … 4 · … 1 », une ligne, tableau
+    inchangé ;
+  . export Carnet vol de 6 lignes dont l'arrivée : suiteFeux Cilaos 3 / Saint-Pierre 1 / Cilaos 1, reste du vol identique à
+    la v17.97 à l'octet ; vol de l'exemple en simulation : même suite ; réouverture + 1 ligne : 3 / 1 / 2 ;
+  . vol sans feu : champ absent, vol identique à la v17.97 à l'octet ; Export PDF identique (hors date et version) ;
+  . aucune erreur JS, aucune fenêtre bloquante (hors « Mode simulation actif », existante).
+  Captures : out/v98/final-<moteur>-blocfeu98-onglet.png, -liste-contenu-ligne1.png (le navigateur d'essai n'affiche pas la
+  liste native : son contenu est rendu visible pour la capture seulement).
+  Incidents d'essai (sans lien avec l'app) : port du faux NAS réservé par Windows (21100-21699) ; « Échap » de l'essai
+  fermait le calculateur en WebKit sans écran, puis en Chrome après la capture de la liste (essai corrigé) ; un passage
+  Chrome arrêté au 1er chargement (page rechargée au démarrage), relancé.
+- Non-régression rapide (cdp_nr90.js, profil P11, vraie V11) : 13/13 (lancement sans erreur JS, V11 avec noms hors ligne,
+  échelle en NM, FdS / GAAR, Créer Feu, Rot. / BINGO, mode navigation, Doc FdF, aucune requête externe).
+- Non-régression habituelle (run_fin98.sh, comparée à la v17.97) : identique (écarts : temps, date de la déclinaison,
+  compteurs du DIAG), aucune erreur JS, aucun « NPF » seul. Mise à jour v17.97 -> v17.98 sans interception puis hors ligne,
+  sur le code final : v17.98 servie, carte (50 NM), communes et PÉLIC hors ligne, seuls les caches npf-q400-test-* touchés,
+  3 caches de la pérenne intacts.
+- Réseau : Carnet envoyé au FAUX NAS seulement ; tentatives coupées (rien n'est sorti) : tuiles OSM, fichiers ULM, VAC,
+  NOTAM SOFIA au démarrage (existe avant) ; aucun appel au vrai VPS.
+- À MESURER sur iPad : toucher du terrain et liste native, export Carnet réel avec suiteFeux (vrai NAS).
 
 VERSION TEST v17.97 — CERCLE ROUGE CLIGNOTANT AUTOUR D'UN TRAFIC SAFESKY PROCHE (REPRIS DE NPF-Q400-RUN v1.5)
                      + 2e COMMIT : MÊME CERCLE POUR LES MOYENS NATIONAUX

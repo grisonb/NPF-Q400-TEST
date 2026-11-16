@@ -274,7 +274,7 @@ function initializeCalculator() {
         const rowTimeValue = row.querySelector('.time-input-wrapper .display-input')?.value || '';
         if (parseTime(rowTimeValue) === null) {
             row.dataset.airportOaci = '';
-            cell.textContent = '--';
+            setAirportOaciCellText(cell, '--');
             return;
         }
 
@@ -283,7 +283,185 @@ function initializeCalculator() {
             row.dataset.airportOaci = airport ? airport.oaci : '';
         }
 
-        cell.textContent = row.dataset.airportOaci || '--';
+        setAirportOaciCellText(cell, row.dataset.airportOaci || '--');
+    }
+
+    /* v17.98 (RUN v1.23) — le terrain est dans un span : la liste du feu (select invisible) est posée dans la même case. */
+    function setAirportOaciCellText(cell, text) {
+        let span = cell.querySelector('.airport-oaci-text');
+        if (!span) {
+            cell.textContent = '';
+            span = document.createElement('span');
+            span.className = 'airport-oaci-text';
+            cell.appendChild(span);
+        }
+        span.textContent = text;
+    }
+
+    /* ======================================================================
+       v17.98 (RUN v1.23) — FEU CONCERNÉ PAR LIGNE (colonne « OACI / Feu », sans colonne en plus).
+       Toucher le terrain d'une ligne remplie ouvre une liste native (select) : feux créés pendant le vol, le plus récent
+       en premier (n°, commune, heure de création), + « Aucun feu » ; le feu de la ligne est coché.
+       Feu par défaut : 1re ligne remplie = feu sélectionné sur la carte à la saisie de son heure (sinon aucun) ;
+       lignes suivantes = feu de la ligne précédente (« herite ») ; changer une ligne la rend « manuel » et change les
+       lignes suivantes « herite » jusqu'à la prochaine ligne « manuel ». Gardé dans la ligne du vol (feu, feuChoix).
+       ====================================================================== */
+    const lireLigneFeu = row => {
+        try { return row?.dataset?.feu ? JSON.parse(row.dataset.feu) : null; } catch (_) { return null; }
+    };
+    const ecrireLigneFeu = (row, feu) => { row.dataset.feu = feu ? JSON.stringify(feu) : ''; };
+    const ligneFeuRemplie = row => parseTime(row?.querySelector('.time-input-wrapper .display-input')?.value || '') !== null;
+    const lignesBlocFeu = () => [...document.querySelectorAll('#bloc-fuel tbody tr')];
+    const heureFeuLocale = f => {
+        const t = Number(f && f.savedAt);
+        if (!t) return '';
+        const d = new Date(t);
+        return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    };
+    const nomFeuLigne = f => {
+        try { return typeof buildFireDisplayName === 'function' ? buildFireDisplayName(f) : String(f.nom_standard || 'Feu'); } catch (_) { return 'Feu'; }
+    };
+
+    function attribuerFeuLigneSaisie(row) {
+        if (!ligneFeuRemplie(row) || row.dataset.feuChoix) return;
+        const lignes = lignesBlocFeu();
+        const avant = lignes.slice(0, lignes.indexOf(row)).some(ligneFeuRemplie);
+        if (avant) {
+            row.dataset.feuChoix = 'herite';
+            return;
+        }
+        row.dataset.feuChoix = 'manuel';
+        let feuCarte = null;
+        try { feuCarte = typeof instantaneNpfCarnetFeu === 'function' && typeof currentCommune !== 'undefined' ? instantaneNpfCarnetFeu(currentCommune) : null; } catch (_) { feuCarte = null; }
+        ecrireLigneFeu(row, feuCarte);
+    }
+
+    function resoudreFeuxLignes() {
+        let precedent = null;
+        lignesBlocFeu().forEach(row => {
+            if (!ligneFeuRemplie(row)) {
+                delete row.dataset.feuChoix;
+                ecrireLigneFeu(row, null);
+                return;
+            }
+            if (row.dataset.feuChoix === 'herite') ecrireLigneFeu(row, precedent);
+            precedent = lireLigneFeu(row);
+        });
+    }
+
+    function remplirListeFeuLigne(row, select, feuxDuVol, ferme) {
+        const cleLigne = (() => { const f = lireLigneFeu(row); return f ? cleNpfCarnetFeu(f) : ''; })();
+        const options = [];
+        const vues = new Set();
+        feuxDuVol.slice().reverse().forEach(f => {
+            const cle = cleNpfCarnetFeu(f);
+            vues.add(cle);
+            const numero = feuxDuVol.indexOf(f) + 1;
+            options.push({ valeur: cle, texte: `Feu n°${numero} · ${nomFeuLigne(f)} (créé ${heureFeuLocale(f)})` });
+        });
+        const feuLigne = lireLigneFeu(row);
+        if (feuLigne && !vues.has(cleLigne)) {
+            options.push({ valeur: cleLigne, texte: `${nomFeuLigne(feuLigne)} (créé ${heureFeuLocale(feuLigne)}, avant ce vol)` });
+        }
+        options.push({ valeur: '', texte: 'Aucun feu' });
+        select.textContent = '';
+        options.forEach(o => {
+            const option = document.createElement('option');
+            option.value = o.valeur;
+            option.textContent = o.texte;
+            if (o.valeur === cleLigne) option.selected = true;
+            select.appendChild(option);
+        });
+        select.value = cleLigne;
+        select.disabled = !!ferme;
+    }
+
+    function feuxDuVolActif() {
+        try { return typeof listerNpfCarnetFeuxDuVol === 'function' ? listerNpfCarnetFeuxDuVol(activeFlightId) : []; } catch (_) { return []; }
+    }
+
+    function changerFeuLigne(row, select) {
+        const cle = select.value;
+        let feu = null;
+        if (cle) {
+            const candidat = feuxDuVolActif().find(f => cleNpfCarnetFeu(f) === cle)
+                || (() => { const f = lireLigneFeu(row); return f && cleNpfCarnetFeu(f) === cle ? f : null; })();
+            feu = candidat ? instantaneNpfCarnetFeu(candidat) : null;
+        }
+        row.dataset.feuChoix = 'manuel';
+        ecrireLigneFeu(row, feu);
+        rafraichirFeuxLignes();
+        saveCalculatorState();
+    }
+
+    function rafraichirFeuxLignes() {
+        try {
+            resoudreFeuxLignes();
+            const vol = dailyFlights.find(flight => flight.id === activeFlightId);
+            const ferme = !!vol?.closed;
+            const feuxDuVol = feuxDuVolActif();
+            lignesBlocFeu().forEach(row => {
+                const cell = row.querySelector('.airport-oaci-cell');
+                if (!cell) return;
+                let select = cell.querySelector('select.bloc-feu-select');
+                if (!ligneFeuRemplie(row)) {
+                    if (select) select.remove();
+                    cell.classList.remove('bloc-feu-cell');
+                    return;
+                }
+                if (!select) {
+                    if (!cell.querySelector('.airport-oaci-text')) setAirportOaciCellText(cell, cell.textContent || '--');
+                    select = document.createElement('select');
+                    select.className = 'bloc-feu-select';
+                    select.setAttribute('aria-label', 'Feu concerné par cette ligne');
+                    const remplir = () => {
+                        const v = dailyFlights.find(flight => flight.id === activeFlightId);
+                        remplirListeFeuLigne(row, select, feuxDuVolActif(), !!v?.closed);
+                    };
+                    select.addEventListener('pointerdown', remplir);
+                    select.addEventListener('touchstart', remplir, { passive: true });
+                    select.addEventListener('focus', remplir);
+                    select.addEventListener('change', () => changerFeuLigne(row, select));
+                    cell.appendChild(select);
+                }
+                cell.classList.add('bloc-feu-cell');
+                remplirListeFeuLigne(row, select, feuxDuVol, ferme);
+            });
+            afficherRotationsParFeu(ferme);
+        } catch (error) {
+            console.warn('[BLOC/FUEL] feu par ligne :', error);
+        }
+    }
+
+    /* Ligne compacte sous le tableau : rotations par feu (dernière ligne exclue quand le vol est clôturé : arrivée aéroport). */
+    function afficherRotationsParFeu(ferme) {
+        const wrapper = document.querySelector('#bloc-fuel .table-wrapper');
+        if (!wrapper) return;
+        let ligne = document.getElementById('bloc-feu-rotations');
+        if (!ligne) {
+            ligne = document.createElement('div');
+            ligne.id = 'bloc-feu-rotations';
+            ligne.className = 'bloc-feu-rotations';
+            wrapper.insertAdjacentElement('afterend', ligne);
+        }
+        let remplies = lignesBlocFeu().filter(ligneFeuRemplie);
+        if (ferme) remplies = remplies.slice(0, -1);
+        const comptes = new Map();
+        remplies.forEach(row => {
+            const f = lireLigneFeu(row);
+            if (!f) return;
+            const cle = cleNpfCarnetFeu(f);
+            const c = comptes.get(cle) || { nom: nomFeuLigne(f), n: 0 };
+            c.n += 1;
+            comptes.set(cle, c);
+        });
+        if (!comptes.size) {
+            ligne.textContent = '';
+            ligne.hidden = true;
+            return;
+        }
+        ligne.hidden = false;
+        ligne.textContent = `Rotations par feu : ${[...comptes.values()].map(c => `${c.nom} ${c.n}`).join(' · ')}`;
     }
 
     function refreshBlocFuelAirportOaciCells() {
@@ -501,9 +679,14 @@ function initializeCalculator() {
             const rltFirstFull = rltWrapper?.dataset.rltFirstFull || '';
             const rltFirstFullPending = rltWrapper?.dataset.rltFirstFullPending || '';
             const rltFirstFullWanted = rltWrapper?.dataset.rltFirstFullWanted || '';
-            const oaci = row.dataset.airportOaci || row.querySelector('.airport-oaci-cell')?.textContent?.replace('--', '').trim() || '';
+            const oaci = row.dataset.airportOaci || (row.querySelector('.airport-oaci-text') || row.querySelector('.airport-oaci-cell'))?.textContent?.replace('--', '').trim() || '';
             if (time || fuel || oaci || rltMass || rltVolume || rltDensity || rltTopMass || rltTopDensity || rltTopVolume || rltBottomVolume || rltBottomDensity || rltBottomMass || rltRefracto || rltMode || rltFirstFull || rltFirstFullPending || rltFirstFullWanted) {
-                tableData.push({ time, fuel, oaci, rltMass, rltVolume, rltDensity, rltTopMass, rltTopDensity, rltTopVolume, rltBottomVolume, rltBottomDensity, rltBottomMass, rltRefracto, rltMode, rltFirstFull, rltFirstFullPending, rltFirstFullWanted });
+                const ligne = { time, fuel, oaci, rltMass, rltVolume, rltDensity, rltTopMass, rltTopDensity, rltTopVolume, rltBottomVolume, rltBottomDensity, rltBottomMass, rltRefracto, rltMode, rltFirstFull, rltFirstFullPending, rltFirstFullWanted };
+                if (row.dataset.feuChoix) {   // v17.98 (RUN v1.23) — feu concerné par la ligne
+                    ligne.feuChoix = row.dataset.feuChoix;
+                    ligne.feu = lireLigneFeu(row);
+                }
+                tableData.push(ligne);
             }
         });
         state.calculator_table_data = compactCalculatorTableData(tableData);
@@ -1435,6 +1618,7 @@ function initializeCalculator() {
         updateDisplayedLimitHdvForActiveFlight();
         refreshSharedHeaderMirrorValues();
         updateActiveFlightLockState();
+        rafraichirFeuxLignes();   // v17.98 (RUN v1.23)
         masterRecalculate();
         updateFlightDurationSummary();
     }
@@ -1515,6 +1699,7 @@ function initializeCalculator() {
                 const row = wrapper.closest('tr');
                 if (row && row.closest('#bloc-fuel')) {
                     updateRowAirportOaci(row, { forceDetect: true });
+                    try { attribuerFeuLigneSaisie(row); rafraichirFeuxLignes(); } catch (_) {}   // v17.98 (RUN v1.23) — feu à la saisie de l'heure
                 }
             }
 
@@ -2988,7 +3173,7 @@ function initializeCalculator() {
 
     const addNewRow = (tableBody, data, isLastRow = false) => {
         const row = document.createElement('tr');
-        row.innerHTML = `<td><div class="input-wrapper time-input-wrapper"><input type="text" class="display-input" readonly placeholder="--:--"><span class="clear-btn">&times;</span><span class="clock-icon">🕒</span><input type="time" class="engine-input"></div></td><td><div class="input-wrapper numeric-input-wrapper fuel-split-input-wrapper" data-unit="kg"><input type="text" class="display-input" inputmode="numeric" placeholder="[valeur]"><span class="clear-btn">&times;</span></div></td><td class="airport-oaci-cell">--</td><td><div class="input-wrapper rlt-mass-input-wrapper" data-unit="kg"><input type="text" class="display-input" readonly placeholder="[kg]"><span class="clear-btn">&times;</span></div></td><td class="duree-rotation-cell"></td><td class="fuel-rotation-cell"></td><td class="tps-vol-cell"></td><td class="tps-vol-restant-cell"></td>`;
+        row.innerHTML = `<td><div class="input-wrapper time-input-wrapper"><input type="text" class="display-input" readonly placeholder="--:--"><span class="clear-btn">&times;</span><span class="clock-icon">🕒</span><input type="time" class="engine-input"></div></td><td><div class="input-wrapper numeric-input-wrapper fuel-split-input-wrapper" data-unit="kg"><input type="text" class="display-input" inputmode="numeric" placeholder="[valeur]"><span class="clear-btn">&times;</span></div></td><td class="airport-oaci-cell"><span class="airport-oaci-text">--</span></td><td><div class="input-wrapper rlt-mass-input-wrapper" data-unit="kg"><input type="text" class="display-input" readonly placeholder="[kg]"><span class="clear-btn">&times;</span></div></td><td class="duree-rotation-cell"></td><td class="fuel-rotation-cell"></td><td class="tps-vol-cell"></td><td class="tps-vol-restant-cell"></td>`;
         tableBody.appendChild(row);
 
         const timeWrapper = row.querySelector('.time-input-wrapper');
@@ -2999,6 +3184,10 @@ function initializeCalculator() {
         initializeNumericInput(numericWrapper, data ? data.fuel : '');
         initializeRltMassInput(rltMassWrapper, data || {});
         row.dataset.airportOaci = data?.oaci || '';
+        if (data?.feuChoix === 'manuel' || data?.feuChoix === 'herite') {   // v17.98 (RUN v1.23)
+            row.dataset.feuChoix = data.feuChoix;
+            ecrireLigneFeu(row, data.feu || null);
+        }
         updateRowAirportOaci(row);
 
         const forceRowRecalculateAndSave = () => {
@@ -3007,6 +3196,7 @@ function initializeCalculator() {
              * toujours recalculer les colonnes Durée/Fuel/Tps de vol.
              */
             try { updateRowAirportOaci(row); } catch (_) {}
+            try { rafraichirFeuxLignes(); } catch (_) {}   // v17.98 (RUN v1.23)
             try { recalculateBlocFuel(); } catch (_) {}
             masterRecalculate();
             saveCalculatorState();

@@ -190,34 +190,106 @@ function noterNpfCarnetFeuSimulation(feu) {
 }
 
 /* Feux de l'historique créés entre le bloc départ et le bloc arrivée (lecture brute, sans réécriture) ;
- * v17.96 (RUN v1.20) : + feux notés avec un vol simulé (sans doublon). */
-function lireNpfCarnetFeux(debutMs, finMs, feuxSimulation = []) {
+ * v17.96 (RUN v1.20) : + feux notés avec un vol simulé (sans doublon).
+ * v17.98 (RUN v1.23) : découpée en deux (liste brute + mise au format), résultat inchangé ; la liste brute sert aussi au choix du
+ * feu de chaque ligne du BLOC/FUEL (src/310) et à la suite des feux envoyée au Carnet. */
+const cleNpfCarnetFeu = f => `${Number(f.savedAt)}|${Number(f.latitude_mairie).toFixed(5)}|${Number(f.longitude_mairie).toFixed(5)}`;
+
+function listerNpfCarnetFeuxBruts(debutMs, finMs, feuxSimulation = []) {
     let historique = [];
     try { historique = JSON.parse(localStorage.getItem(FIRE_HISTORY_STORAGE_KEY) || '[]'); } catch (_) { historique = []; }
     if (!Array.isArray(historique)) historique = [];
     const dansLeVol = historique.filter(f => f && Number.isFinite(Number(f.savedAt)) && Number(f.savedAt) >= debutMs && Number(f.savedAt) <= finMs);
-    const cle = f => `${Number(f.savedAt)}|${Number(f.latitude_mairie).toFixed(5)}|${Number(f.longitude_mairie).toFixed(5)}`;
+    const cle = cleNpfCarnetFeu;
     const vus = new Set(dansLeVol.map(cle));
     (Array.isArray(feuxSimulation) ? feuxSimulation : []).forEach(f => { if (f && !vus.has(cle(f))) { vus.add(cle(f)); dansLeVol.push(f); } });
     return dansLeVol
         .filter(f => Number.isFinite(Number(f.latitude_mairie)) && Number.isFinite(Number(f.longitude_mairie)))
-        .sort((a, b) => Number(a.savedAt) - Number(b.savedAt))
-        .map(f => {
-            const feu = {
-                heure: formatNpfCarnetHeureUtc(new Date(Number(f.savedAt))),
-                lat: Math.round(Number(f.latitude_mairie) * 1e5) / 1e5,
-                lon: Math.round(Number(f.longitude_mairie) * 1e5) / 1e5
-            };
-            const nom = String(f.nom_standard || '').trim();
-            if (f.locality_match) {
-                const commune = String(f.locality_commune_name || '').trim();
-                if (commune) feu.commune = commune;
-                if (nom) feu.nom = nom;
-            } else if (nom && !/^Feu (manuel|SIM)$/i.test(nom)) {
-                feu.commune = nom;
-            }
-            return feu;
-        });
+        .sort((a, b) => Number(a.savedAt) - Number(b.savedAt));
+}
+
+function formaterNpfCarnetFeu(f) {
+    const feu = {
+        heure: formatNpfCarnetHeureUtc(new Date(Number(f.savedAt))),
+        lat: Math.round(Number(f.latitude_mairie) * 1e5) / 1e5,
+        lon: Math.round(Number(f.longitude_mairie) * 1e5) / 1e5
+    };
+    const nom = String(f.nom_standard || '').trim();
+    if (f.locality_match) {
+        const commune = String(f.locality_commune_name || '').trim();
+        if (commune) feu.commune = commune;
+        if (nom) feu.nom = nom;
+    } else if (nom && !/^Feu (manuel|SIM)$/i.test(nom)) {
+        feu.commune = nom;
+    }
+    return feu;
+}
+
+function lireNpfCarnetFeux(debutMs, finMs, feuxSimulation = []) {
+    return listerNpfCarnetFeuxBruts(debutMs, finMs, feuxSimulation).map(formaterNpfCarnetFeu);
+}
+
+/* ==========================================================================
+   v17.98 (RUN v1.23) — FEU CONCERNÉ PAR LIGNE DU BLOC/FUEL (src/310) ET SUITE DES FEUX
+   Chaque ligne remplie garde une copie du feu choisi (champ « feu » de la ligne, mêmes champs que l'historique) et
+   « feuChoix » : « manuel » (choisi, ou feu de la carte pour la 1re ligne) ou « herite » (suit la ligne précédente).
+   Envoi au Carnet : champ facultatif « suiteFeux », toutes les lignes SAUF la dernière (bloc arrivée à l'aéroport),
+   lignes consécutives sur le même feu regroupées, 1 ligne = 1 largage (SUIVI LARGAGES ne note pas de nombre de largages
+   par rotation), lignes « Aucun feu » ignorées. Élément : { feu: n° du feu dans « feux » (1 = premier), largages } ;
+   feu créé hors de ce vol (ex. avant le bloc départ) : { feuHorsVol: { date, heure, lat, lon, commune… }, largages }.
+   ========================================================================== */
+function instantaneNpfCarnetFeu(f) {
+    if (!f || !Number.isFinite(Number(f.latitude_mairie)) || !Number.isFinite(Number(f.longitude_mairie))) return null;
+    const copie = { savedAt: Number(f.savedAt) || 0, latitude_mairie: Number(f.latitude_mairie), longitude_mairie: Number(f.longitude_mairie),
+        nom_standard: String(f.nom_standard || ''), locality_match: !!f.locality_match, locality_commune_name: String(f.locality_commune_name || '') };
+    if (Number.isInteger(Number(f.fireNumber)) && Number(f.fireNumber) > 0) copie.fireNumber = Number(f.fireNumber);
+    if (f.dep_code) copie.dep_code = String(f.dep_code);
+    return copie;
+}
+
+/* Feux créés pendant le vol (ordre de création) : même liste que « feux » envoyé au Carnet ; vol en cours : jusqu'à maintenant. */
+function listerNpfCarnetFeuxDuVol(flightId) {
+    const flight = (Array.isArray(dailyFlights) ? dailyFlights : []).find(f => f && f.id === flightId);
+    if (!flight) return [];
+    const entree = getNpfCarnetEntree(flightId) || {};
+    const state = flight.state || {};
+    const depart = lireNpfCarnetHeure(state['bloc-depart']);
+    let debut = Infinity, fin = Infinity;
+    if (depart && entree.blocDepartLe && entree.blocDepart === depart.texte) {
+        const departLe = new Date(entree.blocDepartLe);
+        debut = departLe.getTime();
+        if (flight.closed) {
+            let precedent = departLe;
+            (Array.isArray(state.calculator_table_data) ? state.calculator_table_data : []).forEach(l => {
+                const h = lireNpfCarnetHeure(l && l.time);
+                if (!h) return;
+                let instant = new Date(precedent.getFullYear(), precedent.getMonth(), precedent.getDate(), h.hh, h.mm, 0, 0);
+                if (instant < precedent) instant = decalerNpfCarnetJour(instant, 1);
+                precedent = instant;
+            });
+            fin = precedent.getTime();
+        }
+    }
+    return listerNpfCarnetFeuxBruts(debut, fin, entree.feuxSimulation);
+}
+
+function construireNpfCarnetSuiteFeux(feuxLignes, feuxBruts) {
+    const numeros = new Map(feuxBruts.map((f, i) => [cleNpfCarnetFeu(f), i + 1]));
+    const suite = [];
+    let derniereCle = null;
+    feuxLignes.forEach(f => {
+        if (!f || !Number.isFinite(Number(f.latitude_mairie)) || !Number.isFinite(Number(f.longitude_mairie))) return;   // « Aucun feu »
+        const cle = cleNpfCarnetFeu(f);
+        if (suite.length && cle === derniereCle) { suite[suite.length - 1].largages += 1; return; }
+        const numero = numeros.get(cle);
+        const element = numero
+            ? { feu: numero }
+            : { feuHorsVol: { date: formatNpfCarnetDateUtc(new Date(Number(f.savedAt) || 0)), ...formaterNpfCarnetFeu(f) } };
+        element.largages = 1;
+        suite.push(element);
+        derniereCle = cle;
+    });
+    return suite;
 }
 
 /*
@@ -294,7 +366,7 @@ function construireNpfCarnetVol(flightId, exporteLe = new Date()) {
     else departLe = new Date(entree.blocDepartLe);
 
     const lignes = (Array.isArray(state.calculator_table_data) ? state.calculator_table_data : [])
-        .map(l => ({ heure: lireNpfCarnetHeure(l && l.time), oaci: String((l && l.oaci) || '').trim().toUpperCase() }))
+        .map(l => ({ heure: lireNpfCarnetHeure(l && l.time), oaci: String((l && l.oaci) || '').trim().toUpperCase(), feu: (l && l.feu) || null }))
         .filter(l => l.heure);
     if (!lignes.length) manque.push('bloc arrivée (aucune heure dans la colonne BLOC Arrivée)');
 
@@ -354,7 +426,10 @@ function construireNpfCarnetVol(flightId, exporteLe = new Date()) {
         vol.arriveePosition = { lat: Number(positionArrivee.lat), lon: Number(positionArrivee.lon) };
     }
     vol.escales = construireNpfCarnetEscales(lignes.slice(0, -1), entree.positions);
-    vol.feux = lireNpfCarnetFeux(departLe.getTime(), arriveeLe.getTime(), entree.feuxSimulation);
+    const feuxBruts = listerNpfCarnetFeuxBruts(departLe.getTime(), arriveeLe.getTime(), entree.feuxSimulation);
+    vol.feux = feuxBruts.map(formaterNpfCarnetFeu);
+    const suiteFeux = construireNpfCarnetSuiteFeux(lignes.slice(0, -1).map(l => l.feu), feuxBruts);   // v17.98 (RUN v1.23)
+    if (suiteFeux.length) vol.suiteFeux = suiteFeux;
     if (entree.simulation === true) vol.simulation = true;   // v17.96 (RUN v1.20) — vrai vol : champ absent
 
     const taille = new TextEncoder().encode(JSON.stringify(vol)).length;

@@ -1,4 +1,4 @@
-/* NPF_STYLE_BUILD_VERSION: v17.97 */
+/* NPF_STYLE_BUILD_VERSION: v17.98 */
 /* v14.83 — nettoyage des références techniques et limitation des cartouches routiers. */
 /* v14.81 — recherche phonétique nationale élargie aux fragments sur deux lettres. */
 /* v14.80 — Brive conservé uniquement sous LFSL. */
@@ -19053,4 +19053,38 @@ body.npf-calculator-modal-open {
 }
 @media (prefers-reduced-motion: reduce) {
     .traffic-proximity-ring { animation-duration: 2s; }
+}
+
+/* v17.98 (repris tel quel de NPF-Q400-RUN v1.23) — BLOC/FUEL : feu concerné par ligne. La case OACI garde son affichage ; une liste native invisible
+   (select) la recouvre sur les lignes remplies : toucher le terrain ouvre la liste des feux du vol. */
+#bloc-fuel td.airport-oaci-cell.bloc-feu-cell {
+    position: relative;
+    cursor: pointer;
+}
+#bloc-fuel td.airport-oaci-cell select.bloc-feu-select {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    opacity: 0;
+    font-size: 16px;
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+}
+#bloc-fuel td.airport-oaci-cell select.bloc-feu-select:disabled {
+    pointer-events: none;
+}
+#bloc-fuel .bloc-feu-rotations {
+    margin: 6px 2px 0;
+    font-size: 13px;
+    font-weight: 800;
+    color: #475569;
+    line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }

@@ -647,7 +647,7 @@ function updateSuiviTab() {
     const getRowOaci = row => {
         const datasetOaci = String(row?.dataset?.airportOaci || '').trim().toUpperCase();
         if (datasetOaci) return datasetOaci;
-        const cellText = String(row?.querySelector('.airport-oaci-cell')?.textContent || '').replace('--', '').trim().toUpperCase();
+        const cellText = String((row?.querySelector('.airport-oaci-text') || row?.querySelector('.airport-oaci-cell'))?.textContent || '').replace('--', '').trim().toUpperCase();
         return cellText || '';
     };
     const getDistanceFromOaciToFire = oaci => {
