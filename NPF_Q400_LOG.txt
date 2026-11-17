@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
-Mise à jour : 16/11/2026
-Version de travail actuelle : TEST v17.98
+Mise à jour : 17/11/2026
+Version de travail actuelle : TEST v17.99
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -551,9 +551,12 @@ NON IMPLÉMENTÉ / OUVERT :
   07/10/2026 : programme VPS bfg-sofia-notams 1.2.0 PRÊT, NON INSTALLÉ
   (~/vps-a-copier/). v17.60 à pousser APRÈS l'installation de la 1.2.0
   (elle annonce « environ 1 minute ») ;
+- v17.99 : points VFR (VRP, autres points désignés, terrains SIA) et leurs zones de toucher toujours visibles pendant et
+  après le glisser et le pincement ; nouveau dessin d'un seul coup ; points dessinés 25 % au-delà de l'écran. HT / Routes,
+  recentrage GPS inchangés. À DÉCIDER : pincement moins fluide sur PC (CPU x6) ; À MESURER sur iPad ; COMMIT LOCAL, NON POUSSÉE ;
 - v17.98 : BLOC/FUEL, feu concerné par chaque ligne (en-tête « OACI / Feu », liste native au toucher du terrain, héritage
   de la ligne précédente) et champ facultatif « suiteFeux » envoyé au Carnet, repris tel quel de la RUN v1.23 ; NAS non
-  touché ; Export PDF inchangé. À MESURER sur iPad ; COMMIT LOCAL, NON POUSSÉE ;
+  touché ; Export PDF inchangé. À MESURER sur iPad ; POUSSÉE le 16/11/2026 (a688809) ;
 - v17.97 : cercle rouge clignotant autour d'un trafic SafeSky rouge (±500 ft) à moins de 4 NM, repris tel quel de la RUN
   v1.5 ; 2e commit (même version, décision de Bastien du 12/11) : même cercle aussi pour les Moyens Nationaux (même
   fonction, même style ; altitude inconnue ou trafic Off : pas de cercle). Décisions de Bastien (12/11) : Moyens Nationaux
@@ -853,30 +856,30 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.98
-Date : 16/11/2026
-Base : v17.97 (1884639, poussée le 12/11/2026)
+Version : TEST v17.99
+Date : 17/11/2026
+Base : v17.98 (a688809, poussée le 16/11/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.98.txt
-2_Index_v17.98.txt
-3_Manifest_v17.98.txt
-4_Script_v17.98.txt
-5_SIA_v17.98.txt
-6_Style_v17.98.txt
-7_Sw_v17.98.txt
+1_Modifications_v17.99.txt
+2_Index_v17.99.txt
+3_Manifest_v17.99.txt
+4_Script_v17.99.txt
+5_SIA_v17.99.txt
+6_Style_v17.99.txt
+7_Sw_v17.99.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.98 (et texte « TEST v17.98 » de l'écran de
+- Index : APP_VERSION = v17.99 (et texte « TEST v17.99 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.98
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.98
-- Style : NPF_STYLE_BUILD_VERSION = v17.98
+- Manifest : start_url = ./index.html?appv=v17.99
+- Script : NPF_SCRIPT_BUILD_VERSION = v17.99
+- Style : NPF_STYLE_BUILD_VERSION = v17.99
 - Nom de l'app (v17.94) : « NPF-Q400 TEST » (manifest name et short_name, <title>, apple-mobile-web-app-title)
 - PDF.js (v17.96) : dossier pdfjs/ (pdf.min.mjs, pdf.worker.min.mjs 4.10.38, LICENSE Apache-2.0, LISEZMOI.txt), à livrer
   avec les 7 fichiers ; fichiers indispensables du service worker.
-- Service Worker : `sw-v17-98_feu_par_ligne` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-98_feu_par_ligne`, `npf-q400-test-app-data-v1`,
+- Service Worker : `sw-v17-99_points_vfr_visibles` ; caches TEST
+  `npf-q400-test-app-shell-sw-v17-99_points_vfr_visibles`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-sia-2026-10-29-v02-g15`
 - SIA_DATA_REVISION (SW / Index sia.js?siav=) : sia-2026-10-29-v02-g15 (= NPF_SIA_DATA_REVISION
   de sia.js ; à changer à chaque nouveau sia.js)
@@ -889,15 +892,15 @@ Références de version cohérentes :
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.98 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v17.99 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
 - `sia.js` : par rapport à v17.70, outre-mer retiré, « a » de 34 VRP renseigné, table vrpAirportColors ajoutée (2 pastels), révision g6 ; zones, terrains et points de métropole identiques ; moteur tuiles (src/100) modifié en v17.66 sur demande
   explicite (limite de zoom propre à chaque carte, zoom 11 OACI 1/500 000) ;
-- tests v17.98 : entrée v17.98 ; sia.js strictement identique à la v17.81 ;
+- tests v17.99 : entrée v17.99 ; sia.js strictement identique à la v17.81 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82, v17.83, v17.84, v17.85, v17.86, v17.87, v17.88, v17.89, v17.90, v17.91, v17.92, v17.93, v17.94, v17.95, v17.96, v17.97 et v17.98 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82, v17.83, v17.84, v17.85, v17.86, v17.87, v17.88, v17.89, v17.90, v17.91, v17.92, v17.93, v17.94, v17.95, v17.96, v17.97, v17.98 et v17.99 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
   v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE ;
   v17.56 VALIDÉE en vol ; v17.57 VALIDÉE sur iPad.
 
@@ -2426,6 +2429,73 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v17.99 — POINTS VFR VISIBLES PENDANT ET APRÈS LE DÉPLACEMENT DE LA CARTE AU DOIGT
+Date : 16-17/11/2026
+Base fonctionnelle : v17.98 (commit a688809, poussée le 16/11/2026). Seule la TEST change : pérenne, RUN, BFG, NAS et VPS
+inchangés. sia.js inchangé (strictement identique à la v17.81). Décision de Bastien (16/11), suite à l'étude du 16/11 (sans
+modification) : les points VFR ne doivent plus disparaître pendant ni après le déplacement au doigt. Le séquenceur Tuiles ->
+VFR -> HT -> Routes (v17.02) est modifié sur demande explicite (règle 7) ; moteur de tuiles inchangé.
+
+0. ÉTUDE DU 16/11 (aucune modification ; outils_tests v99/cdp_vfr99.js, campagne99.sh)
+- VRP = un élément par point (L.marker divIcon, src/350:3755) ; autres points désignés et terrains SIA = un canvas commun
+  (src/350:3780, src/340:1093) ; zones de toucher = SVG commun, 56 px (src/350:98). Points à 5 NM et moins (src/350:2044).
+- Zone la plus chargée de Provence : Arles-Nîmes-Avignon-Istres (43,775 N ; 4,685 E) : à l'écran 81 VRP + 28 autres points
+  à 5 NM, 19 + 7 à 2 NM, 5 + 0 à 1 NM (122 / 35 / 7 zones de toucher).
+- Points masqués pendant tout geste manuel (src/080:662-666), réaffichés après tuiles + reconstruction (src/080:1017-1037).
+  Laissés affichés (page d'essai) : aucune différence mesurable pendant le glisser (CPU x6, 3 passages).
+
+1. ÉTAT DES LIEUX (causes de disparition)
+- (a) séquenceur : panes siaPointPane / siaPointTouchPane masqués pendant le geste (src/080:662-666) ;
+- (b) début de zoom sous charge (HT ou Routes) : tout le dessin SIA effacé, points compris (src/340:633-646, v16.58) ;
+- (c) reconstruction sous charge combinée (HT + Routes + zones) ou zones masquées : ancien dessin retiré AVANT la
+  construction du nouveau (src/350:3651-3670, v16.57) ; sans cette charge, double tampon et échange d'un seul coup (src/350:3809).
+- Marge des points avec HT + Routes + zones : 4 % de l'écran (src/340:108) : bords entrants sans points.
+
+2. CODE
+- src/080 (applyNpfMapOverlayPriorityVisibility) : points VFR et zones de toucher toujours visibles ; ordre du séquenceur et
+  HT / Routes inchangés (masqués pendant le geste comme avant).
+- src/340 : keepOnlySiaPointLayers(group) (ne garde que siaPointPane / siaPointTouchPane) ; clearSiaRenderedLayers({ keepPoints })
+  ; début de zoom sous charge : zones et libellés libérés comme avant, POINTS GARDÉS ; SIA_POINT_MARGIN_RATIO = 0.25.
+- src/350 (refreshSiaLayers) : reconstruction sous charge : l'ancien groupe perd ses zones mais garde ses points jusqu'au
+  « commit » (nouveau groupe ajouté puis ancien retiré dans la même tâche : jamais d'image sans points ni avec les deux) ;
+  points dessinés au moins à 25 % de l'écran au-delà de chaque bord (pointBounds).
+- Garantie v17.02 gardée : points = calques Leaflet accrochés à leurs coordonnées (jamais à l'écran) : jamais décalés ;
+  l'ancien dessin reste à sa vraie position jusqu'au remplacement. Recentrage GPS / suivi inchangés (v17.04).
+- Versions v17.99 ; service worker sw-v17-99_points_vfr_visibles.
+
+3. MARGE CHOISIE : 25 % (mesure CPU x6, Chrome, V11 hors ligne, HT + Routes + zones, Arles-Nîmes-Avignon-Istres, 3 passages
+   alternés, 4 glissers + 2 pincements par échelle ; v99/cdp_vfr100.js, campagne100.sh, out/f100_*.json)
+- Glisser 5 NM (moyenne images/s ; images > 50 ms sur 12 gestes) : v17.98 92,4 / 32 ; 25 % 91,1 / 29 ; 35 % 86,5 / 42 ;
+  50 % 91,5 / 41. 25 % = seule marge sans images lentes de plus ; 35 % et 50 % : environ un tiers de plus, à chaque passage.
+  Points dessinés à 5 NM : VRP 89 -> 103 (25 %), 112 (35 %), 128 (50 %).
+- Limite : autres points et zones de toucher sont sur des images qui dépassent l'écran de 35 % (padding des renderers,
+  inchangé) : au-delà, seuls les VRP auraient leurs points pendant un glisser.
+
+4. ESSAIS (PC ; tout coupé sauf localhost ; faux VPS, NAS simulé ; aucune requête au vrai VPS ni au vrai NAS)
+- Fluidité glisser, 25 % contre v17.98 (moyenne images/s ; images > 50 ms / 12 gestes) : 5 NM 91,1 / 29 contre 92,4 / 32 ;
+  2 NM 114,9 / 19 contre 117,0 / 16 ; 1 NM 123,4 / 12 contre 128,7 / 7 (par passage 2-6 contre 2-3 : dans la variation du PC).
+- PINCEMENT MOINS FLUIDE (quelle que soit la marge, à chaque passage) : 5 NM 27,8 images/s et 117 images > 50 ms contre 42,5 et
+  50 ; 2 NM 50,5 contre 65,2 ; 1 NM 69,7 contre 72,2. Cause : la v17.98 effaçait tout le dessin SIA au début du zoom ; les
+  points gardés sont recalés par Leaflet à chaque image du pincement. À DÉCIDER par Bastien.
+- Après le geste : plus longue tâche de reconstruction 5 NM ~205 ms contre ~168 ms (plus de points, après le geste).
+- Bon fonctionnement (v99/pw_vfr99_ok.js ; relevé image par image) : Chrome 12/12 (vrais glissers et pincements au doigt),
+  WebKit tactile service worker bloqué 10/10 (glisser à la souris, changements d'échelle animés : pas de pincement à deux
+  doigts dans Playwright WebKit) : au milieu du geste points visibles, écart 0 px ; aucune image sans panneau ni sans point
+  pendant et après les gestes (5 / 2 / 1 NM, pincements 5->2->1 NM et retour, zooms animés) ; bords entrés avec tous leurs
+  VRP à la fin du geste ; toucher d'un point VFR après un geste : sa fiche s'ouvre. Contre-essai v17.98 : 3/12 (détecte le
+  défaut : panneau masqué ~900 images par série, bords sans points, ~250 images sans points par pincement).
+- Traits avec WP et Rot., Go To, WP perso, adresse (pw_v1790.js) : Chrome et WebKit 71/71, mêmes résultats que la v17.98.
+- Non-régression rapide (cdp_nr90.js, profil P11, vraie V11) : 13/13.
+- Non-régression habituelle (run_fin99.sh, comparée à la v17.98 : HT + Routes et gestes, retour du suivi GPS, popups terrain,
+  NPF-Q400 sans « NPF » seul, Moyens Nationaux) : identique (écarts : temps, date de la déclinaison, compteurs du DIAG),
+  aucune erreur JS. Mise à jour v17.98 -> v17.99 sans interception puis hors ligne, sur le code final : v17.99 servie,
+  carte (50 NM), communes et PÉLIC hors ligne, seuls les caches npf-q400-test-* touchés, 3 caches de la pérenne intacts.
+- Incidents d'essai : pause du 16/11 au soir (PC éteint), série reprise le 17/11 ; référence v17.98 WebKit de pw_v1790
+  arrêtée une fois (résultat de recherche pas encore affiché), relancée : 71/71.
+- À REGARDER SUR L'IPAD : glisser et pincement avec HT + Routes + zones à 5 NM sur une zone chargée (fluidité, surtout le
+  pincement) ; points jamais absents ni décalés, y compris pendant le pincement (canvas et SVG sous WebKit) ; bords qui
+  entrent ; toucher d'un VRP juste après un geste ; DIAG (durée de la reconstruction SIA après geste).
 
 VERSION TEST v17.98 — BLOC/FUEL : FEU CONCERNÉ PAR CHAQUE LIGNE ET « suiteFeux » ENVOYÉ AU CARNET (REPRIS DE NPF-Q400-RUN v1.23)
 Date : 16/11/2026

@@ -3512,7 +3512,10 @@ async function refreshSiaLayers(reason = 'manual') {
                 : SIA_RENDER_BOUNDS_PAD_RATIO)
             : SIA_POINT_ONLY_RENDER_BOUNDS_PAD_RATIO;
         const renderBounds = currentBounds.pad(renderPadRatio);
-        const pointBounds = renderBounds.pad(0.03);
+        /* v17.99 — points dessinés au moins à SIA_POINT_MARGIN_RATIO de l'écran au-delà de chaque bord (src/340). */
+        const pointBounds = (renderPadRatio >= SIA_POINT_MARGIN_RATIO
+            ? renderBounds
+            : currentBounds.pad(SIA_POINT_MARGIN_RATIO)).pad(0.03);
         let rendered = 0;
 
         /*
@@ -3633,13 +3636,17 @@ async function refreshSiaLayers(reason = 'manual') {
             !preservePreviousSiaDuringRebuild
             && previousSiaLayerGroupForSwap
         ) {
+            /* v17.99 — l'ancien dessin perd ses zones (mémoire iPad, v16.57) mais GARDE ses points VFR et leurs zones
+             * de toucher, à leur position géographique, jusqu'au remplacement d'un seul coup (« commit » ci-dessous) :
+             * plus de passage sans points. Ancien groupe déjà hors carte : libéré comme avant. */
             try {
                 if (map.hasLayer(previousSiaLayerGroupForSwap)) {
-                    map.removeLayer(previousSiaLayerGroupForSwap);
+                    keepOnlySiaPointLayers(previousSiaLayerGroupForSwap);
+                } else {
+                    previousSiaLayerGroupForSwap.clearLayers();
+                    previousSiaLayerGroupForSwap = null;
                 }
-                previousSiaLayerGroupForSwap.clearLayers();
             } catch (_) {}
-            previousSiaLayerGroupForSwap = null;
             /* v16.57 — l'ancien groupe n'existe plus : sa couverture ne doit
              * jamais être réutilisée si le nouveau rendu est interrompu par un zoom. */
             siaRenderedCoverageBounds = null;

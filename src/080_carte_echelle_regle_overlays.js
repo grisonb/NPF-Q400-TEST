@@ -660,9 +660,13 @@ function applyNpfMapOverlayPriorityVisibility() {
     };
 
     // Étape 2 — points VFR.
+    /* v17.99 — les points VFR (VRP, autres points désignés, terrains SIA) et leurs zones de toucher ne sont plus
+     * masqués pendant ni après un geste : ils restent visibles et suivent la carte (calques Leaflet accrochés à
+     * leurs coordonnées, jamais à l'écran). Le séquenceur garde son ordre et ne change rien pour HT / Routes ;
+     * le nouveau dessin des points remplace l'ancien d'un seul coup (src/350, refreshSiaLayers). */
     setPaneVisibility(
         ['siaPointPane', 'siaPointTouchPane'],
-        !active || stage >= 1
+        true
     );
 
     // Étape 3 — lignes HT.
@@ -1019,9 +1023,9 @@ async function runNpfMapOverlayPriorityRestore(token, reason = 'map-end') {
 
     /*
      * 2 — POINTS VFR
-     * Le pane reste encore masqué pendant la reconstruction SIA. Les points
-     * n'apparaissent qu'une fois la vue finale recalculée : aucun ancien rendu
-     * VFR n'est brièvement montré avant le nouveau.
+     * v17.99 : le pane n'est plus masqué. L'ancien dessin des points reste
+     * affiché (à sa vraie position géographique) pendant la reconstruction SIA,
+     * puis le nouveau le remplace d'un seul coup (src/350, refreshSiaLayers).
      */
     if (typeof hasAnyEnabledSiaFilter !== 'function' || hasAnyEnabledSiaFilter()) {
         try {

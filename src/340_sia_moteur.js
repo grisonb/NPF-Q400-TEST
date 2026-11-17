@@ -107,6 +107,12 @@ function setSiaMapVrpVisible(visible) {
 const SIA_RENDER_BOUNDS_PAD_RATIO = 0.25;
 const SIA_COMBINED_HEAVY_RENDER_PAD_RATIO = 0.04;
 const SIA_POINT_ONLY_RENDER_BOUNDS_PAD_RATIO = 0.80;
+/* v17.99 — points VFR (et terrains SIA) dessinés plus loin que l'écran, de cette fraction de l'écran au-delà de chaque
+ * bord, même quand les zones n'ont qu'une petite marge (HT + Routes + zones : 0,04) : la partie qui entre en
+ * glissant a déjà ses points. Choisie par mesure (CPU x6, Arles-Nîmes-Avignon-Istres, 5 NM, 3 passages contre la
+ * v17.98) : 25 % = seule marge sans images lentes de plus pendant le glisser (35 % et 50 % : environ un tiers de plus) ;
+ * les images des autres points et des zones de toucher dépassent l'écran de 35 % (renderers, padding 0.35). */
+const SIA_POINT_MARGIN_RATIO = 0.25;
 let siaRenderedCoverageBounds = null;
 let siaRenderedZoom = null;
 let siaRenderedSignature = '';
@@ -643,7 +649,8 @@ function cancelAllSiaWorkForZoomStart() {
         && (showRoadOverlayLayer || showHighVoltageLinesLayer || renderedZoneCount >= 120)
     );
     if (releaseOldSiaNow) {
-        clearSiaRenderedLayers();
+        /* v17.99 — zones et libellés libérés comme avant ; les points VFR restent affichés pendant le pincement. */
+        clearSiaRenderedLayers({ keepPoints: true });
     }
 
     npfDiagSiaInteraction(
@@ -1099,6 +1106,19 @@ function ensureSiaMapPanes() {
  * libérées ou redessinées (zoom, seuils, suivi) : sa coloration est dans une couche à part et ne
  * disparaît qu'à la fermeture de sa fenêtre. Seule la suppression des données efface la sélection.
  */
+/* v17.99 — ne garder dans un groupe SIA que les points VFR / terrains (siaPointPane) et leurs zones de toucher
+ * (siaPointTouchPane) ; zones, surfaces tactiles des zones et libellés sont retirés. Les points gardés restent à
+ * leur position géographique jusqu'au remplacement d'un seul coup par le nouveau dessin (src/350). */
+function keepOnlySiaPointLayers(group) {
+    if (!group) return;
+    const toRemove = [];
+    group.eachLayer(layer => {
+        const pane = layer?.options?.pane;
+        if (pane !== 'siaPointPane' && pane !== 'siaPointTouchPane') toRemove.push(layer);
+    });
+    toRemove.forEach(layer => { try { group.removeLayer(layer); } catch (_) {} });
+}
+
 function clearSiaRenderedLayers(options = {}) {
     siaRenderedCoverageBounds = null;
     siaRenderedZoom = null;
@@ -1125,7 +1145,12 @@ function clearSiaRenderedLayers(options = {}) {
     }
     siaAirspaceTouchEntries = [];
     if (siaLayerGroup) {
-        try { siaLayerGroup.clearLayers(); } catch (_) {}
+        /* v17.99 — keepPoints : début de zoom sous charge, les points VFR restent affichés. */
+        if (options.keepPoints === true) {
+            try { keepOnlySiaPointLayers(siaLayerGroup); } catch (_) {}
+        } else {
+            try { siaLayerGroup.clearLayers(); } catch (_) {}
+        }
     }
     /* v17.52 — bordures dans leur calque à part. */
     try { clearSiaInnerBands(); } catch (_) {}

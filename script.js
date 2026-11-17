@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.98';
+const NPF_SCRIPT_BUILD_VERSION = 'v17.99';
 
 
 /*
@@ -3309,7 +3309,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.98 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v17.99 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -12522,9 +12522,13 @@ function applyNpfMapOverlayPriorityVisibility() {
     };
 
     // Étape 2 — points VFR.
+    /* v17.99 — les points VFR (VRP, autres points désignés, terrains SIA) et leurs zones de toucher ne sont plus
+     * masqués pendant ni après un geste : ils restent visibles et suivent la carte (calques Leaflet accrochés à
+     * leurs coordonnées, jamais à l'écran). Le séquenceur garde son ordre et ne change rien pour HT / Routes ;
+     * le nouveau dessin des points remplace l'ancien d'un seul coup (src/350, refreshSiaLayers). */
     setPaneVisibility(
         ['siaPointPane', 'siaPointTouchPane'],
-        !active || stage >= 1
+        true
     );
 
     // Étape 3 — lignes HT.
@@ -12881,9 +12885,9 @@ async function runNpfMapOverlayPriorityRestore(token, reason = 'map-end') {
 
     /*
      * 2 — POINTS VFR
-     * Le pane reste encore masqué pendant la reconstruction SIA. Les points
-     * n'apparaissent qu'une fois la vue finale recalculée : aucun ancien rendu
-     * VFR n'est brièvement montré avant le nouveau.
+     * v17.99 : le pane n'est plus masqué. L'ancien dessin des points reste
+     * affiché (à sa vraie position géographique) pendant la reconstruction SIA,
+     * puis le nouveau le remplace d'un seul coup (src/350, refreshSiaLayers).
      */
     if (typeof hasAnyEnabledSiaFilter !== 'function' || hasAnyEnabledSiaFilter()) {
         try {
@@ -60687,6 +60691,12 @@ function setSiaMapVrpVisible(visible) {
 const SIA_RENDER_BOUNDS_PAD_RATIO = 0.25;
 const SIA_COMBINED_HEAVY_RENDER_PAD_RATIO = 0.04;
 const SIA_POINT_ONLY_RENDER_BOUNDS_PAD_RATIO = 0.80;
+/* v17.99 — points VFR (et terrains SIA) dessinés plus loin que l'écran, de cette fraction de l'écran au-delà de chaque
+ * bord, même quand les zones n'ont qu'une petite marge (HT + Routes + zones : 0,04) : la partie qui entre en
+ * glissant a déjà ses points. Choisie par mesure (CPU x6, Arles-Nîmes-Avignon-Istres, 5 NM, 3 passages contre la
+ * v17.98) : 25 % = seule marge sans images lentes de plus pendant le glisser (35 % et 50 % : environ un tiers de plus) ;
+ * les images des autres points et des zones de toucher dépassent l'écran de 35 % (renderers, padding 0.35). */
+const SIA_POINT_MARGIN_RATIO = 0.25;
 let siaRenderedCoverageBounds = null;
 let siaRenderedZoom = null;
 let siaRenderedSignature = '';
@@ -61223,7 +61233,8 @@ function cancelAllSiaWorkForZoomStart() {
         && (showRoadOverlayLayer || showHighVoltageLinesLayer || renderedZoneCount >= 120)
     );
     if (releaseOldSiaNow) {
-        clearSiaRenderedLayers();
+        /* v17.99 — zones et libellés libérés comme avant ; les points VFR restent affichés pendant le pincement. */
+        clearSiaRenderedLayers({ keepPoints: true });
     }
 
     npfDiagSiaInteraction(
@@ -61679,6 +61690,19 @@ function ensureSiaMapPanes() {
  * libérées ou redessinées (zoom, seuils, suivi) : sa coloration est dans une couche à part et ne
  * disparaît qu'à la fermeture de sa fenêtre. Seule la suppression des données efface la sélection.
  */
+/* v17.99 — ne garder dans un groupe SIA que les points VFR / terrains (siaPointPane) et leurs zones de toucher
+ * (siaPointTouchPane) ; zones, surfaces tactiles des zones et libellés sont retirés. Les points gardés restent à
+ * leur position géographique jusqu'au remplacement d'un seul coup par le nouveau dessin (src/350). */
+function keepOnlySiaPointLayers(group) {
+    if (!group) return;
+    const toRemove = [];
+    group.eachLayer(layer => {
+        const pane = layer?.options?.pane;
+        if (pane !== 'siaPointPane' && pane !== 'siaPointTouchPane') toRemove.push(layer);
+    });
+    toRemove.forEach(layer => { try { group.removeLayer(layer); } catch (_) {} });
+}
+
 function clearSiaRenderedLayers(options = {}) {
     siaRenderedCoverageBounds = null;
     siaRenderedZoom = null;
@@ -61705,7 +61729,12 @@ function clearSiaRenderedLayers(options = {}) {
     }
     siaAirspaceTouchEntries = [];
     if (siaLayerGroup) {
-        try { siaLayerGroup.clearLayers(); } catch (_) {}
+        /* v17.99 — keepPoints : début de zoom sous charge, les points VFR restent affichés. */
+        if (options.keepPoints === true) {
+            try { keepOnlySiaPointLayers(siaLayerGroup); } catch (_) {}
+        } else {
+            try { siaLayerGroup.clearLayers(); } catch (_) {}
+        }
     }
     /* v17.52 — bordures dans leur calque à part. */
     try { clearSiaInnerBands(); } catch (_) {}
@@ -67677,7 +67706,10 @@ async function refreshSiaLayers(reason = 'manual') {
                 : SIA_RENDER_BOUNDS_PAD_RATIO)
             : SIA_POINT_ONLY_RENDER_BOUNDS_PAD_RATIO;
         const renderBounds = currentBounds.pad(renderPadRatio);
-        const pointBounds = renderBounds.pad(0.03);
+        /* v17.99 — points dessinés au moins à SIA_POINT_MARGIN_RATIO de l'écran au-delà de chaque bord (src/340). */
+        const pointBounds = (renderPadRatio >= SIA_POINT_MARGIN_RATIO
+            ? renderBounds
+            : currentBounds.pad(SIA_POINT_MARGIN_RATIO)).pad(0.03);
         let rendered = 0;
 
         /*
@@ -67798,13 +67830,17 @@ async function refreshSiaLayers(reason = 'manual') {
             !preservePreviousSiaDuringRebuild
             && previousSiaLayerGroupForSwap
         ) {
+            /* v17.99 — l'ancien dessin perd ses zones (mémoire iPad, v16.57) mais GARDE ses points VFR et leurs zones
+             * de toucher, à leur position géographique, jusqu'au remplacement d'un seul coup (« commit » ci-dessous) :
+             * plus de passage sans points. Ancien groupe déjà hors carte : libéré comme avant. */
             try {
                 if (map.hasLayer(previousSiaLayerGroupForSwap)) {
-                    map.removeLayer(previousSiaLayerGroupForSwap);
+                    keepOnlySiaPointLayers(previousSiaLayerGroupForSwap);
+                } else {
+                    previousSiaLayerGroupForSwap.clearLayers();
+                    previousSiaLayerGroupForSwap = null;
                 }
-                previousSiaLayerGroupForSwap.clearLayers();
             } catch (_) {}
-            previousSiaLayerGroupForSwap = null;
             /* v16.57 — l'ancien groupe n'existe plus : sa couverture ne doit
              * jamais être réutilisée si le nouveau rendu est interrompu par un zoom. */
             siaRenderedCoverageBounds = null;
