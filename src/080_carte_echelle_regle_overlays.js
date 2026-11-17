@@ -663,10 +663,11 @@ function applyNpfMapOverlayPriorityVisibility() {
     /* v17.99 — les points VFR (VRP, autres points désignés, terrains SIA) et leurs zones de toucher ne sont plus
      * masqués pendant ni après un geste : ils restent visibles et suivent la carte (calques Leaflet accrochés à
      * leurs coordonnées, jamais à l'écran). Le séquenceur garde son ordre et ne change rien pour HT / Routes ;
-     * le nouveau dessin des points remplace l'ancien d'un seul coup (src/350, refreshSiaLayers). */
+     * le nouveau dessin des points remplace l'ancien d'un seul coup (src/350, refreshSiaLayers).
+     * v17.99 (2e commit) : sauf pendant un zoom (pincement), où src/340 les masque comme en v17.98. */
     setPaneVisibility(
         ['siaPointPane', 'siaPointTouchPane'],
-        true
+        !(typeof siaPointPanesHiddenForZoom !== 'undefined' && siaPointPanesHiddenForZoom)
     );
 
     // Étape 3 — lignes HT.

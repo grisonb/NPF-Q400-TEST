@@ -551,9 +551,10 @@ NON IMPLÉMENTÉ / OUVERT :
   07/10/2026 : programme VPS bfg-sofia-notams 1.2.0 PRÊT, NON INSTALLÉ
   (~/vps-a-copier/). v17.60 à pousser APRÈS l'installation de la 1.2.0
   (elle annonce « environ 1 minute ») ;
-- v17.99 : points VFR (VRP, autres points désignés, terrains SIA) et leurs zones de toucher toujours visibles pendant et
-  après le glisser et le pincement ; nouveau dessin d'un seul coup ; points dessinés 25 % au-delà de l'écran. HT / Routes,
-  recentrage GPS inchangés. À DÉCIDER : pincement moins fluide sur PC (CPU x6) ; À MESURER sur iPad ; COMMIT LOCAL, NON POUSSÉE ;
+- v17.99 : points VFR (VRP, autres points désignés, terrains SIA) et leurs zones de toucher visibles pendant le glisser et
+  jamais absents après un geste (nouveau dessin d'un seul coup) ; points dessinés 25 % au-delà de l'écran ; 2e commit (choix
+  de Bastien du 17/11) : masqués seulement pendant un zoom (pincement), comme en v17.98, le pincement 1er commit étant moins
+  fluide. HT / Routes, recentrage GPS inchangés. À MESURER sur iPad ; 2 COMMITS LOCAUX, NON POUSSÉE ;
 - v17.98 : BLOC/FUEL, feu concerné par chaque ligne (en-tête « OACI / Feu », liste native au toucher du terrain, héritage
   de la ligne précédente) et champ facultatif « suiteFeux » envoyé au Carnet, repris tel quel de la RUN v1.23 ; NAS non
   touché ; Export PDF inchangé. À MESURER sur iPad ; POUSSÉE le 16/11/2026 (a688809) ;
@@ -2431,7 +2432,29 @@ HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
 
 VERSION TEST v17.99 — POINTS VFR VISIBLES PENDANT ET APRÈS LE DÉPLACEMENT DE LA CARTE AU DOIGT
+                     + 2e COMMIT : MASQUÉS SEULEMENT PENDANT LE PINCEMENT
 Date : 16-17/11/2026
+
+5. 2e COMMIT (même version, sans amend ; v17.99 non poussée) — CHOIX DE BASTIEN DU 17/11 : POSSIBILITÉ 2
+Le 1er commit gardait les points pendant le pincement : pincement moins fluide (point 4). Décision : points VFR visibles pendant
+le glisser, masqués SEULEMENT pendant le pincement (comme en v17.98), jamais absents après un geste (échange d'un seul coup) ;
+marge 25 % gardée.
+- Code : src/340 setSiaPointPanesHiddenForZoom (panes siaPointPane / siaPointTouchPane en display:none au zoomstart, réaffichés
+  au zoomend ; les calques restent en mémoire à leurs coordonnées : l'ancien dessin réapparaît à sa vraie position dès la fin
+  du zoom, puis le nouveau le remplace d'un seul coup) ; src/080 : le séquenceur respecte ce masquage. Vaut pour tout zoom
+  (pincement, boutons +/-, double toucher). Glisser, reconstruction, marge, HT / Routes, recentrage GPS : comme au 1er commit.
+- Fluidité CPU x6 (v99/campagne101.sh + campagne101b.sh, 6 passages alternés contre la v17.98, out/f101_*.json) : pincement,
+  médiane par passage des images/s (v17.99 / v17.98) : 5 NM 45,9 / 44,4 ; 2 NM 58,0 / 61,4 ; 1 NM 68,9 / 70,7 -> REVENU au
+  niveau de la v17.98. Deux passages v17.99 perturbés par le PC (p2 : étalon 586 ms au lieu de 240-440 ; p3 à 1 NM) ; les
+  autres passages sont dans la plage de la v17.98 (ex. 1 NM : 82/2, 70/4, 74/6 contre 70/5, 69/6, 71/5 images/s / images lentes).
+- Bon fonctionnement (pw_vfr99_ok.js adapté : images pendant un zoom comptées à part) : Chrome 12/12 (milieu du pincement :
+  points masqués ; toutes les images de zoom masquées ; dès la fin du zoom aucune image sans panneau ni sans point, écart 0 px ;
+  glisser 5 / 2 / 1 NM et bords entrés comme au 1er commit ; toucher d'un VRP après un geste : sa fiche) ; WebKit 10/10.
+- Non-régression rapide (cdp_nr90.js, P11, vraie V11) : 13/13. Mise à jour v17.98 -> v17.99 sans interception puis hors ligne,
+  sur le code final : v17.99 servie, carte (50 NM), communes et PÉLIC hors ligne, 3 caches de la pérenne intacts. Aucun appel
+  au vrai VPS ni au vrai NAS.
+- À REGARDER SUR L'IPAD : glisser avec HT + Routes + zones à 5 NM (points toujours là, bords qui entrent) ; fin de pincement :
+  les points réapparaissent tout de suite, à la bonne place ; toucher d'un VRP juste après un geste.
 Base fonctionnelle : v17.98 (commit a688809, poussée le 16/11/2026). Seule la TEST change : pérenne, RUN, BFG, NAS et VPS
 inchangés. sia.js inchangé (strictement identique à la v17.81). Décision de Bastien (16/11), suite à l'étude du 16/11 (sans
 modification) : les points VFR ne doivent plus disparaître pendant ni après le déplacement au doigt. Le séquenceur Tuiles ->

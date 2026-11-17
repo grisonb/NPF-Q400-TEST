@@ -200,6 +200,21 @@ const SIA_STARTUP_PASSIVE_MOVEEND_GUARD_MS = 2500;
 let siaStartupInitialRefreshPending = false;
 /* v16.58 — empêche moveend de lancer un rendu intermédiaire pendant un zoom. */
 let siaZoomGestureActive = false;
+/* v17.99 (2e commit, choix de Bastien du 17/11) — points VFR masqués SEULEMENT pendant un zoom (pincement, boutons, double
+ * toucher), comme en v17.98 : panes en display:none (aucun dessin pendant le zoom) ; les calques restent en mémoire, à
+ * leurs coordonnées, et réapparaissent dès la fin du zoom (zoomend), jusqu'au remplacement d'un seul coup (src/350). */
+let siaPointPanesHiddenForZoom = false;
+function setSiaPointPanesHiddenForZoom(hidden) {
+    siaPointPanesHiddenForZoom = !!hidden;
+    ['siaPointPane', 'siaPointTouchPane'].forEach(name => {
+        try {
+            const pane = map && map.getPane ? map.getPane(name) : null;
+            if (!pane) return;
+            pane.style.display = hidden ? 'none' : '';
+            pane.style.visibility = hidden ? 'hidden' : 'visible';
+        } catch (_) {}
+    });
+}
 /* v16.62 — lorsqu'un zoom out HT+Routes est en cours, le moveend associé ne
  * doit pas déclencher un rendu SIA avant la vue finale stabilisée. */
 let siaHeavyZoomFinalRefreshPending = false;
@@ -3541,6 +3556,8 @@ function initializeSiaSystem() {
             markSiaDecorationMapMotion();
             npfDiagZoomStartedAt = NPF_STARTUP_DIAGNOSTIC.now();
             siaZoomGestureActive = true;
+            /* v17.99 (2e commit) — points VFR masqués pendant le zoom seulement. */
+            setSiaPointPanesHiddenForZoom(true);
             /* v16.62 — une transaction Routes/HT différée peut couvrir plusieurs
              * zoomend intermédiaires. Garder le verrou SIA tant que son Promise
              * commun n'est pas résolu. */
@@ -3556,6 +3573,8 @@ function initializeSiaSystem() {
             try { applySiaAirspaceOutlines(); } catch (_) {}
             const now = NPF_STARTUP_DIAGNOSTIC.now();
             siaZoomGestureActive = false;
+            /* v17.99 (2e commit) — fin du zoom : l'ancien dessin des points réapparaît à sa vraie position. */
+            setSiaPointPanesHiddenForZoom(false);
             if (npfDiagZoomStartedAt > 0) {
                 npfDiagZoom({
                     dureeMs: Math.round(now - npfDiagZoomStartedAt),
