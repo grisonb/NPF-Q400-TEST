@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.99';
+const NPF_SCRIPT_BUILD_VERSION = 'v18.00';
 
 
 /*
@@ -654,6 +654,8 @@ const NPF_DIAG_DETAIL = (() => {
         felt: [],
         messages: [],
         bfgAttempts: [],
+        /* v18.00 — échecs des positions Moyens Nationaux (heure, type, contrôle Internet). */
+        glrFailures: [],
         glrClickAt: 0,
         glrClickCaptcha: false,
         fdsClick: null,
@@ -2842,6 +2844,17 @@ const NPF_DIAG_DETAIL = (() => {
                 error: String(entry?.error || '').slice(0, 90)
             });
             if (state.bfgAttempts.length > 20) state.bfgAttempts.splice(0, state.bfgAttempts.length - 20);
+        },
+        glrPositionsFailure: entry => {
+            state.glrFailures.push({
+                at: Date.now(),
+                kind: String(entry?.kind || 'échec'),
+                type: String(entry?.type || '—').slice(0, 90),
+                http: Number(entry?.http) || 0,
+                control: String(entry?.control || '—').slice(0, 60),
+                streak: Number(entry?.streak) || 0
+            });
+            if (state.glrFailures.length > 30) state.glrFailures.splice(0, state.glrFailures.length - 30);
         }
     };
 })();
@@ -2992,6 +3005,11 @@ function npfDiagBfgBridgeAttempt(entry) {
     try { NPF_DIAG_DETAIL.bfgBridgeAttempt(entry); } catch (_) {}
 }
 
+/* v18.00 — échec des positions Moyens Nationaux / déconnexion (appelé par src/180). */
+function npfDiagGlobalLinkPositionsFailure(entry) {
+    try { NPF_DIAG_DETAIL.glrPositionsFailure(entry); } catch (_) {}
+}
+
 /* v17.33 — DIAG I8 : points d'appel du moteur de tuiles (mesure seule). */
 function npfDiagTileNow() {
     try { return NPF_STARTUP_DIAGNOSTIC.now(); } catch (_) { return 0; }
@@ -3071,6 +3089,7 @@ function npfDiagDetailPersistSnapshot() {
             felt: s.felt.slice(-20),
             messages: s.messages.slice(-15),
             bfgAttempts: s.bfgAttempts.slice(-10),
+            glrFailures: s.glrFailures.slice(-15),
             readMinutes: Array.from(s.readMinutes.values()).slice(-15).map(npfDiagCompactReadMinute),
             slowReadBatches: s.slowReadBatches.slice(-10),
             fireSelections: s.fireSelections.slice(-10),
@@ -3309,7 +3328,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.99 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v18.00 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -3764,6 +3783,13 @@ function formatNpfDiagMessageLine(item) {
     return '   ' + formatNpfDiagClock(item.at) + ' | ' + item.source + ' | « ' + item.text + ' »';
 }
 
+/* v18.00 — une ligne par échec des positions Moyens Nationaux. */
+function formatNpfDiagGlrFailureLine(item) {
+    return '   ' + formatNpfDiagClock(item.at) + ' | ' + item.kind
+        + (item.kind === 'échec' ? ' n°' + item.streak + ' en erreur réseau de suite' : '')
+        + ' | ' + item.type + (item.http ? ' | HTTP ' + item.http : '') + ' | contrôle Internet : ' + item.control;
+}
+
 function formatNpfDiagBfgAttemptLine(item) {
     return '   ' + formatNpfDiagClock(item.at) + ' | tentative ' + item.attempt + ' | ' + item.result
         + ' | ' + Math.round(Number(item.ms) || 0) + ' ms'
@@ -3784,6 +3810,7 @@ function appendNpfDiagNasSection(lines) {
         list.forEach(item => { try { lines.push(formatter(item)); } catch (_) {} });
     };
     block('Pont BFG (tentatives) :', s.bfgAttempts, formatNpfDiagBfgAttemptLine, 'Aucune tentative dans cette session.');
+    block('Trafic Moyens Nationaux — échecs des positions (v18.00) :', s.glrFailures, formatNpfDiagGlrFailureLine, 'Aucun échec dans cette session.');
     block('Temps ressenti (appui -> affichage) :', s.felt, formatNpfDiagFeltLine, 'Aucun appui FdS / GAAR / Trafic Moyens Nationaux.');
     block('Messages FdS / BFG / Trafic Moyens Nationaux affichés :', s.messages, formatNpfDiagMessageLine, 'Aucun message.');
     block('Requêtes NAS (30 dernières) :', s.nasRequests, formatNpfDiagNasRequestLine, 'Aucune requête.');
@@ -4072,6 +4099,7 @@ function appendNpfDiagDetailRestoredSections(lines, detail) {
     section('Sondes après un paquet de lectures lent :', detail.packProbes, formatNpfDiagPackProbeLine);
     section('Activité de stockage :', detail.storage, formatNpfDiagStorageEventLine);
     section('Pont BFG (tentatives) :', detail.bfgAttempts, formatNpfDiagBfgAttemptLine);
+    section('Trafic Moyens Nationaux — échecs des positions :', detail.glrFailures, formatNpfDiagGlrFailureLine);
     section('Temps ressenti FdS / Trafic Moyens Nationaux :', detail.felt, formatNpfDiagFeltLine);
     section('Messages FdS / BFG / Trafic Moyens Nationaux affichés :', detail.messages, formatNpfDiagMessageLine);
     section('Requêtes NAS (dernières) :', detail.nasRequests, formatNpfDiagNasRequestLine);
@@ -33440,6 +33468,113 @@ let npfGlobalLinkLastError = '';
 let npfGlobalLinkNasConfirmedToken = '';
 let npfGlobalLinkNasConfirmedAt = 0;
 
+/*
+ * v18.00 — SESSION MOYENS NATIONAUX EXPIRÉE ? Constat iPad v17.99 : « positions indisponibles (réseau) » sans fin, alors
+ * qu'une nouvelle connexion remarche. Cause probable : session refusée par le NAS (401) dont la réponse est remplacée par
+ * une page HTML sans CORS : l'app ne lit qu'un « Load failed » (erreur réseau), n'efface jamais la session et ne redemande
+ * pas le code. Ajouts (TEST seulement, NAS inchangé) :
+ * - bouton « Déconnexion » (appui long sur le bouton Moyens Nationaux) : efface SEULEMENT la session Moyens Nationaux,
+ *   puis redemande le code ; FdS / GAAR (session NPF-Q400), BFG et réglages intacts ;
+ * - bandeau discret « session expirée ? » (jamais de fenêtre qui s'ouvre seule) quand les positions échouent en erreur
+ *   réseau NPF_GLOBAL_LINK_SESSION_HINT_AFTER_FAILURES fois de suite ET qu'un contrôle léger montre que le NAS répond ;
+ *   réseau vraiment coupé : aucun bandeau, message actuel ; disparaît dès que les positions reviennent ;
+ * - DIAG : une ligne par échec des positions (heure, type d'erreur vu par l'app, contrôle Internet).
+ * Inchangé : code une fois par jour ; rouvrir l'app ne redemande pas le code ; OFF masque le trafic sans déconnecter.
+ */
+const NPF_GLOBAL_LINK_SESSION_HINT_AFTER_FAILURES = 3;
+let npfGlobalLinkNetworkFailureStreak = 0;
+let npfGlobalLinkSessionHintDismissed = false;
+
+/* Contrôle Internet léger : même relais Moyens Nationaux puis relais FdS / GAAR du même NAS, en no-cors (réponse
+ * opaque : seul compte le fait que le serveur réponde), sans aucun en-tête d'authentification. */
+async function checkGlobalLinkInternetLight(timeoutMs = 6500) {
+    const glrSeparator = NPF_GLOBAL_LINK_API_URL.includes('?') ? '&' : '?';
+    const glrUrl = `${NPF_GLOBAL_LINK_API_URL}${glrSeparator}action=positions&npf_probe=1&t=${Date.now()}`;
+    const glr = await probeGlobalLinkEndpoint(glrUrl, 'no-cors', timeoutMs);
+    if (glr.reached) return { reachable: true, detail: 'relais Moyens Nationaux joignable' };
+    const docsSeparator = NPF_BRIEFING_DOCS_API_URL.includes('?') ? '&' : '?';
+    const docs = await probeGlobalLinkEndpoint(`${NPF_BRIEFING_DOCS_API_URL}${docsSeparator}action=status&npf_probe=1&t=${Date.now()}`, 'no-cors', timeoutMs);
+    if (docs.reached) return { reachable: true, detail: 'NAS joignable (relais FdS / GAAR)' };
+    return { reachable: false, detail: 'NAS injoignable (réseau coupé ?)' };
+}
+
+function hideGlobalLinkSessionHint() {
+    try {
+        const banner = document.getElementById('global-link-session-banner');
+        if (banner) banner.style.display = 'none';
+    } catch (_) {}
+}
+
+function showGlobalLinkSessionHint() {
+    if (npfGlobalLinkSessionHintDismissed) return;
+    try {
+        let banner = document.getElementById('global-link-session-banner');
+        if (!banner) {
+            banner = document.createElement('div');
+            banner.id = 'global-link-session-banner';
+            banner.className = 'npf-info-banner global-link-session-banner';
+            banner.setAttribute('role', 'status');
+            banner.setAttribute('aria-live', 'polite');
+            banner.innerHTML = '<button type="button" class="npf-info-banner-text global-link-session-banner-action">'
+                + 'Moyens Nationaux : session expirée ? Toucher pour retaper le code</button>'
+                + '<button type="button" class="npf-info-banner-close" aria-label="Fermer">×</button>';
+            banner.querySelector('.global-link-session-banner-action').addEventListener('click', event => {
+                event.preventDefault();
+                event.stopPropagation();
+                resetGlobalLinkSessionAndAskCode('bandeau');
+            });
+            banner.querySelector('.npf-info-banner-close').addEventListener('click', event => {
+                event.preventDefault();
+                event.stopPropagation();
+                npfGlobalLinkSessionHintDismissed = true;
+                hideGlobalLinkSessionHint();
+            });
+            document.body.appendChild(banner);
+        }
+        /* Le bandeau générique (même emplacement) laisse la place. */
+        try { hideNpfInfoBanner(); } catch (_) {}
+        banner.style.display = 'flex';
+        try { npfDiagInfoBannerShown('Moyens Nationaux : session expirée ? Toucher pour retaper le code'); } catch (_) {}
+    } catch (_) {}
+}
+
+function isGlobalLinkSessionHintVisible() {
+    const banner = document.getElementById('global-link-session-banner');
+    return !!banner && banner.style.display === 'flex';
+}
+
+/* Déconnexion (bouton ou bandeau) : efface SEULEMENT la session Moyens Nationaux de la TEST, puis redemande le code. */
+async function resetGlobalLinkSessionAndAskCode(source = 'bouton') {
+    clearStoredGlobalLinkSession();
+    npfGlobalLinkNasConfirmedToken = '';
+    npfGlobalLinkNasConfirmedAt = 0;
+    npfGlobalLinkNetworkFailureStreak = 0;
+    npfGlobalLinkConsecutiveFailures = 0;
+    npfGlobalLinkLastAttemptAt = 0;
+    npfGlobalLinkSeriesDiagnosticMessage = '';
+    npfGlobalLinkSessionHintDismissed = false;
+    npfGlobalLinkLastAuthState = `déconnecté (${source})`;
+    hideGlobalLinkSessionHint();
+    try { npfDiagGlobalLinkPositionsFailure({ kind: 'déconnexion', type: `session effacée (${source})`, control: '—', streak: 0 }); } catch (_) {}
+    updateGlobalLinkButton();
+    try {
+        await loadGlobalLinkCaptcha();
+    } catch (error) {
+        if (error?.message && error.message !== 'Autorisation annulée.' && !isGlobalLinkAbortError(error)) {
+            showNpfInfoBanner(`Trafic Moyens Nationaux : ${error.message}`, { kind: 'error' });
+        }
+    }
+}
+
+async function confirmGlobalLinkLogout() {
+    const ok = await npfConfirmInApp('Déconnecter le Trafic Moyens Nationaux ? La session Moyens Nationaux sera effacée et le code de sécurité redemandé. FdS / GAAR, BFG et les réglages ne changent pas.');
+    if (!ok) return false;
+    const modal = document.getElementById('global-link-options-modal');
+    if (modal) { modal.style.display = 'none'; modal.setAttribute('aria-hidden', 'true'); }
+    await resetGlobalLinkSessionAndAskCode('bouton');
+    return true;
+}
+
 function rememberGlobalLinkRequestState(action, response = null, error = '') {
     npfGlobalLinkLastAction = String(action || '—');
     npfGlobalLinkLastHttpStatus = Number(response?.status || 0);
@@ -34958,6 +35093,10 @@ async function refreshGlobalLinkPositions(options = {}) {
         npfGlobalLinkNasConfirmedAt = Date.now();
         npfGlobalLinkConsecutiveFailures = 0;
         npfGlobalLinkSeriesDiagnosticMessage = '';
+        /* v18.00 — positions revenues : bandeau « session expirée ? » retiré, série remise à zéro. */
+        npfGlobalLinkNetworkFailureStreak = 0;
+        npfGlobalLinkSessionHintDismissed = false;
+        hideGlobalLinkSessionHint();
         noteGlobalLinkAltitudeTrends(payload.positions || []);
         renderGlobalLinkPositions(payload.positions || []);
         return true;
@@ -34966,9 +35105,15 @@ async function refreshGlobalLinkPositions(options = {}) {
         const firstFailureOfSeries = npfGlobalLinkConsecutiveFailures === 1;
         const temporaryNetworkError = isGlobalLinkTemporaryNetworkError(error);
         let userMessage = String(error?.message || error || 'Erreur Trafic Moyens Nationaux');
+        /* v18.00 — contrôle Internet de cet échec (réseau seulement) : résultat des sondes du diagnostic s'il vient de
+         * tourner, sinon contrôle léger. */
+        let internetControl = null;
         if (temporaryNetworkError) {
             if (firstFailureOfSeries || !npfGlobalLinkSeriesDiagnosticMessage) {
                 const diagnostic = await diagnoseGlobalLinkLoadFailure();
+                internetControl = diagnostic.state === 'positions-nas-reseau-fail'
+                    ? { reachable: false, detail: 'NAS injoignable (réseau coupé ?)' }
+                    : { reachable: true, detail: diagnostic.state === 'positions-endpoint-glr-fail' ? 'NAS joignable (relais FdS / GAAR)' : 'relais Moyens Nationaux joignable' };
                 npfGlobalLinkLastAuthState = diagnostic.state;
                 if (diagnostic.state === 'positions-cors-fail') {
                     userMessage = 'Load failed — relais Trafic Moyens Nationaux joignable sans CORS : blocage CORS probable.';
@@ -34983,7 +35128,31 @@ async function refreshGlobalLinkPositions(options = {}) {
             } else {
                 userMessage = npfGlobalLinkSeriesDiagnosticMessage;
             }
+            if (!internetControl) {
+                try { internetControl = await checkGlobalLinkInternetLight(); }
+                catch (_) { internetControl = { reachable: false, detail: 'contrôle impossible' }; }
+            }
         }
+        if (temporaryNetworkError) npfGlobalLinkNetworkFailureStreak += 1;
+        else npfGlobalLinkNetworkFailureStreak = 0;
+        const errorKind = isGlobalLinkAbortError(error)
+            ? 'délai dépassé'
+            : temporaryNetworkError
+                ? 'erreur réseau (réponse illisible : Load failed)'
+                : (globalLinkSessionRefusedByNas ? 'refus du NAS : session invalide' : `autre : ${String(error?.message || error || '').slice(0, 70)}`);
+        try {
+            npfDiagGlobalLinkPositionsFailure({
+                kind: 'échec',
+                type: errorKind,
+                http: Number(npfGlobalLinkLastHttpStatus || 0),
+                control: internetControl ? internetControl.detail : 'non fait (réponse lue)',
+                streak: npfGlobalLinkNetworkFailureStreak
+            });
+        } catch (_) {}
+        const showSessionHint = temporaryNetworkError
+            && npfGlobalLinkNetworkFailureStreak >= NPF_GLOBAL_LINK_SESSION_HINT_AFTER_FAILURES
+            && !!internetControl?.reachable;
+        if (showSessionHint) showGlobalLinkSessionHint();
         rememberGlobalLinkRequestState(
             npfGlobalLinkLastAction || 'positions',
             { status: npfGlobalLinkLastHttpStatus },
@@ -34994,7 +35163,7 @@ async function refreshGlobalLinkPositions(options = {}) {
         if (!options.silent && globalLinkSessionRefusedByNas) {
             /* v17.37 — session réellement refusée par le NAS : nouveau code. */
             await loadGlobalLinkCaptcha();
-        } else if (!isGlobalLinkAbortError(error) && (!options.silent || firstFailureOfSeries)) {
+        } else if (!isGlobalLinkAbortError(error) && (!options.silent || firstFailureOfSeries) && !isGlobalLinkSessionHintVisible()) {
             /* v17.40 — bandeau discret, jamais de fenêtre bloquante ; la
              * session valide est conservée. */
             showNpfInfoBanner(temporaryNetworkError
@@ -35028,6 +35197,7 @@ function setGlobalLinkEnabled(enabled, options = {}) {
         stopGlobalLinkRefreshTimer();
         if (npfGlobalLinkLayer) npfGlobalLinkLayer.clearLayers();
         purgeGlobalLinkDomArtifacts();
+        hideGlobalLinkSessionHint();   // v18.00 — OFF : bandeau retiré, session gardée
         updateGlobalLinkButton();
         return;
     }
@@ -35085,6 +35255,8 @@ function ensureGlobalLinkOptionsMenu() {
                 <input id="global-link-show-off-input" type="checkbox">
                 <span>Afficher trafics non actifs</span>
             </label>
+            <button type="button" id="global-link-logout-button" class="global-link-logout-button">Déconnexion</button>
+            <div class="global-link-logout-note">Efface la session Moyens Nationaux et redemande le code.</div>
         </div>
     `;
     document.body.appendChild(modal);
@@ -35103,6 +35275,12 @@ function ensureGlobalLinkOptionsMenu() {
     });
     checkbox?.addEventListener('change', () => {
         setGlobalLinkShowOffTraffic(checkbox.checked);
+    });
+    /* v18.00 — Déconnexion Moyens Nationaux (avec confirmation). */
+    modal.querySelector('#global-link-logout-button')?.addEventListener('click', event => {
+        event.preventDefault();
+        event.stopPropagation();
+        confirmGlobalLinkLogout().catch(error => console.warn('[Global Link] déconnexion', error));
     });
     document.addEventListener('keydown', event => {
         if (event.key === 'Escape' && modal.style.display === 'flex') close();

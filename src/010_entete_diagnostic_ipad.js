@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v17.99';
+const NPF_SCRIPT_BUILD_VERSION = 'v18.00';
 
 
 /*
@@ -654,6 +654,8 @@ const NPF_DIAG_DETAIL = (() => {
         felt: [],
         messages: [],
         bfgAttempts: [],
+        /* v18.00 — échecs des positions Moyens Nationaux (heure, type, contrôle Internet). */
+        glrFailures: [],
         glrClickAt: 0,
         glrClickCaptcha: false,
         fdsClick: null,
@@ -2842,6 +2844,17 @@ const NPF_DIAG_DETAIL = (() => {
                 error: String(entry?.error || '').slice(0, 90)
             });
             if (state.bfgAttempts.length > 20) state.bfgAttempts.splice(0, state.bfgAttempts.length - 20);
+        },
+        glrPositionsFailure: entry => {
+            state.glrFailures.push({
+                at: Date.now(),
+                kind: String(entry?.kind || 'échec'),
+                type: String(entry?.type || '—').slice(0, 90),
+                http: Number(entry?.http) || 0,
+                control: String(entry?.control || '—').slice(0, 60),
+                streak: Number(entry?.streak) || 0
+            });
+            if (state.glrFailures.length > 30) state.glrFailures.splice(0, state.glrFailures.length - 30);
         }
     };
 })();
@@ -2992,6 +3005,11 @@ function npfDiagBfgBridgeAttempt(entry) {
     try { NPF_DIAG_DETAIL.bfgBridgeAttempt(entry); } catch (_) {}
 }
 
+/* v18.00 — échec des positions Moyens Nationaux / déconnexion (appelé par src/180). */
+function npfDiagGlobalLinkPositionsFailure(entry) {
+    try { NPF_DIAG_DETAIL.glrPositionsFailure(entry); } catch (_) {}
+}
+
 /* v17.33 — DIAG I8 : points d'appel du moteur de tuiles (mesure seule). */
 function npfDiagTileNow() {
     try { return NPF_STARTUP_DIAGNOSTIC.now(); } catch (_) { return 0; }
@@ -3071,6 +3089,7 @@ function npfDiagDetailPersistSnapshot() {
             felt: s.felt.slice(-20),
             messages: s.messages.slice(-15),
             bfgAttempts: s.bfgAttempts.slice(-10),
+            glrFailures: s.glrFailures.slice(-15),
             readMinutes: Array.from(s.readMinutes.values()).slice(-15).map(npfDiagCompactReadMinute),
             slowReadBatches: s.slowReadBatches.slice(-10),
             fireSelections: s.fireSelections.slice(-10),
@@ -3309,7 +3328,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v17.99 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v18.00 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -3764,6 +3783,13 @@ function formatNpfDiagMessageLine(item) {
     return '   ' + formatNpfDiagClock(item.at) + ' | ' + item.source + ' | « ' + item.text + ' »';
 }
 
+/* v18.00 — une ligne par échec des positions Moyens Nationaux. */
+function formatNpfDiagGlrFailureLine(item) {
+    return '   ' + formatNpfDiagClock(item.at) + ' | ' + item.kind
+        + (item.kind === 'échec' ? ' n°' + item.streak + ' en erreur réseau de suite' : '')
+        + ' | ' + item.type + (item.http ? ' | HTTP ' + item.http : '') + ' | contrôle Internet : ' + item.control;
+}
+
 function formatNpfDiagBfgAttemptLine(item) {
     return '   ' + formatNpfDiagClock(item.at) + ' | tentative ' + item.attempt + ' | ' + item.result
         + ' | ' + Math.round(Number(item.ms) || 0) + ' ms'
@@ -3784,6 +3810,7 @@ function appendNpfDiagNasSection(lines) {
         list.forEach(item => { try { lines.push(formatter(item)); } catch (_) {} });
     };
     block('Pont BFG (tentatives) :', s.bfgAttempts, formatNpfDiagBfgAttemptLine, 'Aucune tentative dans cette session.');
+    block('Trafic Moyens Nationaux — échecs des positions (v18.00) :', s.glrFailures, formatNpfDiagGlrFailureLine, 'Aucun échec dans cette session.');
     block('Temps ressenti (appui -> affichage) :', s.felt, formatNpfDiagFeltLine, 'Aucun appui FdS / GAAR / Trafic Moyens Nationaux.');
     block('Messages FdS / BFG / Trafic Moyens Nationaux affichés :', s.messages, formatNpfDiagMessageLine, 'Aucun message.');
     block('Requêtes NAS (30 dernières) :', s.nasRequests, formatNpfDiagNasRequestLine, 'Aucune requête.');
@@ -4072,6 +4099,7 @@ function appendNpfDiagDetailRestoredSections(lines, detail) {
     section('Sondes après un paquet de lectures lent :', detail.packProbes, formatNpfDiagPackProbeLine);
     section('Activité de stockage :', detail.storage, formatNpfDiagStorageEventLine);
     section('Pont BFG (tentatives) :', detail.bfgAttempts, formatNpfDiagBfgAttemptLine);
+    section('Trafic Moyens Nationaux — échecs des positions :', detail.glrFailures, formatNpfDiagGlrFailureLine);
     section('Temps ressenti FdS / Trafic Moyens Nationaux :', detail.felt, formatNpfDiagFeltLine);
     section('Messages FdS / BFG / Trafic Moyens Nationaux affichés :', detail.messages, formatNpfDiagMessageLine);
     section('Requêtes NAS (dernières) :', detail.nasRequests, formatNpfDiagNasRequestLine);

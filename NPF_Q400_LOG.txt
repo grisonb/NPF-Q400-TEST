@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
-Mise à jour : 17/11/2026
-Version de travail actuelle : TEST v17.99
+Mise à jour : 18/11/2026
+Version de travail actuelle : TEST v18.00
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -551,10 +551,13 @@ NON IMPLÉMENTÉ / OUVERT :
   07/10/2026 : programme VPS bfg-sofia-notams 1.2.0 PRÊT, NON INSTALLÉ
   (~/vps-a-copier/). v17.60 à pousser APRÈS l'installation de la 1.2.0
   (elle annonce « environ 1 minute ») ;
+- v18.00 : Moyens Nationaux, session expirée (étape 1 sur 2) : bouton « Déconnexion » (appui long sur le bouton Moyens
+  Nationaux, avec confirmation), bandeau discret « session expirée ? » après 3 échecs réseau de suite si le NAS répond,
+  ligne DIAG par échec. NAS inchangé (étape 2 proposée). À MESURER sur iPad ; COMMIT LOCAL, NON POUSSÉE ;
 - v17.99 : points VFR (VRP, autres points désignés, terrains SIA) et leurs zones de toucher visibles pendant le glisser et
   jamais absents après un geste (nouveau dessin d'un seul coup) ; points dessinés 25 % au-delà de l'écran ; 2e commit (choix
   de Bastien du 17/11) : masqués seulement pendant un zoom (pincement), comme en v17.98, le pincement 1er commit étant moins
-  fluide. HT / Routes, recentrage GPS inchangés. À MESURER sur iPad ; 2 COMMITS LOCAUX, NON POUSSÉE ;
+  fluide. HT / Routes, recentrage GPS inchangés. À MESURER sur iPad ; POUSSÉE le 17/11/2026 (083aa9f) ;
 - v17.98 : BLOC/FUEL, feu concerné par chaque ligne (en-tête « OACI / Feu », liste native au toucher du terrain, héritage
   de la ligne précédente) et champ facultatif « suiteFeux » envoyé au Carnet, repris tel quel de la RUN v1.23 ; NAS non
   touché ; Export PDF inchangé. À MESURER sur iPad ; POUSSÉE le 16/11/2026 (a688809) ;
@@ -857,30 +860,30 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v17.99
-Date : 17/11/2026
-Base : v17.98 (a688809, poussée le 16/11/2026)
+Version : TEST v18.00
+Date : 18/11/2026
+Base : v17.99 (083aa9f, poussée le 17/11/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v17.99.txt
-2_Index_v17.99.txt
-3_Manifest_v17.99.txt
-4_Script_v17.99.txt
-5_SIA_v17.99.txt
-6_Style_v17.99.txt
-7_Sw_v17.99.txt
+1_Modifications_v18.00.txt
+2_Index_v18.00.txt
+3_Manifest_v18.00.txt
+4_Script_v18.00.txt
+5_SIA_v18.00.txt
+6_Style_v18.00.txt
+7_Sw_v18.00.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v17.99 (et texte « TEST v17.99 » de l'écran de
+- Index : APP_VERSION = v18.00 (et texte « TEST v18.00 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v17.99
-- Script : NPF_SCRIPT_BUILD_VERSION = v17.99
-- Style : NPF_STYLE_BUILD_VERSION = v17.99
+- Manifest : start_url = ./index.html?appv=v18.00
+- Script : NPF_SCRIPT_BUILD_VERSION = v18.00
+- Style : NPF_STYLE_BUILD_VERSION = v18.00
 - Nom de l'app (v17.94) : « NPF-Q400 TEST » (manifest name et short_name, <title>, apple-mobile-web-app-title)
 - PDF.js (v17.96) : dossier pdfjs/ (pdf.min.mjs, pdf.worker.min.mjs 4.10.38, LICENSE Apache-2.0, LISEZMOI.txt), à livrer
   avec les 7 fichiers ; fichiers indispensables du service worker.
-- Service Worker : `sw-v17-99_points_vfr_visibles` ; caches TEST
-  `npf-q400-test-app-shell-sw-v17-99_points_vfr_visibles`, `npf-q400-test-app-data-v1`,
+- Service Worker : `sw-v18-00_session_moyens_nationaux` ; caches TEST
+  `npf-q400-test-app-shell-sw-v18-00_session_moyens_nationaux`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-sia-2026-10-29-v02-g15`
 - SIA_DATA_REVISION (SW / Index sia.js?siav=) : sia-2026-10-29-v02-g15 (= NPF_SIA_DATA_REVISION
   de sia.js ; à changer à chaque nouveau sia.js)
@@ -893,15 +896,15 @@ Références de version cohérentes :
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v17.99 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v18.00 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
 - `sia.js` : par rapport à v17.70, outre-mer retiré, « a » de 34 VRP renseigné, table vrpAirportColors ajoutée (2 pastels), révision g6 ; zones, terrains et points de métropole identiques ; moteur tuiles (src/100) modifié en v17.66 sur demande
   explicite (limite de zoom propre à chaque carte, zoom 11 OACI 1/500 000) ;
-- tests v17.99 : entrée v17.99 ; sia.js strictement identique à la v17.81 ;
+- tests v18.00 : entrée v18.00 ; sia.js strictement identique à la v17.81 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82, v17.83, v17.84, v17.85, v17.86, v17.87, v17.88, v17.89, v17.90, v17.91, v17.92, v17.93, v17.94, v17.95, v17.96, v17.97, v17.98 et v17.99 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82, v17.83, v17.84, v17.85, v17.86, v17.87, v17.88, v17.89, v17.90, v17.91, v17.92, v17.93, v17.94, v17.95, v17.96, v17.97, v17.98, v17.99 et v18.00 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
   v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE ;
   v17.56 VALIDÉE en vol ; v17.57 VALIDÉE sur iPad.
 
@@ -2430,6 +2433,93 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v18.00 — MOYENS NATIONAUX : SESSION EXPIRÉE (ÉTAPE 1 SUR 2) — DÉCONNEXION, BANDEAU « SESSION EXPIRÉE ? », DIAG
+Date : 18/11/2026
+Base fonctionnelle : v17.99 (commit 083aa9f, poussée le 17/11/2026). Seule la TEST change : pérenne, RUN, BFG, NAS et VPS
+inchangés. sia.js inchangé (strictement identique à la v17.81). Constat de Bastien (iPad, v17.99) : « Trafic moyens nationaux :
+positions indisponibles (réseau) » sans fin, alors que sur PC Chrome une nouvelle connexion remarche. Cause probable (non
+prouvée sur iPad) : session expirée ; le NAS remplace le refus 401 de npf-global-link-api.php par une page HTML sans CORS ;
+l'app voit une erreur réseau, n'efface jamais la session et ne redemande pas le code. Rouvrir l'app ne redemande pas le code :
+voulu, inchangé.
+
+0. ÉTAT DES LIEUX (v17.99 ; lignes de la v18.00)
+- Session : localStorage npfGlobalLinkSessionV1 + npfGlobalLinkSessionExpV1 (src/180:5-6 ; lecture 197, écriture 223,
+  effacement 235) ; échéance locale = minuit (NAS) ; gardée tant que le NAS ne la refuse pas (v17.37) ; session NPF-Q400
+  (FdS / GAAR) à part : npfBriefingDocsSessionTokenV1 (src/030:939).
+- Code : loadGlobalLinkCaptcha (src/180:491 ; demande d'abord la session NPF-Q400 : pont BFG, sinon mot de passe, 480),
+  fenêtre global-link-auth-modal (index.html:324), submitGlobalLinkCaptcha (546) ; demandé au toucher du bouton (OFF -> ON
+  sans session ou session échue, 1782) ou quand le NAS refuse la session en 401 JSON lisible (1645).
+- Classement d'une erreur de positions (refreshGlobalLinkPositions, 1592) : réponse lue 401 global_session_invalid = refus
+  (session effacée, code) ; exception « Load failed / Failed to fetch » = erreur réseau temporaire (300), session gardée,
+  diagnostic par sondes au 1er échec de la série (340 : relais en CORS, puis no-cors, puis FdS / GAAR no-cors) ; délai
+  dépassé (Abort) ; autre. Une page HTML 401 sans CORS donne « Load failed » : classée « réseau ».
+- Rythme : toutes les 15 s (NPF_GLOBAL_LINK_REFRESH_MS, 9) ; après 3 échecs de suite, 1 essai par minute (1582) ; essai
+  immédiat au retour du réseau et au retour au premier plan.
+
+1. CODE (src/180, src/010, style.css)
+- Bouton « Déconnexion » dans le menu Moyens Nationaux (appui long sur le bouton Moyens Nationaux, à côté de « Afficher
+  trafics non actifs » : c'est la fenêtre de réglage du trafic ; la fenêtre du code ne s'ouvre que quand le code est
+  demandé). Confirmation (npfConfirmInApp). Efface SEULEMENT la session Moyens Nationaux (et ses compteurs), puis redemande
+  le code (resetGlobalLinkSessionAndAskCode, src/180:117) ; FdS / GAAR (session NPF-Q400), BFG, réglages et calque intacts.
+- Bandeau « Moyens Nationaux : session expirée ? Toucher pour retaper le code » (ambre, au même endroit que le bandeau
+  d'information, avec ×) : quand les positions échouent en erreur réseau 3 FOIS DE SUITE (NPF_GLOBAL_LINK_SESSION_HINT_AFTER
+  _FAILURES, src/180:54 ; même seuil que l'espacement à 1 essai / min : environ 30 s) ET que le contrôle Internet léger
+  montre que le NAS répond (checkGlobalLinkInternetLight, 60 : relais Moyens Nationaux puis FdS / GAAR en no-cors, sans
+  authentification ; au 1er échec, résultat des sondes existantes). Toucher = Déconnexion + code (sans confirmation : c'est
+  la demande) ; × = masqué jusqu'au prochain retour des positions. Réseau vraiment coupé (contrôle KO) ou navigateur hors
+  ligne : aucun bandeau, message actuel. Disparaît dès que les positions reviennent ; OFF : bandeau retiré, session gardée.
+  Jamais de fenêtre qui s'ouvre seule. Le bandeau générique ne se superpose pas.
+- DIAG : section « Trafic Moyens Nationaux — échecs des positions (v18.00) » (FdS / BFG / Moyens Nationaux) et dans
+  l'enregistrement : une ligne par échec « HH:MM:SS | échec n°k en erreur réseau de suite | type vu par l'app | HTTP |
+  contrôle Internet : relais Moyens Nationaux joignable / NAS joignable (relais FdS / GAAR) / NAS injoignable (réseau
+  coupé ?) / non fait (réponse lue) », et les déconnexions (bouton / bandeau).
+- Inchangé : code une fois par jour ; relance avec session valide sans code ; OFF masque sans déconnecter ; rythme.
+- Versions v18.00 ; service worker sw-v18-00_session_moyens_nationaux.
+
+2. ÉTAPE 2 (LECTURE SEULE, rien préparé ni installé) — copie locale npf-global-link-api.php du 01/10 (~/nas-a-copier/
+   briefing-api-2026-10-01, 536 lignes)
+- Le PHP pose déjà les en-têtes CORS (l.12-17) et répond par glr_json(status, ...) (l.48-53) : 401 npf_authorization_required
+  (l.117), 401 global_session_invalid (session absente l.434, expirée l.444, ET refus ou panne du serveur Global Link l.465-470,
+  qui efface aussi la session). C'est le serveur web du NAS qui remplace ces 401 par sa page HTML sans CORS (constat).
+- Si le NAS répondait 200 + {"ok":false,"error":"global_session_invalid","message":…} avec CORS (comme BFG) :
+  . TEST v18.00 et RUN v1.23 (même code) : réponse lue, mais la session n'est effacée que si HTTP 401 (src/180 TEST 1645,
+    RUN 1527) : ici 200 -> classée « autre » ; bandeau rouge « Trafic Moyens Nationaux : Session Global Link expirée.
+    Nouvelle authentification requise. » au 1er échec de la série, session gardée, code PAS redemandé tout seul ; le bandeau
+    v18.00 « session expirée ? » ne s'affiche pas (ce n'est plus une erreur réseau) ; le bouton Déconnexion reste le moyen.
+  . Pérenne (script.js:18816-18832) : même règle (efface seulement si 401) ; positions automatiques silencieuses : aucun
+    message ; au toucher : alert « Global Link : Session Global Link expirée… » ; session jamais effacée, code jamais
+    redemandé (il faudrait que la session échoue localement à minuit).
+  . Aucune app ne casserait : message lisible au lieu de « réseau », mais pas de reprise automatique sans changement d'app.
+- PROPOSITION (À DÉCIDER) : NAS : toutes les erreurs de npf-global-link-api.php en HTTP 200 + JSON {ok:false, error, message}
+  + CORS (comme BFG), au moins pour global_session_invalid et npf_authorization_required ; distinguer la panne du serveur
+  Global Link (l.465-470 : ne pas effacer la session, error « positions_indisponibles ») de la vraie session refusée.
+  Apps (TEST d'abord, puis RUN / pérenne sur demande) : traiter error === 'global_session_invalid' quel que soit le code
+  HTTP (effacer la session, redemander le code au toucher / bandeau). Ordre conseillé : app d'abord (accepte 401 ET 200),
+  puis NAS ; ainsi aucune app n'est jamais moins bonne qu'aujourd'hui.
+
+3. ESSAIS (PC ; FAUX NAS LOCAL v100/pw_glr100.js : pré-requête OPTIONS acceptée avec CORS, positions avec session valide =
+   JSON + CORS, session inconnue / expirée et sondes = page HTML 401 SANS CORS comme le Synology, mode « coupé » = connexions
+   fermées ; NAS détourné dans la page ; tout le reste coupé ; aucun appel au vrai NAS ni au vrai VPS)
+- Chrome 16/16, WebKit tactile service worker bloqué 16/16 : session valide au lancement : trafic normal (symbole, étiquette,
+  cercle à 3 NM), aucun code ; relance avec session valide : pas de code ; une erreur isolée puis retour : jamais de bandeau ;
+  session expirée : pas de bandeau après 1 et 2 échecs, bandeau au 3e (NAS joignable), aucune fenêtre ouverte seule ; toucher
+  le bandeau : session Moyens Nationaux effacée, code redemandé, FdS / GAAR + BFG + réglages intacts ; bon code : positions
+  revenues, bandeau parti ; réseau coupé (4 échecs, contrôle KO) : jamais de bandeau, message actuel ; navigateur hors
+  ligne : aucune requête, aucun bandeau ; Déconnexion : confirmation, Annuler = rien, Continuer = session effacée + code,
+  FdS / GAAR + BFG + réglages + calque intacts ; OFF : session gardée ; DIAG : lignes par échec (relais joignable / NAS
+  injoignable) et déconnexions. WebKit : les refus CORS voulus du faux NAS sont signalés par WebKit (« due to access control
+  checks ») : comptés à part, aucune autre erreur JS. Captures : out/v100/glr100-bandeau-*, -code-*, -menu-*.
+  Incidents d'essai (corrigés dans l'essai) : code tapé avant l'arrivée du nouveau code de sécurité (WebKit) ; lecture de
+  positions déjà en cours lancée par l'app (WebKit).
+- Trafic Moyens Nationaux, étiquettes 3 états et cercle (v96/pw_cercle97b.js sur la v18.00) : Chrome 14/14, WebKit 14/14.
+- Non-régression rapide (cdp_nr90.js, P11, vraie V11) : 13/13 (lancement sans erreur JS, V11 avec noms hors ligne, échelle
+  en NM, FdS / GAAR, Créer Feu, Rot. / BINGO, mode navigation, Doc FdF, aucune requête externe). Aucun « NPF » seul
+  (cdp_npf66). Mise à jour v17.99 -> v18.00 sans interception puis hors ligne, sur le code final : v18.00 servie, carte
+  (50 NM), communes et PÉLIC hors ligne, 3 caches de la pérenne intacts.
+- À REGARDER SUR L'IPAD : au prochain « positions indisponibles (réseau) » : le bandeau « session expirée ? » apparaît-il
+  (~30 s) ? DIAG : lignes « échec n°… | erreur réseau … | contrôle Internet : … » — « relais joignable » = session expirée
+  probable ; « NAS injoignable » = vrai réseau. Toucher le bandeau, retaper le code : les positions reviennent-elles ?
 
 VERSION TEST v17.99 — POINTS VFR VISIBLES PENDANT ET APRÈS LE DÉPLACEMENT DE LA CARTE AU DOIGT
                      + 2e COMMIT : MASQUÉS SEULEMENT PENDANT LE PINCEMENT

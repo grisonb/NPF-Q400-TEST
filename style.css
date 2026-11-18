@@ -1,4 +1,4 @@
-/* NPF_STYLE_BUILD_VERSION: v17.99 */
+/* NPF_STYLE_BUILD_VERSION: v18.00 */
 /* v14.83 — nettoyage des références techniques et limitation des cartouches routiers. */
 /* v14.81 — recherche phonétique nationale élargie aux fragments sur deux lettres. */
 /* v14.80 — Brive conservé uniquement sous LFSL. */
@@ -19087,4 +19087,37 @@ body.npf-calculator-modal-open {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+/* v18.00 — Trafic Moyens Nationaux : bouton « Déconnexion » (appui long sur le bouton) et bandeau discret « session expirée ? »
+   (même emplacement que le bandeau d'information, fond ambre, texte touchable). */
+.global-link-logout-button {
+    display: block;
+    width: 100%;
+    min-height: 44px;
+    margin-top: 14px;
+    border: 2px solid #b91c1c;
+    border-radius: 10px;
+    background: #ffffff;
+    color: #b91c1c;
+    font: 800 15px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    cursor: pointer;
+}
+.global-link-logout-note {
+    margin-top: 6px;
+    font-size: 12.5px;
+    color: #475569;
+    text-align: center;
+}
+.npf-info-banner.global-link-session-banner {
+    background: rgba(146, 64, 14, 0.94);
+}
+.global-link-session-banner-action {
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    padding: 4px 0;
+    cursor: pointer;
 }
