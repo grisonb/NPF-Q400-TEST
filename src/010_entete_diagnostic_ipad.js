@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v18.00';
+const NPF_SCRIPT_BUILD_VERSION = 'v18.01';
 
 
 /*
@@ -3328,7 +3328,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v18.00 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v18.01 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -3786,7 +3786,7 @@ function formatNpfDiagMessageLine(item) {
 /* v18.00 — une ligne par échec des positions Moyens Nationaux. */
 function formatNpfDiagGlrFailureLine(item) {
     return '   ' + formatNpfDiagClock(item.at) + ' | ' + item.kind
-        + (item.kind === 'échec' ? ' n°' + item.streak + ' en erreur réseau de suite' : '')
+        + (item.kind === 'échec' && item.streak > 0 ? ' n°' + item.streak + ' en erreur réseau de suite' : '')   // v18.01 : rien si pas une erreur réseau
         + ' | ' + item.type + (item.http ? ' | HTTP ' + item.http : '') + ' | contrôle Internet : ' + item.control;
 }
 

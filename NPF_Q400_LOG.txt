@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 18/11/2026
-Version de travail actuelle : TEST v18.00
+Version de travail actuelle : TEST v18.01
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -551,9 +551,14 @@ NON IMPLÉMENTÉ / OUVERT :
   07/10/2026 : programme VPS bfg-sofia-notams 1.2.0 PRÊT, NON INSTALLÉ
   (~/vps-a-copier/). v17.60 à pousser APRÈS l'installation de la 1.2.0
   (elle annonce « environ 1 minute ») ;
+- v18.01 : Moyens Nationaux, étape 2 : « session invalide » lisible en JSON = session expirée quel que soit le code HTTP
+  (200 ou 401) ; « service indisponible » (panne Global Link) : session gardée ; paquet NAS PRÉPARÉ, NON INSTALLÉ
+  (~/nas-a-copier/a-installer-global-link-2026-11-18, à installer après la mise en ligne de la v18.01). À MESURER sur iPad ;
+  COMMIT LOCAL, NON POUSSÉE ;
 - v18.00 : Moyens Nationaux, session expirée (étape 1 sur 2) : bouton « Déconnexion » (appui long sur le bouton Moyens
   Nationaux, avec confirmation), bandeau discret « session expirée ? » après 3 échecs réseau de suite si le NAS répond,
-  ligne DIAG par échec. NAS inchangé (étape 2 proposée). À MESURER sur iPad ; COMMIT LOCAL, NON POUSSÉE ;
+  ligne DIAG par échec. NAS inchangé (étape 2 proposée). VALIDÉE sur iPad le 18/11 (Déconnexion a tout remis en marche) ;
+  POUSSÉE le 18/11/2026 (732f732) ;
 - v17.99 : points VFR (VRP, autres points désignés, terrains SIA) et leurs zones de toucher visibles pendant le glisser et
   jamais absents après un geste (nouveau dessin d'un seul coup) ; points dessinés 25 % au-delà de l'écran ; 2e commit (choix
   de Bastien du 17/11) : masqués seulement pendant un zoom (pincement), comme en v17.98, le pincement 1er commit étant moins
@@ -860,30 +865,30 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v18.00
+Version : TEST v18.01
 Date : 18/11/2026
-Base : v17.99 (083aa9f, poussée le 17/11/2026)
+Base : v18.00 (732f732, poussée le 18/11/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v18.00.txt
-2_Index_v18.00.txt
-3_Manifest_v18.00.txt
-4_Script_v18.00.txt
-5_SIA_v18.00.txt
-6_Style_v18.00.txt
-7_Sw_v18.00.txt
+1_Modifications_v18.01.txt
+2_Index_v18.01.txt
+3_Manifest_v18.01.txt
+4_Script_v18.01.txt
+5_SIA_v18.01.txt
+6_Style_v18.01.txt
+7_Sw_v18.01.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v18.00 (et texte « TEST v18.00 » de l'écran de
+- Index : APP_VERSION = v18.01 (et texte « TEST v18.01 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v18.00
-- Script : NPF_SCRIPT_BUILD_VERSION = v18.00
-- Style : NPF_STYLE_BUILD_VERSION = v18.00
+- Manifest : start_url = ./index.html?appv=v18.01
+- Script : NPF_SCRIPT_BUILD_VERSION = v18.01
+- Style : NPF_STYLE_BUILD_VERSION = v18.01
 - Nom de l'app (v17.94) : « NPF-Q400 TEST » (manifest name et short_name, <title>, apple-mobile-web-app-title)
 - PDF.js (v17.96) : dossier pdfjs/ (pdf.min.mjs, pdf.worker.min.mjs 4.10.38, LICENSE Apache-2.0, LISEZMOI.txt), à livrer
   avec les 7 fichiers ; fichiers indispensables du service worker.
-- Service Worker : `sw-v18-00_session_moyens_nationaux` ; caches TEST
-  `npf-q400-test-app-shell-sw-v18-00_session_moyens_nationaux`, `npf-q400-test-app-data-v1`,
+- Service Worker : `sw-v18-01_session_mn_json` ; caches TEST
+  `npf-q400-test-app-shell-sw-v18-01_session_mn_json`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-sia-2026-10-29-v02-g15`
 - SIA_DATA_REVISION (SW / Index sia.js?siav=) : sia-2026-10-29-v02-g15 (= NPF_SIA_DATA_REVISION
   de sia.js ; à changer à chaque nouveau sia.js)
@@ -896,15 +901,15 @@ Références de version cohérentes :
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v18.00 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v18.01 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
 - `sia.js` : par rapport à v17.70, outre-mer retiré, « a » de 34 VRP renseigné, table vrpAirportColors ajoutée (2 pastels), révision g6 ; zones, terrains et points de métropole identiques ; moteur tuiles (src/100) modifié en v17.66 sur demande
   explicite (limite de zoom propre à chaque carte, zoom 11 OACI 1/500 000) ;
-- tests v18.00 : entrée v18.00 ; sia.js strictement identique à la v17.81 ;
+- tests v18.01 : entrée v18.01 ; sia.js strictement identique à la v17.81 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82, v17.83, v17.84, v17.85, v17.86, v17.87, v17.88, v17.89, v17.90, v17.91, v17.92, v17.93, v17.94, v17.95, v17.96, v17.97, v17.98, v17.99 et v18.00 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82, v17.83, v17.84, v17.85, v17.86, v17.87, v17.88, v17.89, v17.90, v17.91, v17.92, v17.93, v17.94, v17.95, v17.96, v17.97, v17.98, v17.99, v18.00 et v18.01 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
   v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE ;
   v17.56 VALIDÉE en vol ; v17.57 VALIDÉE sur iPad.
 
@@ -2433,6 +2438,67 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v18.01 — MOYENS NATIONAUX, SESSION EXPIRÉE (ÉTAPE 2 SUR 2) : RÉPONSES LISIBLES DU NAS (APP) + PAQUET NAS PRÉPARÉ
+Date : 18/11/2026
+Base fonctionnelle : v18.00 (commit 732f732, poussée le 18/11/2026 ; validée sur iPad le 18/11 : « Déconnexion » a tout remis
+en marche). Seule la TEST change : pérenne, RUN et BFG inchangés ; RIEN n'est installé sur le NAS ; VPS inchangé. sia.js
+inchangé (strictement identique à la v17.81).
+
+A. APP TEST (src/180, src/010)
+- refreshGlobalLinkPositions : une réponse LISIBLE {"error":"global_session_invalid"} = session expirée QUEL QUE SOIT le code
+  HTTP (200 ou 401) : session Moyens Nationaux effacée, code redemandé comme pour un 401 lisible (au toucher du bouton :
+  1er toucher masque le calque, 2e toucher affiche le code — comportement d'un 401 lisible gardé tel quel) ; jamais de
+  fenêtre seule. {"error":"global_link_unavailable"} (panne Global Link) : session GARDÉE, message actuel (bandeau au 1er
+  échec de la série), nouveaux essais au rythme habituel. npf_authorization_required : inchangé (401 seulement).
+- DIAG : « refus du NAS : session invalide » / « service Moyens Nationaux indisponible (session gardée) » ; libellé « échec
+  n°k en erreur réseau de suite » seulement pour les erreurs réseau (corrigé, v18.00 écrivait « n°0 »).
+- Bandeau « session expirée ? » et bouton Déconnexion de la v18.00 : inchangés (page HTML 401 du NAS actuel).
+- Versions v18.01 ; service worker sw-v18-01_session_mn_json.
+
+B. NAS — PRÉPARÉ, NON INSTALLÉ (~/nas-a-copier/a-installer-global-link-2026-11-18, hors dépôt : contient des secrets)
+- Départ : npf-global-link-api.php du NAS téléchargé par Bastien (File Station : /volume1/web/briefing-api, 18/11/2026
+  18:00:23, 20 919 octets, empreinte b35f7c93…fe4a). Depuis la copie du 01/10 : seules les origines CORS ont changé (RUN : VPS
+  ; app iPad : capacitor://localhost).
+- Modifié (empreinte fd9bbc4a…2eb1, 34 lignes, action positions seulement) : session absente / expirée / refusée par Global
+  Link (HTTP 401 / 403 de Global Link ou JSON lisible avec erreur) -> HTTP 200 + {"ok":false,"error":"global_session_invalid"}
+  + CORS, session effacée comme avant ; panne Global Link (pas de réponse, autre code, réponse illisible) -> HTTP 200 +
+  {"ok":false,"error":"global_link_unavailable"}, session GARDÉE (avant : 401 et session effacée). Reste identique (captcha,
+  login, logout, autorisation NPF-Q400, origines CORS).
+- installer-nas.sh / retour-arriere-nas.sh (tâches DSM root désactivées, lancées à la main) : dossier d'arrivée hors web,
+  empreintes, version en place attendue, syntaxe PHP du NAS, sauvegarde /volume1/briefing-sauvegardes/global-link-avant-…,
+  copie avec mêmes droits, synoacltool -enforce-inherit, contrôle curl (OPTIONS 204, GET sans autorisation 401, jamais 403).
+  INSTALLATION.txt : étapes File Station et DSM, vérifications PowerShell. À installer APRÈS la mise en ligne de la v18.01.
+- Effet sur les autres apps (lu dans leur code) : pérenne (n'efface que sur 401) : session invalide en 200 = session gardée
+  côté app comme aujourd'hui, alerte lisible au toucher au lieu de « Load failed » ; panne : la session NAS n'est plus
+  effacée, reprise seule. RUN v1.23 (même code que TEST v17.99) : bandeau « Session Global Link expirée… » au lieu de
+  « réseau », session gardée comme aujourd'hui ; panne : reprise seule. Aucune moins bonne.
+- À DÉCIDER : les deux autres 401 du fichier (autorisation NPF-Q400 absente, code de sécurité refusé) pourraient passer en
+  200 + JSON de la même façon (avec l'app adaptée) ; RUN : reprendre Déconnexion / bandeau v18.00 et la règle v18.01.
+
+C. ESSAIS (PC ; faux NAS local ; aucun appel au vrai NAS, au vrai VPS ni au vrai Global Link)
+- App, réponses lisibles (v100/pw_glr101.js) : Chrome 8/8, WebKit tactile service worker bloqué 8/8 : session invalide en
+  200 JSON et en 401 JSON : session effacée, aucune fenêtre seule, message, code au toucher du bouton, bon code : positions
+  revenues ; parcours 200 et 401 IDENTIQUES ; service indisponible (4 essais) : session gardée, message, pas de bandeau
+  « session expirée ? », positions revenues dès que le service répond ; DIAG. WebKit : le toucher simulé du bouton (appui
+  long, preventDefault au pointerdown) ne produit pas de clic dans Playwright : repli sur un clic (4 fois), comme l'iPad.
+  Contre-essai sur la v18.00 : 5/8 (en 200, la v18.00 gardait la session).
+- App, page HTML 401 sans CORS (v18.00 rejoué, pw_glr100.js) : Chrome 16/16, WebKit 16/16 (bandeau, Déconnexion, DIAG).
+- Trafic Moyens Nationaux, étiquettes 3 états et cercle (pw_cercle97b.js) : Chrome 14/14.
+- Non-régression rapide (cdp_nr90.js, P11, vraie V11) : 13/13 ; aucun « NPF » seul (cdp_npf66) ; mise à jour v18.00 -> v18.01
+  sans interception puis hors ligne, sur le code final : v18.01 servie, carte (50 NM), communes et PÉLIC hors ligne, 3 caches
+  de la pérenne intacts.
+- Script NAS, essai PHP local (essai-local/essai_php.sh, PHP 8.5 du PC ; copies d'essai : secret inventé, faux Global Link
+  local ; le PHP du PC n'ayant pas cURL, un remplaçant d'essai des fonctions curl_* est chargé avant le script — le NAS a la
+  vraie extension) : avant / après : sans session, session inconnue, expirée : 401 -> 200 global_session_invalid (session
+  effacée) ; Global Link OK : positions identiques ; refus JSON et 401 : 401 -> 200 global_session_invalid (effacée) ;
+  erreur 500, coupé, réponse HTML : 401 session effacée -> 200 global_link_unavailable, session GARDÉE ; CORS : github.io,
+  VPS et capacitor://localhost renvoyés tels quels, autre origine -> github.io (GET et OPTIONS 204) ; autorisation NPF-Q400
+  absente (401) et action inconnue (400) identiques. Installation / retour arrière sur un NAS simulé : OK, 2e installation
+  refusée, version en place inattendue refusée, arrivée dans le dossier web refusée, 2e retour refusé, jamais 403. Copies
+  d'essai contenant des secrets effacées.
+- À REGARDER SUR L'IPAD (après installation NAS) : session expirée -> message « Session Global Link expirée » (plus
+  « réseau ») et code au toucher du bouton ; DIAG « refus du NAS : session invalide ».
 
 VERSION TEST v18.00 — MOYENS NATIONAUX : SESSION EXPIRÉE (ÉTAPE 1 SUR 2) — DÉCONNEXION, BANDEAU « SESSION EXPIRÉE ? », DIAG
 Date : 18/11/2026

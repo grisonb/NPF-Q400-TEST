@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v18.00';
+const NPF_SCRIPT_BUILD_VERSION = 'v18.01';
 
 
 /*
@@ -3328,7 +3328,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v18.00 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v18.01 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -3786,7 +3786,7 @@ function formatNpfDiagMessageLine(item) {
 /* v18.00 — une ligne par échec des positions Moyens Nationaux. */
 function formatNpfDiagGlrFailureLine(item) {
     return '   ' + formatNpfDiagClock(item.at) + ' | ' + item.kind
-        + (item.kind === 'échec' ? ' n°' + item.streak + ' en erreur réseau de suite' : '')
+        + (item.kind === 'échec' && item.streak > 0 ? ' n°' + item.streak + ' en erreur réseau de suite' : '')   // v18.01 : rien si pas une erreur réseau
         + ' | ' + item.type + (item.http ? ' | HTTP ' + item.http : '') + ' | contrôle Internet : ' + item.control;
 }
 
@@ -35051,6 +35051,7 @@ async function refreshGlobalLinkPositions(options = {}) {
     npfGlobalLinkFetchInProgress = true;
     updateGlobalLinkButton({ loading: true });
     let globalLinkSessionRefusedByNas = false;
+    let globalLinkServiceUnavailable = false;   // v18.01
     try {
         let lastMessage = '';
         let response = null;
@@ -35074,12 +35075,22 @@ async function refreshGlobalLinkPositions(options = {}) {
         if (!response.ok || !payload || payload.ok !== true) {
             if (response.status === 401) {
                 if (payload?.error === 'npf_authorization_required') clearBriefingDocsSession();
-                if (payload?.error === 'global_session_invalid') {
-                    clearStoredGlobalLinkSession();
-                    npfGlobalLinkNasConfirmedToken = '';
-                    npfGlobalLinkNasConfirmedAt = 0;
-                    globalLinkSessionRefusedByNas = true;
-                }
+            }
+            /* v18.01 — « session invalide » LISIBLE en JSON = session expirée QUEL QUE SOIT le code HTTP (401 comme avant,
+             * ou 200 + JSON d'erreur + CORS, réponse prévue du NAS modifié, comme BFG) : session Moyens Nationaux effacée,
+             * code redemandé comme pour un 401 lisible (jamais de fenêtre qui s'ouvre seule : seulement au toucher). */
+            if (payload?.error === 'global_session_invalid') {
+                clearStoredGlobalLinkSession();
+                npfGlobalLinkNasConfirmedToken = '';
+                npfGlobalLinkNasConfirmedAt = 0;
+                globalLinkSessionRefusedByNas = true;
+            }
+            /* v18.01 — « service Moyens Nationaux indisponible » (panne du serveur Global Link, réponse prévue du NAS
+             * modifié) : la session N'EST PAS effacée ; message actuel, nouveaux essais au rythme habituel. */
+            if (payload?.error === 'global_link_unavailable') {
+                globalLinkServiceUnavailable = true;
+                npfGlobalLinkLastAuthState = 'positions-service-indisponible';
+                if (!payload?.message) lastMessage = 'Service Moyens Nationaux indisponible (serveur Global Link). Connexion conservée, nouvel essai automatique.';
             }
             if (isGlobalLinkTemporaryLoadFail(lastMessage)) {
                 npfGlobalLinkLastAuthState = 'positions-load-fail-temporaire';
@@ -35139,7 +35150,8 @@ async function refreshGlobalLinkPositions(options = {}) {
             ? 'délai dépassé'
             : temporaryNetworkError
                 ? 'erreur réseau (réponse illisible : Load failed)'
-                : (globalLinkSessionRefusedByNas ? 'refus du NAS : session invalide' : `autre : ${String(error?.message || error || '').slice(0, 70)}`);
+                : (globalLinkSessionRefusedByNas ? 'refus du NAS : session invalide'
+                    : (globalLinkServiceUnavailable ? 'service Moyens Nationaux indisponible (session gardée)' : `autre : ${String(error?.message || error || '').slice(0, 70)}`));
         try {
             npfDiagGlobalLinkPositionsFailure({
                 kind: 'échec',

@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v18-00_session_moyens_nationaux';
-const APP_VERSION = 'v18.00';
+const SW_VERSION = 'sw-v18-01_session_mn_json';
+const APP_VERSION = 'v18.01';
 const SIA_DATA_REVISION = 'sia-2026-10-29-v02-g15';
 const SIA_DATA_URL = './sia.js';
 /*
