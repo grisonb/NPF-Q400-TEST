@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v18-03_prototype_carte_gpu';
-const APP_VERSION = 'v18.03';
+const SW_VERSION = 'sw-v18-04_prototype_carte_complet';
+const APP_VERSION = 'v18.04';
 const SIA_DATA_REVISION = 'sia-2026-10-29-v02-g15';
 const SIA_DATA_URL = './sia.js';
 /*
@@ -90,13 +90,22 @@ const APP_SHELL_URLS = [...CORE_APP_SHELL_URLS, ...APP_DATA_URLS];
  *   (20 s au plus) ; MapLibre (dossier versionné, contenu fixe) est recopié du cache précédent s'il y est ;
  * - ses fichiers sont servis depuis ce cache (réseau en secours, alors rangés dans ce même cache) ;
  * - la page n'est JAMAIS servie à la place de index.html, ni rangée sous index.html (le shell n'est pas touché).
+ * v18.04 — même cache pour le fil des routes (prototype-carte-routes.js) et les données préparées sur le PC
+ * (prototype-carte-donnees.json, -zones.geojson, -points.geojson : ≈ 3 Mo) ; les données ne sont jamais recopiées
+ * d'un ancien cache (elles changent avec le jeu SIA).
  */
 const PROTOTYPE_CARTE_CACHE_PREFIX = 'npf-q400-test-prototype-carte-';
 const PROTOTYPE_CARTE_CACHE = `${PROTOTYPE_CARTE_CACHE_PREFIX}${SW_VERSION}`;
 const PROTOTYPE_CARTE_PAGE_URLS = [
     './prototype-carte.html',
     './prototype-carte.js',
-    './prototype-carte.css'
+    './prototype-carte.css',
+    './prototype-carte-routes.js'
+];
+const PROTOTYPE_CARTE_DATA_URLS = [
+    './prototype-carte-donnees.json',
+    './prototype-carte-zones.geojson',
+    './prototype-carte-points.geojson'
 ];
 const PROTOTYPE_CARTE_LIB_URLS = [
     './maplibre-6.17.0/maplibre-gl.mjs',
@@ -110,7 +119,8 @@ function isPrototypeCarteRequest(request) {
         const parsed = new URL(request.url);
         if (parsed.origin !== self.location.origin) return false;
         const name = parsed.pathname.split('/').pop() || '';
-        if (['prototype-carte.html', 'prototype-carte.js', 'prototype-carte.css'].includes(name)) return true;
+        if (['prototype-carte.html', 'prototype-carte.js', 'prototype-carte.css', 'prototype-carte-routes.js',
+            'prototype-carte-donnees.json', 'prototype-carte-zones.geojson', 'prototype-carte-points.geojson'].includes(name)) return true;
         return /\/maplibre-6\.17\.0\/[^/]+$/.test(parsed.pathname);
     } catch (_) {
         return false;
@@ -119,7 +129,7 @@ function isPrototypeCarteRequest(request) {
 
 async function isValidPrototypeCartePageResponse(url, response) {
     if (!response || !response.ok) return false;
-    if (PROTOTYPE_CARTE_LIB_URLS.includes(url)) return true;
+    if (PROTOTYPE_CARTE_LIB_URLS.includes(url) || PROTOTYPE_CARTE_DATA_URLS.includes(url)) return true;
     try {
         return (await response.clone().text()).includes(APP_VERSION);
     } catch (_) {
@@ -132,7 +142,7 @@ async function cacheNpfPrototypeCarteFiles() {
     const previous = (await caches.keys()).filter(name => (
         name.startsWith(PROTOTYPE_CARTE_CACHE_PREFIX) && name !== PROTOTYPE_CARTE_CACHE
     ));
-    await Promise.all([...PROTOTYPE_CARTE_PAGE_URLS, ...PROTOTYPE_CARTE_LIB_URLS].map(async url => {
+    await Promise.all([...PROTOTYPE_CARTE_PAGE_URLS, ...PROTOTYPE_CARTE_LIB_URLS, ...PROTOTYPE_CARTE_DATA_URLS].map(async url => {
         if (await cache.match(url, { ignoreSearch: true })) return;
         if (PROTOTYPE_CARTE_LIB_URLS.includes(url)) {
             for (const name of previous) {
@@ -162,7 +172,7 @@ async function handlePrototypeCarteRequest(request) {
             const path = new URL(request.url).pathname;
             const libIndex = path.lastIndexOf('/maplibre-6.17.0/');
             const key = libIndex >= 0 ? `.${path.slice(libIndex)}` : `./${path.split('/').pop()}`;
-            if ([...PROTOTYPE_CARTE_PAGE_URLS, ...PROTOTYPE_CARTE_LIB_URLS].includes(key)
+            if ([...PROTOTYPE_CARTE_PAGE_URLS, ...PROTOTYPE_CARTE_LIB_URLS, ...PROTOTYPE_CARTE_DATA_URLS].includes(key)
                 && await isValidPrototypeCartePageResponse(key, fresh)) {
                 await cache.put(key, fresh.clone()).catch(() => null);
             }

@@ -1,4 +1,4 @@
-/* NPF-Q400 TEST v18.03 — prototype de carte MapLibre GL JS (page à part). */
+/* NPF-Q400 TEST v18.04 — prototype de carte MapLibre GL JS (page à part). */
 html, body {
     margin: 0;
     padding: 0;
@@ -99,4 +99,20 @@ html, body {
     font: 900 14px/1.1 Arial, Helvetica, sans-serif;
     color: #111;
     margin-top: 3px;
+}
+/* v18.04 — boutons un peu plus compacts (10 boutons sur une ou deux lignes) et état du trajet simulé. */
+#proto-barre .proto-bouton {
+    padding: 10px 11px;
+    font-size: 15px;
+}
+.proto-trajet-etat {
+    right: calc(env(safe-area-inset-right, 0px) + 10px);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+    background: rgba(255, 255, 255, .9);
+    color: #004370;
+    font: 800 13px/1.2 Arial, Helvetica, sans-serif;
+    border-radius: 8px;
+    padding: 6px 9px;
+    box-shadow: 0 1px 5px rgba(0, 0, 0, .25);
+    pointer-events: none;
 }

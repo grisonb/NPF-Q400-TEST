@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v18.03';
+const NPF_SCRIPT_BUILD_VERSION = 'v18.04';
 
 
 /*
@@ -3332,7 +3332,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v18.03 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v18.04 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -5156,7 +5156,7 @@ function ensureNpfStartupDiagnosticUi() {
                     <button type="button" id="npf-startup-diag-close" aria-label="Fermer">×</button>
                 </div>
                 <div id="npf-startup-diag-body" class="npf-startup-diag-body"></div>
-                <div class="npf-startup-diag-proto-gpu-row"><button type="button" id="npf-startup-diag-proto-gpu" aria-label="Ouvrir le prototype de carte GPU (page à part)">Prototype carte GPU</button></div>
+                <div class="npf-startup-diag-proto-gpu-row"><button type="button" class="npf-startup-diag-trajet" data-trajet="30" aria-label="Trajet simulé de 30 minutes en suivi (banc)">Trajet 30 min</button><button type="button" class="npf-startup-diag-trajet" data-trajet="60" aria-label="Trajet simulé de 60 minutes en suivi (banc)">Trajet 60 min</button><button type="button" class="npf-startup-diag-trajet" data-trajet="0" aria-label="Arrêter le trajet simulé">Arrêter le trajet</button><button type="button" id="npf-startup-diag-proto-gpu" aria-label="Ouvrir le prototype de carte GPU (page à part)">Prototype carte GPU</button></div>
             </div>`;
         document.body.appendChild(panel);
     }
@@ -5222,6 +5222,19 @@ function ensureNpfStartupDiagnosticUi() {
         event.preventDefault();
         event.stopPropagation();
         if (typeof openNpfPrototypeCarteGpu === 'function') openNpfPrototypeCarteGpu();
+    });
+    /* v18.04 — trajet simulé du banc (src/360) : Valence -> Marseille (30 min) ou aller-retour (60 min), suivi ON. */
+    panel.querySelectorAll('.npf-startup-diag-trajet').forEach(bouton => {
+        bouton.addEventListener('click', event => {
+            event.preventDefault();
+            event.stopPropagation();
+            const minutes = Number(bouton.dataset.trajet || 0);
+            if (!minutes) {
+                if (typeof arreterNpfBancTrajet === 'function') arreterNpfBancTrajet('arrêté par le bouton');
+                return;
+            }
+            if (typeof demarrerNpfBancTrajet === 'function' && demarrerNpfBancTrajet(minutes)) close();
+        });
     });
     panel.querySelectorAll('.npf-startup-diag-page-button').forEach(pageButton => {
         pageButton.addEventListener('click', event => {

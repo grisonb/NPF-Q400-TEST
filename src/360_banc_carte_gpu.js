@@ -1,6 +1,8 @@
 /*
  * v18.03 — BANC CARTE GPU, côté carte NPF-Q400 actuelle (Leaflet) : mêmes mesures que le prototype MapLibre
  * (prototype-carte.html), pour comparer les deux DIAG sur l'iPad. Rien ne change à l'affichage.
+ * v18.04 — couches de chaque geste, gestes à 20 NM, session longue par tranches de 10 min, trajet simulé
+ * (boutons du DIAG) ; l'affichage de la carte actuelle ne change toujours pas.
  */
 /* ==== BANC CARTE GPU — DÉBUT DU CODE COMMUN (identique dans src/360_banc_carte_gpu.js et prototype-carte.js) ==== */
 /*
@@ -13,12 +15,20 @@
  * - retours au premier plan : durée de l'absence, perte du contexte graphique, temps jusqu'à une carte de nouveau
  *   complète, alerte « CARTE BLANCHE » si la carte reste vide plus de 2 s.
  * PASSIF : écouteurs passifs, aucune action sur la carte, rien d'enregistré (mémoire de la page seulement).
+ * v18.04 — en plus :
+ * - couches affichées au début de chaque geste (adaptateur.couches()), des deux côtés ; gestes classés aussi à 20 NM ;
+ * - session longue (trajet simulé en suivi ON) : images par seconde par tranche de 10 minutes (cadence
+ *   requestAnimationFrame pendant tout le trajet, page visible), saccades, image la plus longue, dalles blanches
+ *   relevées toutes les 5 s, « carte vide plus de 2 s » ; la boucle d'images ne tourne QUE pendant un trajet.
  */
 function npfBancCreer(adaptateur) {
     const SACCADE_MS = 50;
     const VIDE_ALERTE_MS = 2000;
     const SUIVI_RETOUR_MAX_MS = 30000;
+    const TRANCHE_MS = Number(adaptateur.trancheMs) > 0 ? Number(adaptateur.trancheMs) : 600000;
+    const ECHANTILLON_MS = 5000;
     const B = {
+        trajets: [],
         debut: Date.now(),
         gestes: [],
         categories: {},
@@ -69,6 +79,9 @@ function npfBancCreer(adaptateur) {
             return { total: 0, chargees: 0 };
         }
     };
+    const lireCouches = () => {
+        try { return String(adaptateur.couches ? adaptateur.couches() : '') || '—'; } catch (_) { return '—'; }
+    };
     const horsCarte = cible => {
         try {
             return !!(cible && cible.closest && cible.closest('button, input, select, textarea, a, .proto-ui, .leaflet-control, [role="dialog"]'));
@@ -85,7 +98,8 @@ function npfBancCreer(adaptateur) {
             derniere: null,
             dts: [],
             images: 0,
-            echelleNm: (() => { try { return adaptateur.echelleNm(); } catch (_) { return NaN; } })()
+            echelleNm: (() => { try { return adaptateur.echelleNm(); } catch (_) { return NaN; } })(),
+            couches: lireCouches()
         };
         if (!rafActif) {
             rafActif = true;
@@ -140,13 +154,15 @@ function npfBancCreer(adaptateur) {
             imageMaxMs: Math.round(dtMax),
             saccades: g.dts.filter(dt => dt > SACCADE_MS).length,
             blanches: Math.max(0, cov.total - cov.chargees),
-            dallesFin: cov.total
+            dallesFin: cov.total,
+            couches: g.couches
         };
         B.gestes.push(enregistrement);
         while (B.gestes.length > 200) B.gestes.shift();
         const cle = enregistrement.type + '|' + enregistrement.echelle;
-        const cat = B.categories[cle] || (B.categories[cle] = { type: enregistrement.type, echelle: enregistrement.echelle, gestes: 0, dts: [], blanches: [] });
+        const cat = B.categories[cle] || (B.categories[cle] = { type: enregistrement.type, echelle: enregistrement.echelle, gestes: 0, dts: [], blanches: [], couches: {} });
         cat.gestes += 1;
+        cat.couches[enregistrement.couches] = (cat.couches[enregistrement.couches] || 0) + 1;
         g.dts.forEach(dt => cat.dts.push(dt));
         if (cat.dts.length > 20000) cat.dts.splice(0, cat.dts.length - 20000);
         cat.blanches.push(enregistrement.blanches);
@@ -235,9 +251,92 @@ function npfBancCreer(adaptateur) {
         tick();
     }
 
+    /* ---------- Session longue (trajet simulé) : tranches de 10 minutes ---------- */
+    let trajet = null;
+    const nouvelleTranche = () => ({ images: 0, histo: new Uint32Array(1001), saccades: 0, maxDt: 0, blanches: [], vides: 0, videLongs: 0, couches: {} });
+    function imageTrajet(t) {
+        const tr = trajet;
+        if (!tr || tr.fini) return;
+        if (tr.derniere !== null) {
+            const dt = t - tr.derniere;
+            /* Écart de plus d'1 s : page cachée ou mise en pause par le système, pas une image affichée. */
+            if (dt > 0 && dt <= 1000) {
+                const i = Math.min(Math.floor((Date.now() - tr.debut) / TRANCHE_MS), 200);
+                while (tr.tranches.length <= i) tr.tranches.push(nouvelleTranche());
+                const s = tr.tranches[i];
+                s.images += 1;
+                s.histo[Math.min(1000, Math.round(dt))] += 1;
+                if (dt > SACCADE_MS) s.saccades += 1;
+                if (dt > s.maxDt) s.maxDt = dt;
+            }
+        }
+        tr.derniere = t;
+        requestAnimationFrame(imageTrajet);
+    }
+    function echantillonTrajet() {
+        const tr = trajet;
+        if (!tr || tr.fini || document.visibilityState === 'hidden') {
+            if (tr) tr.videDepuis = null;
+            return;
+        }
+        const i = Math.min(Math.floor((Date.now() - tr.debut) / TRANCHE_MS), 200);
+        while (tr.tranches.length <= i) tr.tranches.push(nouvelleTranche());
+        const s = tr.tranches[i];
+        const cov = couverture();
+        s.blanches.push(Math.max(0, cov.total - cov.chargees));
+        let c = lireCouches();
+        try { c = libelleEchelle(adaptateur.echelleNm()) + ' · ' + c; } catch (_) {}
+        s.couches[c] = (s.couches[c] || 0) + 1;
+        const vide = contextePerdu || (cov.total > 0 && cov.chargees === 0);
+        if (vide) {
+            s.vides += 1;
+            if (tr.videDepuis === null) tr.videDepuis = maintenant();
+            else if (maintenant() - tr.videDepuis > VIDE_ALERTE_MS && !tr.videCompte) { s.videLongs += 1; tr.videCompte = true; }
+        } else {
+            tr.videDepuis = null;
+            tr.videCompte = false;
+        }
+    }
+    const histoValeur = (histo, total, p) => {
+        /* Durée d'image au rang p (0..1) : p = 0,5 médiane ; p = 0,95 = les 5 % d'images les plus longues. */
+        if (!total) return NaN;
+        const rang = Math.max(1, Math.ceil(p * total));
+        let cumul = 0;
+        for (let ms = 0; ms < histo.length; ms += 1) {
+            cumul += histo[ms];
+            if (cumul >= rang) return Math.max(1, ms);
+        }
+        return histo.length - 1;
+    };
+    const plusFrequent = obj => {
+        let best = '—', n = -1, total = 0;
+        Object.entries(obj || {}).forEach(([k, v]) => { total += v; if (v > n) { best = k; n = v; } });
+        return total ? best + (Object.keys(obj).length > 1 ? ' (' + Math.round(n * 100 / total) + ' % du temps)' : '') : '—';
+    };
+
     const banc = {
         etat: B,
         brancher,
+        trajetDebut(description) {
+            if (trajet && !trajet.fini) banc.trajetFin('remplacé par un nouveau trajet');
+            trajet = { a: Date.now(), debut: Date.now(), description: String(description || ''), tranches: [nouvelleTranche()], derniere: null, fini: false, finA: null, raison: '', videDepuis: null, videCompte: false, minuterie: null };
+            B.trajets.push(trajet);
+            while (B.trajets.length > 6) B.trajets.shift();
+            trajet.minuterie = setInterval(echantillonTrajet, ECHANTILLON_MS);
+            requestAnimationFrame(imageTrajet);
+        },
+        trajetFin(raison) {
+            const tr = trajet;
+            if (!tr || tr.fini) return;
+            tr.fini = true;
+            tr.finA = Date.now();
+            tr.raison = String(raison || 'fini');
+            clearInterval(tr.minuterie);
+            tr.minuterie = null;
+        },
+        trajetEnCours() {
+            return !!(trajet && !trajet.fini);
+        },
         tuileDemandee(cle) {
             B.tuiles.demandees += 1;
             enAttente.delete(cle);
@@ -290,11 +389,12 @@ function npfBancCreer(adaptateur) {
             let ecran = '—';
             try { ecran = Math.round(window.innerWidth) + '×' + Math.round(window.innerHeight) + ' CSS ×' + (window.devicePixelRatio || 1); } catch (_) {}
             L.push('');
-            L.push('################ BANC CARTE GPU (v18.03) ################');
+            L.push('################ BANC CARTE GPU (v18.04) ################');
             L.push('Moteur : ' + adaptateur.nom + ' | écran ' + ecran + ' | mesure depuis ' + heure(B.debut));
             L.push('Méthode : images/s = cadence d’affichage (requestAnimationFrame) de la pose du doigt à la fin de l’inertie ; saccade = image de plus de ' + SACCADE_MS + ' ms ; échelle lue au début du geste');
+            L.push('Couches maintenant : ' + lireCouches());
             L.push('Gestes : ' + B.gestes.length + ' mesuré(s)');
-            const ordre = ['glissement|5 NM', 'glissement|2 NM', 'pincement|5 NM', 'pincement|2 NM'];
+            const ordre = ['glissement|20 NM', 'glissement|5 NM', 'glissement|2 NM', 'pincement|20 NM', 'pincement|5 NM', 'pincement|2 NM'];
             const nomType = { glissement: 'Glissement', pincement: 'Pincement', molette: 'Molette (PC)' };
             const autres = Object.keys(B.categories).filter(k => !ordre.includes(k)).sort();
             [...ordre, ...autres].forEach(cle => {
@@ -308,6 +408,7 @@ function npfBancCreer(adaptateur) {
                 const bl = cat.blanches;
                 const moyBl = bl.length ? (bl.reduce((a, b) => a + b, 0) / bl.length) : 0;
                 L.push(nom + cat.gestes + ' geste(s) | médiane ' + ips(mediane(cat.dts)) + ' i/s | pire ' + ips(Math.max(...cat.dts)) + ' i/s (image de ' + Math.round(Math.max(...cat.dts)) + ' ms) | saccades ' + cat.dts.filter(dt => dt > SACCADE_MS).length + ' sur ' + cat.dts.length + ' images | dalles blanches à la fin : moy ' + moyBl.toFixed(1).replace('.', ',') + ' / max ' + Math.max(...bl));
+                Object.entries(cat.couches || {}).sort((a, b) => b[1] - a[1]).forEach(([c, n]) => L.push('      couches (' + n + ' geste' + (n > 1 ? 's' : '') + ') : ' + c));
             });
             const d = B.tuiles.durees;
             L.push('Dalles du fond (demande -> image prête) : ' + B.tuiles.demandees + ' demandées / ' + B.tuiles.affichees + ' affichées / ' + B.tuiles.absentes + ' absentes de la carte'
@@ -332,12 +433,31 @@ function npfBancCreer(adaptateur) {
                         + (p.blanche ? ' | ⚠ CARTE BLANCHE (vide plus de 2 s)' : ''));
                 });
             }
+            L.push('Session longue (trajet simulé, suivi ON) : ' + B.trajets.length + ' trajet(s) | tranches de ' + (TRANCHE_MS >= 60000 ? Math.round(TRANCHE_MS / 60000) + ' min' : Math.round(TRANCHE_MS / 1000) + ' s (essai)'));
+            B.trajets.forEach(tr => {
+                L.push('  ' + tr.description + ' | début ' + heure(tr.debut) + ' | ' + (tr.fini ? 'fin ' + heure(tr.finA) + ' (' + tr.raison + ', ' + duree(tr.finA - tr.debut) + ')' : 'en cours depuis ' + duree(Date.now() - tr.debut)));
+                tr.tranches.forEach((s, i) => {
+                    const unite = TRANCHE_MS >= 60000 ? 60000 : 1000, nomUnite = unite === 60000 ? ' min' : ' s';
+                    const de = Math.round(i * TRANCHE_MS / unite), a = Math.round((i + 1) * TRANCHE_MS / unite);
+                    if (!s.images && !s.blanches.length) {
+                        L.push('    ' + de + '-' + a + nomUnite + ' : aucune image (page cachée ?)');
+                        return;
+                    }
+                    const bl = s.blanches;
+                    const moyBl = bl.length ? bl.reduce((x, y) => x + y, 0) / bl.length : 0;
+                    L.push('    ' + de + '-' + a + nomUnite + ' : ' + s.images + ' images | médiane ' + ips(histoValeur(s.histo, s.images, 0.5)) + ' i/s | 5 % les plus lentes ≤ ' + ips(histoValeur(s.histo, s.images, 0.95)) + ' i/s'
+                        + ' | saccades ' + s.saccades + ' | image max ' + Math.round(s.maxDt) + ' ms | dalles blanches moy ' + moyBl.toFixed(1).replace('.', ',') + ' / max ' + (bl.length ? Math.max(...bl) : 0)
+                        + ' | carte vide : ' + s.vides + ' relevé(s)' + (s.videLongs ? ' | ⚠ CARTE BLANCHE ' + s.videLongs + ' fois (vide plus de 2 s)' : ''));
+                    L.push('      couches : ' + plusFrequent(s.couches));
+                });
+            });
             L.push('Derniers gestes (' + Math.min(30, B.gestes.length) + ') :');
             B.gestes.slice(-30).forEach(g => {
                 L.push('  ' + heure(g.a) + ' | ' + g.type + ' ' + g.echelle + (g.echelleFin !== g.echelle ? ' -> ' + g.echelleFin : '')
                     + ' | ' + (g.dureeMs / 1000).toFixed(2).replace('.', ',') + ' s · ' + g.images + ' images'
                     + ' | moy ' + g.ipsMoy + ' · médiane ' + g.ipsMed + ' · pire ' + g.ipsPire + ' i/s'
-                    + ' | saccades ' + g.saccades + ' | blanches fin ' + g.blanches + '/' + g.dallesFin);
+                    + ' | saccades ' + g.saccades + ' | blanches fin ' + g.blanches + '/' + g.dallesFin
+                    + ' | couches : ' + (g.couches || '—'));
             });
             return L;
         }
@@ -379,6 +499,59 @@ function getNpfBancCarteLeafletMemoire() {
         + canvasN + ' canvas (≈ ' + Math.round(canvasOctets / 1048576) + ' Mo' + (plusGrand ? ', le plus grand ' + plusGrand : '') + ')' + tas;
 }
 
+/*
+ * v18.04 — couches affichées par la carte actuelle (lecture des états de l'app, aucun calcul, aucune action) :
+ * même ligne que le prototype dans le DIAG (« couches : … »), relevée au début de chaque geste.
+ */
+function getNpfBancCarteLeafletCouches() {
+    const parties = ['fond'];
+    const nb = v => (Number.isFinite(Number(v)) ? Number(v) : 0);
+    try { if (typeof npfCalqueNomsLayer !== 'undefined' && npfCalqueNomsLayer && map.hasLayer(npfCalqueNomsLayer)) parties.push('noms'); } catch (_) {}
+    try { if (showHighVoltageLinesLayer && isHighVoltageLayerEffectiveAtCurrentScale()) parties.push('HT'); } catch (_) {}
+    try {
+        if (isRoadOverlayEffectiveAtCurrentZoom()) {
+            const t = getRoadOverlayZoomTier();
+            parties.push('Routes (' + (t >= 2 ? 'A N D M T' : 'autoroutes') + ')');
+        }
+    } catch (_) {}
+    let echelle = Infinity;
+    try { echelle = getCurrentNpfScaleNm(); } catch (_) {}
+    try {
+        const zones = siaMapAirspacesVisible && Array.isArray(siaRenderedAirspaceFeatures) ? siaRenderedAirspaceFeatures.length : 0;
+        if (zones) {
+            const details = [];
+            if (map.getZoom() >= SIA_AIRSPACE_OUTLINE_MIN_ZOOM) details.push('contours');
+            if (siaAirspaceVeilLayers.length && getSiaAirspaceVeilOpacity('P') > 0) details.push('voiles P/D');
+            let bordures = 0;
+            try { bordures = siaInnerBandLayerGroup ? siaInnerBandLayerGroup.getLayers().length : 0; } catch (_) {}
+            if (bordures) details.push('bordures ' + bordures);
+            const noms = Array.isArray(siaZoomDependentLayers) ? siaZoomDependentLayers.length : 0;
+            if (noms) details.push('noms ' + noms);
+            parties.push('zones SIA ' + zones + ' posées' + (details.length ? ' (' + details.join(', ') + ')' : ''));
+        }
+    } catch (_) {}
+    try {
+        const vfr = Array.isArray(siaRenderedPointItems) ? siaRenderedPointItems.length : 0;
+        if (vfr) parties.push('VFR / points ' + vfr);
+        const ter = Array.isArray(siaRenderedTerrainItems) ? siaRenderedTerrainItems.length : 0;
+        if (ter) parties.push('terrains SIA ' + ter);
+        if (typeof siaDotherIconStats !== 'undefined' && nb(siaDotherIconStats.drawn)) parties.push('icônes AER/VOL/PJE ' + nb(siaDotherIconStats.drawn));
+    } catch (_) {}
+    try {
+        let terrains = 0;
+        if (typeof permanentAirportLayer !== 'undefined' && permanentAirportLayer) {
+            permanentAirportLayer.eachLayer(l => { if (l instanceof L.Marker && l._icon) terrains += 1; });
+        }
+        if (terrains) parties.push('PÉLIC / terrains ' + terrains);
+        const noms = typeof airportOperationalLabelLayer !== 'undefined' && airportOperationalLabelLayer ? airportOperationalLabelLayer.getLayers().length : 0;
+        if (noms) parties.push('noms des terrains ' + noms);
+        const pistes = typeof npfRunwayMapLayer !== 'undefined' && npfRunwayMapLayer ? Math.round(npfRunwayMapLayer.getLayers().length / 2) : 0;
+        if (pistes) parties.push('pistes ' + pistes);
+    } catch (_) {}
+    void echelle;
+    return parties.join(' + ');
+}
+
 function brancherNpfBancCarteLeafletFond() {
     const banc = npfBancCarteLeaflet;
     if (!banc || typeof baseTileLayer === 'undefined' || !baseTileLayer || baseTileLayer.__npfBancCarte) return;
@@ -400,6 +573,8 @@ function installNpfBancCarteLeaflet() {
     const banc = npfBancCreer({
         nom: 'Leaflet ' + (L.version || '') + ' (carte NPF-Q400 actuelle)',
         contexteSansObjet: true,
+        /* Essais sur PC seulement : tranches plus courtes si l'adresse contient « npfBancTranche=<secondes> ». */
+        trancheMs: (() => { try { const v = Number(new URLSearchParams(location.search).get('npfBancTranche')); return v > 0 ? v * 1000 : 0; } catch (_) { return 0; } })(),
         conteneur: () => map.getContainer(),
         dernierMouvement: () => npfBancCarteLeafletDernierMouvement,
         echelleNm: () => getCurrentNpfScaleNm(),
@@ -407,7 +582,8 @@ function installNpfBancCarteLeaflet() {
             const c = getNpfCurrentZoomVisibleTileCoverage();
             return { total: c.total, chargees: c.loaded };
         },
-        memoire: getNpfBancCarteLeafletMemoire
+        memoire: getNpfBancCarteLeafletMemoire,
+        couches: getNpfBancCarteLeafletCouches
     });
     if (!banc.brancher()) return false;
     npfBancCarteLeaflet = banc;
@@ -433,7 +609,7 @@ function installNpfBancCarteLeaflet() {
 function appendNpfBancCarteGpuSection(lines) {
     if (!npfBancCarteLeaflet) {
         lines.push('');
-        lines.push('################ BANC CARTE GPU (v18.03) ################');
+        lines.push('################ BANC CARTE GPU (v18.04) ################');
         lines.push('Moteur : Leaflet (carte NPF-Q400 actuelle) | mesure pas encore branchée (carte non prête)');
         return;
     }
@@ -468,3 +644,79 @@ function openNpfPrototypeCarteGpu() {
     window.location.href = 'prototype-carte.html?' + p.toString();
 }
 window.openNpfPrototypeCarteGpu = openNpfPrototypeCarteGpu;
+
+/*
+ * v18.04 — TRAJET SIMULÉ du banc (même trajet que le prototype) : départ Valence (LFLU), route vraie vers Marseille,
+ * demi-tour à 30 min ; vitesse telle que l'aller-retour dure 60 min ; suivi ON (le suivi de l'app, anticipé). Il utilise la simulation de l'app
+ * (même pas de 500 ms, même formule) : mode simulation activé s'il ne l'était pas, puis vitesse et route posées
+ * directement (sans les enregistrer : les réglages de simulation de l'utilisateur sont remis à la fin), suivi activé
+ * comme par son bouton. Tranches de 10 minutes mesurées par le banc. Lancé seulement par les boutons du DIAG.
+ */
+const NPF_BANC_TRAJET = Object.freeze({ depart: [44.91247778, 4.96578056], arrivee: [43.2965, 5.3698], nom: 'Valence (LFLU)', but: 'Marseille' });
+let npfBancTrajetEnCours = null;
+
+function calculerNpfBancTrajet() {
+    const r = Math.PI / 180;
+    const [la1, lo1] = NPF_BANC_TRAJET.depart, [la2, lo2] = NPF_BANC_TRAJET.arrivee;
+    const p1 = la1 * r, p2 = la2 * r, dl = (lo2 - lo1) * r;
+    const route = ((Math.atan2(Math.sin(dl) * Math.cos(p2), Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl)) / r) + 360) % 360;
+    const a = Math.sin((p2 - p1) / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
+    const distanceNm = 2 * 6371000 * Math.asin(Math.sqrt(a)) / 1852;
+    return { route, retour: (route + 180) % 360, distanceNm, vitesseKt: 2 * distanceNm };
+}
+
+function arreterNpfBancTrajet(raison = 'arrêté') {
+    const t = npfBancTrajetEnCours;
+    if (!t) return;
+    npfBancTrajetEnCours = null;
+    clearInterval(t.minuterie);
+    try {
+        simulationSpeedKt = t.avant.vitesse;
+        simulationRouteDeg = t.avant.route;
+        refreshSimulationMotionButtonState();
+    } catch (_) {}
+    try { if (!t.avant.suivi && centerGpsFollowActive) disableCenterGpsFollow(); } catch (_) {}
+    try { if (!t.avant.sim && isSimulationMode) disableSimulationMode({ restoreGps: t.gpsAvant }); } catch (_) {}
+    try { if (npfBancCarteLeaflet) npfBancCarteLeaflet.trajetFin(raison); } catch (_) {}
+}
+
+function demarrerNpfBancTrajet(minutes) {
+    if (!map || !npfBancCarteLeaflet) return false;
+    arreterNpfBancTrajet('remplacé par un nouveau trajet');
+    const duree = Number(minutes) >= 60 ? 60 : 30;
+    const calc = calculerNpfBancTrajet();
+    const avant = { sim: !!isSimulationMode, vitesse: simulationSpeedKt, route: simulationRouteDeg, suivi: !!centerGpsFollowActive };
+    if (!isSimulationMode) {
+        const alerte = window.alert;
+        window.alert = () => {};
+        try { enableSimulationMode(); } finally { window.alert = alerte; }
+    }
+    if (!isSimulationMode) return false;
+    const gpsAvant = !!simulationWasLiveGpsActiveBeforeSimulation;
+    const poserRoute = vraie => { simulationRouteDeg = normalizeSimulationRoute(vraie - Number(getNpfMagneticDeclination() || 0)); };
+    simulationSpeedKt = calc.vitesseKt;
+    poserRoute(calc.route);
+    applySimulatedUserPosition(NPF_BANC_TRAJET.depart[0], NPF_BANC_TRAJET.depart[1], { forceFullRefresh: true });
+    /* Déclinaison du point de départ (connue seulement une fois l'avion posé à Valence). */
+    poserRoute(calc.route);
+    try { refreshSimulationMotionButtonState(); } catch (_) {}
+    if (!centerGpsFollowActive) enableCenterGpsFollow();
+    const t = { minutes: duree, ecouleMs: 0, dernier: performance.now(), retourFait: false, avant, gpsAvant, minuterie: null };
+    npfBancTrajetEnCours = t;
+    npfBancCarteLeaflet.trajetDebut('Trajet ' + duree + ' min ' + NPF_BANC_TRAJET.nom + (duree >= 60 ? ' ⇄ ' : ' → ') + NPF_BANC_TRAJET.but
+        + ' | ' + Math.round(calc.vitesseKt) + ' kt, route vraie ' + Math.round(calc.route) + '° | suivi ON | carte actuelle (Leaflet)');
+    t.minuterie = setInterval(() => {
+        if (npfBancTrajetEnCours !== t) return;
+        const n = performance.now();
+        if (!document.hidden) t.ecouleMs += Math.min(1000, Math.max(0, n - t.dernier));
+        t.dernier = n;
+        if (!t.retourFait && t.minutes >= 60 && t.ecouleMs >= 30 * 60000) t.retourFait = true;
+        /* La déclinaison magnétique suit la position : la route est reposée à chaque pas pour garder la MÊME route vraie
+         * que le prototype (route vraie constante, comme sa simulation). */
+        poserRoute(t.retourFait ? calc.retour : calc.route);
+        if (t.ecouleMs >= t.minutes * 60000) arreterNpfBancTrajet('fini');
+    }, 500);
+    return true;
+}
+window.demarrerNpfBancTrajet = demarrerNpfBancTrajet;
+window.arreterNpfBancTrajet = arreterNpfBancTrajet;

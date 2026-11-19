@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 19/11/2026
-Version de travail actuelle : TEST v18.03
+Version de travail actuelle : TEST v18.04
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -555,8 +555,15 @@ NON IMPLÉMENTÉ / OUVERT :
   bouton « Prototype carte GPU » du DIAG : fond V11 + noms des communes lus en LECTURE SEULE dans les bases actuelles, HT
   du cache (mêmes couleurs, même règle du 63 kV), avion simulé, suivi, échelle NM, boutons 5 NM / 2 NM, Retour à NPF-Q400 ;
   même DIAG « BANC CARTE GPU » des deux côtés (images/s 5 NM / 2 NM, dalles, mémoire, arrière-plan, CARTE BLANCHE) ; carte
-  actuelle inchangée (image identique à la v18.02). À MESURER sur iPad ; bascule À DÉCIDER sur les chiffres de l'iPad ;
-  COMMIT LOCAL, NON POUSSÉE ;
+  actuelle inchangée (image identique à la v18.02). DIAG iPad du 19/11 : prototype bien plus fluide MAIS sans zones ni VFR
+  (comparaison sans valeur) ; POUSSÉE le 19/11/2026 (3b91ffc) ;
+- v18.04 : PROTOTYPE COMPLET : zones SIA (contours, voiles P / D, bordures, noms), VFR et points, terrains SIA, icônes
+  AER / VOL / PJE, PÉLIC et terrains de l'app (noms + fréquences à 2 NM), pistes, HT, Calque Routier avec numéros (lu dans le
+  cache de l'app par un fil à part), mêmes couleurs et règles d'échelle que l'app ; données préparées sur le PC par la vraie
+  app (prototype-carte-donnees.json, -zones.geojson, -points.geojson : À REFAIRE à chaque sia.js, v104/run_gen104.sh) ;
+  DIAG des deux côtés : couches de chaque geste, 20 NM, trajet simulé 30 / 60 min (même trajet Valence <-> Marseille en
+  suivi, boutons du DIAG et du prototype) mesuré par tranches de 10 min ; carte actuelle identique au pixel à la v18.03.
+  À MESURER sur iPad ; bascule À DÉCIDER ; COMMIT LOCAL, NON POUSSÉE ;
 - v18.02 : bouton Moyens Nationaux : contour VERT dès que la session est connectée (même sans appareil détecté, même calque
   masqué OFF) ; ROUGE sans session, ou calque affiché quand la dernière demande de positions a échoué (réseau, hors ligne,
   « service indisponible »), puis vert dès la demande suivante réussie (demande de Bastien du 19/11). À MESURER sur iPad ;
@@ -878,34 +885,36 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v18.03
+Version : TEST v18.04
 Date : 19/11/2026
-Base : v18.02 (53f030f, poussée le 19/11/2026)
+Base : v18.03 (3b91ffc, poussée le 19/11/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v18.03.txt
-2_Index_v18.03.txt
-3_Manifest_v18.03.txt
-4_Script_v18.03.txt
-5_SIA_v18.03.txt
-6_Style_v18.03.txt
-7_Sw_v18.03.txt
+1_Modifications_v18.04.txt
+2_Index_v18.04.txt
+3_Manifest_v18.04.txt
+4_Script_v18.04.txt
+5_SIA_v18.04.txt
+6_Style_v18.04.txt
+7_Sw_v18.04.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v18.03 (et texte « TEST v18.03 » de l'écran de
+- Index : APP_VERSION = v18.04 (et texte « TEST v18.04 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v18.03
-- Script : NPF_SCRIPT_BUILD_VERSION = v18.03
-- Style : NPF_STYLE_BUILD_VERSION = v18.03
+- Manifest : start_url = ./index.html?appv=v18.04
+- Script : NPF_SCRIPT_BUILD_VERSION = v18.04
+- Style : NPF_STYLE_BUILD_VERSION = v18.04
 - Prototype de carte (v18.03) : prototype-carte.html, prototype-carte.js, prototype-carte.css et dossier maplibre-6.17.0/
   (maplibre-gl.mjs, maplibre-gl-worker.mjs, maplibre-gl.css, LICENSE.txt BSD-3), à livrer avec les 7 fichiers ; « ?appv= » de
   la page et constante APPV de prototype-carte.js à changer à chaque version ; bloc « BANC CARTE GPU » commun identique
-  dans src/360_banc_carte_gpu.js et prototype-carte.js.
+  dans src/360_banc_carte_gpu.js et prototype-carte.js. v18.04 : + prototype-carte-routes.js (fil des routes) et les données
+  préparées sur PC prototype-carte-donnees.json, prototype-carte-zones.geojson, prototype-carte-points.geojson (à livrer
+  aussi ; à régénérer à chaque nouveau sia.js : ~/projects/outils_tests_NPF-Q400-TEST/v104/run_gen104.sh <port> <copie app>).
 - Nom de l'app (v17.94) : « NPF-Q400 TEST » (manifest name et short_name, <title>, apple-mobile-web-app-title)
 - PDF.js (v17.96) : dossier pdfjs/ (pdf.min.mjs, pdf.worker.min.mjs 4.10.38, LICENSE Apache-2.0, LISEZMOI.txt), à livrer
   avec les 7 fichiers ; fichiers indispensables du service worker.
-- Service Worker : `sw-v18-03_prototype_carte_gpu` ; caches TEST
-  `npf-q400-test-app-shell-sw-v18-03_prototype_carte_gpu`, `npf-q400-test-prototype-carte-sw-v18-03_prototype_carte_gpu`,
+- Service Worker : `sw-v18-04_prototype_carte_complet` ; caches TEST
+  `npf-q400-test-app-shell-sw-v18-04_prototype_carte_complet`, `npf-q400-test-prototype-carte-sw-v18-04_prototype_carte_complet`,
   `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-sia-2026-10-29-v02-g15`
 - SIA_DATA_REVISION (SW / Index sia.js?siav=) : sia-2026-10-29-v02-g15 (= NPF_SIA_DATA_REVISION
@@ -919,15 +928,15 @@ Références de version cohérentes :
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v18.03 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v18.04 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
 - `sia.js` : par rapport à v17.70, outre-mer retiré, « a » de 34 VRP renseigné, table vrpAirportColors ajoutée (2 pastels), révision g6 ; zones, terrains et points de métropole identiques ; moteur tuiles (src/100) modifié en v17.66 sur demande
   explicite (limite de zoom propre à chaque carte, zoom 11 OACI 1/500 000) ;
-- tests v18.03 : entrée v18.03 ; sia.js strictement identique à la v17.81 ;
+- tests v18.04 : entrée v18.04 ; sia.js strictement identique à la v17.81 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82, v17.83, v17.84, v17.85, v17.86, v17.87, v17.88, v17.89, v17.90, v17.91, v17.92, v17.93, v17.94, v17.95, v17.96, v17.97, v17.98, v17.99, v18.00, v18.01, v18.02 et v18.03 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82, v17.83, v17.84, v17.85, v17.86, v17.87, v17.88, v17.89, v17.90, v17.91, v17.92, v17.93, v17.94, v17.95, v17.96, v17.97, v17.98, v17.99, v18.00, v18.01, v18.02, v18.03 et v18.04 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
   v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE ;
   v17.56 VALIDÉE en vol ; v17.57 VALIDÉE sur iPad.
 
@@ -2456,6 +2465,139 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v18.04 — PROTOTYPE CARTE GPU, ÉTAPE 2 : PROTOTYPE COMPLET (ZONES SIA, VFR, TERRAINS, PÉLIC, PISTES, HT, ROUTES) POUR UNE COMPARAISON À ARMES ÉGALES
+Date : 19/11/2026
+Base fonctionnelle : v18.03 (commit 3b91ffc, poussée le 19/11/2026). Seule la TEST change : pérenne, RUN, BFG, NAS et VPS
+inchangés. sia.js inchangé (strictement identique à la v17.81). Moteur de tuiles (src/100), calques, séquenceur, index.html
+(hors numéros de version) : INCHANGÉS. La carte actuelle n'affiche rien de nouveau (image identique au pixel à la v18.03).
+
+0. CONTEXTE
+- 19/11/2026 : DIAG iPad de la v18.03 : prototype MapLibre bien plus fluide (pincements : 1 saccade sur 229 images contre 34
+  sur 269), mais comparaison sans valeur : le prototype n'affichait que le fond et les noms, la carte actuelle les zones SIA
+  (jusqu'à 1 809) et les points VFR. Demande de Bastien : prototype complet, mêmes couches, tests plus durs, essais PC et
+  non-régression bloquants, commit local seulement.
+- v18.03 poussée le 19/11/2026 (3b91ffc) ; GitHub Pages vérifié (APP_VERSION v18.03, SW sw-v18-03_prototype_carte_gpu,
+  script.js identique au dépôt, prototype-carte.html servi, maplibre-gl.mjs identique).
+
+A. PROTOTYPE COMPLET (prototype-carte.html / .js / .css, toujours ouvert SEULEMENT par le bouton du DIAG)
+- Couches dessinées par la puce graphique (couches MapLibre), dans l'ordre de la carte actuelle : fond, HT (z385), pistes
+  (z390), Calque Routier + numéros (z405-415), noms des communes (z420), zones SIA (z440 : voiles P / D, bordures intérieures,
+  contours, noms), icônes AER / VOL / PJE (z550), terrains SIA, VFR et autres points (z555), noms + fréquences des terrains,
+  terrains de l'app, PÉLIC (z600), étiquettes des terrains SIA et des points (z650), avion.
+- Mêmes règles d'échelle que l'app (appliquées à la fin d'un zoom, comme l'app) : contours à 10 NM et moins (zoom 9 Leaflet),
+  voiles P / D à 5 NM et plus, bordures et noms des zones sous 10 NM (avec HT + Routes allumées : noms à 5 NM et moins,
+  src/350 v17.58), VFR / points / icônes à 5 NM et moins, étiquettes des terrains SIA dès le zoom 8, terrains ajoutés (PIAF)
+  dès le zoom 7, noms + fréquences des terrains à 2 NM et moins, pistes dès 1 NM, autoroutes dès 2 NM, autres routes dès 1 NM,
+  HT masquées à 50 NM et plus (63 kV dès le zoom 10, etc.). Aucun numéro de zoom à l'écran.
+- Mêmes couleurs, traits, pointillés, voiles, bordure intérieure (7 px, 12 px, 22 %), mêmes textes que l'app : ils sont
+  CALCULÉS PAR L'APP ELLE-MÊME sur le PC (voir B) ; styles des marqueurs (PÉLIC, VRP, étiquettes, cartouches des routes, noms
+  des terrains, noms des zones) lus dans le CSS réellement appliqué par l'app.
+- Préférences de l'utilisateur lues en LECTURE SEULE à l'ouverture : catégories SIA cochées (avec la reprise SIV / RAS de
+  l'app, sans rien enregistrer), zones et VRP affichés, masquage au-dessus du FL115, PÉLIC désactivés / eau / ajoutés, HT et
+  Routes (boutons « HT » et « Routes » du prototype : pour la séance seulement, rien n'est enregistré).
+- Textes 100 % hors ligne : MapLibre dessine les lettres sur l'appareil avec SES polices (-apple-system sur l'iPad, comme la
+  carte actuelle ; graisse 900) : aucun fichier de police, aucun serveur.
+- Noms des zones : points d'ancrage préparés sur le PC (1 à 3 par zone selon sa taille, angle de la limite à cet endroit,
+  côté intérieur) ; texte tourné et décalé vers l'intérieur comme l'app, collisions entre noms (un nom qui chevauche est
+  caché). Essai abandonné en cours de travail (19/11) : texte « le long de la limite » de MapLibre, recalculé à chaque image
+  (mesuré à CPU ×6 : 31 images/s pour les seuls noms contre 63 pour le fond) — ABANDONNÉ.
+- Contours : une seule couche, pointillés propres à chaque zone (au lieu de 6 couches).
+- Calque Routier : lu là où l'app le range (index par cases « npf-road-overlay-spatial-v1 », sinon fichier de la partie
+  « npf-road-overlay-data-v1 ») par un FIL DE CALCUL À PART (prototype-carte-routes.js) : rien sur le fil principal ; un
+  cache n'est ouvert que s'il existe déjà (caches.has avant caches.open, qui créerait un cache absent) ; rechargé seulement
+  quand la vue sort de la zone lue (vue + 50 %) ou change de niveau. Numéros dans des cartouches (mêmes couleurs), espacés de
+  240 / 280 / 300 px selon le zoom comme l'app.
+- Boutons : Retour, 20 NM, 5 NM, 2 NM, Suivi avion, HT, Routes, Trajet 30 min, Trajet 60 min, Exporter DIAG.
+- NE FAIT PAS (liste de ce qui manque encore) : popups et fiches (zones, terrains, PÉLIC, VRP), sélection d'une zone et sa
+  coloration, feux et traits de feu, WP / route / Go To, WP perso, trafic (ADS-B, Moyens Nationaux), GAAR / FdS, profil
+  vertical, cercles et règle à deux doigts, communes / départements / plans d'eau, recherche, avion GPS réel et suivi
+  anticipé de l'app (le prototype centre l'avion), PÉLIC sélectionné / BASE en vert, fréquences des terrains venant du petit
+  référentiel téléchargé (seulement les fréquences SIA embarquées), cartes OACI / IGN. Le placement des noms de zones et des
+  numéros de routes est celui de MapLibre (même contenu, positions un peu différentes).
+
+B. DONNÉES PRÉPARÉES SUR LE PC (règle « pas de calcul lourd sur l'iPad »)
+- prototype-carte-donnees.json (règles, styles lus dans l'app, index pour le DIAG), prototype-carte-zones.geojson (4 313
+  zones + 4 589 ancrages de noms), prototype-carte-points.geojson (725 terrains SIA, 1 574 points SIA, 1 082 icônes, 434
+  terrains de l'app, 496 pistes) : générés par ~/projects/outils_tests_NPF-Q400-TEST/v104/run_gen104.sh, qui ouvre la VRAIE
+  app (copie locale, service worker bloqué, tout coupé sauf localhost) et appelle SES fonctions (getSiaAirspaceStyle,
+  textes des zones, couleurs des VRP, exclusions des zones techniques, cap des pistes, fréquences…).
+  À REFAIRE à chaque nouveau sia.js (une commande) : sinon le prototype garde l'ancien cycle (affiché dans son DIAG).
+- Mesure (Chrome, CPU ×6) : faire ce calcul sur l'appareil coûterait 1,0 s à CPU ×6 (décompression du jeu SIA 0,27 s + calculs 0,73 s) ; dans le prototype, la lecture des données
+  préparées prend 0,19 s sur le fil principal ; MapLibre les découpe dans son propre fil de calcul.
+- Poids ajouté au cache du prototype : données 4,61 Mo (≈ 718 Ko compressés au téléchargement), prototype-carte.js 103 Ko
+  (+53 Ko), prototype-carte-routes.js 7 Ko ; script.js +17 Ko (src/360). Rien dans le shell de l'app.
+
+C. MÊME DIAG DES DEUX CÔTÉS, TESTS PLUS DURS (code commun du banc identique dans src/360 et prototype-carte.js)
+- Ligne « couches : … » pour chaque geste (et par catégorie), des deux côtés : fond, noms, HT, Routes (autoroutes ou A N D M
+  T), zones SIA (nombre, contours, voiles, bordures, noms), VFR / points, terrains SIA, icônes, PÉLIC / terrains, noms des
+  terrains, pistes ; ligne « Couches maintenant ». Carte actuelle : objets posés ; prototype : objets dans la vue ±25 %.
+- Gestes classés aussi à 20 NM (glissement / pincement à 20, 5 et 2 NM).
+- Session longue : trajet simulé en suivi ON, MÊME TRAJET des deux côtés : départ Valence (LFLU), route vraie vers Marseille
+  (≈ 170°), vitesse 197 kt (aller-retour en 60 min), demi-tour à 30 min ; « Trajet 30 min » = aller, « Trajet 60 min » =
+  aller-retour. Carte actuelle : boutons du DIAG « Trajet 30 min / Trajet 60 min / Arrêter le trajet » ; ils utilisent la
+  simulation de l'app (mode simulation activé s'il ne l'était pas, route reposée à chaque pas car la déclinaison suit la
+  position, suivi activé comme par son bouton) puis remettent la simulation, la vitesse, la route et le suivi de
+  l'utilisateur comme avant (rien d'enregistré). Prototype : mêmes boutons, même formule de déplacement (rayon 6 371 000 m
+  comme l'app). Mesure par tranche de 10 minutes : images, médiane, 5 % les plus lentes, saccades, image la plus longue,
+  dalles blanches (relevé toutes les 5 s), carte vide, « ⚠ CARTE BLANCHE » si vide plus de 2 s, couches et échelle. La
+  boucle d'images ne tourne QUE pendant un trajet.
+- Compteur des pertes du contexte graphique et alerte « CARTE BLANCHE » (retours d'arrière-plan) inchangés.
+- Prototype : temps d'ouverture (MapLibre, données, images, carte prête, première carte complète) et longues tâches (> 50 ms)
+  avec leur moment ; données (cycle SIA), préférences lues, Calque Routier (source, temps dans le fil à part).
+
+D. SERVICE WORKER (sw-v18-04_prototype_carte_complet)
+- Même cache séparé du prototype, avec en plus prototype-carte-routes.js et les 3 fichiers de données (jamais recopiés d'un
+  ancien cache) ; jamais bloquant ; shell, données, SIA, tuiles : inchangés.
+
+E. ESSAIS (PC ; carte V11 d'essai 25 Mo — Valence, Marseille, Gardanne, 1 577 + 996 dalles extraites de la vraie V11 —
+   installée par le vrai chemin de l'app depuis un FAUX VPS local ; calque routier d'essai importé par l'app ; HT et Routes
+   ON ; toutes les catégories SIA cochées ; service worker bloqué et tout coupé sauf localhost sous Playwright ; aucun appel
+   au vrai VPS, au vrai NAS ni à Internet)
+- Prototype complet (v104/pw_proto104.js) : Chrome CPU ×6 21/21, Playwright WebKit 26.5 21/21 : installation par l'app,
+  gestes à 20 / 5 / 2 NM des deux côtés avec couches notées, trajet des deux côtés (même départ, même route vraie 169,7°,
+  même vitesse 197,1 kt, avion qui avance et carte qui suit, fin à 30 min, demi-tour à 30 min du trajet de 60 min, réglages
+  de simulation et suivi de l'utilisateur remis), DIAG des deux côtés (couches, 20 NM, tranches), ouverture, règles
+  d'échelle (20 NM : voiles et terrains ; 5 NM : contours, bordures, noms, VFR, icônes ; 2 NM : + autoroutes et noms des
+  terrains, sans voiles), préférences lues, routes lues par le fil à part dans l'index de l'app, perte du contexte graphique
+  (vide pendant la perte, puis TOUTES les couches de nouveau dessinées : mêmes objets avant / après), arrière-plan avec perte
+  du contexte (complète en moins de 3 s), « CARTE BLANCHE » (contexte rendu après 3,5 s), export DIAG, aucune requête hors
+  de l'app, stockage IDENTIQUE avant / après (bases, localStorage, caches), base absente : messages clairs, ni base ni cache
+  créé. 0 erreur JS dans le prototype (WebKit : 3 erreurs de l'APP, téléchargements extérieurs coupés par l'essai).
+- Ouverture du prototype à CPU ×6 (Chrome) : MapLibre lu 0,45 s, données lues 0,63 s (lecture des bases + données du PC :
+  0,19 s sur le fil principal), images 1,38 s, carte prête 4,16 s, première carte complète 4,62 s ; plus longue tâche 446 ms
+  (découpage des données terminé). WebKit (sans ralentissement) : carte complète 6,66 s. Le même calcul fait SUR l'appareil
+  coûterait 1,0 s à CPU ×6 (décompression du jeu SIA 0,27 s + calculs de l'app 0,73 s) : d'où la préparation sur PC.
+- Fluidité PC (indicative ; médiane des images/s pendant le geste, saccades = images de plus de 50 ms) — Chrome CPU ×6 :
+  carte actuelle : glissement 20 / 5 / 2 NM 143 / 142 / 143 (5, 8, 7 saccades), pincement 40 / 143 / 143 (56, 7, 12) ;
+  prototype : glissement 48 / 143 / 143 (18, 13, 2), pincement 49 / 143 / 143 (20, 9, 5) ; images les plus longues :
+  carte actuelle 166 à 639 ms, prototype 90 à 146 ms. WebKit (souris) : glissement 20 / 5 / 2 NM carte actuelle 14 / 19 /
+  22 (35 sur 35, 25 sur 45, 21 sur 51 images en saccade), prototype 34 / 31 / 29 (3 sur 98, 7 sur 90, 4 sur 87).
+  Trajet 5 NM (tranches de 20 s) : Chrome : carte actuelle 15 puis 8 saccades, image max 397 ms ; prototype 0 saccade,
+  image max 35 ms. WebKit : carte actuelle 41 puis 4 saccades (max 296 ms) ; prototype 34 puis 20 (max 562 ms).
+  Coût mesuré par famille de couches (Chrome CPU ×6, glissement animé) : fond seul 63 images/s ; noms des zones posés « le
+  long des limites » 31 (abandonné, voir A) ; avec les ancrages préparés sur PC : carte complète 42 (18 à 25 avant).
+- Captures côte à côte (v104/run_vue104.sh, 9 captures : Marseille, Gardanne, Valence à 20, 5 et 2 NM) : mêmes zones, mêmes
+  couleurs, voiles, bordures, VRP colorés, terrains SIA, icônes, PÉLIC, pistes, autoroutes et numéros, noms + fréquences des
+  terrains. Écarts visibles : noms des zones placés par le prototype (plus nombreux, inclinés le long des limites ; la carte
+  actuelle les pose plutôt à plat à l'intérieur et en pose moins, aucun à 2 NM sur Marseille) ; numéros des routes à des
+  endroits un peu différents ; le prototype centre l'avion (suivi anticipé dans l'app).
+- Carte actuelle identique AU PIXEL à la v18.03, prototype jamais ouvert (v104/pw_image104.js) : Chrome 3/3, WebKit 3/3.
+- Service worker RÉEL (v104/cdp_proto104_sw.js) : 6/6 : mise à jour v18.03 -> v18.04, cache du prototype complet (10
+  fichiers dont routes et données), prototype hors ligne avec ses données et ses terrains, retour à l'app hors ligne,
+  index.html du shell intact.
+- Non-régression rapide (bloquante) : glr102 13/13, glr101 8/8, glr100 16/16 (Chrome et WebKit), cercle 14/14, nr 13/13,
+  map / popup / ret55 / npf66 / glr64 / upd53 identiques à la v18.03 (seuls temps et numéros de version diffèrent).
+
+F. RISQUES / À MESURER SUR L'IPAD (seul le DIAG de l'iPad compte)
+- Sur PC à CPU ×6, le prototype complet est moins fluide que la carte actuelle à 20 NM (beaucoup d'objets à l'écran) et
+  équivalent à 5 et 2 NM ; les mesures PC varient d'un passage à l'autre. Le PC n'est pas l'iPad (Safari, puce graphique
+  Apple) : c'est le DIAG iPad, mêmes gestes, qui tranche.
+- Mémoire : 5 sources de données en plus du fond (zones, points, routes, HT, noms) ; à lire dans les deux DIAG.
+- Ouverture du prototype plus longue (données à découper) : à lire dans « Ouverture » du DIAG.
+- Statut : v18.04 À MESURER (DIAG Leaflet et DIAG prototype : HT et Routes ON des deux côtés, mêmes gestes au même endroit
+  à 20, 5 et 2 NM, trajet de 30 min en suivi sur chaque carte, 15 min d'arrière-plan avec des apps lourdes).
+  Aucune décision de bascule : À DÉCIDER par Bastien sur les chiffres de l'iPad.
 
 VERSION TEST v18.03 — PROTOTYPE DE CARTE MAPLIBRE GL JS (PAGE À PART, CARTE ACTUELLE INTACTE) + MÊME DIAG DES DEUX CÔTÉS
 Date : 19/11/2026
