@@ -42,3 +42,4 @@
 330_sia_donnees_embarquees.js
 340_sia_moteur.js
 350_sia_ctr_labels_selection.js
+360_banc_carte_gpu.js

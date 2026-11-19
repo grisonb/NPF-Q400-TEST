@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v18-02_contour_mn_vert';
-const APP_VERSION = 'v18.02';
+const SW_VERSION = 'sw-v18-03_prototype_carte_gpu';
+const APP_VERSION = 'v18.03';
 const SIA_DATA_REVISION = 'sia-2026-10-29-v02-g15';
 const SIA_DATA_URL = './sia.js';
 /*
@@ -83,6 +83,98 @@ const APP_DATA_URLS = [
 ];
 
 const APP_SHELL_URLS = [...CORE_APP_SHELL_URLS, ...APP_DATA_URLS];
+
+/*
+ * v18.03 — PROTOTYPE de carte MapLibre (page à part prototype-carte.html, ouverte par le DIAG) :
+ * - cache SÉPARÉ du shell, propre à chaque version ; rempli à l'installation sans JAMAIS la faire échouer
+ *   (20 s au plus) ; MapLibre (dossier versionné, contenu fixe) est recopié du cache précédent s'il y est ;
+ * - ses fichiers sont servis depuis ce cache (réseau en secours, alors rangés dans ce même cache) ;
+ * - la page n'est JAMAIS servie à la place de index.html, ni rangée sous index.html (le shell n'est pas touché).
+ */
+const PROTOTYPE_CARTE_CACHE_PREFIX = 'npf-q400-test-prototype-carte-';
+const PROTOTYPE_CARTE_CACHE = `${PROTOTYPE_CARTE_CACHE_PREFIX}${SW_VERSION}`;
+const PROTOTYPE_CARTE_PAGE_URLS = [
+    './prototype-carte.html',
+    './prototype-carte.js',
+    './prototype-carte.css'
+];
+const PROTOTYPE_CARTE_LIB_URLS = [
+    './maplibre-6.17.0/maplibre-gl.mjs',
+    './maplibre-6.17.0/maplibre-gl-worker.mjs',
+    './maplibre-6.17.0/maplibre-gl.css'
+];
+const PROTOTYPE_CARTE_INSTALL_MAX_MS = 20000;
+
+function isPrototypeCarteRequest(request) {
+    try {
+        const parsed = new URL(request.url);
+        if (parsed.origin !== self.location.origin) return false;
+        const name = parsed.pathname.split('/').pop() || '';
+        if (['prototype-carte.html', 'prototype-carte.js', 'prototype-carte.css'].includes(name)) return true;
+        return /\/maplibre-6\.17\.0\/[^/]+$/.test(parsed.pathname);
+    } catch (_) {
+        return false;
+    }
+}
+
+async function isValidPrototypeCartePageResponse(url, response) {
+    if (!response || !response.ok) return false;
+    if (PROTOTYPE_CARTE_LIB_URLS.includes(url)) return true;
+    try {
+        return (await response.clone().text()).includes(APP_VERSION);
+    } catch (_) {
+        return false;
+    }
+}
+
+async function cacheNpfPrototypeCarteFiles() {
+    const cache = await caches.open(PROTOTYPE_CARTE_CACHE);
+    const previous = (await caches.keys()).filter(name => (
+        name.startsWith(PROTOTYPE_CARTE_CACHE_PREFIX) && name !== PROTOTYPE_CARTE_CACHE
+    ));
+    await Promise.all([...PROTOTYPE_CARTE_PAGE_URLS, ...PROTOTYPE_CARTE_LIB_URLS].map(async url => {
+        if (await cache.match(url, { ignoreSearch: true })) return;
+        if (PROTOTYPE_CARTE_LIB_URLS.includes(url)) {
+            for (const name of previous) {
+                try {
+                    const old = await (await caches.open(name)).match(url, { ignoreSearch: true });
+                    if (old) {
+                        await cache.put(url, old);
+                        return;
+                    }
+                } catch (_) {}
+            }
+        }
+        try {
+            const response = await fetchForAppShell(url, 15000, 1);
+            if (await isValidPrototypeCartePageResponse(url, response)) await cache.put(url, response.clone());
+        } catch (_) {}
+    }));
+}
+
+async function handlePrototypeCarteRequest(request) {
+    const cache = await caches.open(PROTOTYPE_CARTE_CACHE);
+    const cached = await cache.match(request, { ignoreSearch: true });
+    if (cached) return cached;
+    try {
+        const fresh = await swFetchWithTimeout(new Request(request, { cache: 'reload' }), {}, 15000);
+        if (fresh && fresh.ok) {
+            const path = new URL(request.url).pathname;
+            const libIndex = path.lastIndexOf('/maplibre-6.17.0/');
+            const key = libIndex >= 0 ? `.${path.slice(libIndex)}` : `./${path.split('/').pop()}`;
+            if ([...PROTOTYPE_CARTE_PAGE_URLS, ...PROTOTYPE_CARTE_LIB_URLS].includes(key)
+                && await isValidPrototypeCartePageResponse(key, fresh)) {
+                await cache.put(key, fresh.clone()).catch(() => null);
+            }
+            return fresh;
+        }
+    } catch (_) {}
+    return new Response('Prototype carte GPU indisponible hors ligne (fichiers absents du cache).', {
+        status: 504,
+        statusText: 'Offline prototype unavailable',
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+    });
+}
 
 
 
@@ -335,6 +427,11 @@ self.addEventListener('install', event => {
             'shell-ready',
             `${Date.now() - installStartedAt} ms`
         );
+        /* v18.03 — fichiers du prototype de carte : jamais bloquants, 20 s au plus. */
+        await Promise.race([
+            cacheNpfPrototypeCarteFiles().catch(() => null),
+            swDelay(PROTOTYPE_CARTE_INSTALL_MAX_MS, null)
+        ]);
         await self.skipWaiting();
     })());
 });
@@ -352,6 +449,10 @@ self.addEventListener('activate', event => {
         const leftoverInstallCaches = cacheNames.filter(
             name => name.startsWith(APP_SHELL_INSTALL_CACHE_PREFIX)
         );
+        /* v18.03 — anciens caches du prototype de carte (le courant est gardé). */
+        const previousPrototypeCaches = cacheNames.filter(
+            name => name.startsWith(PROTOTYPE_CARTE_CACHE_PREFIX) && name !== PROTOTYPE_CARTE_CACHE
+        );
 
         /*
          * Conserver le shell précédent comme secours. Les shells plus anciens
@@ -366,7 +467,7 @@ self.addEventListener('activate', event => {
                 ...legacyTestShells
             ]
             : legacyTestShells.slice(0, Math.max(0, legacyTestShells.length - 1));
-        await Promise.all([...shellsToDelete, ...leftoverInstallCaches].map(name => caches.delete(name)));
+        await Promise.all([...shellsToDelete, ...leftoverInstallCaches, ...previousPrototypeCaches].map(name => caches.delete(name)));
 
         /*
          * L'ouverture de la grande base IndexedDB ne doit jamais retenir le
@@ -613,6 +714,12 @@ self.addEventListener('fetch', event => {
 
     if (isAppDataRequest(request)) {
         event.respondWith(handleAppDataRequest(request));
+        return;
+    }
+
+    /* v18.03 — avant le shell : une navigation vers prototype-carte.html ne doit jamais recevoir index.html. */
+    if (isPrototypeCarteRequest(request)) {
+        event.respondWith(handlePrototypeCarteRequest(request));
         return;
     }
 

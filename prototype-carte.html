@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#004370">
+    <title>NPF-Q400 — Prototype carte GPU</title>
+    <!-- v18.03 — PROTOTYPE de carte MapLibre GL JS (page à part, ouverte seulement par le bouton « Prototype carte GPU »
+         du DIAG). Copie locale de MapLibre GL JS 6.17.0 ; aucune requête vers un serveur extérieur. Lecture seule stricte
+         des bases de cartes (aucune écriture, création ni suppression). La carte NPF-Q400 (index.html) n'est pas touchée. -->
+    <link rel="stylesheet" href="maplibre-6.17.0/maplibre-gl.css?appv=v18.03">
+    <link rel="stylesheet" href="prototype-carte.css?appv=v18.03">
+</head>
+<body>
+    <div id="proto-carte" aria-label="Carte prototype"></div>
+    <div id="proto-barre" class="proto-ui">
+        <button type="button" id="proto-retour" class="proto-retour">← Retour à NPF&#8209;Q400</button>
+        <button type="button" id="proto-5nm" class="proto-bouton">5 NM</button>
+        <button type="button" id="proto-2nm" class="proto-bouton">2 NM</button>
+        <button type="button" id="proto-suivi" class="proto-bouton" aria-pressed="false">Suivi avion</button>
+        <button type="button" id="proto-export" class="proto-bouton">Exporter DIAG</button>
+        <span class="proto-titre">Prototype carte GPU · TEST v18.03</span>
+    </div>
+    <div id="proto-message" class="proto-ui proto-message" hidden></div>
+    <div id="proto-echelle" class="proto-ui proto-echelle"><div class="proto-echelle-barre"></div><div class="proto-echelle-texte">-- NM</div></div>
+    <script type="module" src="prototype-carte.js?appv=v18.03"></script>
+</body>
+</html>

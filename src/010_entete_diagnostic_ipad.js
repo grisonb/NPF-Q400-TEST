@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v18.02';
+const NPF_SCRIPT_BUILD_VERSION = 'v18.03';
 
 
 /*
@@ -3325,10 +3325,14 @@ function appendNpfDiagDetailExportSections(lines) {
     if (typeof appendNpfCalqueNomsDiagLines === 'function') {
         try { appendNpfCalqueNomsDiagLines(lines); } catch (_) {}
     }
+    /* v18.03 — banc de comparaison avec le prototype de carte MapLibre (src/360). */
+    if (typeof appendNpfBancCarteGpuSection === 'function') {
+        try { appendNpfBancCarteGpuSection(lines); } catch (_) {}
+    }
 
     lines.push('');
     lines.push(
-        'Instrumentation v18.02 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v18.03 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -5152,6 +5156,7 @@ function ensureNpfStartupDiagnosticUi() {
                     <button type="button" id="npf-startup-diag-close" aria-label="Fermer">×</button>
                 </div>
                 <div id="npf-startup-diag-body" class="npf-startup-diag-body"></div>
+                <div class="npf-startup-diag-proto-gpu-row"><button type="button" id="npf-startup-diag-proto-gpu" aria-label="Ouvrir le prototype de carte GPU (page à part)">Prototype carte GPU</button></div>
             </div>`;
         document.body.appendChild(panel);
     }
@@ -5211,6 +5216,12 @@ function ensureNpfStartupDiagnosticUi() {
         event.preventDefault();
         event.stopPropagation();
         await exportNpfStartupDiagnostic();
+    });
+    /* v18.03 — page à part prototype-carte.html (src/360) ; la carte actuelle n'est pas touchée. */
+    panel.querySelector('#npf-startup-diag-proto-gpu')?.addEventListener('click', event => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (typeof openNpfPrototypeCarteGpu === 'function') openNpfPrototypeCarteGpu();
     });
     panel.querySelectorAll('.npf-startup-diag-page-button').forEach(pageButton => {
         pageButton.addEventListener('click', event => {

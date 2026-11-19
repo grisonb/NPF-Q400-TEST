@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 19/11/2026
-Version de travail actuelle : TEST v18.02
+Version de travail actuelle : TEST v18.03
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -551,10 +551,16 @@ NON IMPLÉMENTÉ / OUVERT :
   07/10/2026 : programme VPS bfg-sofia-notams 1.2.0 PRÊT, NON INSTALLÉ
   (~/vps-a-copier/). v17.60 à pousser APRÈS l'installation de la 1.2.0
   (elle annonce « environ 1 minute ») ;
+- v18.03 : PROTOTYPE de carte MapLibre GL JS 6.17.0 (copie locale) dans une page à part prototype-carte.html, ouverte par le
+  bouton « Prototype carte GPU » du DIAG : fond V11 + noms des communes lus en LECTURE SEULE dans les bases actuelles, HT
+  du cache (mêmes couleurs, même règle du 63 kV), avion simulé, suivi, échelle NM, boutons 5 NM / 2 NM, Retour à NPF-Q400 ;
+  même DIAG « BANC CARTE GPU » des deux côtés (images/s 5 NM / 2 NM, dalles, mémoire, arrière-plan, CARTE BLANCHE) ; carte
+  actuelle inchangée (image identique à la v18.02). À MESURER sur iPad ; bascule À DÉCIDER sur les chiffres de l'iPad ;
+  COMMIT LOCAL, NON POUSSÉE ;
 - v18.02 : bouton Moyens Nationaux : contour VERT dès que la session est connectée (même sans appareil détecté, même calque
   masqué OFF) ; ROUGE sans session, ou calque affiché quand la dernière demande de positions a échoué (réseau, hors ligne,
   « service indisponible »), puis vert dès la demande suivante réussie (demande de Bastien du 19/11). À MESURER sur iPad ;
-  COMMIT LOCAL, NON POUSSÉE ;
+  POUSSÉE le 19/11/2026 (53f030f) ;
 - v18.01 : Moyens Nationaux, étape 2 : « session invalide » lisible en JSON = session expirée quel que soit le code HTTP
   (200 ou 401) ; « service indisponible » (panne Global Link) : session gardée. POUSSÉE le 18/11/2026 (d98583c). Paquet NAS
   INSTALLÉ par Bastien le 19/11/2026 à 08:01 (tâche DSM « Global Link installation », rapport OK, sauvegarde
@@ -872,30 +878,35 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v18.02
+Version : TEST v18.03
 Date : 19/11/2026
-Base : v18.01 (d98583c, poussée le 18/11/2026)
+Base : v18.02 (53f030f, poussée le 19/11/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v18.02.txt
-2_Index_v18.02.txt
-3_Manifest_v18.02.txt
-4_Script_v18.02.txt
-5_SIA_v18.02.txt
-6_Style_v18.02.txt
-7_Sw_v18.02.txt
+1_Modifications_v18.03.txt
+2_Index_v18.03.txt
+3_Manifest_v18.03.txt
+4_Script_v18.03.txt
+5_SIA_v18.03.txt
+6_Style_v18.03.txt
+7_Sw_v18.03.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v18.02 (et texte « TEST v18.02 » de l'écran de
+- Index : APP_VERSION = v18.03 (et texte « TEST v18.03 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v18.02
-- Script : NPF_SCRIPT_BUILD_VERSION = v18.02
-- Style : NPF_STYLE_BUILD_VERSION = v18.02
+- Manifest : start_url = ./index.html?appv=v18.03
+- Script : NPF_SCRIPT_BUILD_VERSION = v18.03
+- Style : NPF_STYLE_BUILD_VERSION = v18.03
+- Prototype de carte (v18.03) : prototype-carte.html, prototype-carte.js, prototype-carte.css et dossier maplibre-6.17.0/
+  (maplibre-gl.mjs, maplibre-gl-worker.mjs, maplibre-gl.css, LICENSE.txt BSD-3), à livrer avec les 7 fichiers ; « ?appv= » de
+  la page et constante APPV de prototype-carte.js à changer à chaque version ; bloc « BANC CARTE GPU » commun identique
+  dans src/360_banc_carte_gpu.js et prototype-carte.js.
 - Nom de l'app (v17.94) : « NPF-Q400 TEST » (manifest name et short_name, <title>, apple-mobile-web-app-title)
 - PDF.js (v17.96) : dossier pdfjs/ (pdf.min.mjs, pdf.worker.min.mjs 4.10.38, LICENSE Apache-2.0, LISEZMOI.txt), à livrer
   avec les 7 fichiers ; fichiers indispensables du service worker.
-- Service Worker : `sw-v18-02_contour_mn_vert` ; caches TEST
-  `npf-q400-test-app-shell-sw-v18-02_contour_mn_vert`, `npf-q400-test-app-data-v1`,
+- Service Worker : `sw-v18-03_prototype_carte_gpu` ; caches TEST
+  `npf-q400-test-app-shell-sw-v18-03_prototype_carte_gpu`, `npf-q400-test-prototype-carte-sw-v18-03_prototype_carte_gpu`,
+  `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-sia-2026-10-29-v02-g15`
 - SIA_DATA_REVISION (SW / Index sia.js?siav=) : sia-2026-10-29-v02-g15 (= NPF_SIA_DATA_REVISION
   de sia.js ; à changer à chaque nouveau sia.js)
@@ -908,15 +919,15 @@ Références de version cohérentes :
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v18.02 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v18.03 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
 - `sia.js` : par rapport à v17.70, outre-mer retiré, « a » de 34 VRP renseigné, table vrpAirportColors ajoutée (2 pastels), révision g6 ; zones, terrains et points de métropole identiques ; moteur tuiles (src/100) modifié en v17.66 sur demande
   explicite (limite de zoom propre à chaque carte, zoom 11 OACI 1/500 000) ;
-- tests v18.02 : entrée v18.02 ; sia.js strictement identique à la v17.81 ;
+- tests v18.03 : entrée v18.03 ; sia.js strictement identique à la v17.81 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82, v17.83, v17.84, v17.85, v17.86, v17.87, v17.88, v17.89, v17.90, v17.91, v17.92, v17.93, v17.94, v17.95, v17.96, v17.97, v17.98, v17.99, v18.00, v18.01 et v18.02 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82, v17.83, v17.84, v17.85, v17.86, v17.87, v17.88, v17.89, v17.90, v17.91, v17.92, v17.93, v17.94, v17.95, v17.96, v17.97, v17.98, v17.99, v18.00, v18.01, v18.02 et v18.03 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
   v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE ;
   v17.56 VALIDÉE en vol ; v17.57 VALIDÉE sur iPad.
 
@@ -2445,6 +2456,124 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v18.03 — PROTOTYPE DE CARTE MAPLIBRE GL JS (PAGE À PART, CARTE ACTUELLE INTACTE) + MÊME DIAG DES DEUX CÔTÉS
+Date : 19/11/2026
+Base fonctionnelle : v18.02 (commit 53f030f, poussée le 19/11/2026). Seule la TEST change : pérenne, RUN, BFG, NAS et VPS
+inchangés. sia.js inchangé (strictement identique à la v17.81). Moteur de tuiles (src/100), calques, séquenceur, index.html
+(hors numéros de version) : INCHANGÉS.
+
+0. CONTEXTE
+- 18/11/2026 : étude en lecture seule « carte sur la puce graphique » (MapLibre GL JS) sur la v18.00 ; recommandation :
+  prototype séparé mesuré sur l'iPad avant toute décision de bascule (point 6 « Plan du prototype »).
+- 19/11/2026 : demande de Bastien : faire le prototype dans la TEST (page à part), même DIAG côté Leaflet et MapLibre,
+  essais PC bloquants, non-régression bloquante, commit local seulement.
+- v18.02 poussée le 19/11/2026 (53f030f) ; GitHub Pages vérifié (APP_VERSION v18.02, SW sw-v18-02_contour_mn_vert,
+  script.js identique au dépôt).
+
+A. PAGE À PART prototype-carte.html (+ prototype-carte.js, prototype-carte.css)
+- Chargée SEULEMENT par le bouton « Prototype carte GPU » du DIAG (même fenêtre : l'app installée sur l'écran d'accueil a
+  ses propres bases ; une autre fenêtre ne les verrait pas). index.html ne charge rien de nouveau.
+- MapLibre GL JS 6.17.0 (07/11/2026, licence BSD-3, copie locale dans maplibre-6.17.0/ : maplibre-gl.mjs 1 110 272 o,
+  maplibre-gl-worker.mjs 520 114 o, maplibre-gl.css 71 596 o, LICENSE.txt ; fichiers identiques au paquet npm, empreinte
+  du paquet sha1 efbfcbf7…a2de). Version 6.19.0 (17/11) écartée : trop récente (moins de 2 semaines). Aucun appel à un
+  serveur extérieur (aucune police, aucun style distant : pas de texte sur la carte).
+- Fond V11 et noms des communes lus dans les bases actuelles (OfflineMap_NPF_France ou base du pack NPF installé,
+  CalqueNomsCommunes) par addProtocol « npfidb:// », renvoyés en ArrayBuffer. LECTURE SEULE STRICTE : base vérifiée dans
+  indexedDB.databases() avant toute ouverture ; ouverture SANS numéro de version (aucune mise à niveau) ; si la base
+  n'existe pas, la création qui démarrerait est annulée aussitôt ; transactions « readonly » seulement ; rien écrit dans
+  localStorage ni dans les caches. Base absente : message clair, rien créé. Clés et adresses logiques reprises de l'app
+  (src/280 / src/100 / src/285), recopiées sans modifier l'app. 8 lectures simultanées au plus (carte actuelle : 5 + 2).
+- Lignes HT : lues dans le cache existant (caches.match, comme src/110), dessinées par la puce graphique : même couleur
+  #d8232a, mêmes épaisseurs, opacités et pointillés par tension, même règle d'affichage (90 kV au-delà du zoom 8, 63 kV
+  au-delà du zoom 9, autres au-delà du zoom 10 ; masquées à 50 NM et plus). HT absentes du cache : message, rien téléchargé.
+- Avion simulé (même mouvement que la simulation de l'app : pas de 500 ms, ligne droite, vitesse et route de la simulation
+  de l'app, 120 kt si vitesse nulle), bouton « Suivi avion », échelle en NM (même calcul que l'app), boutons « 5 NM » et
+  « 2 NM » (même zoom que la carte actuelle à cet endroit : 5 NM = zoom 10, 2 NM = zoom 11 vers 45° N), aucun numéro de
+  zoom à l'écran, gros bouton « ← Retour à NPF-Q400 ». Zoom au pincement continu, rotation et inclinaison coupées.
+- Cache de dalles MapLibre : 100 dalles gardées hors écran PAR SOURCE (fond, noms) ; 256 Ko par dalle sur la puce
+  graphique : ≈ 25 Mo par source, ≈ 50 Mo pour les deux + ≈ 20 Mo de dalles à l'écran. Assez pour revenir sur ses pas
+  (un écran et demi, un niveau de zoom de part et d'autre) sans approcher la limite d'un iPad 9 de 3 Go (la carte actuelle
+  garde jusqu'à 1 300 dalles et 146 Mo de canvas d'après le DIAG). Fondu des dalles coupé (comme Leaflet).
+- Ne fait PAS : routes, VFR, zones SIA, feux, WP, trafic, popups ; aucun téléchargement de carte ; rien sur VPS / NAS.
+- « Exporter DIAG » : fichier NPF_DIAG_PROTOTYPE_GPU_AAAA-MM-JJ_HH-MM.txt partagé comme le DIAG de l'app (partage, sinon
+  presse-papiers, sinon fichier) : en-tête « NPF-Q400 — Diagnostic prototype carte GPU », bases ouvertes en lecture seule,
+  lectures IndexedDB, puis la section commune « BANC CARTE GPU (v18.03) ».
+
+B. MÊME DIAG DES DEUX CÔTÉS — « BANC CARTE GPU » (src/360_banc_carte_gpu.js, nouveau, en fin de script.js ; même code
+   copié dans prototype-carte.js, vérifié identique)
+- Images par seconde pendant un geste (cadence requestAnimationFrame, de la pose du doigt à la fin de l'inertie) :
+  glissement (1 doigt), pincement (2 doigts), molette (PC), classés par échelle au début du geste ; pour 5 NM et 2 NM :
+  médiane, pire valeur, nombre de saccades (image de plus de 50 ms). Un toucher sans déplacement n'est pas compté.
+- Temps d'affichage des dalles du fond (demande -> image prête) : médiane, 95 %, maximum ; dalles encore blanches à la fin
+  de chaque geste (moyenne, maximum).
+- Mémoire : dalles gardées, canvas (taille, Mo), tas JS si le navigateur le donne (pas Safari).
+- Arrière-plan : à chaque retour au premier plan : durée de l'absence, perte du contexte graphique (webglcontextlost /
+  restored ; « sans objet » pour Leaflet), temps jusqu'à une carte affichée puis complète, « ⚠ CARTE BLANCHE » si la carte
+  reste vide plus de 2 s. MapLibre : liste des pertes du contexte (au premier plan ou pendant l'arrière-plan).
+- Côté Leaflet : ÉCOUTE SEULE (écouteurs passifs, « move » de la carte, tileloadstart / tileload / tileerror / tileunload du
+  fond, branchés aussi sur un fond recréé) ; rien d'enregistré ; section ajoutée au DIAG exporté (src/010).
+- Bouton discret « Prototype carte GPU » en bas de la fenêtre DIAG (src/010, style.css) : passe au prototype le centre, le
+  zoom et la simulation (position, vitesse, route) ; DIAG de la session enregistré avant de quitter (npfDiagPersist).
+
+C. SERVICE WORKER (sw-v18-03_prototype_carte_gpu)
+- Cache SÉPARÉ npf-q400-test-prototype-carte-<SW> (6 fichiers : page, js, css, MapLibre ×3), rempli à l'installation SANS
+  JAMAIS la faire échouer (20 s au plus) ; MapLibre (dossier versionné) recopié du cache précédent s'il y est ; anciens
+  caches du prototype effacés à l'activation (préfixe propre, jamais touché par la pérenne qui n'efface que
+  « npf-q400-app-shell- »).
+- Requêtes du prototype servies depuis ce cache (réseau en secours, rangé dans ce même cache) et traitées AVANT le shell :
+  sans cela, une navigation vers prototype-carte.html recevait index.html (le SW sert index.html pour toute navigation) et
+  la page aurait pu être rangée sous « index.html ». Shell, données, SIA, tuiles : inchangés.
+- Poids ajouté au cache de l'app : 1 757 Ko (≈ 470 Ko compressés au téléchargement). script.js : +23 Ko (src/360).
+
+D. ESSAIS (PC ; carte V11 d'essai 12 Mo installée par le vrai chemin de l'app depuis un FAUX VPS local ; service worker
+   bloqué et tout coupé sauf localhost sous Playwright ; aucun appel au vrai VPS, au vrai NAS ni à Internet)
+- Prototype (v103/pw_proto103.js) : Chrome 19/19 (deux passages), WebKit 26.5 19/19 (contexte PERSISTANT : en contexte
+  éphémère, Playwright WebKit perd le contenu du Cache Storage à chaque changement de page, vérifié sur un témoin ; Safari
+  ne le fait pas). Série finale WebKit : 18/19 (C2 : carte affichée en 0,37 s mais complète en 2,36 s après un retour
+  d'arrière-plan avec perte du contexte, seuil d'essai 2 s, pas de carte blanche) ; rejoué : 19/19 (complète en 1,27 s).
+  Vérifié : carte prête (fond + noms + 5 couches HT + avion) ; aucun numéro de zoom à l'écran ; règle HT 90 / 63 kV / autres
+  comme la carte actuelle ; avion à 120 kt ; suivi ; boutons 5 NM / 2 NM ; perte du contexte simulée (WEBGL_lose_context) :
+  carte de nouveau complète (0,2 à 0,4 s après le retour du contexte) ; retour d'arrière-plan avec perte : noté, pas de
+  carte blanche ; contexte rendu 3,5 s après le retour : « ⚠ CARTE BLANCHE » au DIAG ; export DIAG (partage du fichier
+  NPF_DIAG_PROTOTYPE_GPU_….txt) ; aucune requête hors de l'app pendant le prototype ; bouton Retour.
+- RIEN ÉCRIT : photo complète du stockage (toutes les bases : noms, versions, magasins, index, empreinte SHA-256 de chaque
+  enregistrement ; localStorage ; caches) avant / après une séance de prototype avec gestes : IDENTIQUE (Chrome et WebKit).
+  Aucune carte : message clair ; carte listée mais base absente : message clair, AUCUNE base créée ; même chose sans
+  indexedDB.databases() (ouverture annulée, base toujours absente).
+- Service worker RÉEL (Chrome CDP, tout coupé sauf localhost, v103/cdp_proto103_sw.js) : 6/6 : mise à jour v18.02 -> v18.03,
+  cache du prototype = les 6 fichiers, page prototype servie HORS LIGNE (dalles affichées, WebGL actif), « Retour à
+  NPF-Q400 » hors ligne : app v18.03 et sa carte ; index.html du shell intact avant et après (jamais la page prototype).
+- Carte actuelle IDENTIQUE à la v18.02, prototype jamais ouvert (v103/pw_image103.js, carte V11 d'essai + HT, même zone) :
+  Chrome 3/3 et WebKit 3/3 : à 5 NM et à 2 NM, image identique pixel pour pixel, seule différence le badge « v18.02 » /
+  « v18.03 » (≈ 100 pixels dans son rectangle) ; mêmes dalles, mêmes tronçons HT (360 à 5 NM, 151 à 2 NM).
+- Chiffres PC (CPU ×6 Chrome ; MapLibre dessiné par une émulation LOGICIELLE de la puce graphique en mode sans écran : ces
+  chiffres ne disent rien de l'iPad ; seul le DIAG de l'iPad compte) — 2 passages Chrome :
+  . images/s médianes, glissement 5 NM / 2 NM : Leaflet 125 / 125 ; MapLibre 29-65 / 72-123 ; pincement 5 NM / 2 NM :
+    Leaflet 123-125 / 125 ; MapLibre 47-63 / 36-62 (Chrome sans écran ne cale pas les images sur 60 Hz) ;
+  . dalles blanches à la fin d'un pincement : Leaflet moy 7 à 9, max 18 ; MapLibre 0 (glissement : 0 à 1,3 / 0) ;
+  . dalles (demande -> image prête) : Leaflet médiane 221-228 ms, 95 % 1,6-1,8 s ; MapLibre médiane 37-96 ms, 95 %
+    190-610 ms ; lectures IndexedDB du prototype : médiane 10-21 ms ;
+  . mémoire : Leaflet 2 canvas ≈ 43 Mo (2832×1968) ; MapLibre canvas 2360×1640 ≈ 15 Mo par image, cache 100 dalles/source.
+  WebKit (sans ralentissement, rendu logiciel, très variable d'un passage à l'autre) : glissement Leaflet 9-31 i/s,
+  MapLibre 17-43 i/s.
+- Côté Leaflet non ralenti : essai « map » rejoué 2 fois en alternance v18.02 / v18.03 : premier geste 2 189 / 2 085 ms
+  (v18.02) et 2 071 / 2 110 ms (v18.03), gestes suivants du même ordre.
+- Non-régression rapide v18.03 : nr 13/13 ; Moyens Nationaux glr102 / glr101 / glr100 Chrome 13/13, 8/8, 16/16 et WebKit
+  13/13, 8/8, 16/16 ; cercle 14/14 ; map, popup, ret55, npf66 (aucun « NPF » seul), glr64 : sans exception, résultats
+  identiques à la référence (seule différence glr64 : classe « global-link-connected » de la v18.02, attendue) ; mise à jour
+  v18.02 -> v18.03 puis hors ligne : v18.03 servie, carte (50 NM), 34 935 communes, 27 PÉLIC, 3 caches de la pérenne intacts.
+- DIAG : bouton « Prototype carte GPU » en bas de la fenêtre (capture vérifiée, en-tête inchangé), ouvre la page avec
+  centre, zoom et simulation.
+
+E. RISQUES / À MESURER SUR L'IPAD (seul le DIAG de l'iPad compte)
+- Perte du contexte graphique au retour d'arrière-plan sur l'iPad (iPadOS peut retirer le dessin) : MapLibre le reconstruit
+  (essai PC : carte complète en moins de 2 s) ; à vérifier : 10 min d'arrière-plan, alerte « CARTE BLANCHE ».
+- Mémoire sur l'iPad 9 (3 Go) : canvas plein écran ×2 + dalles ; à lire dans les deux DIAG.
+- Fichier MapLibre de 1,1 Mo à lire au premier affichage (une fois par ouverture de la page).
+- La page prototype n'est pas l'app : en revenant (« Retour à NPF-Q400 ») l'app redémarre comme à l'ouverture.
+- Statut : v18.03 À MESURER (DIAG Leaflet et DIAG prototype, mêmes gestes, même endroit, 5 NM et 2 NM, arrière-plan 10 min).
+  Aucune décision de bascule : À DÉCIDER par Bastien sur les chiffres de l'iPad.
 
 VERSION TEST v18.02 — BOUTON MOYENS NATIONAUX : CONTOUR VERT DÈS QUE LA SESSION EST CONNECTÉE
 Date : 19/11/2026

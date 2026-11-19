@@ -1,4 +1,4 @@
-/* NPF_STYLE_BUILD_VERSION: v18.02 */
+/* NPF_STYLE_BUILD_VERSION: v18.03 */
 /* v14.83 — nettoyage des références techniques et limitation des cartouches routiers. */
 /* v14.81 — recherche phonétique nationale élargie aux fragments sur deux lettres. */
 /* v14.80 — Brive conservé uniquement sous LFSL. */
@@ -19130,4 +19130,22 @@ body.npf-calculator-modal-open {
     text-align: left;
     padding: 4px 0;
     cursor: pointer;
+}
+
+/* v18.03 — DIAG : bouton discret « Prototype carte GPU » (page à part prototype-carte.html), en bas de la fenêtre. */
+.npf-startup-diag-proto-gpu-row {
+    display: flex;
+    justify-content: flex-end;
+    padding: 0 10px 8px;
+}
+#npf-startup-diag-proto-gpu {
+    min-height: 30px;
+    padding: 3px 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #f8fafc;
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
 }
