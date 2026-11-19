@@ -1,4 +1,4 @@
-/* NPF_STYLE_BUILD_VERSION: v18.01 */
+/* NPF_STYLE_BUILD_VERSION: v18.02 */
 /* v14.83 — nettoyage des références techniques et limitation des cartouches routiers. */
 /* v14.81 — recherche phonétique nationale élargie aux fragments sur deux lettres. */
 /* v14.80 — Brive conservé uniquement sous LFSL. */
@@ -16629,6 +16629,16 @@ body.simulation-mode-active #ops-frequencies-pdf-button {
 
 /* Le bouton est vert dès qu'au moins un trafic GLR est détecté. */
 #global-link-layer-button.global-link-active {
+    background: #ffffff !important;
+    border-color: #16a34a !important;
+    color: var(--primary-color) !important;
+    box-shadow:
+        0 0 0 2px rgba(255,255,255,.96),
+        0 2px 9px rgba(22,163,74,.42) !important;
+}
+/* v18.02 — session Moyens Nationaux connectée (même sans appareil, même calque OFF) et positions qui arrivent : contour
+   vert. Placé APRÈS les règles rouges (même spécificité) : l'emporte aussi pendant un chargement. */
+#global-link-layer-button.global-link-connected {
     background: #ffffff !important;
     border-color: #16a34a !important;
     color: var(--primary-color) !important;

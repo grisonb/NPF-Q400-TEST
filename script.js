@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v18.01';
+const NPF_SCRIPT_BUILD_VERSION = 'v18.02';
 
 
 /*
@@ -3328,7 +3328,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v18.01 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v18.02 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -34528,8 +34528,18 @@ function updateGlobalLinkButton(options = {}) {
         Number.isFinite(Number(item.lat)) && Number.isFinite(Number(item.lon))
     ));
 
-    button.classList.remove('global-link-auth-needed','global-link-ready','global-link-active','global-link-stale','loading');
+    button.classList.remove('global-link-auth-needed','global-link-ready','global-link-active','global-link-stale','global-link-connected','loading');
     if (options.loading) button.classList.add('loading');
+
+    /*
+     * v18.02 — contour VERT dès que la session Moyens Nationaux est connectée, même sans appareil détecté et même calque
+     * masqué (OFF) ; ROUGE sans session, ou calque affiché quand les positions n'arrivent pas (dernière demande en échec :
+     * réseau coupé, « service Moyens Nationaux indisponible »…), puis vert dès la demande suivante réussie. Classes,
+     * compteurs et titres inchangés ; seule la classe « global-link-connected » (style.css) porte le contour vert.
+     */
+    let globalLinkPositionsFailing = false;
+    try { globalLinkPositionsFailing = npfGlobalLinkConsecutiveFailures > 0 || navigator.onLine === false; } catch (_) {}
+    if (hasSession && (!npfGlobalLinkEnabled || !globalLinkPositionsFailing)) button.classList.add('global-link-connected');
 
     /*
      * v15.92 — le contour est national : vert dès qu'au moins un trafic GLR

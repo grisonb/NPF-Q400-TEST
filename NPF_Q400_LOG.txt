@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
-Mise à jour : 18/11/2026
-Version de travail actuelle : TEST v18.01
+Mise à jour : 19/11/2026
+Version de travail actuelle : TEST v18.02
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -551,10 +551,17 @@ NON IMPLÉMENTÉ / OUVERT :
   07/10/2026 : programme VPS bfg-sofia-notams 1.2.0 PRÊT, NON INSTALLÉ
   (~/vps-a-copier/). v17.60 à pousser APRÈS l'installation de la 1.2.0
   (elle annonce « environ 1 minute ») ;
-- v18.01 : Moyens Nationaux, étape 2 : « session invalide » lisible en JSON = session expirée quel que soit le code HTTP
-  (200 ou 401) ; « service indisponible » (panne Global Link) : session gardée ; paquet NAS PRÉPARÉ, NON INSTALLÉ
-  (~/nas-a-copier/a-installer-global-link-2026-11-18, à installer après la mise en ligne de la v18.01). À MESURER sur iPad ;
+- v18.02 : bouton Moyens Nationaux : contour VERT dès que la session est connectée (même sans appareil détecté, même calque
+  masqué OFF) ; ROUGE sans session, ou calque affiché quand la dernière demande de positions a échoué (réseau, hors ligne,
+  « service indisponible »), puis vert dès la demande suivante réussie (demande de Bastien du 19/11). À MESURER sur iPad ;
   COMMIT LOCAL, NON POUSSÉE ;
+- v18.01 : Moyens Nationaux, étape 2 : « session invalide » lisible en JSON = session expirée quel que soit le code HTTP
+  (200 ou 401) ; « service indisponible » (panne Global Link) : session gardée. POUSSÉE le 18/11/2026 (d98583c). Paquet NAS
+  INSTALLÉ par Bastien le 19/11/2026 à 08:01 (tâche DSM « Global Link installation », rapport OK, sauvegarde
+  /volume1/briefing-sauvegardes/global-link-avant-20261119-080113 ; tâche « Global Link retour arriere » créée, désactivée,
+  non lancée) ; contrôles : OPTIONS 204, GET sans autorisation 401, CORS github.io ; iPad v18.01 : session active, positions
+  HTTP 200 sans échec. À MESURER : prochaine session expirée (message « Session Global Link expirée », code au toucher),
+  pérenne et RUN inchangées ;
 - v18.00 : Moyens Nationaux, session expirée (étape 1 sur 2) : bouton « Déconnexion » (appui long sur le bouton Moyens
   Nationaux, avec confirmation), bandeau discret « session expirée ? » après 3 échecs réseau de suite si le NAS répond,
   ligne DIAG par échec. NAS inchangé (étape 2 proposée). VALIDÉE sur iPad le 18/11 (Déconnexion a tout remis en marche) ;
@@ -865,30 +872,30 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v18.01
-Date : 18/11/2026
-Base : v18.00 (732f732, poussée le 18/11/2026)
+Version : TEST v18.02
+Date : 19/11/2026
+Base : v18.01 (d98583c, poussée le 18/11/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v18.01.txt
-2_Index_v18.01.txt
-3_Manifest_v18.01.txt
-4_Script_v18.01.txt
-5_SIA_v18.01.txt
-6_Style_v18.01.txt
-7_Sw_v18.01.txt
+1_Modifications_v18.02.txt
+2_Index_v18.02.txt
+3_Manifest_v18.02.txt
+4_Script_v18.02.txt
+5_SIA_v18.02.txt
+6_Style_v18.02.txt
+7_Sw_v18.02.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v18.01 (et texte « TEST v18.01 » de l'écran de
+- Index : APP_VERSION = v18.02 (et texte « TEST v18.02 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v18.01
-- Script : NPF_SCRIPT_BUILD_VERSION = v18.01
-- Style : NPF_STYLE_BUILD_VERSION = v18.01
+- Manifest : start_url = ./index.html?appv=v18.02
+- Script : NPF_SCRIPT_BUILD_VERSION = v18.02
+- Style : NPF_STYLE_BUILD_VERSION = v18.02
 - Nom de l'app (v17.94) : « NPF-Q400 TEST » (manifest name et short_name, <title>, apple-mobile-web-app-title)
 - PDF.js (v17.96) : dossier pdfjs/ (pdf.min.mjs, pdf.worker.min.mjs 4.10.38, LICENSE Apache-2.0, LISEZMOI.txt), à livrer
   avec les 7 fichiers ; fichiers indispensables du service worker.
-- Service Worker : `sw-v18-01_session_mn_json` ; caches TEST
-  `npf-q400-test-app-shell-sw-v18-01_session_mn_json`, `npf-q400-test-app-data-v1`,
+- Service Worker : `sw-v18-02_contour_mn_vert` ; caches TEST
+  `npf-q400-test-app-shell-sw-v18-02_contour_mn_vert`, `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-sia-2026-10-29-v02-g15`
 - SIA_DATA_REVISION (SW / Index sia.js?siav=) : sia-2026-10-29-v02-g15 (= NPF_SIA_DATA_REVISION
   de sia.js ; à changer à chaque nouveau sia.js)
@@ -901,15 +908,15 @@ Références de version cohérentes :
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v18.01 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v18.02 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
 - `sia.js` : par rapport à v17.70, outre-mer retiré, « a » de 34 VRP renseigné, table vrpAirportColors ajoutée (2 pastels), révision g6 ; zones, terrains et points de métropole identiques ; moteur tuiles (src/100) modifié en v17.66 sur demande
   explicite (limite de zoom propre à chaque carte, zoom 11 OACI 1/500 000) ;
-- tests v18.01 : entrée v18.01 ; sia.js strictement identique à la v17.81 ;
+- tests v18.02 : entrée v18.02 ; sia.js strictement identique à la v17.81 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82, v17.83, v17.84, v17.85, v17.86, v17.87, v17.88, v17.89, v17.90, v17.91, v17.92, v17.93, v17.94, v17.95, v17.96, v17.97, v17.98, v17.99, v18.00 et v18.01 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82, v17.83, v17.84, v17.85, v17.86, v17.87, v17.88, v17.89, v17.90, v17.91, v17.92, v17.93, v17.94, v17.95, v17.96, v17.97, v17.98, v17.99, v18.00, v18.01 et v18.02 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
   v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE ;
   v17.56 VALIDÉE en vol ; v17.57 VALIDÉE sur iPad.
 
@@ -2438,6 +2445,49 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v18.02 — BOUTON MOYENS NATIONAUX : CONTOUR VERT DÈS QUE LA SESSION EST CONNECTÉE
+Date : 19/11/2026
+Base fonctionnelle : v18.01 (commit d98583c, poussée le 18/11/2026). Seule la TEST change : pérenne, RUN, BFG, NAS et VPS
+inchangés. sia.js inchangé (strictement identique à la v17.81).
+
+0. CONTEXTE
+- 19/11/2026, 08:01 : paquet NAS Global Link du 18/11 INSTALLÉ par Bastien, guidé pas à pas (File Station : dossier
+  /volume1/briefing-sauvegardes/arrivee-global-link ; tâche DSM déclenchée « Global Link installation », root, désactivée,
+  lancée une fois). Rapport : empreintes OK, version en place attendue, PHP 7.3.3 du NAS sans erreur, sauvegarde
+  global-link-avant-20261119-080113, droits Synology hérités, OPTIONS 204, GET 401, jamais 403 -> « INSTALLATION NAS : OK ».
+  Tâche « Global Link retour arriere » créée, désactivée, non lancée (DSM refuse les accents dans le nom d'une tâche).
+  Piège rencontré : « Créer » avait d'abord donné une tâche PROGRAMMÉE (tous les jours à 00:00) : supprimée et recréée en
+  tâche déclenchée ; après « Exécuter », la case Activé de la tâche d'installation s'est retrouvée cochée : décochée.
+  Contrôle PowerShell (lancé par Claude Code) : OPTIONS 204 avec Access-Control-Allow-Origin https://grisonb.github.io,
+  GET sans autorisation 401. iPad v18.01 : code du jour redemandé (échéance de la veille dépassée, normal), session active,
+  positions HTTP 200 toutes les 15 s sans échec.
+- Remarque de Bastien : le bouton restait ROUGE alors que tout fonctionnait (aucun Moyen National en vol). Cause : depuis
+  v15.92 (« même convention que SafeSky »), le contour n'est vert que si au moins un appareil est reçu (style.css 14068 et
+  16631, classe global-link-active ; src/180 updateGlobalLinkButton). Décisions de Bastien du 19/11 : vert dès que la
+  session est connectée, même sans appareil ; calque masqué (OFF) avec session : vert ; session gardée mais positions en
+  échec : rouge pendant l'échec, vert dès la demande suivante réussie ; faire en v18.02.
+
+A. APP TEST (src/180, style.css)
+- updateGlobalLinkButton : nouvelle classe « global-link-connected » si session Moyens Nationaux présente ET (calque OFF, ou
+  dernière demande de positions réussie et iPad en ligne : npfGlobalLinkConsecutiveFailures = 0 et navigator.onLine non
+  faux). Sinon contour rouge comme avant. Classes existantes, compteurs, titres, pastilles : inchangés.
+- style.css : règle #global-link-layer-button.global-link-connected (contour vert, même style que global-link-active),
+  placée après les règles rouges : reste verte pendant un chargement (pas de clignotement rouge toutes les 15 s).
+- Versions v18.02 ; service worker sw-v18-02_contour_mn_vert.
+
+B. ESSAIS (PC ; faux NAS local ; aucun appel au vrai NAS, au vrai VPS ni au vrai Global Link)
+- Couleur du contour (v100/pw_glr102.js, couleur calculée par le navigateur) : Chrome 13/13, WebKit service worker bloqué
+  13/13 : 1 appareil vert ; 0 appareil vert ; calque OFF vert ; rallumé vert ; pendant un chargement de 4 s vert ; service
+  indisponible rouge puis vert au retour ; erreur réseau rouge puis vert ; hors ligne rouge puis vert ; échec puis calque
+  OFF vert ; session invalide (effacée) rouge ; sans session et OFF rouge ; aucune erreur JS. Contre-essai sur la v18.01 :
+  5/13 (rouge sans appareil, comme constaté sur l'iPad).
+- Moyens Nationaux v18.01 (pw_glr101) : Chrome 8/8, WebKit 8/8 ; v18.00 rejoué (pw_glr100) : Chrome 16/16, WebKit 16/16 ;
+  étiquettes et cercle (pw_cercle97b) : Chrome 14/14.
+- Non-régression rapide (cdp_nr90.js) : 13/13 ; aucun « NPF » seul (cdp_npf66) ; mise à jour v18.01 -> v18.02 sans
+  interception puis hors ligne : v18.02 servie, carte (50 NM), communes et PÉLIC hors ligne, 3 caches de la pérenne intacts.
+- À REGARDER SUR L'IPAD : contour vert après le code même sans Moyen National en vol ; rouge en mode avion (calque affiché),
+  vert au retour du réseau.
 
 VERSION TEST v18.01 — MOYENS NATIONAUX, SESSION EXPIRÉE (ÉTAPE 2 SUR 2) : RÉPONSES LISIBLES DU NAS (APP) + PAQUET NAS PRÉPARÉ
 Date : 18/11/2026
