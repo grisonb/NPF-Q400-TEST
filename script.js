@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v18.04';
+const NPF_SCRIPT_BUILD_VERSION = 'v18.05';
 
 
 /*
@@ -3332,7 +3332,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v18.04 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v18.05 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -34744,10 +34744,13 @@ function buildGlobalLinkLabelLayout(items) {
             String(item.name || '').length,
             altitudeLabel.length
         );
+        /* v18.05 — « Alt. » seule : texte 12,5 px (au lieu de 10,5), flèche 16,5 px, marge 2 / 6 px : boîte agrandie dans
+         * la même proportion (avant : 22 + 6 px par caractère, 40 à 110 px, hauteur 20 px). Le bord de l'étiquette reste
+         * à la même distance de l'avion (écart calculé depuis le bord) ; « Alt. + Immat. » inchangé. */
         const width = altOnly
-            ? Math.max(40, Math.min(110, 22 + altitudeLabel.length * 6))
+            ? Math.max(48, Math.min(130, 28 + altitudeLabel.length * 7.2))
             : Math.max(68, Math.min(178, 20 + longestLabelLength * 8.4));
-        const height = altOnly ? 20 : (altitudeLabel ? 42 : 25);
+        const height = altOnly ? 24 : (altitudeLabel ? 42 : 25);
         const hGap = 27 + width / 2;
         const vGap = 27 + height / 2;
         const shifts = [0, -30, 30, -60, 60, -90, 90, -120, 120];

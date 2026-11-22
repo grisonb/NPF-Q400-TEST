@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
-Mise à jour : 19/11/2026
-Version de travail actuelle : TEST v18.04
+Mise à jour : 22/11/2026
+Version de travail actuelle : TEST v18.05
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -563,7 +563,11 @@ NON IMPLÉMENTÉ / OUVERT :
   app (prototype-carte-donnees.json, -zones.geojson, -points.geojson : À REFAIRE à chaque sia.js, v104/run_gen104.sh) ;
   DIAG des deux côtés : couches de chaque geste, 20 NM, trajet simulé 30 / 60 min (même trajet Valence <-> Marseille en
   suivi, boutons du DIAG et du prototype) mesuré par tranches de 10 min ; carte actuelle identique au pixel à la v18.03.
-  À MESURER sur iPad ; bascule À DÉCIDER ; COMMIT LOCAL, NON POUSSÉE ;
+  À MESURER sur iPad ; bascule À DÉCIDER ; POUSSÉE le 19/11/2026 (a0fece0) ;
+- v18.05 : étiquettes de trafic « Alt. » seule (SafeSky et Moyens Nationaux) : texte 10,5 -> 12,5 px, flèche 14 -> 16,5 px,
+  marge 1 / 4 -> 2 / 6 px ; boîte des étiquettes Moyens Nationaux agrandie dans la même proportion (évitement des
+  chevauchements) ; « Alt. + Immat. », couleurs, contour, position et trait inchangés. À MESURER sur iPad ;
+  COMMIT LOCAL, NON POUSSÉE ;
 - v18.02 : bouton Moyens Nationaux : contour VERT dès que la session est connectée (même sans appareil détecté, même calque
   masqué OFF) ; ROUGE sans session, ou calque affiché quand la dernière demande de positions a échoué (réseau, hors ligne,
   « service indisponible »), puis vert dès la demande suivante réussie (demande de Bastien du 19/11). À MESURER sur iPad ;
@@ -885,25 +889,25 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v18.04
-Date : 19/11/2026
-Base : v18.03 (3b91ffc, poussée le 19/11/2026)
+Version : TEST v18.05
+Date : 22/11/2026
+Base : v18.04 (a0fece0, poussée le 19/11/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v18.04.txt
-2_Index_v18.04.txt
-3_Manifest_v18.04.txt
-4_Script_v18.04.txt
-5_SIA_v18.04.txt
-6_Style_v18.04.txt
-7_Sw_v18.04.txt
+1_Modifications_v18.05.txt
+2_Index_v18.05.txt
+3_Manifest_v18.05.txt
+4_Script_v18.05.txt
+5_SIA_v18.05.txt
+6_Style_v18.05.txt
+7_Sw_v18.05.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v18.04 (et texte « TEST v18.04 » de l'écran de
+- Index : APP_VERSION = v18.05 (et texte « TEST v18.05 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v18.04
-- Script : NPF_SCRIPT_BUILD_VERSION = v18.04
-- Style : NPF_STYLE_BUILD_VERSION = v18.04
+- Manifest : start_url = ./index.html?appv=v18.05
+- Script : NPF_SCRIPT_BUILD_VERSION = v18.05
+- Style : NPF_STYLE_BUILD_VERSION = v18.05
 - Prototype de carte (v18.03) : prototype-carte.html, prototype-carte.js, prototype-carte.css et dossier maplibre-6.17.0/
   (maplibre-gl.mjs, maplibre-gl-worker.mjs, maplibre-gl.css, LICENSE.txt BSD-3), à livrer avec les 7 fichiers ; « ?appv= » de
   la page et constante APPV de prototype-carte.js à changer à chaque version ; bloc « BANC CARTE GPU » commun identique
@@ -913,8 +917,8 @@ Références de version cohérentes :
 - Nom de l'app (v17.94) : « NPF-Q400 TEST » (manifest name et short_name, <title>, apple-mobile-web-app-title)
 - PDF.js (v17.96) : dossier pdfjs/ (pdf.min.mjs, pdf.worker.min.mjs 4.10.38, LICENSE Apache-2.0, LISEZMOI.txt), à livrer
   avec les 7 fichiers ; fichiers indispensables du service worker.
-- Service Worker : `sw-v18-04_prototype_carte_complet` ; caches TEST
-  `npf-q400-test-app-shell-sw-v18-04_prototype_carte_complet`, `npf-q400-test-prototype-carte-sw-v18-04_prototype_carte_complet`,
+- Service Worker : `sw-v18-05_etiquette_alt_seule` ; caches TEST
+  `npf-q400-test-app-shell-sw-v18-05_etiquette_alt_seule`, `npf-q400-test-prototype-carte-sw-v18-05_etiquette_alt_seule`,
   `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-sia-2026-10-29-v02-g15`
 - SIA_DATA_REVISION (SW / Index sia.js?siav=) : sia-2026-10-29-v02-g15 (= NPF_SIA_DATA_REVISION
@@ -928,15 +932,15 @@ Références de version cohérentes :
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v18.04 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v18.05 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
 - `sia.js` : par rapport à v17.70, outre-mer retiré, « a » de 34 VRP renseigné, table vrpAirportColors ajoutée (2 pastels), révision g6 ; zones, terrains et points de métropole identiques ; moteur tuiles (src/100) modifié en v17.66 sur demande
   explicite (limite de zoom propre à chaque carte, zoom 11 OACI 1/500 000) ;
-- tests v18.04 : entrée v18.04 ; sia.js strictement identique à la v17.81 ;
+- tests v18.05 : entrée v18.05 ; sia.js strictement identique à la v17.81 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82, v17.83, v17.84, v17.85, v17.86, v17.87, v17.88, v17.89, v17.90, v17.91, v17.92, v17.93, v17.94, v17.95, v17.96, v17.97, v17.98, v17.99, v18.00, v18.01, v18.02, v18.03 et v18.04 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82, v17.83, v17.84, v17.85, v17.86, v17.87, v17.88, v17.89, v17.90, v17.91, v17.92, v17.93, v17.94, v17.95, v17.96, v17.97, v17.98, v17.99, v18.00, v18.01, v18.02, v18.03, v18.04 et v18.05 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
   v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE ;
   v17.56 VALIDÉE en vol ; v17.57 VALIDÉE sur iPad.
 
@@ -2465,6 +2469,57 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v18.05 — ÉTIQUETTES DE TRAFIC « ALT. » SEULE : TEXTE PLUS GRAND ET UN PEU PLUS DE MARGE
+Date : 22/11/2026
+Base fonctionnelle : v18.04 (commit a0fece0, poussée le 19/11/2026). Seule la TEST change : pérenne, RUN, BFG, NAS et VPS
+inchangés. sia.js inchangé (strictement identique à la v17.81). Moteur de tuiles, calques, séquenceur, prototype de carte
+(hors numéros de version) : INCHANGÉS.
+
+0. CONTEXTE
+- Constat iPad de Bastien (capture : étiquette « 837 ft » avec flèche de descente) : en mode « Alt. » seule, texte trop petit
+  et presque collé au contour de l'étiquette.
+- v18.04 poussée le 19/11/2026 (a0fece0) ; GitHub Pages vérifié (APP_VERSION v18.04, SW sw-v18-04_prototype_carte_complet,
+  script.js, prototype et données identiques au dépôt).
+
+A. MODIFICATION (mode « Alt. » seule SEULEMENT, SafeSky et Moyens Nationaux ; style.css, bloc v18.05 après celui de la v17.96)
+- Texte de l'altitude : 10,5 px -> 12,5 px (hauteur de ligne SafeSky 12 -> 14 px).
+- Flèche de tendance, même proportion (x 1,19) : taille 14 -> 16,5 px ; case 14 x 11 -> 16,5 x 13 px.
+- Marge intérieure : 1 px (haut / bas) et 4 px (côtés) -> 2 px et 6 px.
+- Taille mesurée (Chrome) : SafeSky « 837 ft ↘ » 61 x 16 -> 74 x 20 px ; Moyens Nationaux « 3500 ft ↗ » 64 x 20 -> 78 x 24 px.
+- Moyens Nationaux (src/180 buildGlobalLinkLabelLayout) : la boîte de l'étiquette a la taille ESTIMÉE qui sert aussi à éviter
+  les chevauchements ; estimation agrandie dans la même proportion (largeur 22 + 6 px par caractère, 40 à 110 px -> 28 + 7,2
+  px par caractère, 48 à 130 px ; hauteur 20 -> 24 px). Sans cela, le texte agrandi aurait débordé et l'évitement aurait
+  travaillé sur des boîtes trop petites. Le bord de l'étiquette reste à la même distance de l'avion (écart calculé depuis le
+  bord, inchangé) ; SafeSky : étiquette toujours ancrée par son bord le plus proche à 24 px du centre de l'avion.
+- Inchangés : mode « Alt. + Immat. », couleurs, contour, coins, position de l'étiquette, trait de liaison, contenu (texte et
+  flèche). Aucun calcul en plus pendant les gestes (feuille de style et deux constantes seulement).
+
+B. ESSAIS (PC ; Playwright WebKit 26.5 et Chrome ; service worker bloqué, toute requête hors localhost coupée ; trafic
+   SIMULÉ : faux SafeSky local et positions Moyens Nationaux inventées ; aucun appel au vrai VPS, au vrai NAS ni à SafeSky ;
+   heure de la page figée et animations arrêtées pour comparer les images)
+- Étiquettes (v105/pw_etiq105.js) : Chrome 7/7, WebKit 7/7 : avant (v18.04) / après (v18.05), chacune sur son port, à 5 NM
+  et 2 NM, 1 trafic, 3 trafics proches (30 px d'écart, ≈ 1 NM à 2 NM) et 3 trafics très serrés (8 px, information), en
+  mode « Alt. » puis « Alt. + Immat. » : valeurs avant / après (A) ; couleurs, contour, coins inchangés ; même contenu
+  (texte, flèche ; « 837 ft ↘ » comme la capture iPad) ; « Alt. + Immat. » IDENTIQUE (styles calculés identiques, 0 pixel
+  différent ; une passe Chrome a montré 2 pixels à 1/255 près, bruit de rendu, aussi vu sur des cas non touchés) ;
+  étiquettes Moyens Nationaux sans débordement (0,2 à 0,4 px, contre 0,6 à 0,7 px avant) ; 1 trafic et 3 trafics proches :
+  aucun chevauchement entre étiquettes avant comme après, aucune étiquette sur un avion (au plus un coin de 6 px² contre le
+  cadre d'un avion SafeSky voisin) ; aucune requête vers SafeSky ni hors de localhost.
+  Information, trafics très serrés (symboles qui se touchent déjà) : toujours aucun chevauchement entre étiquettes ; le
+  recouvrement d'avions déjà présent avant augmente un peu avec les étiquettes plus grandes (cadres : 1 778 -> 2 149 px²
+  à 5 NM, 1 664 -> 2 080 px² à 2 NM), surtout l'étiquette Moyens Nationaux sur mon avion quand le trafic est collé à moi.
+- Service worker RÉEL (v105/cdp_proto105_sw.js) : 6/6 (mise à jour v18.04 -> v18.05, prototype et données hors ligne,
+  index.html du shell intact).
+- Non-régression rapide (bloquante) : glr102 13/13, glr101 8/8, glr100 16/16 (Chrome et WebKit), cercle 14/14, nr 13/13,
+  map / popup / ret55 / npf66 / glr64 / upd53 identiques à la v18.04 (seuls des temps diffèrent).
+  Incident d'environnement (22/11) : nr d'abord 12/13 (N1 : carte V11 absente au lancement), AUSSI sur la v18.04 témoin :
+  le modèle de profil P11 (%TEMP%\npf89prof\P11, vraie V11) avait été vidé le 21/11 (nettoyage du dossier Temp de
+  Windows, comme le 11/11) ; reconstruit avec v96/pw_creer_p11.js (faux serveur local, vraie V11 : 164 406 dalles + 83 022
+  noms, hors ligne) ; nr ensuite 13/13 sur la v18.04 et sur la v18.05.
+
+C. STATUT
+- v18.05 À MESURER sur iPad (lisibilité de l'étiquette « Alt. » seule en vol).
 
 VERSION TEST v18.04 — PROTOTYPE CARTE GPU, ÉTAPE 2 : PROTOTYPE COMPLET (ZONES SIA, VFR, TERRAINS, PÉLIC, PISTES, HT, ROUTES) POUR UNE COMPARAISON À ARMES ÉGALES
 Date : 19/11/2026

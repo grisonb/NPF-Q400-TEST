@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v18-04_prototype_carte_complet';
-const APP_VERSION = 'v18.04';
+const SW_VERSION = 'sw-v18-05_etiquette_alt_seule';
+const APP_VERSION = 'v18.05';
 const SIA_DATA_REVISION = 'sia-2026-10-29-v02-g15';
 const SIA_DATA_URL = './sia.js';
 /*

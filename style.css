@@ -1,4 +1,4 @@
-/* NPF_STYLE_BUILD_VERSION: v18.04 */
+/* NPF_STYLE_BUILD_VERSION: v18.05 */
 /* v14.83 — nettoyage des références techniques et limitation des cartouches routiers. */
 /* v14.81 — recherche phonétique nationale élargie aux fragments sur deux lettres. */
 /* v14.80 — Brive conservé uniquement sous LFSL. */
@@ -19017,6 +19017,36 @@ body.npf-calculator-modal-open {
 }
 .global-link-aircraft-label.glr-label-alt-seule .glr-label-altitude {
     font-size: 10.5px !important;
+}
+/* v18.05 — « Alt. » seule (SafeSky et Moyens Nationaux) : texte plus grand et un peu plus de marge intérieure (constat
+   iPad : texte trop petit, collé au contour). Texte 10,5 -> 12,5 px ; flèche agrandie dans la même proportion (x 1,19) :
+   14 -> 16,5 px ; marge 1 px / 4 px -> 2 px / 6 px (haut et bas / côtés). Couleurs, contour, coins, position, trait de
+   liaison et style « Alt. + Immat. » : inchangés. */
+.traffic-aircraft-altitude-label.traffic-label-alt-seule {
+    padding: 2px 6px !important;
+}
+.traffic-aircraft-altitude-label.traffic-label-alt-seule .traffic-label-line-secondary .traffic-label-altitude-value {
+    font-size: 12.5px !important;
+    line-height: 14px !important;
+}
+.traffic-aircraft-altitude-label.traffic-label-alt-seule .traffic-label-line-secondary {
+    min-height: 14px !important;
+    line-height: 14px !important;
+}
+.traffic-aircraft-altitude-label.traffic-label-alt-seule .traffic-vertical-trend,
+.global-link-aircraft-label.glr-label-alt-seule .traffic-vertical-trend {
+    flex: 0 0 16.5px !important;
+    width: 16.5px !important;
+    min-width: 16.5px !important;
+    height: 13px !important;
+    font-size: 16.5px !important;
+    line-height: 12px !important;
+}
+.global-link-aircraft-label-marker .global-link-aircraft-label.glr-label-alt-seule {
+    padding: 2px 6px !important;
+}
+.global-link-aircraft-label.glr-label-alt-seule .glr-label-altitude {
+    font-size: 12.5px !important;
 }
 
 /* ==========================================================================
