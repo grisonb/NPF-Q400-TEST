@@ -1566,6 +1566,8 @@ function syncNpfHeavyOverlaysWithBaseMap(source = 'fond-de-carte') {
                     ) {
                         map.removeLayer(highVoltageLinesRenderer);
                     }
+                    /* v18.06 — verrou de redessin remis à zéro (voir le passage OFF de toggleHighVoltageLinesLayer). */
+                    if (highVoltageLinesRenderer && !highVoltageLinesRenderer._map) highVoltageLinesRenderer._redrawRequest = null;
                 } catch (_) {}
             };
             if (typeof requestAnimationFrame === 'function') {
@@ -2280,11 +2282,31 @@ async function toggleHighVoltageLinesLayer(forceState = null, options = {}) {
          * pane dès que des tracés HT reviennent sur la carte (HT ON). Jamais
          * pendant un geste : uniquement ici, au passage OFF.
          */
-        try {
-            if (highVoltageLinesRenderer && map?.hasLayer(highVoltageLinesRenderer)) {
-                map.removeLayer(highVoltageLinesRenderer);
-            }
-        } catch (_) {}
+        /*
+         * v18.06 — retrait du canvas à l'IMAGE SUIVANTE (comme au changement de fond de carte, plus haut) : retirer les
+         * lignes vient de programmer un dernier redessin ; retiré dans le même instant, Leaflet l'annulait sans remettre
+         * son verrou à zéro (_redrawRequest) et, au rallumage, plus rien n'était dessiné avant un déplacement de la carte
+         * (défaut introduit en v17.33). Retrait seulement si les HT sont toujours éteintes ; verrou remis à zéro par
+         * sécurité (comme le clignotement HT en v17.83).
+         */
+        const removeHighVoltageRendererOff = () => {
+            try {
+                if (
+                    !showHighVoltageLinesLayer
+                    && highVoltageLinesRenderer
+                    && map?.hasLayer(highVoltageLinesRenderer)
+                    && !(highVoltageLinesLayer && map.hasLayer(highVoltageLinesLayer))
+                ) {
+                    map.removeLayer(highVoltageLinesRenderer);
+                }
+                if (highVoltageLinesRenderer && !highVoltageLinesRenderer._map) highVoltageLinesRenderer._redrawRequest = null;
+            } catch (_) {}
+        };
+        if (typeof requestAnimationFrame === 'function') {
+            requestAnimationFrame(removeHighVoltageRendererOff);
+        } else {
+            setTimeout(removeHighVoltageRendererOff, 50);
+        }
         recordNpfStartupDiagnosticOverlaySnapshot(`lignes-ht OFF · ${options.source || 'toggle'}`);
         return;
     }

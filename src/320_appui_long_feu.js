@@ -255,6 +255,8 @@ function installMapFireLongPressDelay() {
     const isInteractiveTarget = target => {
         try {
             if (target?.closest?.('.sia-airspace-touch-surface')) return false;
+            /* v18.06 — bande de toucher des traits PÉLIC -> FEU (src/150) : l'appui long y garde son effet (WP des traits). */
+            if (target?.closest?.('.npf-pelic-route-touch')) return false;
 
             return !!target?.closest?.(
                 '.leaflet-control, .leaflet-popup, .leaflet-marker-icon, .leaflet-interactive, button, input, textarea, select, a'

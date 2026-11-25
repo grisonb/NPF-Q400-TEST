@@ -1243,11 +1243,10 @@ function getGlobalLinkTrendHtml(item) {
 }
 
 function getGlobalLinkLabelStyle() {
-    try {
-        return sanitizeTrafficSettings(trafficSettings).labelStyle;
-    } catch (_) {
-        return 'alt-immat';
-    }
+    /* v18.06 (décision de Bastien) — les Moyens Nationaux gardent TOUJOURS leur étiquette complète actuelle (nom +
+     * altitude), quel que soit le réglage « Étiquettes Trafics » (« Alt. » seule ou aucune) : ces réglages ne
+     * s'appliquent qu'aux trafics SafeSky ordinaires (src/140). Taille estimée de l'étiquette complète inchangée. */
+    return 'alt-immat';
 }
 
 function isGlobalLinkLabelAltOnly() {

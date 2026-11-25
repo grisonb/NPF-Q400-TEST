@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v18-05_etiquette_alt_seule';
-const APP_VERSION = 'v18.05';
+const SW_VERSION = 'sw-v18-06_ht_trait_etiquettes_base';
+const APP_VERSION = 'v18.06';
 const SIA_DATA_REVISION = 'sia-2026-10-29-v02-g15';
 const SIA_DATA_URL = './sia.js';
 /*

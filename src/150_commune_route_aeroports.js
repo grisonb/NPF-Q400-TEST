@@ -15,6 +15,7 @@ function updateMapBingoDisplay() {
     const pelicEl = document.getElementById('map-bingo-pelic');
 
     lftwEl.innerHTML = `<span class="bingo-title">BINGO BASE <span class="bingo-oaci">${selectedBaseOACI}</span>:</span> <b>${bingoBase} kg</b>`;
+    installerNpfBaseBandeau(lftwEl);
 
     if (bingoPelic !== 700 && selectedPelicanOACI) {
         pelicEl.innerHTML = `<span class="bingo-title">BINGO <span class="bingo-oaci">${selectedPelicanOACI}</span>:</span> <b>${bingoPelic} kg</b>`;
@@ -34,6 +35,7 @@ function displayCommuneDetails(commune, shouldFitBounds = true) {
     if (typeof syncNpfTraitsFeuPourFeu === 'function') syncNpfTraitsFeuPourFeu(commune);
     saveFireHistory(commune);
     routesLayer.clearLayers();
+    npfPelicRouteTouchLines = [];
     lftwRouteLayer.clearLayers();
     resetRouteTooltipOffsets();
     drawFireHistoryMarkers();
@@ -242,6 +244,88 @@ function buildNpfGreatCircleLatLngs(startLatLng, endLatLng, distanceNm = null) {
     return points;
 }
 
+/*
+ * v18.06 — bande de toucher des traits PÉLIC -> FEU au-dessus des couches SIA (comme les terrains en v15.50) : niveau
+ * 662, juste sous les zones rondes des terrains (npfTouchPane, 665) qui gardent la priorité sur leur symbole ; au-dessus
+ * des canvas SIA (zones 440, points 555) et des cibles VRP (660) qui prenaient tout le toucher. Rendu SVG (fiable pour le
+ * toucher sur Safari / iPad), créé au premier trait dessiné.
+ */
+/* var (et non let) : displayCommuneDetails, plus haut dans le fichier, peut s'en servir dès le démarrage. */
+var npfPelicRouteTouchRenderer = null;
+/*
+ * Second chemin, indépendant de la cible choisie par le navigateur : Safari (iPad) peut envoyer le clic d'un toucher
+ * posé sur la bande à un canvas voisin (choix « au plus probable » de la cible). Au clic sur la carte (jamais pendant
+ * un geste), un trait à moins de 12 px du doigt (demi-largeur de la bande) change le PÉLIC, sauf dans la zone ronde
+ * d'un terrain (32 px, le terrain garde la priorité sur son symbole) et sauf le clic qui suit un appui long.
+ */
+var npfPelicRouteTouchLines = [];
+var npfPelicRouteMapClickInstalled = false;
+function getNpfPelicRouteNearContainerPoint(point) {
+    if (!map || !point || !npfPelicRouteTouchLines.length) return null;
+    const terrainProche = (() => {
+        let trouve = false;
+        try {
+            if (typeof permanentAirportLayer !== 'undefined' && permanentAirportLayer) {
+                permanentAirportLayer.eachLayer(layer => {
+                    if (trouve || !layer || !layer._npfAirportOaci || !(layer instanceof L.CircleMarker) || !layer._map) return;
+                    const c = map.latLngToContainerPoint(layer.getLatLng());
+                    if (Math.hypot(c.x - point.x, c.y - point.y) <= Number(layer.options?.radius || 32)) trouve = true;
+                });
+            }
+        } catch (_) {}
+        return trouve;
+    })();
+    if (terrainProche) return null;
+    let meilleur = null;
+    npfPelicRouteTouchLines.forEach(trait => {
+        const pts = trait.latlngs.map(ll => map.latLngToContainerPoint(ll));
+        for (let i = 1; i < pts.length; i += 1) {
+            const a = pts[i - 1], b = pts[i];
+            const dx = b.x - a.x, dy = b.y - a.y;
+            const l2 = dx * dx + dy * dy;
+            const t = l2 > 0 ? Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / l2)) : 0;
+            const d = Math.hypot(point.x - (a.x + t * dx), point.y - (a.y + t * dy));
+            if (d <= 12 && (!meilleur || d < meilleur.d)) meilleur = { oaci: trait.oaci, d };
+        }
+    });
+    return meilleur;
+}
+function installNpfPelicRouteMapClick() {
+    if (npfPelicRouteMapClickInstalled || !map) return;
+    npfPelicRouteMapClickInstalled = true;
+    /* Position EXACTE du doigt au début du toucher : le clic qui suit peut arriver déplacé de quelques pixels
+     * (ajustement de la cible par le navigateur). Écoute passive, aucune action pendant un geste. */
+    let dernierAppui = null;
+    const conteneur = map.getContainer();
+    conteneur.addEventListener('pointerdown', event => {
+        const r = conteneur.getBoundingClientRect();
+        dernierAppui = { x: Number(event.clientX) - r.left, y: Number(event.clientY) - r.top, at: Date.now() };
+    }, { capture: true, passive: true });
+    map.on('click', event => {
+        try {
+            if (!currentCommune || (typeof isDrawingMode !== 'undefined' && isDrawingMode) || !event?.containerPoint) return;
+            const appuiLong = window.__npfFireLongPressTouchState;
+            if (appuiLong && Date.now() < Number(appuiLong.suppressSyntheticClickUntil || 0)) return;
+            const point = dernierAppui && Date.now() - dernierAppui.at < 1000
+                ? L.point(dernierAppui.x, dernierAppui.y)
+                : event.containerPoint;
+            const trait = getNpfPelicRouteNearContainerPoint(point);
+            if (trait) selectPelicanOaciFromRoute(trait.oaci);
+        } catch (_) {}
+    });
+}
+function getNpfPelicRouteTouchRenderer() {
+    if (!map || !map.createPane) return undefined;
+    installNpfPelicRouteMapClick();
+    if (!map.getPane('npfPelicRouteTouchPane')) {
+        const pane = map.createPane('npfPelicRouteTouchPane');
+        pane.style.zIndex = '662';
+        pane.style.pointerEvents = 'auto';
+    }
+    if (!npfPelicRouteTouchRenderer && L.svg) npfPelicRouteTouchRenderer = L.svg({ padding: 0.35, pane: 'npfPelicRouteTouchPane' });
+    return npfPelicRouteTouchRenderer || undefined;
+}
+
 function drawRoute(startLatLng, endLatLng, options = {}) {
     const { oaci, isUser, isLftwRoute, magneticBearing, pane } = options;
     /* v17.57 — A : route avion -> cible et Feu -> BASE : chemin à cap constant
@@ -308,12 +392,29 @@ function drawRoute(startLatLng, endLatLng, options = {}) {
             lineJoin: 'round'
         }).addTo(layer);
 
-        const hitbox = L.polyline(routeLatLngs, { color: 'transparent', weight: 24, opacity: 0 }).addTo(layer);
+        const touchRenderer = getNpfPelicRouteTouchRenderer();
+        /* Trait quasi invisible (0,002) et non totalement transparent : comme les zones des terrains (v15.50), sinon
+         * Safari / iPad ne le retient pas toujours pour le toucher. */
+        const hitbox = L.polyline(routeLatLngs, {
+            color: '#000000',
+            weight: 24,
+            opacity: 0.002,
+            pane: touchRenderer ? 'npfPelicRouteTouchPane' : undefined,
+            renderer: touchRenderer,
+            className: 'npf-pelic-route-touch',
+            bubblingMouseEvents: false
+        }).addTo(layer);
+        npfPelicRouteTouchLines.push({ oaci, latlngs: routeLatLngs });
         const selectPelicRoute = (event) => {
             try {
                 if (event && event.originalEvent && typeof event.originalEvent.stopPropagation === 'function') {
                     event.originalEvent.stopPropagation();
                 }
+            } catch (_) {}
+            /* v18.06 — clic que Safari émet à la fin d'un appui long (WP des traits, src/205) : pas un changement de PÉLIC. */
+            try {
+                const appuiLong = window.__npfFireLongPressTouchState;
+                if (appuiLong && Date.now() < Number(appuiLong.suppressSyntheticClickUntil || 0)) return;
             } catch (_) {}
             selectPelicanOaciFromRoute(oaci);
         };
@@ -631,6 +732,90 @@ function selectAirportDestination(airport) {
     return true;
 }
 
+
+/*
+ * v18.06 (décision de Bastien) — bandeau « BINGO BASE LFxx » : un toucher sur toute cette partie ouvre une petite fenêtre
+ * où l'on TAPE le code OACI de la base, exactement comme le champ « Base » du calculateur : même saisie (LF imposé,
+ * majuscules), mêmes contrôles et mêmes messages, même effet (applyBaseOaciFromInput : base, calculateur, BINGO,
+ * routes, coucher du soleil). Pas de liste. Annuler (ou toucher hors de la fenêtre) ferme sans rien changer.
+ */
+function installerNpfBaseBandeau(element) {
+    if (!element || element.dataset.npfBaseBandeau === '1') return;
+    element.dataset.npfBaseBandeau = '1';
+    element.setAttribute('role', 'button');
+    element.setAttribute('aria-label', 'Changer la base');
+    element.addEventListener('click', event => {
+        event.preventDefault();
+        event.stopPropagation();
+        ouvrirNpfBaseBandeau();
+    });
+}
+
+function fermerNpfBaseBandeau() {
+    const fenetre = document.getElementById('npf-base-bandeau-modal');
+    if (fenetre) fenetre.hidden = true;
+}
+
+function ouvrirNpfBaseBandeau() {
+    let fenetre = document.getElementById('npf-base-bandeau-modal');
+    if (!fenetre) {
+        fenetre = document.createElement('div');
+        fenetre.id = 'npf-base-bandeau-modal';
+        fenetre.className = 'npf-base-bandeau-modal';
+        fenetre.hidden = true;
+        fenetre.innerHTML = `
+            <div class="npf-base-bandeau-boite" role="dialog" aria-modal="true" aria-labelledby="npf-base-bandeau-titre">
+                <div id="npf-base-bandeau-titre" class="npf-base-bandeau-titre">Base</div>
+                <input type="text" id="npf-base-bandeau-input" class="npf-base-bandeau-input" inputmode="text" maxlength="4" placeholder="OACI"
+                    autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" enterkeyhint="done">
+                <div class="npf-base-bandeau-boutons">
+                    <button type="button" id="npf-base-bandeau-annuler" class="npf-base-bandeau-annuler">Annuler</button>
+                    <button type="button" id="npf-base-bandeau-valider" class="npf-base-bandeau-valider">Valider</button>
+                </div>
+            </div>`;
+        document.body.appendChild(fenetre);
+        const input = fenetre.querySelector('#npf-base-bandeau-input');
+        /* Même saisie que le champ « Base » du calculateur (setupBaseOaciInputs). */
+        input.addEventListener('input', () => {
+            const previousLength = input.value.length;
+            input.value = normalizeBaseOaciLockedLfInput(input.value);
+            input.classList.remove('base-oaci-invalid');
+            if (input.value.length <= 2 || previousLength <= 2) {
+                try { input.setSelectionRange(2, 2); } catch (_) {}
+            }
+        });
+        input.addEventListener('focus', () => selectBaseOaciSuffix(input));
+        const valider = () => {
+            if (applyBaseOaciFromInput(input)) fermerNpfBaseBandeau();
+        };
+        input.addEventListener('keydown', event => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                valider();
+            } else if (event.key === 'Escape') {
+                event.preventDefault();
+                fermerNpfBaseBandeau();
+            }
+        });
+        fenetre.querySelector('#npf-base-bandeau-valider').addEventListener('click', event => {
+            event.preventDefault();
+            valider();
+        });
+        fenetre.querySelector('#npf-base-bandeau-annuler').addEventListener('click', event => {
+            event.preventDefault();
+            fermerNpfBaseBandeau();
+        });
+        fenetre.addEventListener('click', event => {
+            if (event.target === fenetre) fermerNpfBaseBandeau();
+        });
+    }
+    const input = fenetre.querySelector('#npf-base-bandeau-input');
+    input.value = selectedBaseOACI || 'LF';
+    input.classList.remove('base-oaci-invalid');
+    fenetre.hidden = false;
+    try { input.focus(); } catch (_) {}
+    selectBaseOaciSuffix(input);
+}
 
 function normalizeBaseOaciLockedLfInput(value) {
     const raw = String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');

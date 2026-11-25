@@ -1,5 +1,5 @@
 /*
- * NPF-Q400 TEST v18.05 (prototype inchangé depuis la v18.04) — PROTOTYPE de carte MapLibre GL JS (module de prototype-carte.html, page à part).
+ * NPF-Q400 TEST v18.06 (prototype inchangé depuis la v18.04) — PROTOTYPE de carte MapLibre GL JS (module de prototype-carte.html, page à part).
  * - Chargé SEULEMENT quand on ouvre la page (bouton « Prototype carte GPU » du DIAG) ; la carte NPF-Q400 n'est pas touchée.
  * - MapLibre GL JS 6.17.0 en copie locale (dossier maplibre-6.17.0) ; aucune requête vers un serveur extérieur ;
  *   textes dessinés sur l'appareil avec ses propres polices (aucun fichier de police, aucun serveur).
@@ -477,7 +477,7 @@ function npfBancCreer(adaptateur) {
 /* ==== BANC CARTE GPU — FIN DU CODE COMMUN ==== */
 
 /* ==================== PROTOTYPE ==================== */
-const APPV = 'v18.05';
+const APPV = 'v18.06';
 const MAPLIBRE_VERSION = '6.17.0';
 const MAPLIBRE_DOSSIER = 'maplibre-6.17.0';
 /*

@@ -1,4 +1,4 @@
-/* NPF_STYLE_BUILD_VERSION: v18.05 */
+/* NPF_STYLE_BUILD_VERSION: v18.06 */
 /* v14.83 — nettoyage des références techniques et limitation des cartouches routiers. */
 /* v14.81 — recherche phonétique nationale élargie aux fragments sur deux lettres. */
 /* v14.80 — Brive conservé uniquement sous LFSL. */
@@ -19184,4 +19184,89 @@ body.npf-calculator-modal-open {
     font-size: 11px;
     font-weight: 700;
     white-space: nowrap;
+}
+
+/* ==========================================================================
+   v18.06 — bandeau « BINGO BASE LFxx » : toute la partie se touche (zone d'au moins 48 × 64 px, invisible, aspect
+   du bandeau inchangé) et ouvre une petite fenêtre où l'on tape le code OACI de la base (comme le champ « Base » du
+   calculateur).
+   ========================================================================== */
+#bingo-map-display #map-bingo-lftw {
+    position: relative;
+    cursor: pointer;
+    min-width: 64px;
+    -webkit-tap-highlight-color: transparent;
+}
+#bingo-map-display #map-bingo-lftw::after {
+    content: "";
+    position: absolute;
+    left: -6px;
+    right: -6px;
+    top: 50%;
+    height: 48px;
+    transform: translateY(-50%);
+}
+.npf-base-bandeau-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 2147483200;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: calc(var(--safe-area-top, 0px) + 70px);
+    background: rgba(0, 0, 0, 0.35);
+}
+.npf-base-bandeau-modal[hidden] {
+    display: none !important;
+}
+.npf-base-bandeau-boite {
+    background: #ffffff;
+    border: 3px solid var(--secondary-color);
+    border-radius: 14px;
+    box-shadow: 0 6px 22px rgba(0, 0, 0, 0.4);
+    padding: 16px 18px;
+    width: min(320px, calc(100vw - 32px));
+    box-sizing: border-box;
+}
+.npf-base-bandeau-titre {
+    font: 900 18px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+    color: var(--secondary-color);
+    margin-bottom: 10px;
+    text-align: center;
+}
+.npf-base-bandeau-input {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    font: 900 32px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+    letter-spacing: 3px;
+    text-align: center;
+    text-transform: uppercase;
+    padding: 8px 10px;
+    border: 2px solid #94a3b8;
+    border-radius: 10px;
+}
+.npf-base-bandeau-input.base-oaci-invalid {
+    border-color: #dc2626;
+    background: #fee2e2;
+}
+.npf-base-bandeau-boutons {
+    display: flex;
+    gap: 10px;
+    margin-top: 14px;
+}
+.npf-base-bandeau-boutons button {
+    flex: 1 1 50%;
+    min-height: 48px;
+    border-radius: 10px;
+    font: 800 17px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+    border: 2px solid var(--secondary-color);
+}
+.npf-base-bandeau-annuler {
+    background: #ffffff;
+    color: var(--secondary-color);
+}
+.npf-base-bandeau-valider {
+    background: var(--secondary-color);
+    color: #ffffff;
 }

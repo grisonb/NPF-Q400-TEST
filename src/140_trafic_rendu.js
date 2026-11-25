@@ -2482,8 +2482,11 @@ function buildTrafficMarkerIcon(aircraft) {
         : ((aircraft.altitude && aircraft.altitude !== '--') ? aircraft.altitude : '');
     const verticalTrend = getTrafficVerticalTrend(aircraft);
 
-    /* v17.96 (RUN v1.21) — « Étiquettes Trafics Alt. » : ni immatriculation ni type, altitude + tendance seules. */
-    const labelAltOnly = settings.labelStyle === 'alt';
+    /* v17.96 (RUN v1.21) — « Étiquettes Trafics Alt. » : ni immatriculation ni type, altitude + tendance seules.
+     * v18.06 (décision de Bastien) — modes réduits (« Alt. » seule, aucune) pour les trafics SafeSky ORDINAIRES seulement :
+     * un trafic suivi garde toujours son étiquette complète actuelle (indicatif + altitude + tendance). */
+    const labelAltOnly = settings.labelStyle === 'alt' && !isTrackedAircraft;
+    const showTrafficLabel = settings.showAltitudeLabel || isTrackedAircraft;
     const firstLineParts = labelAltOnly ? [] : [
         permanentIdentifier,
         permanentType
@@ -2495,7 +2498,7 @@ function buildTrafficMarkerIcon(aircraft) {
     ].filter(Boolean);
 
     const altitudeHtml = (
-        settings.showAltitudeLabel
+        showTrafficLabel
         && (firstLineParts.length || secondLineParts.length)
     ) ? `
         <span class="traffic-aircraft-altitude-label ${labelAnchorClass}${labelAltOnly ? ' traffic-label-alt-seule' : ''}"

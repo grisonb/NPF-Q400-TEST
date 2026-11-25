@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
-Mise à jour : 22/11/2026
-Version de travail actuelle : TEST v18.05
+Mise à jour : 25/11/2026
+Version de travail actuelle : TEST v18.06
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -567,7 +567,12 @@ NON IMPLÉMENTÉ / OUVERT :
 - v18.05 : étiquettes de trafic « Alt. » seule (SafeSky et Moyens Nationaux) : texte 10,5 -> 12,5 px, flèche 14 -> 16,5 px,
   marge 1 / 4 -> 2 / 6 px ; boîte des étiquettes Moyens Nationaux agrandie dans la même proportion (évitement des
   chevauchements) ; « Alt. + Immat. », couleurs, contour, position et trait inchangés. À MESURER sur iPad ;
-  COMMIT LOCAL, NON POUSSÉE ;
+  POUSSÉE le 22/11/2026 (b141d4a) ;
+- v18.06 : HT dessinées tout de suite au rallumage (canvas retiré à l'image suivante, défaut depuis v17.33) ; trait feu ->
+  pélic de nouveau touchable avec les couches SIA (bande au niveau 662, sous les zones des terrains ; second chemin au clic
+  avec la position exacte du doigt) ; étiquettes : modes réduits pour SafeSky ordinaires seulement (MN et suivis toujours
+  complets) ; toucher « BINGO BASE LFxx » = fenêtre de saisie du code de la base (comme le champ du calculateur).
+  À MESURER sur iPad ; COMMIT LOCAL, NON POUSSÉE ;
 - v18.02 : bouton Moyens Nationaux : contour VERT dès que la session est connectée (même sans appareil détecté, même calque
   masqué OFF) ; ROUGE sans session, ou calque affiché quand la dernière demande de positions a échoué (réseau, hors ligne,
   « service indisponible »), puis vert dès la demande suivante réussie (demande de Bastien du 19/11). À MESURER sur iPad ;
@@ -889,25 +894,25 @@ et ce qui ne doit pas être intégré automatiquement.
 
 1. PAQUET SOURCE DE RÉFÉRENCE ACTUEL
 ------------------------------------
-Version : TEST v18.05
-Date : 22/11/2026
-Base : v18.04 (a0fece0, poussée le 19/11/2026)
+Version : TEST v18.06
+Date : 25/11/2026
+Base : v18.05 (b141d4a, poussée le 22/11/2026)
 
 Les 7 fichiers qui font foi sont, dans l'ordre de livraison utilisateur :
-1_Modifications_v18.05.txt
-2_Index_v18.05.txt
-3_Manifest_v18.05.txt
-4_Script_v18.05.txt
-5_SIA_v18.05.txt
-6_Style_v18.05.txt
-7_Sw_v18.05.txt
+1_Modifications_v18.06.txt
+2_Index_v18.06.txt
+3_Manifest_v18.06.txt
+4_Script_v18.06.txt
+5_SIA_v18.06.txt
+6_Style_v18.06.txt
+7_Sw_v18.06.txt
 
 Références de version cohérentes :
-- Index : APP_VERSION = v18.05 (et texte « TEST v18.05 » de l'écran de
+- Index : APP_VERSION = v18.06 (et texte « TEST v18.06 » de l'écran de
   démarrage, à changer aussi à chaque version)
-- Manifest : start_url = ./index.html?appv=v18.05
-- Script : NPF_SCRIPT_BUILD_VERSION = v18.05
-- Style : NPF_STYLE_BUILD_VERSION = v18.05
+- Manifest : start_url = ./index.html?appv=v18.06
+- Script : NPF_SCRIPT_BUILD_VERSION = v18.06
+- Style : NPF_STYLE_BUILD_VERSION = v18.06
 - Prototype de carte (v18.03) : prototype-carte.html, prototype-carte.js, prototype-carte.css et dossier maplibre-6.17.0/
   (maplibre-gl.mjs, maplibre-gl-worker.mjs, maplibre-gl.css, LICENSE.txt BSD-3), à livrer avec les 7 fichiers ; « ?appv= » de
   la page et constante APPV de prototype-carte.js à changer à chaque version ; bloc « BANC CARTE GPU » commun identique
@@ -917,8 +922,8 @@ Références de version cohérentes :
 - Nom de l'app (v17.94) : « NPF-Q400 TEST » (manifest name et short_name, <title>, apple-mobile-web-app-title)
 - PDF.js (v17.96) : dossier pdfjs/ (pdf.min.mjs, pdf.worker.min.mjs 4.10.38, LICENSE Apache-2.0, LISEZMOI.txt), à livrer
   avec les 7 fichiers ; fichiers indispensables du service worker.
-- Service Worker : `sw-v18-05_etiquette_alt_seule` ; caches TEST
-  `npf-q400-test-app-shell-sw-v18-05_etiquette_alt_seule`, `npf-q400-test-prototype-carte-sw-v18-05_etiquette_alt_seule`,
+- Service Worker : `sw-v18-06_ht_trait_etiquettes_base` ; caches TEST
+  `npf-q400-test-app-shell-sw-v18-06_ht_trait_etiquettes_base`, `npf-q400-test-prototype-carte-sw-v18-06_ht_trait_etiquettes_base`,
   `npf-q400-test-app-data-v1`,
   `npf-q400-test-sia-data-sia-2026-10-29-v02-g15`
 - SIA_DATA_REVISION (SW / Index sia.js?siav=) : sia-2026-10-29-v02-g15 (= NPF_SIA_DATA_REVISION
@@ -932,15 +937,15 @@ Références de version cohérentes :
   center-gps-icon, bloc-fuel-shortcut-icon en 256 × 256.
 
 STATUT DE VALIDATION :
-- validation statique v18.05 effectuée avant livraison : Script/SIA/SW OK, scripts
+- validation statique v18.06 effectuée avant livraison : Script/SIA/SW OK, scripts
   inline Index OK, Manifest JSON OK et cohérence versions OK ;
 - `node tools/build_script.js --check` : IDENTIQUE ; CRLF conservés ;
 - `sia.js` : par rapport à v17.70, outre-mer retiré, « a » de 34 VRP renseigné, table vrpAirportColors ajoutée (2 pastels), révision g6 ; zones, terrains et points de métropole identiques ; moteur tuiles (src/100) modifié en v17.66 sur demande
   explicite (limite de zoom propre à chaque carte, zoom 11 OACI 1/500 000) ;
-- tests v18.05 : entrée v18.05 ; sia.js strictement identique à la v17.81 ;
+- tests v18.06 : entrée v18.06 ; sia.js strictement identique à la v17.81 ;
 - v17.26 reste À MESURER en vol prolongé ; v17.27, v17.28 et v17.30 VALIDÉES
   sur iPad ; v17.32 MESURÉE ; v17.44, v17.47 et v17.52 VALIDÉES ; v17.29, v17.31,
-  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82, v17.83, v17.84, v17.85, v17.86, v17.87, v17.88, v17.89, v17.90, v17.91, v17.92, v17.93, v17.94, v17.95, v17.96, v17.97, v17.98, v17.99, v18.00, v18.01, v18.02, v18.03, v18.04 et v18.05 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
+  v17.33 à v17.43, v17.45, v17.46, v17.48 à v17.51, v17.58 à v17.64, v17.67, v17.68, v17.70, v17.71, v17.72, v17.73, v17.74, v17.75, v17.76, v17.77, v17.78, v17.80, v17.81, v17.82, v17.83, v17.84, v17.85, v17.86, v17.87, v17.88, v17.89, v17.90, v17.91, v17.92, v17.93, v17.94, v17.95, v17.96, v17.97, v17.98, v17.99, v18.00, v18.01, v18.02, v18.03, v18.04, v18.05 et v18.06 À MESURER ; v17.79 VALIDÉE (fluidité du calque) ; v17.69 VALIDÉE ; v17.65 et v17.66 VALIDÉES ;
   v17.53 retirée en v17.54 puis remise en v17.55 (VALIDÉE) ; v17.54 MESURÉE ;
   v17.56 VALIDÉE en vol ; v17.57 VALIDÉE sur iPad.
 
@@ -2469,6 +2474,88 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v18.06 — HT AU RALLUMAGE, TRAIT FEU -> PÉLIC TOUCHABLE, ÉTIQUETTES COMPLÈTES (MN ET SUIVIS), BASE DU BANDEAU
+Date : 25/11/2026
+Base fonctionnelle : v18.05 (commit b141d4a, poussée le 22/11/2026). Seule la TEST change : pérenne, RUN, BFG, NAS et VPS
+inchangés. sia.js inchangé (strictement identique à la v17.81). Moteur de tuiles, séquenceur, prototype de carte (hors
+numéros de version) : INCHANGÉS.
+
+0. CONTEXTE
+- 25/11/2026 : étude en lecture seule de six demandes de Bastien (iPad) ; décisions de Bastien sur les quatre premières.
+- v18.05 poussée le 22/11/2026 (b141d4a) ; GitHub Pages vérifié (APP_VERSION v18.05, SW sw-v18-05_etiquette_alt_seule).
+
+A. HT AU RALLUMAGE (src/110)
+- Défaut (depuis la v17.33, commit e9bc769, « R6 ») : HT éteintes puis rallumées = rien dessiné avant un déplacement de la
+  carte. Cause : à l'extinction, le retrait des lignes programme un redessin, puis le canvas HT était retiré dans le même
+  instant ; Leaflet annule ce redessin sans remettre son verrou à zéro (_destroyContainer, _redrawRequest) ; au rallumage,
+  plus aucun redessin n'était programmé. Prouvé : v17.32 bonne, v17.33 et suivantes vides au rallumage.
+- Correction : canvas retiré à l'IMAGE SUIVANTE, comme au changement de fond de carte, seulement si les HT sont toujours
+  éteintes ; verrou remis à zéro par sécurité (comme le clignotement HT en v17.83), aussi au changement de fond.
+- Autres canvas : seul le clignotement HT est aussi retiré de la carte, déjà corrigé en v17.83. Calque Routier, pistes,
+  SIA : jamais retirés, pas de défaut.
+
+B. TRAIT FEU -> PÉLIC TOUCHABLE (src/150, src/320)
+- Défaut (ancien, depuis l'arrivée des couches SIA, ≈ v15.4x ; vérifié en v16.96, v17.30, v17.50, v17.70, v17.90, v18.05) :
+  dès que les points / terrains SIA sont affichés, leur canvas (niveau 555) couvre toute la carte et prend le toucher de la
+  bande du trait (niveau 400). La v15.50 avait corrigé la même chose pour les terrains, pas pour les traits.
+- Correction :
+  - bande de toucher du trait (24 px) dans un niveau à part, 662 : au-dessus de toutes les couches SIA (dont les cibles
+    VRP, 660), juste sous les zones rondes des terrains (665, 32 px) : le terrain gagne sur son symbole, le trait partout
+    ailleurs (décision de Bastien) ; rendu SVG, trait quasi invisible (0,002) comme les zones des terrains ;
+  - second chemin au clic sur la carte (jamais pendant un geste) : Safari peut envoyer le clic à un canvas voisin et le
+    décaler de quelques pixels (vu sous Playwright WebKit : clic décalé d'environ 9 px et envoyé au canvas SIA) ; la
+    position EXACTE du doigt au début du toucher est gardée et, à moins de 12 px d'un trait (hors zone ronde d'un terrain),
+    le pélic change ;
+  - appui long sur le trait (WP des traits, v17.90) : inchangé (exception dans isInteractiveTarget, src/320) ; le clic que
+    Safari émet après un appui long ne change pas le pélic.
+- Le changement de pélic passe toujours par selectPelicanOaciFromRoute : routes, Rot., calculateur, BINGO refaits comme
+  avant. Cartouche OACI du trait : inchangé (toujours touchable).
+
+C. ÉTIQUETTES DE TRAFIC (src/140, src/180)
+- Décision de Bastien : les modes réduits (« Alt. » seule, et aucune) ne s'appliquent qu'aux trafics SafeSky ORDINAIRES.
+  Les trafics SafeSky suivis gardent toujours leur étiquette complète actuelle (indicatif + altitude + tendance) ; les
+  Moyens Nationaux gardent toujours la leur (nom + altitude), quel que soit le mode, aucune comprise.
+- Moyens Nationaux : évitement des chevauchements calculé avec la taille de l'étiquette complète (104 × 42 px mesurés,
+  aucun débordement).
+
+D. BASE DU BANDEAU « BINGO BASE LFxx » (src/150, style.css)
+- Un toucher sur toute cette partie (zone de toucher d'au moins 48 px de haut, invisible ; mesuré 282 × 52 px en portrait,
+  420 × 72 px en paysage) ouvre une petite fenêtre « Base » avec une case où l'on TAPE le code (LF imposé, majuscules),
+  boutons Valider et Annuler. Pas de liste.
+- Mêmes fonctions que le champ « Base » du calculateur (normalizeBaseOaciLockedLfInput, selectBaseOaciSuffix,
+  applyBaseOaciFromInput) : mêmes contrôles, mêmes messages (« Base LFZQ inconnue dans la base terrains. », « Code OACI
+  base incomplet. Exemple : LFTW. »), même effet (base, calculateur, BINGO, routes, coucher du soleil). Annuler, Échap ou
+  un toucher hors de la fenêtre : rien ne change ; un code faux garde la fenêtre ouverte.
+
+E. ESSAIS (PC ; Chrome et Playwright WebKit 26.5 ; service worker bloqué, tout coupé sauf localhost ; aucun appel au vrai
+   VPS ni au vrai NAS ; trafic simulé : faux SafeSky local, positions Moyens Nationaux inventées)
+- HT (v106/pw_htr106.js ; Chrome : vraie V11 ; WebKit : carte d'essai) : allumer, éteindre, rallumer sans bouger la carte :
+  v18.05 : rallumage VIDE à 5 NM et 2 NM (Chrome et WebKit) ; v18.06 : rallumage dessiné dès 1,5 s (5 NM : 11 909 px,
+  471 lignes ; 2 NM : 7 806 px, 137 lignes), Chrome et WebKit.
+- Trait (v106/pw_v106.js ; feu à Crest, pélic LFLU, toutes les catégories SIA cochées, zones et VRP affichés, avion) :
+  touchers sur 5 points de chaque trait non choisi (LFHO, LFMH) : v18.05 : 0 sur 9 hors terrain (le toucher allait au
+  canvas SIA) ; v18.06 : 9 sur 9 changent le pélic (Chrome et WebKit), BINGO pélic et calculateur suivent ; le point du
+  trait LFHO dans la zone ronde du terrain LFLQ : pélic inchangé ; toucher du symbole LFLQ : sa fiche s'ouvre ; appui long
+  sur un trait : un WP ajouté au trait, pélic inchangé, pas de menu « Créer Feu ».
+- Étiquettes (faux SafeSky : FORDI ordinaire, FSUIV suivi ; MN-ESSAI-7 inventé) : v18.05 : le suivi et les MN suivaient
+  le mode ; v18.06, Chrome et WebKit : « Alt. + Immat. » : tout complet ; « Alt. » : FORDI réduite, FSUIV et MN complètes ;
+  aucune : FORDI sans étiquette, FSUIV et MN complètes ; étiquette MN 104 × 42 px, aucun débordement.
+- Base (Chrome et WebKit) : toucher de « BINGO BASE LFTW » -> fenêtre, case LFTW, majuscules ; LFZQ -> « Base LFZQ inconnue
+  dans la base terrains. » (fenêtre gardée, base inchangée) ; LF -> « Code OACI base incomplet. Exemple : LFTW. » ; mêmes
+  messages que le champ du calculateur ; Annuler : rien ne change ; « mu » tapé -> LFMU, Valider : base LFMU, distance
+  base-feu 64 -> 111 NM, BINGO BASE 1 020 -> 1 144 kg, champ du calculateur LFMU. Zone de toucher : 282 × 52 px en
+  portrait, 420 × 72 px en paysage.
+- Fluidité Chrome CPU ×6 (8 gestes, feu + toutes les couches SIA, vraie V11) : v18.05 : 30 / 65 / 42 saccades (3
+  passages), médianes 48 à 145 i/s ; v18.06 : 41 / 46 / 28 / 21 saccades (4 passages), médianes 72 à 145 i/s : aucun recul
+  (écarts de mesure du PC).
+- Service worker RÉEL (v106/cdp_proto106_sw.js) : 6/6 (mise à jour v18.05 -> v18.06, prototype hors ligne, shell intact).
+- Non-régression rapide (bloquante) : glr102 13/13, glr101 8/8, glr100 16/16 (Chrome et WebKit), cercle 14/14, nr 13/13,
+  map / popup / ret55 / npf66 / glr64 / upd53 identiques à la v18.05 (caches de la pérenne présents après la mise à jour).
+- Aucune requête vers SafeSky, le vrai VPS ou le vrai NAS (tout coupé sauf localhost).
+
+F. STATUT
+- v18.06 À MESURER sur iPad (HT au rallumage ; toucher du trait avec les couches SIA en vol ; étiquettes ; base).
 
 VERSION TEST v18.05 — ÉTIQUETTES DE TRAFIC « ALT. » SEULE : TEXTE PLUS GRAND ET UN PEU PLUS DE MARGE
 Date : 22/11/2026
