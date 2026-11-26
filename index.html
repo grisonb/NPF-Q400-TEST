@@ -8,8 +8,8 @@
     <!-- v17.94 — nom « NPF-Q400 TEST » (titre de la fenêtre sur PC, nom sous l'icône de l'iPad, manifest), pour ne pas confondre avec la pérenne. -->
     <title>NPF-Q400 TEST</title>
     <link rel="stylesheet" href="leaflet.css">
-    <link rel="stylesheet" href="style.css?appv=v18.06">
-    <link rel="manifest" href="manifest.json?appv=v18.06">
+    <link rel="stylesheet" href="style.css?appv=v18.07">
+    <link rel="manifest" href="manifest.json?appv=v18.07">
     <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192x192.png?appv=v13.92">
     <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512x512.png?appv=v13.92">
     <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png?appv=v13.92">
@@ -68,7 +68,7 @@
     <div id="app-boot-screen" aria-live="polite">
         <div class="boot-card">
             <div>NPF-Q400 — démarrage…</div>
-            <div class="boot-version">TEST v18.06</div>
+            <div class="boot-version">TEST v18.07</div>
         </div>
     </div>
     <script>
@@ -116,6 +116,19 @@
                 </svg>
             </span>
             <span id="road-overlay-button-status" class="road-overlay-button-status">—</span>
+        </button>
+        <!-- v18.07 — réseau RTBA (AZBA, source SDVFR via le NAS, src/370) : allumé à chaque lancement, éteint = masqué seulement.
+             Pastille : heure du fichier affiché (heure de Paris), « veille » ou « — » quand rien n'est affiché. -->
+        <button id="rtba-layer-button" class="left-map-action-button rtba-map-button active" type="button" aria-pressed="true"
+                title="Afficher/Masquer le réseau RTBA" aria-label="Afficher/Masquer le réseau RTBA">
+            <span class="rtba-map-icon" aria-hidden="true">
+                <svg viewBox="0 0 64 64" focusable="false" role="img">
+                    <path class="rtba-map-zone rtba-map-zone-avenir" d="M6 40 L22 30 L40 36 L58 26 L58 44 L40 54 L22 48 L6 56 Z"/>
+                    <path class="rtba-map-zone rtba-map-zone-actif" d="M6 14 L22 6 L40 12 L58 6 L58 24 L40 30 L22 24 L6 32 Z"/>
+                </svg>
+            </span>
+            <span class="rtba-map-label" aria-hidden="true">RTBA</span>
+            <span id="rtba-button-status" class="rtba-button-status">—</span>
         </button>
         <button id="ops-frequencies-pdf-button" class="left-map-action-button ops-frequencies-map-button" title="Ouvrir la carte fréquences OPS" aria-label="Ouvrir la carte fréquences OPS">
             <span class="radio-frequency-icon" aria-hidden="true">
@@ -663,7 +676,7 @@
             };
         } catch (_) {}
 
-        const APP_VERSION = 'v18.06';
+        const APP_VERSION = 'v18.07';
         const SERVICE_WORKER_URL = `./sw.js?appv=${encodeURIComponent(APP_VERSION)}`;
         const APP_VERSION_STORAGE_KEY = 'appVersion';
         const SW_CONTROLLER_RELOAD_GUARD_KEY = 'swControllerReloadGuard';
@@ -1506,7 +1519,7 @@
     <script src="suncalc.js"></script>
     <script src="jszip.min.js"></script>
     <script src="sia.js?siav=sia-2026-10-29-v02-g15"></script>
-    <script src="script.js?appv=v18.06"></script>
+    <script src="script.js?appv=v18.07"></script>
     
     <div id="fuel-split-modal" class="fuel-split-modal" style="display: none;">
         <div class="fuel-split-modal-content">

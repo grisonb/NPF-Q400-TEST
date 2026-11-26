@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v18.06';
+const NPF_SCRIPT_BUILD_VERSION = 'v18.07';
 
 
 /*
@@ -3332,7 +3332,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v18.06 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v18.07 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -4604,6 +4604,10 @@ function buildNpfStartupDiagnosticExportText() {
         lines.push('Tuiles IDB : ' + runtime.directHits + ' trouvées / ' + runtime.directMisses + ' absentes');
     }
     lines.push('Couches : Routes ' + runtime.roadOverlaySelected + ' | Lignes HT ' + runtime.highVoltageSelected);
+    /* v18.07 — réseau RTBA (src/370) : dernier téléchargement, zones, échecs, fichier gardé ou non. */
+    if (typeof getNpfRtbaDiagLine === 'function') {
+        try { lines.push(getNpfRtbaDiagLine()); } catch (_) {}
+    }
     lines.push(
         'Détail couches : '
         + runtime.roadOverlayInstalledParts + ' parties routes installées | '

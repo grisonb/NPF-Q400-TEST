@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
-Mise à jour : 25/11/2026
-Version de travail actuelle : TEST v18.06
+Mise à jour : 26/11/2026
+Version de travail actuelle : TEST v18.07
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -572,7 +572,13 @@ NON IMPLÉMENTÉ / OUVERT :
   pélic de nouveau touchable avec les couches SIA (bande au niveau 662, sous les zones des terrains ; second chemin au clic
   avec la position exacte du doigt) ; étiquettes : modes réduits pour SafeSky ordinaires seulement (MN et suivis toujours
   complets) ; toucher « BINGO BASE LFxx » = fenêtre de saisie du code de la base (comme le champ du calculateur).
-  À MESURER sur iPad ; COMMIT LOCAL, NON POUSSÉE ;
+  À MESURER sur iPad ; POUSSÉE le 25/11/2026 (524c49c) ;
+- v18.07 : réseau RTBA (AZBA) sur la carte, mêmes règles que BFG TEST (source NAS get-sdvfr-temporary-airspaces.php?type=rtba,
+  plafond 195 ; UTC « HH:MMZ » ; secteurs ; actif fixe, à venir clignotant ; nuit civile et coucher du soleil -30 min ;
+  fenêtre au toucher ACTIF / À VENIR / TERMINÉ ; 5 min / lancement / premier plan, jamais deux demandes en moins de 60 s ;
+  recalcul chaque minute) ; bouton « RTBA » de la colonne des calques, allumé à chaque lancement, éteint = masqué ;
+  dernier fichier valable gardé (« RTBA de 14:32 »), jamais celui d'un jour de Paris précédent ; colonne : écart entre
+  boutons 15 -> 6 px sur écran large de moins de 900 px de haut (iPad paysage). À MESURER sur iPad ; COMMIT LOCAL, NON POUSSÉE ;
 - v18.02 : bouton Moyens Nationaux : contour VERT dès que la session est connectée (même sans appareil détecté, même calque
   masqué OFF) ; ROUGE sans session, ou calque affiché quand la dernière demande de positions a échoué (réseau, hors ligne,
   « service indisponible »), puis vert dès la demande suivante réussie (demande de Bastien du 19/11). À MESURER sur iPad ;
@@ -2474,6 +2480,107 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v18.07 — RÉSEAU RTBA (AZBA) SUR LA CARTE, MÊMES RÈGLES QUE BFG TEST
+Date : 26/11/2026
+Base fonctionnelle : v18.06 (commit 524c49c, poussée le 25/11/2026). Seule la TEST change : pérenne, RUN, BFG, NAS et VPS
+inchangés. sia.js inchangé (strictement identique à la v17.81). Moteur de tuiles, séquenceur, prototype de carte (hors
+numéros de version) : INCHANGÉS.
+
+0. CONTEXTE
+- 25/11/2026 : étude en lecture seule (point 5) du module RTBA de BFG TEST (Briefing_fdf_TEST/index.html, v5.51) ;
+  26/11/2026 : demande de Bastien, décisions ci-dessous.
+- v18.06 poussée le 25/11/2026 (524c49c) ; GitHub Pages vérifié (APP_VERSION v18.06).
+- NAS : le relais get-sdvfr-temporary-airspaces.php (copie 5.22 du 01/10, ~/nas-a-copier) répond à toutes les origines
+  (Access-Control-Allow-Origin: *, GET / OPTIONS, sans jeton) : la TEST n'est pas refusée. Réserve : version réellement
+  installée sur le NAS non vérifiée (aucun appel au vrai NAS pendant le travail). À MESURER sur iPad.
+
+A. RÈGLES REPRISES DE BFG À L'IDENTIQUE (nouveau fichier src/370_rtba.js)
+- Source : NAS get-sdvfr-temporary-airspaces.php?type=rtba&ceiling=195 (même plafond fixe que BFG), délai 25 s, sans
+  cache ni identifiants ; réponse valable seulement si ok = true, type = rtba et payload.airspaces est une liste ; vraies
+  RTBA seulement (type AZBA ou sous-type RTBA, les autres types sont ignorés) ; heure du fichier = heure de récupération
+  SDVFR donnée par le NAS (finishedAt / savedAt).
+- Créneaux : un objet = un créneau, ou un créneau par plage des « activations » (nouveau format) ; heure ou contour
+  illisible : non affiché (compté dans le DIAG) ; créneau terminé : retiré.
+- Nuit civile (soleil à -6°, au centre du secteur) : créneau qui touche la nuit avec 30 min de jour ou moins : écarté.
+  Créneau qui COMMENCE après le coucher du soleil moins 30 min (jour UTC de son début, position du secteur) : écarté.
+  Calcul impossible : créneau gardé (prudence).
+- Regroupement par SECTEUR (même code et même contour) ; actif si un créneau est en cours, sinon à venir.
+- Dessin : actif magenta vif FIXE (#d1007a / #ff1aa3), à venir rose clair CLIGNOTANT (#f08cc4 / #fbc6e3).
+- Toucher : une fenêtre qui liste TOUTES les zones sous le doigt (actives d'abord) : code, statut, plancher / plafond,
+  créneaux en UTC « HH:MMZ » (date jj/mm si ce n'est pas le jour UTC courant) marqués ACTIF / À VENIR / TERMINÉ (créneaux
+  terminés du jour gardés en mémoire, jour de Paris), « Source : SDVFR — RTBA de HH:MM ».
+- Actualisation : toutes les 5 min (en ligne, app au premier plan), au lancement et au retour au premier plan ; jamais
+  deux demandes en moins de 60 s (une demande en cours est partagée) ; recalcul local des statuts chaque minute, sans réseau.
+- Différence voulue : NPF-Q400 n'a pas de champ « FL max » : aucun filtre de niveau (comme BFG sans valeur saisie).
+
+B. DÉCISIONS DE BASTIEN
+- Bouton « RTBA » dans la colonne des calques (sous le Calque Routier), ALLUMÉ par défaut et rallumé à chaque lancement
+  (jamais enregistré). Éteint = masqué seulement (les téléchargements continuent). Pastille : heure du fichier affiché,
+  « veille » ou « — » (bord orange) quand rien n'est affiché.
+- Affiché à toutes les échelles.
+- Sans réseau : dernier fichier valable gardé en mémoire (et dans le stockage local de la TEST, clé npfQ400TestRtbaV1,
+  pour un relancement hors ligne) avec son heure (« RTBA de 14:32 (dernier fichier gardé) »). Un fichier d'un jour de
+  Paris précédent n'est JAMAIS affiché : rien sur la carte, message en haut de l'écran (8 s) « RTBA : pas de fichier
+  d'aujourd'hui (dernier du jj/mm à HH:MM) — rien affiché ». Un échec ne remplace jamais le dernier fichier valable.
+- Les touchers RTBA ne bloquent jamais les autres : niveaux RTBA (446 à venir, 447 actifs, entre les zones SIA 440 et
+  les points SIA 555) traversés par le doigt (pointer-events: none) ; le toucher est traité au clic sur la carte, 0,3 s
+  après, avec la position exacte du doigt, et seulement s'il n'y a ni trait feu-pélic à moins de 12 px, ni zone ronde de
+  terrain, ni symbole, WP, trafic, bouton ou fenêtre sous le doigt, ni fenêtre ouverte par ce même toucher, ni appui long,
+  ni double appui de zoom, ni mode GAAR. Corrections de la v18.06 gardées.
+
+C. FLUIDITÉ
+- Contours, regroupement, nuit et coucher du soleil calculés UNE FOIS par fichier (préparation 1 à 4 ms) ; la minute ne
+  recalcule que les statuts (3 à 7 ms) et ne touche la carte que si un secteur change, jamais pendant un geste (reporté à
+  la fin du geste) ; clignotement par l'opacité CSS du niveau « à venir » seulement (0,85 s / 0,85 s), aucun redessin.
+- DIAG (SESSION COURANTE) : ligne « RTBA (v18.07) » : ON / OFF, heure du dernier téléchargement, fichier gardé ou non,
+  zones reçues, secteurs actifs / à venir, créneaux écartés, téléchargements, échecs (et dernier message), dernière
+  demande, versions du relais, temps de calcul.
+
+D. AUTRES CHANGEMENTS NÉCESSAIRES
+- sw.js : la demande RTBA au NAS passe directement au réseau, comme npf-docs-api.php (sinon délai de 8 s du service
+  worker au lieu de 25 s) ; jamais copiée dans un cache.
+- style.css : colonne des calques sur écran large de moins de 900 px de haut (iPad en paysage, 820 px) : écart entre
+  boutons 15 -> 6 px, sinon le 9e bouton poussait SafeSky hors de l'écran (bas de colonne mesuré 871 px pour 820) ; en
+  dessous de 820 px de haut (iPad mini en paysage) : boutons 78 px, écart 4 px. Portrait et téléphone inchangés. À
+  MESURER sur iPad (paysage).
+
+E. ESSAIS (PC ; Chrome et Playwright WebKit ; service worker bloqué, tout coupé sauf localhost ; FAUX NAS : la demande RTBA
+   est interceptée et reçoit un fichier INVENTÉ ; aucun appel au vrai NAS, au vrai VPS ni à SafeSky ; v107/pw_rtba107.js)
+- Fichier inventé (zones « RTBA-ESSAI-… » autour de Valence) : 11 RTBA + 1 SUP AIP. Résultat identique Chrome et WebKit :
+  5 secteurs (2 actifs fixes, 3 à venir clignotants) ; créneau de nuit et créneau du petit matin écartés (2), créneau
+  commençant 20 min avant le coucher écarté (1), créneau 45 min avant le coucher gardé, contour illisible et heure
+  illisible écartés, SUP AIP ignorée, ancien format et nouveau format (activations) lus.
+- Toucher sur deux zones superposées : une fenêtre avec les deux (ACTIF / À VENIR, horaires « Z ») ; zone seule : une ;
+  hors zone : rien.
+- Avec feu à Crest, toutes les couches SIA et le RTBA affiché : touchers de trait dans une zone RTBA : pélic changé
+  (LFLU -> LFMH), pas de fenêtre RTBA ; touchers des terrains LFHE, LFKE, LFLQ, LFLU dans des zones RTBA : fiche du terrain,
+  jamais la fenêtre RTBA ; appui long dans une zone : menu « Créer Feu / Ajout WP / Sélection Zone ».
+- Bouton : OFF -> niveaux masqués, aucune fenêtre au toucher ; ON -> de nouveau affiché ; OFF puis relancement -> ON.
+- Anti-rafale : 2 demandes en moins de 60 s -> 0 envoyée ; 3 simultanées -> 1.
+- Échecs (HTTP 500 ; 200 + {"erreur","code"} ; page HTML 502 sans CORS ; coupure) : fichier gardé, affiché, stockage
+  inchangé, échecs comptés, « (dernier fichier gardé) ».
+- Hors ligne (navigator.onLine faux) avec le fichier du jour : aucune demande, zones affichées, « RTBA de HH:MM (dernier
+  fichier gardé) », fenêtre au toucher. Avec un fichier de la veille : rien dessiné, aucune fenêtre, pastille « veille »,
+  message affiché. Retour du réseau : nouveau fichier.
+- Minute : fin d'un créneau et début d'un autre basculés 44 à 45 s après l'heure (recalcul de la minute), 1 seul
+  changement de carte, aucune demande réseau ; la fenêtre montre le créneau TERMINÉ.
+- Colonne en paysage 1180 × 820 : bas du dernier bouton 808 px (871 avant le réglage).
+- Fluidité Chrome CPU ×6 (8 gestes, feu + toutes les couches SIA, vraie V11, 3 passages alternés) : v18.06 : 69 images par
+  geste en moyenne, 233 saccades ; v18.07 RTBA affiché : 65, 219 ; v18.07 RTBA éteint : 66, 220. Médianes de 2 à 143 i/s
+  pour chaque version (PC irrégulier) : aucun recul attribuable au RTBA. À MESURER sur iPad.
+- Service worker RÉEL (v107/cdp_proto107_sw.js) : 7/7 (mise à jour v18.06 -> v18.07, prototype hors ligne, shell intact,
+  demande RTBA passée directement au réseau, jamais de réponse du service worker).
+- Non-régression rapide (bloquante) : glr102 13/13, glr101 8/8, glr100 16/16 (Chrome et WebKit), cercle 14/14, nr 13/13,
+  map / popup / ret55 / npf66 / glr64 / upd53 identiques à la v18.06 (temps seuls ; caches de la pérenne présents après la
+  mise à jour). Premier passage : un KO « Z1 » dans glr100 / 101 / 102 et cercle, causé par les essais eux-mêmes : la
+  nouvelle demande RTBA, COUPÉE par l'essai (jamais envoyée au vrai NAS), n'était pas dans leur liste de demandes coupées
+  tolérées ; ajoutée à cette liste comme la demande SOFIA (v17.59), puis 13/13, 8/8, 16/16, 14/14.
+- Aucune requête vers SafeSky, le vrai VPS ou le vrai NAS (tout coupé sauf localhost).
+
+F. STATUT
+- v18.07 À MESURER sur iPad (réponse du vrai NAS à l'origine de la TEST ; zones et clignotement ; fenêtre au toucher ;
+  colonne en paysage ; fluidité).
 
 VERSION TEST v18.06 — HT AU RALLUMAGE, TRAIT FEU -> PÉLIC TOUCHABLE, ÉTIQUETTES COMPLÈTES (MN ET SUIVIS), BASE DU BANDEAU
 Date : 25/11/2026

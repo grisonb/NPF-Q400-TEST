@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v18-06_ht_trait_etiquettes_base';
-const APP_VERSION = 'v18.06';
+const SW_VERSION = 'sw-v18-07_rtba';
+const APP_VERSION = 'v18.07';
 const SIA_DATA_REVISION = 'sia-2026-10-29-v02-g15';
 const SIA_DATA_URL = './sia.js';
 /*
@@ -767,9 +767,11 @@ function isBriefingDocsNasRequest(url) {
         const parsed = new URL(url);
         // v17.59 — fichier NOTAM SOFIA complet : même passage direct au réseau
         // que npf-docs-api.php (pas de délai de 8 s, pas de cache du SW).
+        // v18.07 — réseau RTBA (src/370) : même passage direct (délai de 25 s de l'app, jamais de copie du SW).
         return parsed.hostname === 'grisonb.synology.me'
             && (parsed.pathname === '/briefing-api/npf-docs-api.php'
-                || parsed.pathname === '/briefing-api/get-sofia-notams-all.php');
+                || parsed.pathname === '/briefing-api/get-sofia-notams-all.php'
+                || parsed.pathname === '/briefing-api/get-sdvfr-temporary-airspaces.php');
     } catch (_) {
         return false;
     }

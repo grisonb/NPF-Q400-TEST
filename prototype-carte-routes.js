@@ -1,5 +1,5 @@
 /*
- * NPF-Q400 TEST v18.06 (inchangé depuis la v18.04) — fil de calcul à part du prototype de carte (prototype-carte.html) : Calque Routier.
+ * NPF-Q400 TEST v18.07 (inchangé depuis la v18.04) — fil de calcul à part du prototype de carte (prototype-carte.html) : Calque Routier.
  * Lit les routes là où l'app les range déjà (src/120 : index par cases de 0,15° « npf-road-overlay-spatial-v1 »,
  * sinon le fichier complet de la partie « npf-road-overlay-data-v1 ») et renvoie les routes de la zone demandée
  * (GeoJSON en octets). LECTURE SEULE STRICTE : un cache n'est ouvert que s'il existe déjà (caches.has d'abord :
