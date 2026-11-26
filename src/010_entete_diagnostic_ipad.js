@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v18.11';
+const NPF_SCRIPT_BUILD_VERSION = 'v18.12';
 
 
 /*
@@ -3332,7 +3332,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v18.11 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v18.12 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -4611,6 +4611,10 @@ function buildNpfStartupDiagnosticExportText() {
     /* v18.10 — météo des pélics (src/380) : heure du fichier du NAS, pélics avec METAR / TAF, échecs. */
     if (typeof getNpfMeteoPelicsDiagLine === 'function') {
         try { lines.push(getNpfMeteoPelicsDiagLine()); } catch (_) {}
+    }
+    /* v18.12 — calque radar Météo-France (src/390). */
+    if (typeof getNpfRadarDiagLine === 'function') {
+        try { lines.push(getNpfRadarDiagLine()); } catch (_) {}
     }
     lines.push(
         'Détail couches : '

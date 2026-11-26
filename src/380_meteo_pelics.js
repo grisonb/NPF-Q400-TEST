@@ -19,6 +19,13 @@
  * cours… », relecture toutes les 30 s, fenêtre mise à jour toute seule (bulletins et âges). Au bout de 4 min sans tout recevoir,
  * ou sans réseau : message clair, bulletins précédents gardés. Bouton grisé 2 min après un toucher (le NAS refuse de toute façon
  * une seconde demande forcée en moins de 2 min, tous iPad confondus).
+ *
+ * v18.12 — PÉLIC PRIORITAIRE (demande de Bastien, 26/11/2026) : le toucher envoie le pélic de la fenêtre (NAS 1.2 :
+ * ?force=1&prioritaire=LFxx, ce pélic part SEUL dans le premier lot, puis les 26 autres par lots de 10). La fenêtre se met à
+ * jour dès que le bulletin de CE pélic arrive (récupéré après la demande), « LFxx à jour — autres pélics en cours… », puis
+ * « Bulletins à jour (HH:MM) ». Relecture toutes les 5 s tant que ce pélic n'est pas arrivé (1 min au plus), puis toutes les
+ * 10 s (chaque relecture fait partir le lot suivant ; mesure du 26/11 : un lot de 10 dure 4 s chez SDVFR). Avec un NAS encore
+ * en 1.1 : même affichage, le pélic arrive dans l'un des lots (sans priorité).
  */
 const NPF_METEO_PELICS_URL = 'https://grisonb.synology.me/briefing-api/get-meteo-pelics.php';
 const NPF_METEO_PELICS_STORE_KEY = 'npfQ400TestMeteoPelicsV1';
@@ -29,7 +36,9 @@ const NPF_METEO_PELICS_FOLLOW_MAX = 3;
 const NPF_METEO_PELICS_TIMEOUT_MS = 20000;
 const NPF_METEO_METAR_MAX_AGE_MIN = 35;
 const NPF_METEO_FORCE_LOCK_MS = 2 * 60 * 1000;     // bouton grisé 2 min après un toucher
-const NPF_METEO_FORCE_POLL_MS = 30 * 1000;         // relecture pendant une mise à jour demandée
+const NPF_METEO_FORCE_POLL_MS = 10 * 1000;         // v18.12 : relecture pendant une mise à jour demandée (30 s en v18.11)
+const NPF_METEO_FORCE_PRIO_POLL_MS = 5 * 1000;     // v18.12 : tant que le pélic de la fenêtre n'est pas arrivé…
+const NPF_METEO_FORCE_PRIO_MAX_MS = 60 * 1000;     // …pendant 1 min au plus
 const NPF_METEO_FORCE_MAX_MS = 4 * 60 * 1000;      // au-delà : message, bulletins précédents gardés
 
 const npfMeteoPelics = {
@@ -55,7 +64,8 @@ const npfMeteoPelics = {
     forceRun: null,         // { startedAt, timer, restants } pendant une mise à jour demandée
     forceMessage: '',
     forceMessageWarn: false,
-    forceRequests: 0
+    forceRequests: 0,
+    forceMesures: []        // v18.12 : temps mesurés (pélic de la fenêtre, 27 pélics), DIAG
 };
 
 function npfMeteoParisDayKey(ms) {
@@ -185,7 +195,7 @@ function npfMeteoRefresh(reason, options = {}) {
     npfMeteoPelics.lastRequestAt = now;
     npfMeteoPelics.lastAttemptAt = new Date(now);
     npfMeteoPelics.lastReason = String(reason || '');
-    npfMeteoPelics.inFlight = npfMeteoRequest(!!options.force).finally(() => { npfMeteoPelics.inFlight = null; });
+    npfMeteoPelics.inFlight = npfMeteoRequest(options.force ? (options.prioritaire || true) : false).finally(() => { npfMeteoPelics.inFlight = null; });
     return npfMeteoPelics.inFlight;
 }
 
@@ -194,7 +204,8 @@ async function npfMeteoRequest(force) {
     const timer = controller ? setTimeout(() => controller.abort(), NPF_METEO_PELICS_TIMEOUT_MS) : null;
     try {
         if (force) npfMeteoPelics.forceRequests += 1;
-        const response = await fetch(`${NPF_METEO_PELICS_URL}?${force ? 'force=1&' : ''}t=${Date.now()}`, {
+        const prio = force && /^[A-Z]{4}$/.test(String(force)) ? `prioritaire=${force}&` : '';
+        const response = await fetch(`${NPF_METEO_PELICS_URL}?${force ? 'force=1&' : ''}${prio}t=${Date.now()}`, {
             method: 'GET', cache: 'no-store', credentials: 'omit',
             headers: { 'Accept': 'application/json' },
             signal: controller ? controller.signal : undefined
@@ -257,7 +268,16 @@ function npfMeteoForceStep(ok) {
         return;
     }
     run.restants = Number(f.restants || 0);
+    /* v18.12 : le pélic de la fenêtre est-il arrivé (récupéré depuis la demande forcée) ? */
+    const depuis = Date.parse(f.depuis || '');
+    const p = npfMeteoPelics.file && npfMeteoPelics.file.pelics[run.oaci];
+    if (!run.prioRecuAt && p && p.recupereA instanceof Date && Number.isFinite(depuis) && p.recupereA.getTime() >= depuis) {
+        run.prioRecuAt = Date.now();
+    }
     if (!f.actif || run.restants === 0) {
+        if (!run.prioRecuAt) run.prioRecuAt = Date.now();
+        run.finAt = Date.now();
+        npfMeteoPelics.forceMesures.push({ oaci: run.oaci, prio_s: Math.round((run.prioRecuAt - run.startedAt) / 100) / 10, tous_s: Math.round((run.finAt - run.startedAt) / 100) / 10 });
         npfMeteoForceFinish(`Bulletins à jour (${npfMeteoHhMm(new Date())}).`, false);
         return;
     }
@@ -265,14 +285,15 @@ function npfMeteoForceStep(ok) {
         npfMeteoForceFinish(`Pas tous les nouveaux bulletins reçus (${run.restants} pélic${run.restants > 1 ? 's' : ''} en attente, serveur occupé) : bulletins précédents gardés.`, true);
         return;
     }
-    npfMeteoPelics.forceMessage = 'Mise à jour en cours…';
+    npfMeteoPelics.forceMessage = run.prioRecuAt ? `${run.oaci} à jour — autres pélics en cours…` : 'Mise à jour en cours…';
     npfMeteoPelics.forceMessageWarn = false;
     npfMeteoRenderModal();
+    const rapide = !run.prioRecuAt && Date.now() - run.startedAt < NPF_METEO_FORCE_PRIO_MAX_MS;
     run.timer = setTimeout(() => {
         run.timer = null;
         if (npfMeteoPelics.forceRun !== run) return;
         npfMeteoRefresh('mise à jour demandée (suite)', { user: true }).then(npfMeteoForceStep);
-    }, NPF_METEO_FORCE_POLL_MS);
+    }, rapide ? NPF_METEO_FORCE_PRIO_POLL_MS : NPF_METEO_FORCE_POLL_MS);
 }
 
 function npfMeteoForceRefresh() {
@@ -287,11 +308,11 @@ function npfMeteoForceRefresh() {
         return false;
     }
     if (npfMeteoPelics.followTimer) { clearTimeout(npfMeteoPelics.followTimer); npfMeteoPelics.followTimer = null; }
-    npfMeteoPelics.forceRun = { startedAt: now, timer: null, restants: null };
+    npfMeteoPelics.forceRun = { startedAt: now, timer: null, restants: null, oaci: npfMeteoPelics.modalOaci, prioRecuAt: 0, finAt: 0 };
     npfMeteoPelics.forceMessage = 'Mise à jour en cours…';
     npfMeteoPelics.forceMessageWarn = false;
     npfMeteoRenderModal();
-    const go = () => npfMeteoRefresh('mise à jour demandée', { user: true, force: true }).then(npfMeteoForceStep);
+    const go = () => npfMeteoRefresh('mise à jour demandée', { user: true, force: true, prioritaire: npfMeteoPelics.modalOaci }).then(npfMeteoForceStep);
     if (npfMeteoPelics.inFlight) npfMeteoPelics.inFlight.then(go, go); else go();
     return true;
 }
@@ -525,13 +546,14 @@ function getNpfMeteoPelicsDiagLine() {
     const fichier = f
         ? `${f.genereA.toLocaleDateString('fr-FR', { timeZone: 'Europe/Paris', day: '2-digit', month: '2-digit' })} ${npfMeteoHhMm(f.genereA)}${today ? '' : ' (jour précédent : NON affiché)'}`
         : 'aucun';
-    return 'MÉTÉO PÉLICS (v18.11) : fichier du NAS : ' + fichier
+    return 'MÉTÉO PÉLICS (v18.12) : fichier du NAS : ' + fichier
         + ' | gardé : ' + (f ? (npfMeteoPelics.fromMemory ? 'oui, affiché depuis la mémoire' : 'oui') : 'non') + ' (enregistré : ' + npfMeteoPelics.stored + ')'
         + ' | pélics avec bouton ' + avecBouton + ' (METAR ' + avecMetar + ', TAF ' + avecTaf + ')'
         + ' | téléchargements ' + npfMeteoPelics.downloads + ' | échecs ' + npfMeteoPelics.failures + (npfMeteoPelics.lastError ? ' (dernier : ' + npfMeteoPelics.lastError + ')' : '')
         + ' | dernière demande ' + (npfMeteoPelics.lastAttemptAt ? npfMeteoHhMm(npfMeteoPelics.lastAttemptAt) + ' (' + npfMeteoPelics.lastReason + ') ' + (npfMeteoPelics.lastResult || '…') : '—')
         + (npfMeteoPelics.nasCreneau ? ' | NAS : créneau ' + npfMeteoPelics.nasCreneau + ', ' + npfMeteoPelics.nasDemandes + ' pélic(s) demandé(s)' : '')
-        + ' | Rafraîchir : ' + npfMeteoPelics.forceRequests + ' demande(s)' + (npfMeteoPelics.forceRun ? ' (en cours)' : '') + (npfMeteoPelics.forceMessage ? ' — ' + npfMeteoPelics.forceMessage : '');
+        + ' | Rafraîchir : ' + npfMeteoPelics.forceRequests + ' demande(s)' + (npfMeteoPelics.forceRun ? ' (en cours)' : '') + (npfMeteoPelics.forceMessage ? ' — ' + npfMeteoPelics.forceMessage : '')
+        + (npfMeteoPelics.forceMesures.length ? ' | temps : ' + npfMeteoPelics.forceMesures.slice(-3).map(m => `${m.oaci} ${m.prio_s} s, 27 pélics ${m.tous_s} s`).join(' ; ') : '');
 }
 
 function getNpfMeteoPelicsEtat() {
@@ -540,6 +562,6 @@ function getNpfMeteoPelicsEtat() {
         fichier: f ? f.genereA.toISOString() : null, duJour: !!npfMeteoFileOfToday(), fromMemory: npfMeteoPelics.fromMemory,
         downloads: npfMeteoPelics.downloads, failures: npfMeteoPelics.failures, lastError: npfMeteoPelics.lastError,
         followCount: npfMeteoPelics.followCount, forceRequests: npfMeteoPelics.forceRequests, forceEnCours: !!npfMeteoPelics.forceRun,
-        forceMessage: npfMeteoPelics.forceMessage, forceLockMs: Math.max(0, npfMeteoPelics.forceLockUntil - Date.now()), diag: getNpfMeteoPelicsDiagLine()
+        forceMessage: npfMeteoPelics.forceMessage, forceMesures: npfMeteoPelics.forceMesures.slice(), forceLockMs: Math.max(0, npfMeteoPelics.forceLockUntil - Date.now()), diag: getNpfMeteoPelicsDiagLine()
     };
 }

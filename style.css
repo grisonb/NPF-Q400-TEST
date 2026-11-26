@@ -1,4 +1,4 @@
-/* NPF_STYLE_BUILD_VERSION: v18.11 */
+/* NPF_STYLE_BUILD_VERSION: v18.12 */
 /* v14.83 — nettoyage des références techniques et limitation des cartouches routiers. */
 /* v14.81 — recherche phonétique nationale élargie aux fragments sur deux lettres. */
 /* v14.80 — Brive conservé uniquement sous LFSL. */
@@ -19565,4 +19565,136 @@ body.npf-meteo-modal-open {
     background: #cbd5e1;
     border-color: #94a3b8;
     color: #475569;
+}
+
+/* ==========================================================================
+   v18.12 — CALQUE RADAR Météo-France (src/390) : bouton du panneau (à gauche du RTBA), image, légende mm/h + heure + animation
+   ========================================================================== */
+.sia-filter-global-actions #sia-filter-radar {
+    margin-left: auto;
+    min-width: 116px;
+    min-height: 40px;
+    padding: 2px 12px;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    line-height: 1.05;
+    background: #ffffff;
+    color: #6b7280;
+    border: 2px solid #9ca3af;
+}
+.sia-filter-global-actions #sia-filter-radar.active {
+    background: #1565c0;
+    border-color: #1565c0;
+    color: #ffffff;
+}
+.sia-filter-global-actions #sia-filter-radar + #sia-filter-rtba {
+    margin-left: 0;
+}
+.sia-filter-radar-titre {
+    font-size: 15px;
+    font-weight: 900;
+    letter-spacing: .3px;
+}
+.sia-filter-radar-heure {
+    font-size: 12px;
+    font-weight: 700;
+}
+#sia-filter-radar.radar-sans-image .sia-filter-radar-heure {
+    color: #fde68a;
+}
+.leaflet-pane.leaflet-npfRadar-pane,
+.leaflet-pane.leaflet-npfRadar-pane img {
+    pointer-events: none !important;
+}
+.npf-radar-legende {
+    position: fixed;
+    left: 50%;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 80px);
+    transform: translateX(-50%);
+    z-index: 1000;
+    width: min(92vw, 380px);
+    box-sizing: border-box;
+    padding: 6px 10px 6px;
+    border: 1px solid rgba(15, 23, 42, .25);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, .92);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, .18);
+    font: 700 12px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+    color: #1f2937;
+}
+.npf-radar-legende[hidden] {
+    display: none !important;
+}
+.npf-radar-legende-haut {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.npf-radar-legende-titre {
+    flex: 1 1 auto;
+    font-size: 14px;
+    font-weight: 900;
+    color: #0b2f6b;
+}
+.npf-radar-heure {
+    font-size: 16px;
+    font-weight: 950;
+    font-variant-numeric: tabular-nums;
+}
+.npf-radar-heure-ok { color: #28a745; }
+.npf-radar-heure-vieille { color: #dc2626; }
+.npf-radar-heure-animee { color: #6b7280; }
+.npf-radar-lecture {
+    flex: 0 0 auto;
+    width: 44px;
+    height: 36px;
+    border: 1px solid #1565c0;
+    border-radius: 8px;
+    background: #1565c0;
+    color: #ffffff;
+    font-size: 16px;
+    font-weight: 900;
+    touch-action: manipulation;
+}
+.npf-radar-lecture:disabled {
+    background: #cbd5e1;
+    border-color: #94a3b8;
+    color: #475569;
+}
+.npf-radar-echelle {
+    display: flex;
+    margin-top: 5px;
+    border-radius: 4px;
+    overflow: hidden;
+}
+.npf-radar-case {
+    flex: 1 1 0;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.npf-radar-case b {
+    font-size: 10px;
+    font-weight: 900;
+    color: #ffffff;
+    text-shadow: 0 0 2px rgba(0, 0, 0, .8);
+}
+.npf-radar-legende-bas {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 3px;
+    font-size: 11px;
+    color: #40556c;
+}
+.npf-radar-message {
+    margin-top: 2px;
+    font-size: 11px;
+    color: #b45309;
+}
+.npf-radar-message:empty {
+    display: none;
 }

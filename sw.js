@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v18-11_meteo_rafraichir';
-const APP_VERSION = 'v18.11';
+const SW_VERSION = 'sw-v18-12_meteo_prioritaire_radar';
+const APP_VERSION = 'v18.12';
 const SIA_DATA_REVISION = 'sia-2026-10-29-v02-g15';
 const SIA_DATA_URL = './sia.js';
 /*

@@ -1298,6 +1298,11 @@ function ensureSiaFilterModal() {
                         title="Afficher ou masquer la coupe verticale des espaces devant l'avion">
                     PROFIL ESPACES
                 </button>
+                <!-- v18.12 — calque radar Météo-France (src/390) : à gauche du RTBA, éteint au lancement. -->
+                <button type="button" id="sia-filter-radar" aria-pressed="false" title="Afficher le radar de pluie (Météo-France)">
+                    <span class="sia-filter-radar-titre">RADAR OFF</span>
+                    <span class="sia-filter-radar-heure">Météo-France</span>
+                </button>
                 <!-- v18.08 — réseau RTBA (src/370) : tout à droite de la 1re ligne (la case FL115 prend toute la ligne suivante), piloté seulement par ce bouton (ni « Tout afficher »
                      ni « Tout masquer ») ; allumé à chaque lancement. -->
                 <button type="button" id="sia-filter-rtba" class="active" aria-pressed="true" title="Masquer le réseau RTBA">
@@ -1325,6 +1330,7 @@ function ensureSiaFilterModal() {
     initializeSiaAirspaceProfileUi();
     // v18.08 — bouton RTBA (src/370) : état et heure du fichier à jour dès la création du panneau.
     if (typeof npfRtbaUpdateButton === 'function') { try { npfRtbaUpdateButton(); } catch (_) {} }
+    if (typeof npfRadarUpdateButton === 'function') { try { npfRadarUpdateButton(); } catch (_) {} }
 
     const close = () => {
         modal.classList.remove('open');
@@ -1404,6 +1410,7 @@ function renderSiaFilterModal(dataset) {
 async function openSiaFilterDialog() {
     const modal = ensureSiaFilterModal();
     if (typeof npfRtbaUpdateButton === 'function') { try { npfRtbaUpdateButton(); } catch (_) {} }
+    if (typeof npfRadarUpdateButton === 'function') { try { npfRadarUpdateButton(); } catch (_) {} }
     modal.classList.add('open');
     modal.setAttribute('aria-hidden', 'false');
 

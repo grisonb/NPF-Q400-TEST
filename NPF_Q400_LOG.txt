@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 26/11/2026
-Version de travail actuelle : TEST v18.11
+Version de travail actuelle : TEST v18.12
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -596,8 +596,12 @@ NON IMPLÉMENTÉ / OUVERT :
 - v18.11 : bouton « Rafraîchir » dans la fenêtre MÉTÉO : derniers bulletins des 27 pélics même de moins de 10 min (NAS 1.1,
   ?force=1, créneau SDVFR toujours respecté, lots de 10), « Mise à jour en cours… », fenêtre mise à jour toute seule, message
   et bulletins gardés au bout de 4 min ou sans réseau, bouton grisé 2 min. Paquet NAS 1.1
-  (~/nas-a-copier/a-installer-meteo-pelics-force-2026-11-26) À INSTALLER APRÈS LE PUSH. À MESURER sur iPad ; COMMIT LOCAL,
-  NON POUSSÉE ;
+  (~/nas-a-copier/a-installer-meteo-pelics-force-2026-11-26) À INSTALLER APRÈS LE PUSH. À MESURER sur iPad ; POUSSÉE le
+  26/11/2026 (0079ad6) ; paquet NAS 1.1 INSTALLÉ le 26/11/2026 à 16:25 ;
+- v18.12 : « Rafraîchir » MÉTÉO avec PÉLIC PRIORITAIRE (pélic de la fenêtre seul dans le 1er lot, NAS 1.2 à installer) ;
+  CALQUE RADAR Météo-France (lame d'eau, mm/h, animation 1 h, bouton RADAR du panneau, éteint au lancement ; service VPS
+  npf-meteo-radar 1.0.0 PRÉPARÉ, NON INSTALLÉ, compte Météo-France à créer par Bastien) ; étude foudre. À MESURER sur iPad ;
+  COMMIT LOCAL, NON POUSSÉE ;
 - v18.02 : bouton Moyens Nationaux : contour VERT dès que la session est connectée (même sans appareil détecté, même calque
   masqué OFF) ; ROUGE sans session, ou calque affiché quand la dernière demande de positions a échoué (réseau, hors ligne,
   « service indisponible »), puis vert dès la demande suivante réussie (demande de Bastien du 19/11). À MESURER sur iPad ;
@@ -2499,6 +2503,97 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v18.12 — MÉTÉO : RAFRAÎCHIR AVEC PÉLIC PRIORITAIRE ; CALQUE RADAR MÉTÉO-FRANCE ; ÉTUDE FOUDRE
+Date : 26/11/2026
+Base fonctionnelle : v18.11 (commit 0079ad6, poussée le 26/11/2026). Seule la TEST change : pérenne, RUN, BFG inchangés ; NAS :
+paquet 1.2 PRÉPARÉ, NON INSTALLÉ ; VPS : service radar PRÉPARÉ, NON INSTALLÉ (lectures seules faites, voir 0. et C.). sia.js
+inchangé (identique à la v17.81). Moteur de tuiles, séquenceur, RTBA, prototype de carte (hors numéros de version) :
+INCHANGÉS.
+
+0. CONTEXTE
+- v18.11 poussée le 26/11/2026 (0079ad6) ; GitHub Pages vérifié. Paquet NAS 1.1 INSTALLÉ le 26/11 à 16:25 (rapport OK : syntaxe
+  PHP 7.3.3, OPTIONS 204, GET 200 version 1.1, pas de 403) ; demande forcée réelle (curl) : 27 pélics en 1 min 40 (3 lots :
+  10 / 10 / 7), créneau libre, 24 METAR / 19 TAF ; 2e demande forcée immédiate refusée (2 min). Tâches DSM « Meteo pelics force
+  installation / retour arriere » créées, désactivées ; « Meteo pelics installation » (1.0), trouvée COCHÉE « Activé »
+  (déclenchement au démarrage), décochée par Bastien.
+- Mesure réelle (journal du worker VPS, lecture seule) : connexion SDVFR 0,25 s, 0,32 s par terrain, lot de 10 en 4 s : la
+  lenteur du Rafraîchir venait de la cadence de l'app (un lot par relecture de 30 s) et du délai de 15 s du NAS.
+- CONSTAT À SIGNALER (non modifié) : sur le VPS, le travail des cartes des risques (bfg-risk-maps-worker) échoue chaque heure
+  le 26/11 (14:51, 15:51…) : reconnexion Météo-France réussie, puis « Timeout 60000ms … waiting for event "download" » sur la
+  carte National. Concerne BFG. À DÉCIDER.
+
+A. MÉTÉO : RAFRAÎCHIR AVEC PÉLIC PRIORITAIRE
+- NAS get-meteo-pelics.php 1.2 (~/nas-a-copier/a-installer-meteo-pelics-prioritaire-2026-11-26/, PRÉPARÉ, NON INSTALLÉ) :
+  « prioritaire=LFxx » avec « force=1 » : ce pélic SEUL dans le 1er lot, puis les 26 autres par lots de 10 ; pendant une telle
+  demande, plus de délai de 15 s après les lots de la file elle-même (toujours après les demandes étrangères : lots NPF-Q400
+  06:30) ; sans « prioritaire » : 1.0 / 1.1 inchangés. Créneau SDVFR toujours respecté, une force toutes les 2 min tous iPad.
+  Installation 1.1 -> 1.2 avec sauvegarde, retour arrière vers la 1.1. Essais locaux : prioritaire 13 / 13, 1.1 12 / 12, 1.0
+  16 / 16, installation / retour arrière OK. Aucune syntaxe PHP > 7.3.
+- App (src/380) : le toucher sur « Rafraîchir » envoie le pélic de la fenêtre ; relecture toutes les 5 s tant que ce pélic
+  n'est pas arrivé (1 min au plus), puis toutes les 10 s ; fenêtre mise à jour dès son arrivée (récupéré après la demande) :
+  « LFxx à jour — autres pélics en cours… », puis « Bulletins à jour (HH:MM) » ; temps mesurés (pélic, 27) dans le DIAG. Mêmes
+  règles qu'en v18.11 (bouton grisé 2 min, 4 min, messages, bulletins gardés). Compatible NAS 1.1 (sans priorité).
+
+B. CALQUE RADAR MÉTÉO-FRANCE (décisions de Bastien du 26/11)
+- VPS (~/vps-a-copier/npf-meteo-radar-1.0.0/, PRÉPARÉ, NON INSTALLÉ ; INSTALLATION-npf-meteo-radar-1.0.0.txt) : service
+  Python toutes les 5 min : jeton OAuth2 (Application ID dans /etc/npf-meteo-radar/meteofrance.conf 0600, saisi masqué dans le
+  .ps1, jamais ailleurs), dernier produit « DonneesPubliquesRadar » METROPOLE LAME_D_EAU maille 500 m (HDF5), mm/h (cumul 5 min
+  x 12), reprojection Web Mercator (emprise -5,6 / 41,2 / 10,0 / 51,3), interpolation bilinéaire, lissage gaussien 1,2 px,
+  palette proche de Windy (transparence des faibles intensités), PNG 1280 x 1203 (~175 Ko), index.json (12 images = 1 h,
+  heures UTC, emprise, légende), nettoyage > 3 h. Publié dans /srv/npf-cartes/meteo-radar : AUCUNE modification de Caddy (déjà
+  servi, CORS grisonb.github.io). .ps1 d'installation (arrêt à la première erreur, état avant / après) et de retour arrière.
+  Essai local : 12 fichiers HDF5 INVENTÉS au format ODIM (aucun fichier d'exemple public trouvé ; structure réelle à confirmer
+  au premier essai sur le VPS, arrêt explicite sinon) : 12 images en ~2 s chacune.
+- App (nouveau src/390_radar_meteo.js, src/340, src/010, style.css) : bouton « RADAR ON / OFF » (+ heure de l'image) à gauche
+  du RTBA dans le panneau « Calques aéronautiques », ÉTEINT au lancement ; image au niveau 418 (au-dessus des HT 385 et des
+  Routes 405-415, sous les noms 420, les zones SIA 440, les zones de toucher et les symboles ; doigt traversant) ; légende
+  (mm/h, 9 cases, « Météo-France », heure HH:MMZ verte jusqu'à 15 min, rouge au-delà ; plus rien au-delà de 30 min, aussi sans
+  réseau) ; animation des 12 images (lecture / pause : images décodées avant la lecture, une seule image sur la carte, arrêt
+  pendant les gestes et reprise, images libérées à la pause et à l'extinction) ; actualisation 5 min (allumé, en ligne, premier
+  plan, jamais pendant un geste) ; échec : dernière image gardée avec message ; DIAG « RADAR (v18.12) ». Service worker : le
+  VPS passe déjà en direct (isNpfMapServerRequest), rien à changer.
+
+C. ÉTUDE FOUDRE (lecture seule)
+- Page « Multi Radar / Foudre France » (pro.meteofrance.com/page/index/affiche/id/248287) : une seule visite de diagnostic avec la
+  session EXISTANTE du VPS (aucune nouvelle connexion, session non réenregistrée, rien écrit) : « VOUS N'AVEZ PAS LES DROITS
+  D'ACCÈS À CETTE PAGE » (404) ; la session venait d'être renouvelée (15:50) : le compte utilisé par le VPS n'a pas ce droit.
+  Aucune donnée radar / foudre chargée, donc mode d'obtention des données non observable.
+- Conditions d'utilisation de l'extranet pro.meteofrance.com : non trouvées publiquement -> INCONNU. Les données radar ouvertes
+  (API publique) sont en Licence Ouverte ; la foudre n'est pas dans les données publiques ouvertes (Météorage : commercial).
+  Statut : À DÉCIDER (questions à Météo-France / employeur dans le rapport).
+
+D. ESSAIS (PC ; Chrome et Playwright WebKit ; service worker bloqué, tout coupé sauf localhost ; FAUX NAS 1.2 / 1.1 et FAUX
+   serveur d'images (12 images fabriquées par npf-meteo-radar.py depuis des HDF5 INVENTÉS) ; aucun appel au vrai NAS, au vrai
+   VPS ni à Météo-France)
+- Rafraîchir prioritaire (v112/pw_meteo112.js) : 16 / 16 Chrome et WebKit : LFMU à jour en 4 à 5 s (« LFMU à jour — autres
+  pélics en cours… », âge 0-1 min en vert), 27 pélics en 35 s (temps mesurés dans le DIAG) ; relectures jamais à moins de 4 s ;
+  NAS 1.1 (sans priorité) : mise à jour complète ; demande NOTAM en cours, 4 min, sans réseau, coupure, NAS 1.0, bouton grisé
+  2 min : comme en v18.11. Estimation réelle (journal du worker) : pélic prioritaire en ~5-10 s, 27 pélics en ~30-40 s (au
+  lieu de ~75 s mesurés le 26/11 avec la 1.1) : À MESURER après installation de la 1.2.
+- Météo de la v18.10 (v110/pw_meteo110.js) : 21 / 21 Chrome et WebKit. (L'essai v18.11 vérifiait la relecture de 30 s,
+  remplacée par 5 / 10 s : repris dans pw_meteo112.)
+- Radar (v112/pw_radar112.js) : 17 / 17 Chrome et WebKit : éteint au lancement sans aucune demande ; allumé par le panneau :
+  image, bouton « RADAR ON / image HH:MMZ », niveau 418 (> Routes 415, < SIA 440 et zones de toucher), doigt traversant,
+  légende (9 cases mm/h, Météo-France, heure verte) ; fiche du terrain LFLU sous le radar ; animation : 12 images préparées,
+  image et heure qui changent, arrêt pendant un glissement et reprise, pause : image récente et images libérées ; coupure :
+  image gardée et message ; 20 min : heure rouge ; sans réseau : image gardée sans demande, puis plus rien au-delà de 30 min ;
+  serveur en retard (40 min) : rien ; OFF : image et légende retirées ; relancement : éteint ; ligne DIAG.
+- Fluidité Chrome CPU ×6 (8 gestes, vraie V11, 2 passages) : v18.11 : saccades 9 / 5, images 1 262 / 1 265 ; v18.12 radar
+  éteint : 4 / 7, 1 282 / 1 261 ; radar allumé : 8 / 6, 1 232 / 1 249 ; animation en lecture : 8 / 3, 1 178 / 1 271 ; médianes
+  125 à 145 i/s partout : aucun recul. Mémoire de Chrome après les gestes : radar éteint ~880 Mo, allumé ~915 Mo (+35),
+  animation ~1 060 Mo (+180, 12 images de 1280 x 1203 décodées) : tient sur PC ; À MESURER sur iPad 9 (3 Go) ; réduction
+  possible si besoin (8 images ou 1024 px).
+- RTBA (v112/pw_rtba112.js) : le passage du soir (16:41Z) n'affichait AUCUNE zone inventée : 5 créneaux de nuit civile et 2
+  après le coucher - 30 min écartés (règles BFG, comportement juste ; src/370 inchangé depuis la v18.11) ; essai rejoué avec
+  une horloge de page simulée à 10:00Z (Playwright clock, temps qui avance) : identique à la v18.11 (Chrome et WebKit).
+- Service worker RÉEL : 8/8 (mise à jour v18.11 -> v18.12).
+- Non-régression rapide (bloquante) : glr102 13/13, glr101 8/8, glr100 16/16 (Chrome et WebKit), cercle 14/14, nr 13/13,
+  map / popup / ret55 / npf66 / glr64 / upd53 identiques à la v18.11 (temps seuls ; caches de la pérenne présents).
+
+E. STATUT
+- v18.12 À MESURER sur iPad. Ordre : push v18.12 ; paquet NAS 1.2 ; compte Météo-France (Bastien) puis service radar VPS
+  (après OK) ; vérifications. Radar : structure HDF5 réelle À CONFIRMER au premier essai VPS.
 
 VERSION TEST v18.11 — MÉTÉO : BOUTON « RAFRAÎCHIR » (DERNIERS BULLETINS DES 27 PÉLICS)
 Date : 26/11/2026
