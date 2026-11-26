@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v18-10_meteo_pelics';
-const APP_VERSION = 'v18.10';
+const SW_VERSION = 'sw-v18-11_meteo_rafraichir';
+const APP_VERSION = 'v18.11';
 const SIA_DATA_REVISION = 'sia-2026-10-29-v02-g15';
 const SIA_DATA_URL = './sia.js';
 /*

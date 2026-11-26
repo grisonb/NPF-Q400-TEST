@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v18.10';
+const NPF_SCRIPT_BUILD_VERSION = 'v18.11';
 
 
 /*
@@ -3332,7 +3332,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v18.10 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v18.11 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }

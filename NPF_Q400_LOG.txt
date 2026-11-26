@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 26/11/2026
-Version de travail actuelle : TEST v18.10
+Version de travail actuelle : TEST v18.11
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -592,7 +592,12 @@ NON IMPLÉMENTÉ / OUVERT :
   (aucune station de repli) ; METAR / TAF en texte brut, âge du METAR (vert <= 35 min, rouge au-delà), « TAF non à jour »
   (règles BFG) ; source : nouveau fichier NAS get-meteo-pelics.php (paquet ~/nas-a-copier/a-installer-meteo-pelics-2026-11-26,
   À INSTALLER APRÈS LE PUSH, VPS inchangé) ; fichier du jour gardé hors ligne, jamais celui de la veille. À MESURER sur iPad ;
-  COMMIT LOCAL, NON POUSSÉE ;
+  POUSSÉE le 26/11/2026 (703d9e1) ; paquet NAS 1.0 INSTALLÉ par Bastien le 26/11/2026 à 13:55 (après correction PHP 7.3) ;
+- v18.11 : bouton « Rafraîchir » dans la fenêtre MÉTÉO : derniers bulletins des 27 pélics même de moins de 10 min (NAS 1.1,
+  ?force=1, créneau SDVFR toujours respecté, lots de 10), « Mise à jour en cours… », fenêtre mise à jour toute seule, message
+  et bulletins gardés au bout de 4 min ou sans réseau, bouton grisé 2 min. Paquet NAS 1.1
+  (~/nas-a-copier/a-installer-meteo-pelics-force-2026-11-26) À INSTALLER APRÈS LE PUSH. À MESURER sur iPad ; COMMIT LOCAL,
+  NON POUSSÉE ;
 - v18.02 : bouton Moyens Nationaux : contour VERT dès que la session est connectée (même sans appareil détecté, même calque
   masqué OFF) ; ROUGE sans session, ou calque affiché quand la dernière demande de positions a échoué (réseau, hors ligne,
   « service indisponible »), puis vert dès la demande suivante réussie (demande de Bastien du 19/11). À MESURER sur iPad ;
@@ -2494,6 +2499,67 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v18.11 — MÉTÉO : BOUTON « RAFRAÎCHIR » (DERNIERS BULLETINS DES 27 PÉLICS)
+Date : 26/11/2026
+Base fonctionnelle : v18.10 (commit 703d9e1, poussée le 26/11/2026). Seule la TEST change : pérenne, RUN, BFG et VPS
+inchangés ; NAS : paquet 1.1 PRÉPARÉ, NON INSTALLÉ. sia.js inchangé (identique à la v17.81). Moteur de tuiles, séquenceur,
+RTBA, prototype de carte (hors numéros de version) : INCHANGÉS.
+
+0. CONTEXTE
+- v18.10 poussée le 26/11/2026 (703d9e1) ; GitHub Pages vérifié (APP_VERSION v18.10, SW sw-v18-10_meteo_pelics).
+- Paquet NAS météo 1.0 : 1re exécution le 26/11 à 13:51 en ÉCHEC sans rien copier (contrôle de syntaxe de l'installation :
+  le PHP du NAS est en 7.3.3, les fonctions fléchées « fn » n'existent qu'en 7.4) ; corrigé (fonctions anonymes classiques),
+  paquet refait (empreinte 570321b5…c4dc), INSTALLÉ le 26/11 à 13:55 : rapport OK (syntaxe 7.3.3 sans erreur, OPTIONS 204,
+  GET 200, pas de 403). Tâches DSM « Meteo pelics installation » et « Meteo pelics retour arriere » (noms SANS accents :
+  DSM les refuse) créées, désactivées. LEÇON : vérifier toute syntaxe PHP pour la 7.3 du NAS (pas de fn, ??=, match, ?->).
+- Contrôles curl du 26/11 (moi) : OPTIONS 204, GET 200, CORS *, no-store ; 3 lots de 10 en ~3 min, créneau libre à chaque fois,
+  puis plus aucune demande. SDVFR réel : METAR + TAF 19 pélics (LFAQ LFBD LFBL LFBM LFBP LFCR LFGJ LFKB LFKC LFKF LFKJ LFLX
+  LFMD LFMK LFML LFMP LFMU LFTH LFTW) ; METAR seul 5 (LFJR LFLU LFMH LFRV LFSG) ; rien 3 (LFBN LFCC LFHO : pas de bouton).
+  Écarts avec l'estimation de l'étude : LFLU et LFMH sans TAF ; LFAQ avec METAR et TAF.
+- Demande de Bastien du 26/11 : bouton « Rafraîchir » dans la fenêtre MÉTÉO.
+
+A. NAS — get-meteo-pelics.php 1.1, PRÉPARÉ, NON INSTALLÉ (~/nas-a-copier/a-installer-meteo-pelics-force-2026-11-26/)
+- Sans « force=1 » : comportement 1.0 inchangé. Avec « ?force=1 » : pendant 5 min, pélics pas encore récupérés depuis la
+  demande redemandés même s'ils ont moins de 10 min ; lots de 10 ; seulement si le créneau SDVFR est libre (jamais pendant
+  une demande NOTAM) ; tickets forcés (cache de moins de 60 s, comme « Actualiser » de BFG) ; une demande forcée au plus
+  toutes les 2 min tous iPad confondus (repère force.json sous le verrou de la file). Champ « force » dans la réponse.
+- Installation : remplacement de la 1.0 avec sauvegarde hors web, contrôles (empreintes, 1.0 en place, file BFG connue,
+  syntaxe PHP du NAS), synoacltool, curl ; retour arrière vers la 1.0. Essais locaux : force 12 / 12, 1.0 sur 1.1 16 / 16,
+  installation et retour arrière sur NAS simulé OK.
+
+B. APP (src/380, style.css)
+- Fenêtre MÉTÉO : pied avec l'état et le bouton « Rafraîchir » (132 × 44 px). Un toucher : demande forcée, « Mise à jour en
+  cours… », relecture toutes les 30 s, fenêtre mise à jour toute seule (bulletins et âges), « Bulletins à jour (HH:MM) ».
+- Au bout de 4 min sans tout recevoir : « Pas tous les nouveaux bulletins reçus (N pélics en attente, serveur occupé) :
+  bulletins précédents gardés. » ; coupure : « Mise à jour impossible (…) : bulletins précédents gardés. » ; sans réseau :
+  « Pas de réseau : bulletins précédents gardés. » ; NAS encore en 1.0 : « Le NAS ne propose pas encore la mise à jour
+  immédiate : bulletins habituels (toutes les 10 min). »
+- Bouton grisé 2 min après un toucher (aussi pendant la mise à jour). DIAG : nombre de demandes « Rafraîchir » et état.
+
+C. ÉTUDE RADAR (26/11, lecture seule, aucun compte ni clé) : Météo-France, API « DonneesPubliquesRadar » (gratuite, Licence
+  Ouverte 2.0, lame d'eau HDF5 500 m toutes les 5 min, dernier produit seulement), image fabriquée sur le VPS (clé cachée),
+  calque Leaflet d'images. Questions remises à Bastien. Statut : À DÉCIDER.
+
+D. ESSAIS (PC ; Chrome et Playwright WebKit ; service worker bloqué, tout coupé sauf localhost ; FAUX NAS simulant la 1.1 ;
+   aucun appel au vrai NAS, au vrai VPS ni à SafeSky)
+- Rafraîchir (v110/pw_meteo111.js) : 13 / 13 sous Chrome et sous WebKit : bouton 132 × 44 px ; toucher -> « Mise à jour en
+  cours… », bouton grisé, demande forcée ; relectures toutes les 30 s (jamais plus vite) ; fenêtre mise à jour seule en 89 s
+  (nouveau METAR, âge 0 min en vert, « Bulletins à jour ») ; bouton grisé jusqu'à 2 min puis de nouveau actif ; demande NOTAM
+  en cours : « en cours » et anciens bulletins, puis mise à jour dès le créneau libre ; 4 min : message, anciens bulletins ;
+  sans réseau, coupure, NAS 1.0 : messages clairs, bulletins gardés ; DIAG.
+- Météo de la v18.10 (v110/pw_meteo110.js) : 21 / 21 sous Chrome et sous WebKit.
+- RTBA (v108/pw_rtba108.js) : identique à la v18.10. Remarque : un créneau inventé de l'essai (début t0 + 2 h) commençait
+  l'après-midi après le coucher du soleil - 30 min et était donc écarté par l'app (règle BFG, comportement JUSTE) ; essai
+  corrigé (t0 + 20 min), bascule de la minute OK (42-45 s). Un passage WebKit a remonté une erreur de page du module VAC
+  (demande du manifeste VAC coupée par l'essai, « access control checks ») : non reproduite au passage suivant, code VAC
+  inchangé : aléa de l'environnement d'essai, À SURVEILLER.
+- Service worker RÉEL : 8/8 (mise à jour v18.10 -> v18.11).
+- Non-régression rapide (bloquante) : glr102 13/13, glr101 8/8, glr100 16/16 (Chrome et WebKit), cercle 14/14, nr 13/13,
+  map / popup / ret55 / npf66 / glr64 / upd53 identiques à la v18.10 (temps seuls ; caches de la pérenne présents).
+
+E. STATUT
+- v18.11 À MESURER sur iPad APRÈS installation du paquet NAS 1.1 (ordre : push v18.11, puis paquet NAS, puis vérifications).
 
 VERSION TEST v18.10 — MÉTÉO DES PÉLICANDROMES (METAR / TAF)
 Date : 26/11/2026
