@@ -1,4 +1,4 @@
-/* NPF_STYLE_BUILD_VERSION: v18.09 */
+/* NPF_STYLE_BUILD_VERSION: v18.10 */
 /* v14.83 — nettoyage des références techniques et limitation des cartouches routiers. */
 /* v14.81 — recherche phonétique nationale élargie aux fragments sur deux lettres. */
 /* v14.80 — Brive conservé uniquement sous LFSL. */
@@ -19393,4 +19393,135 @@ body.npf-calculator-modal-open {
 }
 .npf-rtba-message.visible {
     opacity: 1;
+}
+
+/* ==========================================================================
+   v18.10 — MÉTÉO DES PÉLICS (src/380) : bouton « MÉTÉO » à côté de « NOTAMS » dans la fenêtre du pélic, fenêtre METAR / TAF
+   (texte brut ; âge du METAR vert jusqu'à 35 min, rouge au-delà ; « TAF non à jour », comme BFG)
+   ========================================================================== */
+.airport-popup .popup-notams-buttons.avec-meteo {
+    gap: 6px;
+}
+.airport-popup .popup-notams-buttons.avec-meteo .pelic-notams-btn,
+.airport-popup .pelic-meteo-btn {
+    flex: 1 1 0;
+    min-width: 0;
+}
+.airport-popup .pelic-meteo-btn {
+    min-height: 42px;
+    padding: 7px 12px;
+    border-radius: 8px;
+    background: #0e7490;
+    border: 1px solid #155e75;
+    color: #ffffff;
+    font-size: 15px;
+    line-height: 1.1;
+    font-weight: 950;
+    touch-action: manipulation;
+}
+body.npf-meteo-modal-open {
+    overflow: hidden;
+}
+.npf-meteo-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 2147483620;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    padding: max(12px, var(--npf-barre-haut)) 12px max(12px, env(safe-area-inset-bottom));
+    background: rgba(6, 24, 43, .68);
+}
+.npf-meteo-modal[hidden] {
+    display: none !important;
+}
+.npf-meteo-modal-card {
+    width: min(96vw, 760px);
+    max-height: min(92dvh, 760px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-sizing: border-box;
+    border: 1px solid #9db7d7;
+    border-radius: 12px;
+    background: #ffffff;
+    box-shadow: 0 12px 36px rgba(0, 0, 0, .32);
+}
+.npf-meteo-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 12px;
+    border-bottom: 1px solid #9db7d7;
+    border-left: 8px solid #0e7490;
+    background: linear-gradient(90deg, #e6f6fa 0%, #f8fbff 100%);
+}
+.npf-meteo-modal-title {
+    color: #0b2f6b;
+    font-size: 18px;
+    font-weight: 950;
+}
+.npf-meteo-modal-source {
+    margin-top: 2px;
+    color: #40556c;
+    font-size: 12px;
+    font-weight: 800;
+}
+.npf-meteo-modal-close {
+    flex: 0 0 38px;
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    border: 1px solid #991b1b;
+    border-radius: 8px;
+    background: #dc2626;
+    color: #000000;
+    font-size: 28px;
+    font-weight: 900;
+    line-height: 1;
+    touch-action: manipulation;
+}
+.npf-meteo-modal-body {
+    overflow: auto;
+    padding: 10px 12px 14px;
+}
+.npf-meteo-bloc h4 {
+    margin: 8px 0 4px;
+    color: #0b2f6b;
+    font-size: 16px;
+    font-weight: 950;
+}
+.npf-meteo-bloc pre {
+    margin: 0;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: #f1f5f9;
+    color: #111827;
+    font: 600 16px/1.35 ui-monospace, Menlo, Consolas, monospace;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.npf-meteo-age {
+    margin-left: 8px;
+    font-size: 15px;
+    font-weight: 950;
+}
+.npf-meteo-age-ok {
+    color: #28a745;
+}
+.npf-meteo-age-vieux {
+    color: #dc2626;
+}
+.npf-meteo-taf-perime {
+    margin-left: 8px;
+    color: #dc2626;
+    font-size: 15px;
+    font-weight: 950;
+}
+.npf-meteo-vide {
+    padding: 12px 0;
+    color: #40556c;
+    font-weight: 800;
 }

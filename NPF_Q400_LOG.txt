@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 26/11/2026
-Version de travail actuelle : TEST v18.09
+Version de travail actuelle : TEST v18.10
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -587,7 +587,12 @@ NON IMPLÉMENTÉ / OUVERT :
   À MESURER sur iPad ; POUSSÉE le 26/11/2026 (37d5515) ;
 - v18.09 : correction de Bastien : bouton « carte de France » (pastilles N et œil) JUSTE SOUS « Routes » (et non sous
   « Lignes HT ») ; ordre : Lignes HT, Routes, carte de France, OPS, FdS / GAAR, Moyens Nationaux, SafeSky ; écarts de la
-  v18.06 ; rien d'autre ne change. À MESURER sur iPad ; COMMIT LOCAL, NON POUSSÉE ;
+  v18.06 ; rien d'autre ne change. À MESURER sur iPad ; POUSSÉE le 26/11/2026 (93fc0fa) ;
+- v18.10 : MÉTÉO DES PÉLICS : bouton « MÉTÉO » à côté de « NOTAMS » dans la fenêtre des 27 pélics qui ont un METAR ou un TAF
+  (aucune station de repli) ; METAR / TAF en texte brut, âge du METAR (vert <= 35 min, rouge au-delà), « TAF non à jour »
+  (règles BFG) ; source : nouveau fichier NAS get-meteo-pelics.php (paquet ~/nas-a-copier/a-installer-meteo-pelics-2026-11-26,
+  À INSTALLER APRÈS LE PUSH, VPS inchangé) ; fichier du jour gardé hors ligne, jamais celui de la veille. À MESURER sur iPad ;
+  COMMIT LOCAL, NON POUSSÉE ;
 - v18.02 : bouton Moyens Nationaux : contour VERT dès que la session est connectée (même sans appareil détecté, même calque
   masqué OFF) ; ROUGE sans session, ou calque affiché quand la dernière demande de positions a échoué (réseau, hors ligne,
   « service indisponible »), puis vert dès la demande suivante réussie (demande de Bastien du 19/11). À MESURER sur iPad ;
@@ -2489,6 +2494,71 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v18.10 — MÉTÉO DES PÉLICANDROMES (METAR / TAF)
+Date : 26/11/2026
+Base fonctionnelle : v18.09 (commit 93fc0fa, poussée le 26/11/2026). Seule la TEST change : pérenne, RUN, BFG et VPS
+inchangés ; NAS : paquet PRÉPARÉ, NON INSTALLÉ. sia.js inchangé (identique à la v17.81). Moteur de tuiles, séquenceur,
+RTBA, prototype de carte (hors numéros de version) : INCHANGÉS.
+
+0. CONTEXTE
+- Étude du 26/11 (lecture seule) : NPF-Q400 n'affichait aucun METAR / TAF ; BFG les reçoit de SDVFR (NAS -> worker VPS) avec
+  les NOTAM des 27 pélics (mêmes 27 que NPF-Q400).
+- Réponses de Bastien du 26/11 : pas de station de repli (pélic sans METAR ni TAF : rien ; METAR sans TAF : METAR seul) ;
+  bouton « MÉTÉO » dans la fenêtre du pélic à côté de « NOTAMS » ; fichier NAS « tous les pélics » lu comme le RTBA (sans
+  BFG, sans jeton) ; hors ligne : dernier fichier du jour avec son âge, jamais celui d'un jour précédent ; un échec ne
+  remplace jamais le dernier fichier valable. VPS : pas modifié.
+
+A. NAS — PRÉPARÉ, NON INSTALLÉ (~/nas-a-copier/a-installer-meteo-pelics-2026-11-26/, INSTALLATION.txt)
+- Un seul fichier AJOUTÉ : get-meteo-pelics.php (public, sans jeton). Aucun fichier existant modifié, aucune tâche répétée.
+- Il lit le cache NOTAM / météo de la file BFG (chaque résultat du worker contient déjà METAR / TAF), renvoie les 27 pélics
+  en un JSON et, SEULEMENT si le créneau SDVFR est libre (aucune demande en cours, aucun ticket en attente, 15 s après la fin
+  d'une demande), dépose un ticket ordinaire de 10 pélics au plus dont les données ont plus de 10 min. Jamais pendant une
+  demande NOTAM. Charge SDVFR bornée (un pélic au plus toutes les 10 min, rien sans utilisateur, rien la nuit).
+- Choix d'une écriture par le serveur web plutôt qu'une tâche root répétée : un script root recréerait les fichiers de la
+  file sans l'héritage des droits Synology (réponses 403 constatées pour SOFIA le 07/10) et casserait BFG.
+- Mêmes carrés que BFG (±0,015° × ±0,018°) : cache partagé avec BFG.
+- Essais locaux (PHP du PC, vraie file BFG du 01/10, aucun accès réseau) : 16 / 16 ; installation et retour arrière sur un
+  NAS simulé : OK, refus d'une 2e installation, refus si la file BFG a changé ou si le dossier d'arrivée est dans le web.
+
+B. APP (nouveau src/380_meteo_pelics.js, src/010, sw.js, style.css)
+- Bouton « MÉTÉO » ajouté à l'ouverture de la fenêtre des 27 pélics (à côté de « NOTAMS », même hauteur, moitié de la
+  ligne chacun), seulement si le fichier du jour contient un METAR ou un TAF pour ce pélic ; « NOTAMS » garde son action.
+- Fenêtre MÉTÉO : METAR et TAF en texte brut, âge du METAR (heure JJHHMMZ du texte, vert jusqu'à 35 min, rouge au-delà),
+  « TAF non à jour » après la fin de validité (règles de BFG checkWeatherValidity), heure du fichier du NAS (« dernier
+  fichier gardé » hors ligne ou après un échec) ; âge tenu à jour toutes les 30 s.
+- Actualisation : lancement, retour au premier plan, toutes les 10 min (en ligne, premier plan) ; jamais deux demandes en
+  moins de 60 s ; si le NAS vient de demander des bulletins à SDVFR, une relecture 90 s plus tard (3 au plus de suite).
+- Fichier gardé (mémoire + stockage local de la TEST, clé npfQ400TestMeteoPelicsV1) ; fichier d'un jour de Paris précédent
+  jamais affiché (pas de bouton) ; échec : ancien fichier gardé.
+- Rien sur la carte (aucun redessin, rien pendant les gestes).
+- sw.js : get-meteo-pelics.php en passage direct au réseau (comme le RTBA), jamais copié.
+- DIAG : ligne « MÉTÉO PÉLICS (v18.10) » (heure du fichier, pélics avec bouton / METAR / TAF, téléchargements, échecs,
+  dernière demande, état du créneau du NAS).
+
+C. ESSAIS APP (PC ; Chrome et Playwright WebKit ; service worker bloqué, tout coupé sauf localhost ; FAUX NAS : la demande
+   get-meteo-pelics.php est interceptée, bulletins INVENTÉS ; aucun appel au vrai NAS, au vrai VPS ni à SafeSky ;
+   v110/pw_meteo110.js) : 21 / 21 sous Chrome et sous WebKit.
+- LFMU (METAR + TAF) : bouton MÉTÉO sur la ligne de NOTAMS (42 px de haut) ; texte brut ; âge 10 min en vert ; TAF à jour.
+- LFTW (METAR seul) : METAR seul. LFLU : METAR de 60 min en rouge, « TAF non à jour ». LFHO (ni METAR ni TAF) et LFKC
+  (absent du fichier) : pas de bouton.
+- NOTAMS inchangé (même action, sa fenêtre s'ouvre). Jamais deux demandes en moins de 60 s. Échecs (HTTP 500, 200 +
+  {"ok":false}, page HTML 502 sans CORS, coupure) : fichier gardé, bouton toujours là, stockage inchangé. Relecture 90 s
+  après une actualisation lancée par le NAS. Ligne DIAG.
+- Hors ligne avec le fichier du jour : aucune demande, bouton, METAR et « dernier fichier gardé ». Fichier de la veille :
+  pas de bouton, DIAG « jour précédent : NON affiché ». Retour du réseau : nouveau fichier.
+- RTBA (v108/pw_rtba108.js) : résultats identiques à la v18.09 (Chrome et WebKit), trait feu-pélic et terrains toujours
+  touchables.
+- Service worker RÉEL (v110/cdp_proto110_sw.js) : 8/8 (mise à jour v18.09 -> v18.10 ; demandes RTBA et météo en passage
+  direct, jamais de réponse du service worker).
+- Non-régression rapide (bloquante) : glr102 13/13, glr101 8/8, glr100 16/16 (Chrome et WebKit), cercle 14/14, nr 13/13,
+  map / popup / ret55 / npf66 / glr64 / upd53 identiques à la v18.09 (temps seuls ; caches de la pérenne présents).
+  Premier passage : un KO « Z1 » dans glr100 / 101 / 102 et cercle, causé par les essais : la nouvelle demande météo,
+  COUPÉE par l'essai (jamais envoyée au vrai NAS), ajoutée à leur liste tolérée comme le RTBA (v18.07), puis tout OK.
+
+D. STATUT
+- v18.10 À MESURER sur iPad, APRÈS installation du paquet NAS (ordre : push v18.10, puis paquet NAS, puis vérifications de
+  INSTALLATION.txt). Pélics qui ont réellement METAR / TAF dans SDVFR : À MESURER (DIAG).
 
 VERSION TEST v18.09 — BOUTON « CARTE DE FRANCE » JUSTE SOUS « ROUTES »
 Date : 26/11/2026

@@ -44,3 +44,4 @@
 350_sia_ctr_labels_selection.js
 360_banc_carte_gpu.js
 370_rtba.js
+380_meteo_pelics.js

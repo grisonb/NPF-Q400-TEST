@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v18-09_bouton_france';
-const APP_VERSION = 'v18.09';
+const SW_VERSION = 'sw-v18-10_meteo_pelics';
+const APP_VERSION = 'v18.10';
 const SIA_DATA_REVISION = 'sia-2026-10-29-v02-g15';
 const SIA_DATA_URL = './sia.js';
 /*
@@ -768,10 +768,12 @@ function isBriefingDocsNasRequest(url) {
         // v17.59 — fichier NOTAM SOFIA complet : même passage direct au réseau
         // que npf-docs-api.php (pas de délai de 8 s, pas de cache du SW).
         // v18.07 — réseau RTBA (src/370) : même passage direct (délai de 25 s de l'app, jamais de copie du SW).
+        // v18.10 — météo des pélics (src/380) : même passage direct.
         return parsed.hostname === 'grisonb.synology.me'
             && (parsed.pathname === '/briefing-api/npf-docs-api.php'
                 || parsed.pathname === '/briefing-api/get-sofia-notams-all.php'
-                || parsed.pathname === '/briefing-api/get-sdvfr-temporary-airspaces.php');
+                || parsed.pathname === '/briefing-api/get-sdvfr-temporary-airspaces.php'
+                || parsed.pathname === '/briefing-api/get-meteo-pelics.php');
     } catch (_) {
         return false;
     }
