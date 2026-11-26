@@ -17,7 +17,9 @@
  *    jamais deux demandes en moins de 60 s ; recalcul local des statuts chaque minute, sans réseau.
  * Différence voulue : NPF-Q400 n'a pas de champ « FL max » : aucun filtre de niveau (BFG sans valeur saisie = idem).
  *
- * Décisions de Bastien (26/11/2026) : bouton « RTBA » de la colonne des calques, ALLUMÉ par défaut et rallumé à chaque
+ * v18.08 (décision de Bastien, 26/11) : le bouton est dans le panneau « Calques aéronautiques », tout à droite de la ligne
+ * « Tout afficher / Tout masquer » (qui ne le changent pas) ; plus de bouton dans la colonne de la carte.
+ * Décisions de Bastien (26/11/2026) : bouton « RTBA » (v18.07 : colonne des calques), ALLUMÉ par défaut et rallumé à chaque
  * lancement (jamais enregistré), éteint = masqué seulement (les téléchargements continuent) ; affiché à toutes les
  * échelles ; sans réseau, dernier fichier valable gardé (« RTBA de 14:32 ») ; un fichier d'un jour de Paris précédent
  * n'est JAMAIS affiché ; un échec ne remplace jamais le dernier fichier valable ; les touchers RTBA ne bloquent jamais
@@ -595,20 +597,34 @@ function npfRtbaStatusText() {
     return 'RTBA : aucun fichier (pas encore reçu) — rien affiché';
 }
 
+/* v18.08 — bouton RTBA du panneau « Calques aéronautiques » (src/340, tout à droite de la ligne « Tout afficher / Tout
+ * masquer ») : il n'existe qu'une fois le panneau ouvert ; le message en haut de la carte ne dépend pas de lui. */
+function npfRtbaFileText() {
+    if (npfRtba.state === 'ok') return `fichier ${npfRtbaHhMm(npfRtba.fetchedAt)}${npfRtba.fromMemory ? ' (gardé)' : ''}`;
+    if (npfRtba.state === 'veille') {
+        const veille = npfRtbaParisDayKey(Date.now() - 86400000) === npfRtbaParisDayKey(npfRtba.fetchedAt.getTime());
+        return veille ? 'fichier de la veille' : `fichier du ${npfRtbaDayMonth(npfRtba.fetchedAt)}`;
+    }
+    return npfRtba.inFlight ? 'chargement…' : 'aucun fichier';
+}
+
 function npfRtbaUpdateButton() {
-    const button = document.getElementById('rtba-layer-button');
-    if (!button) return;
-    button.classList.toggle('active', npfRtba.visible);
-    button.setAttribute('aria-pressed', npfRtba.visible ? 'true' : 'false');
-    button.classList.toggle('rtba-sans-fichier', npfRtba.state !== 'ok');
-    button.classList.toggle('rtba-fichier-garde', npfRtba.state === 'ok' && npfRtba.fromMemory);
-    const status = document.getElementById('rtba-button-status');
-    const text = npfRtba.state === 'ok' ? npfRtbaHhMm(npfRtba.fetchedAt) : (npfRtba.state === 'veille' ? 'veille' : '—');
-    if (status && status.textContent !== text) status.textContent = text;
-    const title = `${npfRtba.visible ? 'Masquer' : 'Afficher'} le réseau RTBA — ${npfRtbaStatusText()}`;
-    if (button.title !== title) {
-        button.title = title;
-        button.setAttribute('aria-label', title);
+    const button = document.getElementById('sia-filter-rtba');
+    if (button) {
+        button.classList.toggle('active', npfRtba.visible);
+        button.setAttribute('aria-pressed', npfRtba.visible ? 'true' : 'false');
+        button.classList.toggle('rtba-sans-fichier', npfRtba.state !== 'ok');
+        const titre = button.querySelector('.sia-filter-rtba-titre');
+        const heure = button.querySelector('.sia-filter-rtba-heure');
+        const t1 = `RTBA ${npfRtba.visible ? 'ON' : 'OFF'}`;
+        const t2 = npfRtbaFileText();
+        if (titre && titre.textContent !== t1) titre.textContent = t1;
+        if (heure && heure.textContent !== t2) heure.textContent = t2;
+        const title = `${npfRtba.visible ? 'Masquer' : 'Afficher'} le réseau RTBA — ${npfRtbaStatusText()}`;
+        if (button.title !== title) {
+            button.title = title;
+            button.setAttribute('aria-label', title);
+        }
     }
     /* Message seulement une fois la demande du lancement faite (ou hors ligne) : pas d'alerte avant la première réponse. */
     const launchDone = !!npfRtba.lastAttemptAt || (typeof navigator !== 'undefined' && navigator.onLine === false);
@@ -857,11 +873,16 @@ function npfRtbaInstallTouch() {
 function installNpfRtba() {
     if (npfRtba.installed) return true;
     if (typeof map === 'undefined' || !map || !window.L || !map.getContainer) return false;
-    const button = document.getElementById('rtba-layer-button');
     if (!npfRtbaEnsurePanes()) return false;
     npfRtba.installed = true;
     npfRtba.visible = true;   // allumé à chaque lancement (jamais enregistré)
-    if (button) button.addEventListener('click', event => { event.preventDefault(); npfRtbaToggle(); });
+    /* v18.08 — bouton du panneau « Calques aéronautiques » (créé à la première ouverture du panneau). */
+    document.addEventListener('click', event => {
+        const target = event.target && event.target.closest ? event.target.closest('#sia-filter-rtba') : null;
+        if (!target) return;
+        event.preventDefault();
+        npfRtbaToggle();
+    });
     npfRtbaInstallTouch();
     const stored = npfRtbaReadStore();
     if (stored) {
@@ -903,7 +924,7 @@ function getNpfRtbaDiagLine() {
     const file = npfRtba.fetchedAt
         ? `${npfRtbaDayMonth(npfRtba.fetchedAt)} ${npfRtbaHhMm(npfRtba.fetchedAt)}${npfRtba.state === 'veille' ? ' (jour précédent : NON affiché)' : ''}`
         : 'aucun';
-    return 'RTBA (v18.07) : ' + (npfRtba.visible ? 'ON' : 'OFF (masqué)')
+    return 'RTBA (v18.08) : ' + (npfRtba.visible ? 'ON' : 'OFF (masqué)')
         + ' | dernier téléchargement : ' + file
         + ' | fichier gardé : ' + (npfRtba.fetchedAt ? (npfRtba.fromMemory ? 'oui, affiché depuis la mémoire' : 'oui') : 'non') + ' (enregistré : ' + npfRtba.stored + ')'
         + ' | zones reçues ' + (Array.isArray(npfRtba.airspaces) ? npfRtba.airspaces.length : '—')

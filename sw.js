@@ -1,5 +1,5 @@
-const SW_VERSION = 'sw-v18-07_rtba';
-const APP_VERSION = 'v18.07';
+const SW_VERSION = 'sw-v18-08_rtba_panneau';
+const APP_VERSION = 'v18.08';
 const SIA_DATA_REVISION = 'sia-2026-10-29-v02-g15';
 const SIA_DATA_URL = './sia.js';
 /*

@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 26/11/2026
-Version de travail actuelle : TEST v18.07
+Version de travail actuelle : TEST v18.08
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -578,7 +578,13 @@ NON IMPLÉMENTÉ / OUVERT :
   fenêtre au toucher ACTIF / À VENIR / TERMINÉ ; 5 min / lancement / premier plan, jamais deux demandes en moins de 60 s ;
   recalcul chaque minute) ; bouton « RTBA » de la colonne des calques, allumé à chaque lancement, éteint = masqué ;
   dernier fichier valable gardé (« RTBA de 14:32 »), jamais celui d'un jour de Paris précédent ; colonne : écart entre
-  boutons 15 -> 6 px sur écran large de moins de 900 px de haut (iPad paysage). À MESURER sur iPad ; COMMIT LOCAL, NON POUSSÉE ;
+  boutons 15 -> 6 px sur écran large de moins de 900 px de haut (iPad paysage). À MESURER sur iPad ; POUSSÉE le 26/11/2026
+  (2140f06) ;
+- v18.08 : disposition décidée par Bastien sur iPad (26/11) : bouton RTBA retiré de la colonne et resserrement de la colonne
+  ANNULÉ (écart 15 px partout, comme en v18.06) ; bouton « RTBA ON / OFF » + heure du fichier tout à droite de la ligne
+  « Tout afficher / Tout masquer » du panneau « Calques aéronautiques » (ces deux boutons ne changent pas le RTBA) ; bouton
+  « carte de France » (appui long = panneau des calques) placé juste sous « Lignes HT ». RTBA inchangé par ailleurs.
+  À MESURER sur iPad ; COMMIT LOCAL, NON POUSSÉE ;
 - v18.02 : bouton Moyens Nationaux : contour VERT dès que la session est connectée (même sans appareil détecté, même calque
   masqué OFF) ; ROUGE sans session, ou calque affiché quand la dernière demande de positions a échoué (réseau, hors ligne,
   « service indisponible »), puis vert dès la demande suivante réussie (demande de Bastien du 19/11). À MESURER sur iPad ;
@@ -2480,6 +2486,52 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v18.08 — RTBA : BOUTON DANS LE PANNEAU « CALQUES AÉRONAUTIQUES », COLONNE COMME EN v18.06
+Date : 26/11/2026
+Base fonctionnelle : v18.07 (commit 2140f06, poussée le 26/11/2026). Seule la TEST change : pérenne, RUN, BFG, NAS et VPS
+inchangés. sia.js inchangé (strictement identique à la v17.81). Moteur de tuiles, séquenceur, prototype de carte (hors
+numéros de version) : INCHANGÉS.
+
+0. CONTEXTE
+- v18.07 poussée le 26/11/2026 (2140f06) ; GitHub Pages vérifié (APP_VERSION v18.07, SW sw-v18-07_rtba).
+- Décisions de Bastien sur iPad (26/11). Précisions de Bastien du 26/11 : le bouton « Calques aéro » est le bouton « carte
+  de France » (appui long = panneau « Calques aéronautiques ») ; la colonne visée est celle de « Lignes HT » / « Routes ».
+
+A. COLONNE DES BOUTONS DE LA CARTE (index.html, style.css)
+- Bouton RTBA retiré de la colonne. Resserrement de la v18.07 ANNULÉ en entier : écart 15 px partout, tailles inchangées
+  (CSS de la colonne identique à la v18.06).
+- Bouton « carte de France » (avec ses pastilles N et œil) déplacé juste sous « Lignes HT », fonctionnement inchangé.
+  Ordre : Lignes HT, carte de France, Calque Routier, OPS, FdS / GAAR, Moyens Nationaux, SafeSky. index.html identique à la
+  v18.06 en dehors de ce déplacement et des numéros de version.
+
+B. BOUTON RTBA DU PANNEAU « CALQUES AÉRONAUTIQUES » (src/340, src/370, style.css)
+- Tout à droite de la 1re ligne (« Tout afficher », « Tout masquer », « PROFIL ESPACES ») ; la case « Masquer zones >
+  FL115 » occupe toujours la ligne suivante, à la même place. Même style que les boutons de la ligne (40 px de haut) ;
+  allumé : magenta plein, « RTBA ON » ; éteint : blanc à bord gris, « RTBA OFF ». Dessous : « fichier 14:32 » (« (gardé) »
+  si affiché depuis la mémoire), « fichier de la veille » (ou « fichier du jj/mm »), « aucun fichier », « chargement… ».
+- « Tout afficher » et « Tout masquer » ne changent pas le RTBA (ils ne touchent que les cases des catégories SIA).
+- RTBA allumé à chaque lancement (inchangé) ; le message en haut de la carte (pas de fichier du jour) ne dépend plus du
+  bouton (le panneau n'existe qu'après sa première ouverture).
+- Tout le reste du RTBA de la v18.07 est inchangé (règles BFG, hors ligne, veille jamais affichée, touchers, DIAG).
+
+C. ESSAIS (PC ; Chrome et Playwright WebKit ; service worker bloqué, tout coupé sauf localhost ; faux NAS par interception,
+   fichiers RTBA inventés ; aucun appel au vrai NAS, au vrai VPS ni à SafeSky)
+- Disposition (v108/pw_disp108.js), v18.06 / v18.08, iPad paysage 1080 × 810 et 1180 × 820, portrait 810 × 1080 et
+  820 × 1180 : colonne identique à la v18.06 (écarts 15 px, mêmes tailles et positions) sauf « carte de France » juste
+  sous « Lignes HT » ; colonne entière à l'écran, SafeSky touchable (bas de SafeSky 766 px en 1180 × 820). Panneau : bouton
+  RTBA sur la ligne de « Tout afficher », tout à droite, 108 × 40 px, touchable ; case FL115 à la même place qu'en v18.06.
+- RTBA (v108/pw_rtba108.js, essais de la v18.07 avec le bouton du panneau) : tout identique à la v18.07 (zones, nuit,
+  coucher, fenêtres, trait et terrains prioritaires, appui long, échecs, hors ligne du jour / de la veille, minute, DIAG) ;
+  bouton : ON au lancement, OFF (zones masquées, aucune fenêtre), ON, puis ON après relancement ; « Tout afficher » et
+  « Tout masquer », RTBA allumé puis éteint : état du RTBA jamais changé. Bouton : « fichier 10:41 », « fichier 10:41
+  (gardé) », « fichier de la veille ».
+- Service worker RÉEL (v108/cdp_proto108_sw.js) : 7/7 (mise à jour v18.07 -> v18.08).
+- Non-régression rapide (bloquante) : glr102 13/13, glr101 8/8, glr100 16/16 (Chrome et WebKit), cercle 14/14, nr 13/13,
+  map / popup / ret55 / npf66 / glr64 / upd53 identiques à la v18.07 (temps seuls ; caches de la pérenne présents).
+
+D. STATUT
+- v18.08 À MESURER sur iPad (bouton RTBA du panneau ; colonne ; et toujours la réponse du vrai NAS au RTBA).
 
 VERSION TEST v18.07 — RÉSEAU RTBA (AZBA) SUR LA CARTE, MÊMES RÈGLES QUE BFG TEST
 Date : 26/11/2026

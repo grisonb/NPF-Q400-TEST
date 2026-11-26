@@ -1,4 +1,4 @@
-/* NPF_STYLE_BUILD_VERSION: v18.07 */
+/* NPF_STYLE_BUILD_VERSION: v18.08 */
 /* v14.83 — nettoyage des références techniques et limitation des cartouches routiers. */
 /* v14.81 — recherche phonétique nationale élargie aux fragments sur deux lettres. */
 /* v14.80 — Brive conservé uniquement sous LFSL. */
@@ -19272,91 +19272,45 @@ body.npf-calculator-modal-open {
 }
 
 /* ==========================================================================
-   v18.07 — réseau RTBA (AZBA, src/370) : bouton de la colonne des calques, niveaux de la carte, fenêtre au toucher
+   v18.07 — réseau RTBA (AZBA, src/370) : niveaux de la carte, fenêtre au toucher (v18.08 : bouton dans le panneau)
    ========================================================================== */
-#rtba-layer-button {
+/* v18.08 — bouton RTBA dans le panneau « Calques aéronautiques », tout à droite de la ligne « Tout afficher / Tout
+   masquer » (même style que les boutons de cette ligne) ; allumé = magenta plein, éteint = blanc ; heure du fichier dessous.
+   « Tout afficher » et « Tout masquer » ne le changent pas. */
+.sia-filter-global-actions #sia-filter-rtba {
+    margin-left: auto;
+    min-width: 108px;
+    min-height: 40px;
+    padding: 2px 12px;
+    display: inline-flex;
     flex-direction: column;
-    gap: 2px;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    line-height: 1.05;
+    background: #ffffff;
+    color: #6b7280;
+    border: 2px solid #9ca3af;
 }
-#rtba-layer-button.active {
-    background: #a3005f !important;
-    border-color: #a3005f !important;
-    color: #ffffff !important;
-}
-#rtba-layer-button.rtba-sans-fichier {
-    border-color: #d97706 !important;
-}
-.rtba-map-icon,
-.rtba-map-icon svg {
-    width: 44px;
-    height: 36px;
-    display: block;
-}
-.rtba-map-zone {
-    stroke-width: 3;
-    stroke-linejoin: round;
-}
-.rtba-map-zone-actif {
-    fill: rgba(255, 26, 163, .55);
-    stroke: #d1007a;
-}
-.rtba-map-zone-avenir {
-    fill: rgba(251, 198, 227, .75);
-    stroke: #f08cc4;
-}
-#rtba-layer-button.active .rtba-map-zone-actif {
-    stroke: #ffffff;
-}
-.rtba-map-label {
-    font: 1000 17px/1 Arial, Helvetica, sans-serif;
-    letter-spacing: .5px;
-    color: #a3005f;
-    margin-bottom: 14px;
-}
-#rtba-layer-button.active .rtba-map-label {
+.sia-filter-global-actions #sia-filter-rtba.active {
+    background: #a3005f;
+    border-color: #a3005f;
     color: #ffffff;
 }
-.rtba-button-status {
-    position: absolute !important;
-    right: 5px !important;
-    bottom: 4px !important;
-    min-width: 29px !important;
-    height: 18px !important;
-    padding: 0 4px !important;
-    box-sizing: border-box !important;
-    border-radius: 999px !important;
-    background: rgba(255, 255, 255, .95) !important;
-    border: 1px solid rgba(0, 0, 0, .22) !important;
-    color: #a3005f !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    font-size: 9px !important;
-    font-weight: 1000 !important;
-    line-height: 1 !important;
-    white-space: nowrap !important;
-    pointer-events: none !important;
+.sia-filter-rtba-titre {
+    font-size: 15px;
+    font-weight: 900;
+    letter-spacing: .3px;
 }
-#rtba-layer-button.rtba-sans-fichier .rtba-button-status {
-    color: #b45309 !important;
+.sia-filter-rtba-heure {
+    font-size: 12px;
+    font-weight: 700;
 }
-@media (max-width: 760px) {
-    .rtba-map-icon,
-    .rtba-map-icon svg {
-        width: 26px !important;
-        height: 20px !important;
-    }
-    .rtba-map-label {
-        font-size: 10px !important;
-        margin-bottom: 10px !important;
-    }
-    .rtba-button-status {
-        right: 3px !important;
-        bottom: 2px !important;
-        min-width: 22px !important;
-        height: 12px !important;
-        font-size: 8px !important;
-    }
+#sia-filter-rtba.rtba-sans-fichier .sia-filter-rtba-heure {
+    color: #b45309;
+}
+#sia-filter-rtba.active.rtba-sans-fichier .sia-filter-rtba-heure {
+    color: #fde68a;
 }
 /* Niveaux RTBA : le doigt les traverse toujours (toucher traité au clic sur la carte, après les autres). */
 .leaflet-pane.leaflet-npfRtbaActif-pane,
@@ -19439,21 +19393,4 @@ body.npf-calculator-modal-open {
 }
 .npf-rtba-message.visible {
     opacity: 1;
-}
-/* v18.07 — 9e bouton de la colonne (RTBA) : sur un écran large mais peu haut (iPad en paysage, 820 px), la colonne doit
-   rester entière à l'écran. Seul l'écart entre les boutons diminue (15 -> 6 px), taille des boutons inchangée ; en dessous
-   de 820 px de haut (iPad mini en paysage), boutons de 78 px. Rien ne change en portrait ni sur téléphone. */
-@media (min-width: 761px) and (max-height: 900px) {
-    #left-map-action-buttons {
-        gap: 6px;
-    }
-}
-@media (min-width: 761px) and (max-height: 819px) {
-    #left-map-action-buttons {
-        gap: 4px;
-    }
-    #left-map-action-buttons .left-map-action-button {
-        width: 78px;
-        height: 78px;
-    }
 }
