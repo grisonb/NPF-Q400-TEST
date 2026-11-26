@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
 Mise à jour : 26/11/2026
-Version de travail actuelle : TEST v18.08
+Version de travail actuelle : TEST v18.09
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -584,7 +584,10 @@ NON IMPLÉMENTÉ / OUVERT :
   ANNULÉ (écart 15 px partout, comme en v18.06) ; bouton « RTBA ON / OFF » + heure du fichier tout à droite de la ligne
   « Tout afficher / Tout masquer » du panneau « Calques aéronautiques » (ces deux boutons ne changent pas le RTBA) ; bouton
   « carte de France » (appui long = panneau des calques) placé juste sous « Lignes HT ». RTBA inchangé par ailleurs.
-  À MESURER sur iPad ; COMMIT LOCAL, NON POUSSÉE ;
+  À MESURER sur iPad ; POUSSÉE le 26/11/2026 (37d5515) ;
+- v18.09 : correction de Bastien : bouton « carte de France » (pastilles N et œil) JUSTE SOUS « Routes » (et non sous
+  « Lignes HT ») ; ordre : Lignes HT, Routes, carte de France, OPS, FdS / GAAR, Moyens Nationaux, SafeSky ; écarts de la
+  v18.06 ; rien d'autre ne change. À MESURER sur iPad ; COMMIT LOCAL, NON POUSSÉE ;
 - v18.02 : bouton Moyens Nationaux : contour VERT dès que la session est connectée (même sans appareil détecté, même calque
   masqué OFF) ; ROUGE sans session, ou calque affiché quand la dernière demande de positions a échoué (réseau, hors ligne,
   « service indisponible »), puis vert dès la demande suivante réussie (demande de Bastien du 19/11). À MESURER sur iPad ;
@@ -2486,6 +2489,39 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v18.09 — BOUTON « CARTE DE FRANCE » JUSTE SOUS « ROUTES »
+Date : 26/11/2026
+Base fonctionnelle : v18.08 (commit 37d5515, poussée le 26/11/2026). Seule la TEST change. sia.js inchangé (identique à la
+v17.81). Moteur de tuiles, séquenceur, RTBA, prototype de carte (hors numéros de version) : INCHANGÉS.
+
+0. CONTEXTE
+- Correction de Bastien du 26/11 sur la v18.08 : le bouton « carte de France » doit être juste sous « Routes ». La v18.08
+  étant déjà poussée (37d5515, GitHub Pages vérifié), décision de Bastien : nouvelle version v18.09 (un même numéro aurait
+  gardé le même service worker : un iPad déjà en v18.08 n'aurait pas reçu la correction).
+
+A. COLONNE (index.html seulement)
+- Ordre : Lignes HT, Routes, carte de France (pastilles N et œil), OPS, FdS / GAAR, Moyens Nationaux, SafeSky. Écarts et
+  tailles de la v18.06 (CSS de la colonne inchangé). index.html identique à la v18.06 sauf ce déplacement et les versions.
+- Bouton RTBA du panneau « Calques aéronautiques » : inchangé.
+
+B. ESSAIS (PC ; Chrome et Playwright WebKit ; service worker bloqué, tout coupé sauf localhost ; faux NAS RTBA ; aucun
+   appel au vrai NAS, au vrai VPS ni à SafeSky)
+- Disposition (v108/pw_disp108.js) sur 1080 × 810, 1180 × 820, 810 × 1080 et 820 × 1180 : ordre Lignes HT, Routes, carte
+  de France, OPS, FdS / GAAR, Moyens Nationaux, SafeSky ; écarts 15 px et tailles identiques à la v18.06 ; colonne
+  entière à l'écran (bas de SafeSky 766 px), SafeSky touchable ; bouton RTBA du panneau toujours sur la 1re ligne, à droite.
+- RTBA (v108/pw_rtba108.js) : résultats identiques à la v18.08 (Chrome et WebKit).
+- Service worker RÉEL : 7/7 (mise à jour v18.08 -> v18.09).
+- Non-régression rapide (bloquante) : glr102 13/13, glr101 8/8, glr100 16/16 (Chrome et WebKit), cercle 14/14, nr 13/13,
+  map / popup / ret55 / npf66 / glr64 / upd53 identiques à la v18.08 (temps seuls ; caches de la pérenne présents).
+
+C. ÉTUDE METAR / TAF DES PÉLICS (26/11, lecture seule, aucune modification) : NPF-Q400 n'affiche aucun METAR / TAF ;
+  BFG les reçoit de SDVFR (NAS -> VPS) pour les 27 pélics ; le programme VPS (bfg-sdvfr-worker v5.25,
+  collect_weather_for_icao) jette le bulletin « nearestMetar / nearestTaf » d'une autre station. Propositions et questions
+  remises à Bastien. Statut : À DÉCIDER.
+
+D. STATUT
+- v18.09 À MESURER sur iPad (ordre de la colonne).
 
 VERSION TEST v18.08 — RTBA : BOUTON DANS LE PANNEAU « CALQUES AÉRONAUTIQUES », COLONNE COMME EN v18.06
 Date : 26/11/2026
