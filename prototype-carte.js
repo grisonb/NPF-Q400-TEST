@@ -1,5 +1,5 @@
 /*
- * NPF-Q400 TEST v18.12 (prototype inchangé depuis la v18.04) — PROTOTYPE de carte MapLibre GL JS (module de prototype-carte.html, page à part).
+ * NPF-Q400 TEST v18.13 (trajet de comparaison LFTW, route magnétique 360,0°, 250 kt, 8000 ft ; reste inchangé depuis la v18.04) — PROTOTYPE de carte MapLibre GL JS (module de prototype-carte.html, page à part).
  * - Chargé SEULEMENT quand on ouvre la page (bouton « Prototype carte GPU » du DIAG) ; la carte NPF-Q400 n'est pas touchée.
  * - MapLibre GL JS 6.17.0 en copie locale (dossier maplibre-6.17.0) ; aucune requête vers un serveur extérieur ;
  *   textes dessinés sur l'appareil avec ses propres polices (aucun fichier de police, aucun serveur).
@@ -329,7 +329,7 @@ function npfBancCreer(adaptateur) {
         brancher,
         trajetDebut(description) {
             if (trajet && !trajet.fini) banc.trajetFin('remplacé par un nouveau trajet');
-            trajet = { a: Date.now(), debut: Date.now(), description: String(description || ''), tranches: [nouvelleTranche()], derniere: null, fini: false, finA: null, raison: '', videDepuis: null, videCompte: false, minuterie: null };
+            trajet = { a: Date.now(), debut: Date.now(), description: String(description || ''), tranches: [nouvelleTranche()], notes: [], derniere: null, fini: false, finA: null, raison: '', videDepuis: null, videCompte: false, minuterie: null };
             B.trajets.push(trajet);
             while (B.trajets.length > 6) B.trajets.shift();
             trajet.minuterie = setInterval(echantillonTrajet, ECHANTILLON_MS);
@@ -346,6 +346,10 @@ function npfBancCreer(adaptateur) {
         },
         trajetEnCours() {
             return !!(trajet && !trajet.fini);
+        },
+        /* v18.13 — ligne datée ajoutée au trajet en cours (départ, positions toutes les 10 min, arrivée). */
+        trajetNote(texte) {
+            if (trajet) trajet.notes.push(heure(Date.now()) + ' | ' + String(texte || ''));
         },
         tuileDemandee(cle) {
             B.tuiles.demandees += 1;
@@ -446,6 +450,7 @@ function npfBancCreer(adaptateur) {
             L.push('Session longue (trajet simulé, suivi ON) : ' + B.trajets.length + ' trajet(s) | tranches de ' + (TRANCHE_MS >= 60000 ? Math.round(TRANCHE_MS / 60000) + ' min' : Math.round(TRANCHE_MS / 1000) + ' s (essai)'));
             B.trajets.forEach(tr => {
                 L.push('  ' + tr.description + ' | début ' + heure(tr.debut) + ' | ' + (tr.fini ? 'fin ' + heure(tr.finA) + ' (' + tr.raison + ', ' + duree(tr.finA - tr.debut) + ')' : 'en cours depuis ' + duree(Date.now() - tr.debut)));
+                (tr.notes || []).forEach(n => L.push('    ' + n));
                 tr.tranches.forEach((s, i) => {
                     const unite = TRANCHE_MS >= 60000 ? 60000 : 1000, nomUnite = unite === 60000 ? ' min' : ' s';
                     const de = Math.round(i * TRANCHE_MS / unite), a = Math.round((i + 1) * TRANCHE_MS / unite);
@@ -474,10 +479,40 @@ function npfBancCreer(adaptateur) {
     };
     return banc;
 }
+/*
+ * v18.13 — TRAJET DE COMPARAISON, défini UNE fois pour les deux cartes (demande de Bastien, 27/11/2026) : départ du terrain
+ * LFTW (Nîmes-Garons) pris dans les données de l'app, route MAGNÉTIQUE 360,0° tenue constante (cap vrai = route magnétique +
+ * déclinaison WMM2025 à la position de l'avion, recalculée tous les 1 NM, comme la simulation de l'app), 250 kt, 8000 ft,
+ * suivi de l'avion activé, ligne droite. « Temps de vol simulé » = distance réellement parcourue / vitesse : une pause de la
+ * page (arrière-plan) ne le fausse pas. Le DIAG note le départ, puis la position toutes les 10 min de vol simulé.
+ */
+const NPF_BANC_TRAJET_COMMUN = Object.freeze({ oaci: 'LFTW', routeMagDeg: 360.0, vitesseKt: 250, altitudeFt: 8000 });
+function npfBancFr(v, d) { return Number(v).toFixed(d).replace('.', ','); }
+function npfBancPosition(lat, lon) {
+    return npfBancFr(Math.abs(lat), 5) + '° ' + (lat >= 0 ? 'N' : 'S') + ' ' + npfBancFr(Math.abs(lon), 5) + '° ' + (lon >= 0 ? 'E' : 'O');
+}
+/* Distance orthodromique en NM (sphère de 6 371 km, comme le déplacement de la simulation). */
+function npfBancDistanceNm(la1, lo1, la2, lo2) {
+    const r = Math.PI / 180;
+    const a = Math.sin((la2 - la1) * r / 2) ** 2 + Math.cos(la1 * r) * Math.cos(la2 * r) * Math.sin((lo2 - lo1) * r / 2) ** 2;
+    return 2 * 6371000 * Math.asin(Math.min(1, Math.sqrt(a))) / 1852;
+}
+function npfBancTexteDepart(minutes, depart, debut, cote) {
+    const T = NPF_BANC_TRAJET_COMMUN;
+    const d = debut instanceof Date ? debut : new Date(debut);
+    return 'Trajet ' + minutes + ' min | départ ' + T.oaci + ' ' + (depart.nom || '') + ' ' + npfBancPosition(depart.lat, depart.lon)
+        + ' | route ' + npfBancFr(T.routeMagDeg, 1) + '° magnétique constante (WMM2025) | ' + T.vitesseKt + ' kt | ' + T.altitudeFt + ' ft'
+        + ' | suivi ON | début ' + d.toLocaleDateString('fr-FR') + ' ' + d.toLocaleTimeString('fr-FR') + ' (' + d.toISOString().slice(11, 19) + 'Z) | ' + cote;
+}
+function npfBancTextePosition(volSimuleS, lat, lon, depart, declinaison) {
+    return 'vol simulé ' + Math.floor(volSimuleS / 60) + ' min ' + String(Math.round(volSimuleS % 60)).padStart(2, '0') + ' s | avion '
+        + npfBancPosition(lat, lon) + ' | ' + npfBancFr(npfBancDistanceNm(depart.lat, depart.lon, lat, lon), 2) + ' NM du départ'
+        + (Number.isFinite(declinaison) ? ' | déclinaison ' + npfBancFr(declinaison, 2) + '°' : '');
+}
 /* ==== BANC CARTE GPU — FIN DU CODE COMMUN ==== */
 
 /* ==================== PROTOTYPE ==================== */
-const APPV = 'v18.12';
+const APPV = 'v18.13';
 const MAPLIBRE_VERSION = '6.17.0';
 const MAPLIBRE_DOSSIER = 'maplibre-6.17.0';
 /*
@@ -506,8 +541,150 @@ const ROUTES_DESCRIPTION_CLE = 'npfRoadOverlayManifestV1';
 /* Polices : celles de l'appareil (mêmes familles que la carte actuelle) ; « npf black » ne sert qu'à demander la graisse 900. */
 const POLICE_TEXTE = ['npf black', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Arial'];
 const POLICE_ROUTES = ['npf black', 'Arial', 'Helvetica'];
-/* Trajet simulé (même trajet que la carte actuelle, src/360) : Valence (LFLU) -> Marseille, demi-tour à 30 min. */
-const TRAJET = Object.freeze({ depart: [44.91247778, 4.96578056], arrivee: [43.2965, 5.3698], nom: 'Valence (LFLU)', but: 'Marseille' });
+/* v18.13 — trajet simulé = trajet de comparaison commun (NPF_BANC_TRAJET_COMMUN : LFTW, route magnétique 360,0°, 250 kt,
+ * 8000 ft) ; départ = pélic LFTW des données de l'app (prototype-carte-points.geojson, préparé par l'app). */
+/* ---- Déclinaison magnétique : COPIE IDENTIQUE de src/030 (WMM2025, mêmes coefficients, même calcul, même année
+ * décimale), recalculée tous les 1 NM comme getNpfMagneticDeclination() : même cap vrai que la simulation de l'app. ---- */
+const NPF_WMM2025_EPOCH = 2025.0;
+const NPF_WMM2025_COEFFICIENTS = [
+    [1,0,-29351.8,0,12,0], [1,1,-1410.8,4545.4,9.7,-21.5], [2,0,-2556.6,0,-11.6,0], [2,1,2951.1,-3133.6,-5.2,-27.7],
+    [2,2,1649.3,-815.1,-8,-12.1], [3,0,1361,0,-1.3,0], [3,1,-2404.1,-56.6,-4.2,4], [3,2,1243.8,237.5,0.4,-0.3],
+    [3,3,453.6,-549.5,-15.6,-4.1], [4,0,895,0,-1.6,0], [4,1,799.5,278.6,-2.4,-1.1], [4,2,55.7,-133.9,-6,4.1],
+    [4,3,-281.1,212,5.6,1.6], [4,4,12.1,-375.6,-7,-4.4], [5,0,-233.2,0,0.6,0], [5,1,368.9,45.4,1.4,-0.5],
+    [5,2,187.2,220.2,0,2.2], [5,3,-138.7,-122.9,0.6,0.4], [5,4,-142,43,2.2,1.7], [5,5,20.9,106.1,0.9,1.9],
+    [6,0,64.4,0,-0.2,0], [6,1,63.8,-18.4,-0.4,0.3], [6,2,76.9,16.8,0.9,-1.6], [6,3,-115.7,48.8,1.2,-0.4],
+    [6,4,-40.9,-59.8,-0.9,0.9], [6,5,14.9,10.9,0.3,0.7], [6,6,-60.7,72.7,0.9,0.9], [7,0,79.5,0,0,0],
+    [7,1,-77,-48.9,-0.1,0.6], [7,2,-8.8,-14.4,-0.1,0.5], [7,3,59.3,-1,0.5,-0.8], [7,4,15.8,23.4,-0.1,0],
+    [7,5,2.5,-7.4,-0.8,-1], [7,6,-11.1,-25.1,-0.8,0.6], [7,7,14.2,-2.3,0.8,-0.2], [8,0,23.2,0,-0.1,0],
+    [8,1,10.8,7.1,0.2,-0.2], [8,2,-17.5,-12.6,0,0.5], [8,3,2,11.4,0.5,-0.4], [8,4,-21.7,-9.7,-0.1,0.4],
+    [8,5,16.9,12.7,0.3,-0.5], [8,6,15,0.7,0.2,-0.6], [8,7,-16.8,-5.2,0,0.3], [8,8,0.9,3.9,0.2,0.2],
+    [9,0,4.6,0,0,0], [9,1,7.8,-24.8,-0.1,-0.3], [9,2,3,12.2,0.1,0.3], [9,3,-0.2,8.3,0.3,-0.3],
+    [9,4,-2.5,-3.3,-0.3,0.3], [9,5,-13.1,-5.2,0,0.2], [9,6,2.4,7.2,0.3,-0.1], [9,7,8.6,-0.6,-0.1,-0.2],
+    [9,8,-8.7,0.8,0.1,0.4], [9,9,-12.9,10,-0.1,0.1], [10,0,-1.3,0,0.1,0], [10,1,-6.4,3.3,0,0],
+    [10,2,0.2,0,0.1,0], [10,3,2,2.4,0.1,-0.2], [10,4,-1,5.3,0,0.1], [10,5,-0.6,-9.1,-0.3,-0.1],
+    [10,6,-0.9,0.4,0,0.1], [10,7,1.5,-4.2,-0.1,0], [10,8,0.9,-3.8,-0.1,-0.1], [10,9,-2.7,0.9,0,0.2],
+    [10,10,-3.9,-9.1,0,0], [11,0,2.9,0,0,0], [11,1,-1.5,0,0,0], [11,2,-2.5,2.9,0,0.1],
+    [11,3,2.4,-0.6,0,0], [11,4,-0.6,0.2,0,0.1], [11,5,-0.1,0.5,-0.1,0], [11,6,-0.6,-0.3,0,0],
+    [11,7,-0.1,-1.2,0,0.1], [11,8,1.1,-1.7,-0.1,0], [11,9,-1,-2.9,-0.1,0], [11,10,-0.2,-1.8,-0.1,0],
+    [11,11,2.6,-2.3,-0.1,0], [12,0,-2,0,0,0], [12,1,-0.2,-1.3,0,0], [12,2,0.3,0.7,0,0],
+    [12,3,1.2,1,0,-0.1], [12,4,-1.3,-1.4,0,0.1], [12,5,0.6,0,0,0], [12,6,0.6,0.6,0.1,0],
+    [12,7,0.5,-0.1,0,0], [12,8,-0.1,0.8,0,0], [12,9,-0.4,0.1,0,0], [12,10,-0.2,-1,-0.1,0],
+    [12,11,-1.3,0.1,0,0], [12,12,-0.7,0.2,-0.1,-0.1]
+];
+/* v17.57 — 5 -> 1 NM : cap constant tenu à 0,1° près (coût < 0,5 ms par NM). */
+const NPF_MAGNETIC_DECLINATION_RECOMPUTE_NM = 1;
+
+function computeNpfWmm2025Declination(latDeg, lonDeg, altKm = 0, decimalYear = NPF_WMM2025_EPOCH) {
+    const MAXN = 12;
+    const A = 6378.137;
+    const F = 1 / 298.257223563;
+    const E2 = F * (2 - F);
+    const RE = 6371.2;
+    const rad = Math.PI / 180;
+    const dt = Number(decimalYear) - NPF_WMM2025_EPOCH;
+    const phi = Number(latDeg) * rad;
+    const lam = Number(lonDeg) * rad;
+    const alt = Number(altKm) || 0;
+    if (!Number.isFinite(phi) || !Number.isFinite(lam) || !Number.isFinite(dt)) return NaN;
+
+    /* Géodésique WGS84 -> géocentrique sphérique. */
+    const sinPhi = Math.sin(phi);
+    const cosPhi = Math.cos(phi);
+    const rc = A / Math.sqrt(1 - E2 * sinPhi * sinPhi);
+    const p = (rc + alt) * cosPhi;
+    const z = (rc * (1 - E2) + alt) * sinPhi;
+    const r = Math.sqrt(p * p + z * z);
+    const phiC = Math.asin(z / r);
+    const x = Math.sin(phiC);
+    const y = Math.cos(phiC);
+
+    /* Coefficients à la date. */
+    const g = [];
+    const h = [];
+    const P = [];
+    const dP = [];
+    for (let n = 0; n <= MAXN; n += 1) {
+        g.push(new Array(MAXN + 1).fill(0));
+        h.push(new Array(MAXN + 1).fill(0));
+        P.push(new Array(MAXN + 1).fill(0));
+        dP.push(new Array(MAXN + 1).fill(0));
+    }
+    for (const [n, m, gnm, hnm, gdot, hdot] of NPF_WMM2025_COEFFICIENTS) {
+        g[n][m] = gnm + dt * gdot;
+        h[n][m] = hnm + dt * hdot;
+    }
+
+    /* Legendre semi-normalisées de Schmidt et dérivées (colatitude). */
+    P[0][0] = 1;
+    for (let n = 1; n <= MAXN; n += 1) {
+        for (let m = 0; m <= n; m += 1) {
+            if (n === m) {
+                const k = n === 1 ? 1 : Math.sqrt((2 * n - 1) / (2 * n));
+                P[n][n] = k * y * P[n - 1][n - 1];
+                dP[n][n] = k * (y * dP[n - 1][n - 1] + x * P[n - 1][n - 1]);
+            } else {
+                const a1 = (2 * n - 1) / Math.sqrt(n * n - m * m);
+                const a2 = Math.sqrt(((n - 1) * (n - 1) - m * m) / (n * n - m * m));
+                P[n][m] = a1 * x * P[n - 1][m] - (n >= 2 ? a2 * P[n - 2][m] : 0);
+                dP[n][m] = a1 * (x * dP[n - 1][m] - y * P[n - 1][m]) - (n >= 2 ? a2 * dP[n - 2][m] : 0);
+            }
+        }
+    }
+
+    let Xp = 0;
+    let Yp = 0;
+    let Zp = 0;
+    for (let n = 1; n <= MAXN; n += 1) {
+        const ar = Math.pow(RE / r, n + 2);
+        for (let m = 0; m <= n; m += 1) {
+            const cm = Math.cos(m * lam);
+            const sm = Math.sin(m * lam);
+            const gc = g[n][m] * cm + h[n][m] * sm;
+            Xp += ar * gc * dP[n][m];
+            Yp += ar * m * (g[n][m] * sm - h[n][m] * cm) * P[n][m];
+            Zp -= ar * (n + 1) * gc * P[n][m];
+        }
+    }
+    Yp /= y;
+
+    /* Retour au repère géodésique, puis D = atan2(Y, X). */
+    const psi = phiC - phi;
+    const X = Xp * Math.cos(psi) - Zp * Math.sin(psi);
+    return Math.atan2(Yp, X) / rad;
+}
+
+function getNpfDecimalYear(date = new Date()) {
+    const year = date.getUTCFullYear();
+    const start = Date.UTC(year, 0, 1);
+    const end = Date.UTC(year + 1, 0, 1);
+    return year + (date.getTime() - start) / (end - start);
+}
+
+let declinaisonCache = null;
+function declinaisonAvion(lat, lon) {
+    const an = getNpfDecimalYear(new Date());
+    const c = declinaisonCache;
+    if (c && Math.abs(an - c.an) < 1 / 12 && npfBancDistanceNm(c.lat, c.lon, lat, lon) < NPF_MAGNETIC_DECLINATION_RECOMPUTE_NM) return c.valeur;
+    const v = computeNpfWmm2025Declination(lat, lon, 0, an);
+    if (!Number.isFinite(v)) return c ? c.valeur : 0;
+    declinaisonCache = { valeur: v, lat, lon, an };
+    return v;
+}
+let departTrajet = null;
+async function lireDepartTrajet() {
+    if (departTrajet) return departTrajet;
+    const T = NPF_BANC_TRAJET_COMMUN;
+    try {
+        const r = await fetch(new URL(POINTS_URL + '?appv=' + APPV, location.href).href);
+        const g = await r.json();
+        const f = (g.features || []).find(x => x && x.properties && x.properties.g === 'pelic' && x.properties.oaci === T.oaci);
+        if (f && Array.isArray(f.geometry && f.geometry.coordinates)) {
+            const [lon, lat] = f.geometry.coordinates.map(Number);
+            if (Number.isFinite(lat) && Number.isFinite(lon)) departTrajet = { lat, lon, nom: String(f.properties.nm || '').replace(/\s*\(.*\)\s*$/, '') };
+        }
+    } catch (_) {}
+    return departTrajet;
+}
 
 const PNG_TRANSPARENT = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAXpeqz8AAAAASUVORK5CYII=';
 /* Dalle absente du fond : même couleur que la carte actuelle (#d8e2e8, OFFLINE_TILE_PLACEHOLDER_DATA_URL). */
@@ -916,6 +1093,8 @@ const avion = {
     lon: nombre('alon', nombre('lon', 4.65)),
     vitesseKt: nombre('kt', 0) > 0 ? nombre('kt', 0) : 120,
     routeVraie: ((nombre('route', 0) % 360) + 360) % 360,
+    routeMag: null,          // v18.13 : route magnétique tenue pendant un trajet (sinon route vraie fixe)
+    altitudeFt: null,
     dernierPas: 0,
     suivi: false
 };
@@ -931,17 +1110,10 @@ function geojsonAvion() {
     return { type: 'FeatureCollection', features: [{ type: 'Feature', properties: { cap: avion.routeVraie }, geometry: { type: 'Point', coordinates: [avion.lon, avion.lat] } }] };
 }
 let doigtsPoses = 0;
+/* Essais : état du trajet en cours (lecture seule). */
+window.npfPrototypeTrajetEtat = () => (trajet ? { minutes: trajet.minutes, volS: trajet.ecouleMs / 1000, lat: avion.lat, lon: avion.lon, routeMag: avion.routeMag, routeVraie: avion.routeVraie, vitesse: avion.vitesseKt, altitude: avion.altitudeFt } : null);
 /* Trajet simulé (boutons « Trajet 30 min » / « Trajet 60 min ») : même calcul que src/360. */
 let trajet = null;
-function calculerTrajet() {
-    const r = Math.PI / 180;
-    const [la1, lo1] = TRAJET.depart, [la2, lo2] = TRAJET.arrivee;
-    const p1 = la1 * r, p2 = la2 * r, dl = (lo2 - lo1) * r;
-    const route = ((Math.atan2(Math.sin(dl) * Math.cos(p2), Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl)) / r) + 360) % 360;
-    const a = Math.sin((p2 - p1) / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
-    const distanceNm = 2 * 6371000 * Math.asin(Math.sqrt(a)) / 1852;
-    return { route, retour: (route + 180) % 360, distanceNm, vitesseKt: 2 * distanceNm };
-}
 function majBoutonsTrajet() {
     document.querySelectorAll('.proto-trajet').forEach(b => {
         const actif = !!trajet && Number(b.dataset.trajet) === trajet.minutes;
@@ -952,7 +1124,7 @@ function majBoutonsTrajet() {
     if (!trajet) { etat.hidden = true; return; }
     const reste = Math.max(0, trajet.minutes * 60000 - trajet.ecouleMs);
     etat.hidden = false;
-    etat.textContent = 'Trajet ' + trajet.minutes + ' min · ' + (trajet.retourFait ? 'retour vers ' + TRAJET.nom : 'vers ' + TRAJET.but) + ' · reste ' + Math.ceil(reste / 60000) + ' min';
+    etat.textContent = 'Trajet ' + trajet.minutes + ' min · ' + NPF_BANC_TRAJET_COMMUN.oaci + ' route ' + npfBancFr(NPF_BANC_TRAJET_COMMUN.routeMagDeg, 1) + '° · ' + NPF_BANC_TRAJET_COMMUN.vitesseKt + ' kt · ' + NPF_BANC_TRAJET_COMMUN.altitudeFt + ' ft · reste ' + Math.ceil(reste / 60000) + ' min';
 }
 function arreterTrajet(raison = 'arrêté') {
     if (!trajet) return;
@@ -960,27 +1132,33 @@ function arreterTrajet(raison = 'arrêté') {
     trajet = null;
     avion.vitesseKt = t.avant.vitesse;
     avion.routeVraie = t.avant.route;
+    avion.routeMag = null;
+    avion.altitudeFt = t.avant.altitude;
     banc.trajetFin(raison);
     majBoutonsTrajet();
 }
-function demarrerTrajet(minutes) {
+async function demarrerTrajet(minutes) {
     if (!map) return;
+    const T = NPF_BANC_TRAJET_COMMUN;
+    const depart = await lireDepartTrajet();
+    if (!depart) { alert('Trajet impossible : terrain ' + T.oaci + ' absent des données du prototype.'); return; }
     if (trajet) arreterTrajet('remplacé par un nouveau trajet');
     const duree = Number(minutes) >= 60 ? 60 : 30;
-    const calc = calculerTrajet();
-    trajet = { minutes: duree, ecouleMs: 0, retourFait: false, calc, avant: { vitesse: avion.vitesseKt, route: avion.routeVraie } };
-    avion.lat = TRAJET.depart[0];
-    avion.lon = TRAJET.depart[1];
-    avion.vitesseKt = calc.vitesseKt;
-    avion.routeVraie = calc.route;
+    trajet = { minutes: duree, ecouleMs: 0, prochaineNote: 600, depart, avant: { vitesse: avion.vitesseKt, route: avion.routeVraie, altitude: avion.altitudeFt } };
+    avion.lat = depart.lat;
+    avion.lon = depart.lon;
+    avion.vitesseKt = T.vitesseKt;
+    avion.routeMag = T.routeMagDeg % 360;   // 360,0° -> 0 (comme la saisie de l'app)
+    avion.altitudeFt = T.altitudeFt;
+    avion.routeVraie = (((avion.routeMag + declinaisonAvion(avion.lat, avion.lon)) % 360) + 360) % 360;
     avion.dernierPas = performance.now();
     avion.suivi = true;
     majBoutonSuivi();
     map.jumpTo({ center: [avion.lon, avion.lat] });
     const src = map.getSource('avion');
     if (src) src.setData(geojsonAvion());
-    banc.trajetDebut('Trajet ' + duree + ' min ' + TRAJET.nom + (duree >= 60 ? ' ⇄ ' : ' → ') + TRAJET.but
-        + ' | ' + Math.round(calc.vitesseKt) + ' kt, route vraie ' + Math.round(calc.route) + '° | suivi ON | prototype (MapLibre)');
+    banc.trajetDebut(npfBancTexteDepart(duree, depart, new Date(), 'prototype (MapLibre)'));
+    banc.trajetNote('départ : ' + npfBancTextePosition(0, depart.lat, depart.lon, depart, declinaisonAvion(depart.lat, depart.lon)));
     majBoutonsTrajet();
 }
 function pasSimulation() {
@@ -988,14 +1166,16 @@ function pasSimulation() {
     if (document.hidden || !map) { avion.dernierPas = n; return; }
     const ecoule = avion.dernierPas > 0 ? Math.min(1, Math.max(0, (n - avion.dernierPas) / 1000)) : SIMULATION_PAS_MS / 1000;
     avion.dernierPas = n;
+    if (avion.routeMag !== null) avion.routeVraie = (((avion.routeMag + declinaisonAvion(avion.lat, avion.lon)) % 360) + 360) % 360;
     const [la, lo] = destination(avion.lat, avion.lon, avion.routeVraie, avion.vitesseKt * 1852 * ecoule / 3600);
     avion.lat = la;
     avion.lon = lo;
     if (trajet) {
+        /* Temps de vol simulé = durée des pas effectivement parcourus (même définition que la carte actuelle). */
         trajet.ecouleMs += ecoule * 1000;
-        if (!trajet.retourFait && trajet.minutes >= 60 && trajet.ecouleMs >= 30 * 60000) {
-            trajet.retourFait = true;
-            avion.routeVraie = trajet.calc.retour;
+        while (trajet.ecouleMs / 1000 >= trajet.prochaineNote && trajet.prochaineNote <= trajet.minutes * 60) {
+            banc.trajetNote(npfBancTextePosition(trajet.ecouleMs / 1000, avion.lat, avion.lon, trajet.depart, declinaisonAvion(avion.lat, avion.lon)));
+            trajet.prochaineNote += 600;
         }
         if (trajet.ecouleMs >= trajet.minutes * 60000) arreterTrajet('fini');
         else if (Math.floor(trajet.ecouleMs / 30000) !== Math.floor((trajet.ecouleMs - ecoule * 1000) / 30000)) majBoutonsTrajet();

@@ -1,7 +1,7 @@
 ================================================================================
 NPF-Q400 — FICHE DE REPRISE / ÉTAT DE RÉFÉRENCE ACTUEL
-Mise à jour : 26/11/2026
-Version de travail actuelle : TEST v18.12
+Mise à jour : 27/11/2026
+Version de travail actuelle : TEST v18.13
 IMPORTANT : cette fiche synthétique complète l'historique cumulatif conservé
 intégralement plus bas. Elle doit être lue AVANT toute nouvelle modification.
 ================================================================================
@@ -601,7 +601,13 @@ NON IMPLÉMENTÉ / OUVERT :
 - v18.12 : « Rafraîchir » MÉTÉO avec PÉLIC PRIORITAIRE (pélic de la fenêtre seul dans le 1er lot, NAS 1.2 à installer) ;
   CALQUE RADAR Météo-France (lame d'eau, mm/h, animation 1 h, bouton RADAR du panneau, éteint au lancement ; service VPS
   npf-meteo-radar 1.0.0 PRÉPARÉ, NON INSTALLÉ, compte Météo-France à créer par Bastien) ; étude foudre. À MESURER sur iPad ;
-  COMMIT LOCAL, NON POUSSÉE ;
+  POUSSÉE le 26/11/2026 (03c5bf6) ; paquet NAS 1.2 INSTALLÉ le 26/11/2026 à 18:23, VALIDÉ sur iPad par Bastien (« Ça
+  fonctionne ») ; compte Météo-France créé par Bastien le 26/11, souscription « Données radar » faite, service radar VPS
+  toujours NON INSTALLÉ ;
+- v18.13 : trajet de COMPARAISON carte actuelle / prototype GPU : boutons « Trajet 30 min / 60 min » (DIAG et prototype) =
+  départ LFTW (données de l'app), route magnétique 360,0° constante (WMM2025), 250 kt, 8000 ft, suivi ON ; DIAG des deux
+  côtés : départ, route, vitesse, altitude, heure de début, position toutes les 10 min de vol simulé. COMMIT LOCAL, NON
+  POUSSÉE ;
 - v18.02 : bouton Moyens Nationaux : contour VERT dès que la session est connectée (même sans appareil détecté, même calque
   masqué OFF) ; ROUGE sans session, ou calque affiché quand la dernière demande de positions a échoué (réseau, hors ligne,
   « service indisponible »), puis vert dès la demande suivante réussie (demande de Bastien du 19/11). À MESURER sur iPad ;
@@ -2503,6 +2509,69 @@ site en ligne) — À DÉCIDER, NON MODIFIÉE
 ================================================================================
 HISTORIQUE CUMULATIF DES MODIFICATIONS — CONSERVÉ INTÉGRALEMENT CI-DESSOUS
 ================================================================================
+
+VERSION TEST v18.13 — TRAJET DE COMPARAISON CARTE ACTUELLE / PROTOTYPE GPU (LFTW, 360,0°, 250 kt, 8000 ft)
+Date : 27/11/2026
+Base fonctionnelle : v18.12 (commit 03c5bf6, poussée le 26/11/2026). Seule la TEST change : pérenne, RUN, BFG, NAS et VPS
+inchangés. sia.js inchangé (identique à la v17.81). Moteur de tuiles, séquenceur, RTBA, météo, radar : INCHANGÉS. Affichage
+de la carte actuelle : inchangé (hors trajet du DIAG).
+
+0. CONTEXTE
+- v18.12 poussée le 26/11/2026 (03c5bf6) ; paquet NAS météo 1.2 (pélic prioritaire) INSTALLÉ le 26/11 à 18:23 (rapport OK,
+  sauvegarde de la 1.1) ; demande forcée réelle avec LFMU prioritaire : LFMU en 15,8 s (un autre lot de 7 pélics occupait le
+  créneau au moment du toucher), 27 pélics en 36,3 s (1.1 : 100 s) ; VALIDÉ sur iPad par Bastien.
+- Radar : compte Météo-France créé par Bastien le 26/11 (après plusieurs refus du mot de passe à l'inscription ; serveur
+  d'inscription WSO2 du portail en erreur 500 pour une lecture hors navigateur), souscription « Données radar »
+  (DonneesPubliquesRadar) faite ; l'identifiant permanent pour le VPS est la valeur « Authorization: Basic … » de la commande
+  curl affichée par le portail en mode OAuth2 (clé et secret de l'application) ; service VPS NON INSTALLÉ (OK attendu).
+- Demande de Bastien du 27/11 : comparer sur iPad la carte actuelle et le prototype avec 30 min de simulation, sur EXACTEMENT
+  le même trajet.
+
+A. POURQUOI UN CHANGEMENT SUR LA CARTE ACTUELLE
+- Sans changement, la simulation de la carte actuelle part de la position GPS, ou du point touché au doigt (appui long >
+  « Positionner avion ») : jamais exactement de LFTW ; son DIAG ne notait ni départ, ni route, ni vitesse, ni altitude, ni heure.
+  Ajout d'un départ fixe accessible SEULEMENT par le DIAG (boutons « Trajet 30 min / 60 min » existants), rien d'autre sur la
+  carte. Le trajet Valence -> Marseille (aller-retour) de la v18.04 est remplacé.
+
+B. TRAJET COMMUN (code commun du banc, identique dans src/360 et prototype-carte.js)
+- NPF_BANC_TRAJET_COMMUN : LFTW, route magnétique 360,0°, 250 kt, 8000 ft, suivi ON, ligne droite (30 ou 60 min).
+- Départ : carte actuelle = pélic LFTW de l'app (pelicanAirports : 43,74950833 N, 4,41295000 E) ; prototype = pélic LFTW de
+  prototype-carte-points.geojson, préparé par l'app (43,74951 N, 4,41295 E : 0,2 m d'écart, arrondi du fichier).
+- Carte actuelle : déplacement = simulation de l'app sans changement (src/270 : pas de 500 ms, distance = vitesse x temps
+  écoulé limité à 1 s par pas, cap vrai = route magnétique + déclinaison WMM2025 à la position de l'avion recalculée tous les
+  1 NM, src/260 calculateDestinationLatLng) ; vitesse, route, altitude posées sans être enregistrées, réglages remis à la fin.
+- Prototype : même pas de 500 ms, même formule de déplacement, et COPIE IDENTIQUE du calcul WMM2025 de src/030 (coefficients,
+  année décimale, recalcul tous les 1 NM) : même cap vrai.
+- « Temps de vol simulé » des deux côtés = distance réellement parcourue / vitesse (une pause de la page ne le fausse pas).
+- DIAG des deux côtés (section BANC CARTE GPU, « Session longue ») : ligne de début « Trajet 30 min | départ LFTW … | route
+  360,0° magnétique constante (WMM2025) | 250 kt | 8000 ft | suivi ON | début JJ/MM/AAAA HH:MM:SS (HH:MM:SSZ) | côté », note
+  de départ, puis « vol simulé 10 min … | avion lat / lon | NM du départ | déclinaison » toutes les 10 min.
+
+C. MARCHE À SUIVRE SUR L'IPAD (Bastien)
+- Carte actuelle : bouton DIAG > « Trajet 30 min » (l'avion se pose sur LFTW, route 360,0°, 250 kt, 8000 ft, suivi ON) ;
+  à la fin (ou « Arrêter le trajet »), réglages de simulation remis comme avant ; DIAG > Copier pour le rapport.
+- Prototype : bouton DIAG > « Prototype carte GPU » > « Trajet 30 min » (même départ, même route, même vitesse, même
+  altitude) ; DIAG du prototype > Copier ; « Retour à NPF-Q400 ».
+
+D. ESSAIS (PC, profils séparés, service worker bloqué, tout coupé sauf localhost, aucun vrai NAS / VPS)
+- Trajet, CPU ralenti x6 (Chrome : bridage CDP x6, profil avec la vraie V11 ; WebKit : fil principal occupé ~83 % par une
+  boucle, carte V11 d'ESSAI installée par le vrai chemin depuis un faux VPS local) ; position après 10 min de vol simulé :
+    Chrome : carte actuelle et prototype 44,4433 N 4,4577 E, 41,70 NM du départ, déclinaison 2,66° : écart 0,002 NM ;
+    WebKit : carte actuelle 44,44294 N 4,45770 E (41,68 NM), prototype 44,44329 N 4,45772 E (41,70 NM) : écart 0,021 NM.
+    Écart à 10 min d'horloge (relevé toutes les 2 s, départs non simultanés au pas près) : Chrome 0,17 NM, WebKit 0,049 NM.
+  Lignes de début identiques des deux côtés (LFTW 43,74951° N 4,41295° E, 360,0° magnétique, 250 kt, 8000 ft, heure).
+  VALIDÉ (< 0,1 NM) sur PC.
+- Carte actuelle hors simulation, v18.12 contre v18.13, même zone, à 5 NM et 2 NM, HT affichées : image identique pixel pour
+  pixel hors badge du numéro de version (Chrome 104 / 120 pixels, WebKit idem, tous dans le badge) ; prototype jamais
+  demandé. 3/3 Chrome, 3/3 WebKit.
+- Non-régression courte : prototype (service worker réel, ouverture et retour à NPF-Q400) 8/8 ; Moyens Nationaux glr102 /
+  glr101 / glr100 13/13, 8/8, 16/16 sous Chrome et sous WebKit ; cercle MN 14/14 ; nr 13/13 ; démarrage, carte, popups,
+  retours, FdS / GAAR (npf66), trafic (glr64) : 0 exception, 0 erreur console ; mise à jour v18.12 -> v18.13 et hors ligne
+  (upd53) : OK. Aucune erreur JS de l'appli (WebKit : seuls les 2 refus du fichier VAC / ULM externe, coupé par l'essai,
+  déjà présents en v18.01).
+- Outillage : Windows réserve maintenant aussi les ports 19385-19484 (dans la plage Chrome 19300-19899 des tests CDP) :
+  3 tests n'ont pas démarré au 1er passage, relancés OK.
+- Statut : À MESURER sur iPad (30 min carte actuelle, puis 30 min prototype).
 
 VERSION TEST v18.12 — MÉTÉO : RAFRAÎCHIR AVEC PÉLIC PRIORITAIRE ; CALQUE RADAR MÉTÉO-FRANCE ; ÉTUDE FOUDRE
 Date : 26/11/2026

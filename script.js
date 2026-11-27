@@ -1,4 +1,4 @@
-const NPF_SCRIPT_BUILD_VERSION = 'v18.12';
+const NPF_SCRIPT_BUILD_VERSION = 'v18.13';
 
 
 /*
@@ -3332,7 +3332,7 @@ function appendNpfDiagDetailExportSections(lines) {
 
     lines.push('');
     lines.push(
-        'Instrumentation v18.12 : ' + s.wrapped.length + ' fonctions suivies'
+        'Instrumentation v18.13 : ' + s.wrapped.length + ' fonctions suivies'
         + (s.missing.length ? ' | absentes : ' + s.missing.join(', ') : '')
     );
 }
@@ -68897,6 +68897,7 @@ try { npfStartupDiagMark('script_end', 'Script NPF-Q400 évalué'); } catch (_) 
  * (prototype-carte.html), pour comparer les deux DIAG sur l'iPad. Rien ne change à l'affichage.
  * v18.04 — couches de chaque geste, gestes à 20 NM, session longue par tranches de 10 min, trajet simulé
  * (boutons du DIAG) ; l'affichage de la carte actuelle ne change toujours pas.
+ * v18.13 — trajet de comparaison LFTW, route magnétique 360,0°, 250 kt, 8000 ft (code commun) ; départ et positions au DIAG.
  */
 /* ==== BANC CARTE GPU — DÉBUT DU CODE COMMUN (identique dans src/360_banc_carte_gpu.js et prototype-carte.js) ==== */
 /*
@@ -69213,7 +69214,7 @@ function npfBancCreer(adaptateur) {
         brancher,
         trajetDebut(description) {
             if (trajet && !trajet.fini) banc.trajetFin('remplacé par un nouveau trajet');
-            trajet = { a: Date.now(), debut: Date.now(), description: String(description || ''), tranches: [nouvelleTranche()], derniere: null, fini: false, finA: null, raison: '', videDepuis: null, videCompte: false, minuterie: null };
+            trajet = { a: Date.now(), debut: Date.now(), description: String(description || ''), tranches: [nouvelleTranche()], notes: [], derniere: null, fini: false, finA: null, raison: '', videDepuis: null, videCompte: false, minuterie: null };
             B.trajets.push(trajet);
             while (B.trajets.length > 6) B.trajets.shift();
             trajet.minuterie = setInterval(echantillonTrajet, ECHANTILLON_MS);
@@ -69230,6 +69231,10 @@ function npfBancCreer(adaptateur) {
         },
         trajetEnCours() {
             return !!(trajet && !trajet.fini);
+        },
+        /* v18.13 — ligne datée ajoutée au trajet en cours (départ, positions toutes les 10 min, arrivée). */
+        trajetNote(texte) {
+            if (trajet) trajet.notes.push(heure(Date.now()) + ' | ' + String(texte || ''));
         },
         tuileDemandee(cle) {
             B.tuiles.demandees += 1;
@@ -69330,6 +69335,7 @@ function npfBancCreer(adaptateur) {
             L.push('Session longue (trajet simulé, suivi ON) : ' + B.trajets.length + ' trajet(s) | tranches de ' + (TRANCHE_MS >= 60000 ? Math.round(TRANCHE_MS / 60000) + ' min' : Math.round(TRANCHE_MS / 1000) + ' s (essai)'));
             B.trajets.forEach(tr => {
                 L.push('  ' + tr.description + ' | début ' + heure(tr.debut) + ' | ' + (tr.fini ? 'fin ' + heure(tr.finA) + ' (' + tr.raison + ', ' + duree(tr.finA - tr.debut) + ')' : 'en cours depuis ' + duree(Date.now() - tr.debut)));
+                (tr.notes || []).forEach(n => L.push('    ' + n));
                 tr.tranches.forEach((s, i) => {
                     const unite = TRANCHE_MS >= 60000 ? 60000 : 1000, nomUnite = unite === 60000 ? ' min' : ' s';
                     const de = Math.round(i * TRANCHE_MS / unite), a = Math.round((i + 1) * TRANCHE_MS / unite);
@@ -69357,6 +69363,36 @@ function npfBancCreer(adaptateur) {
         }
     };
     return banc;
+}
+/*
+ * v18.13 — TRAJET DE COMPARAISON, défini UNE fois pour les deux cartes (demande de Bastien, 27/11/2026) : départ du terrain
+ * LFTW (Nîmes-Garons) pris dans les données de l'app, route MAGNÉTIQUE 360,0° tenue constante (cap vrai = route magnétique +
+ * déclinaison WMM2025 à la position de l'avion, recalculée tous les 1 NM, comme la simulation de l'app), 250 kt, 8000 ft,
+ * suivi de l'avion activé, ligne droite. « Temps de vol simulé » = distance réellement parcourue / vitesse : une pause de la
+ * page (arrière-plan) ne le fausse pas. Le DIAG note le départ, puis la position toutes les 10 min de vol simulé.
+ */
+const NPF_BANC_TRAJET_COMMUN = Object.freeze({ oaci: 'LFTW', routeMagDeg: 360.0, vitesseKt: 250, altitudeFt: 8000 });
+function npfBancFr(v, d) { return Number(v).toFixed(d).replace('.', ','); }
+function npfBancPosition(lat, lon) {
+    return npfBancFr(Math.abs(lat), 5) + '° ' + (lat >= 0 ? 'N' : 'S') + ' ' + npfBancFr(Math.abs(lon), 5) + '° ' + (lon >= 0 ? 'E' : 'O');
+}
+/* Distance orthodromique en NM (sphère de 6 371 km, comme le déplacement de la simulation). */
+function npfBancDistanceNm(la1, lo1, la2, lo2) {
+    const r = Math.PI / 180;
+    const a = Math.sin((la2 - la1) * r / 2) ** 2 + Math.cos(la1 * r) * Math.cos(la2 * r) * Math.sin((lo2 - lo1) * r / 2) ** 2;
+    return 2 * 6371000 * Math.asin(Math.min(1, Math.sqrt(a))) / 1852;
+}
+function npfBancTexteDepart(minutes, depart, debut, cote) {
+    const T = NPF_BANC_TRAJET_COMMUN;
+    const d = debut instanceof Date ? debut : new Date(debut);
+    return 'Trajet ' + minutes + ' min | départ ' + T.oaci + ' ' + (depart.nom || '') + ' ' + npfBancPosition(depart.lat, depart.lon)
+        + ' | route ' + npfBancFr(T.routeMagDeg, 1) + '° magnétique constante (WMM2025) | ' + T.vitesseKt + ' kt | ' + T.altitudeFt + ' ft'
+        + ' | suivi ON | début ' + d.toLocaleDateString('fr-FR') + ' ' + d.toLocaleTimeString('fr-FR') + ' (' + d.toISOString().slice(11, 19) + 'Z) | ' + cote;
+}
+function npfBancTextePosition(volSimuleS, lat, lon, depart, declinaison) {
+    return 'vol simulé ' + Math.floor(volSimuleS / 60) + ' min ' + String(Math.round(volSimuleS % 60)).padStart(2, '0') + ' s | avion '
+        + npfBancPosition(lat, lon) + ' | ' + npfBancFr(npfBancDistanceNm(depart.lat, depart.lon, lat, lon), 2) + ' NM du départ'
+        + (Number.isFinite(declinaison) ? ' | déclinaison ' + npfBancFr(declinaison, 2) + '°' : '');
 }
 /* ==== BANC CARTE GPU — FIN DU CODE COMMUN ==== */
 
@@ -69540,23 +69576,21 @@ function openNpfPrototypeCarteGpu() {
 window.openNpfPrototypeCarteGpu = openNpfPrototypeCarteGpu;
 
 /*
- * v18.04 — TRAJET SIMULÉ du banc (même trajet que le prototype) : départ Valence (LFLU), route vraie vers Marseille,
- * demi-tour à 30 min ; vitesse telle que l'aller-retour dure 60 min ; suivi ON (le suivi de l'app, anticipé). Il utilise la simulation de l'app
- * (même pas de 500 ms, même formule) : mode simulation activé s'il ne l'était pas, puis vitesse et route posées
- * directement (sans les enregistrer : les réglages de simulation de l'utilisateur sont remis à la fin), suivi activé
- * comme par son bouton. Tranches de 10 minutes mesurées par le banc. Lancé seulement par les boutons du DIAG.
+ * v18.04 — TRAJET SIMULÉ du banc, lancé seulement par les boutons du DIAG (« Trajet 30 min », « Trajet 60 min »).
+ * v18.13 — trajet de comparaison avec le prototype (NPF_BANC_TRAJET_COMMUN, code commun) : départ LFTW pris dans les
+ * données de l'app (pelicanAirports), route MAGNÉTIQUE 360,0°, 250 kt, 8000 ft, suivi ON. Le déplacement est celui de la
+ * SIMULATION DE L'APP, sans changement (src/270 : pas de 500 ms, cap vrai = route magnétique + déclinaison WMM2025 à la
+ * position de l'avion, src/260 calculateDestinationLatLng). Vitesse, route et altitude posées sans être enregistrées : les
+ * réglages de simulation de l'utilisateur sont remis à la fin. Remplace le trajet Valence -> Marseille de la v18.04.
  */
-const NPF_BANC_TRAJET = Object.freeze({ depart: [44.91247778, 4.96578056], arrivee: [43.2965, 5.3698], nom: 'Valence (LFLU)', but: 'Marseille' });
 let npfBancTrajetEnCours = null;
 
-function calculerNpfBancTrajet() {
-    const r = Math.PI / 180;
-    const [la1, lo1] = NPF_BANC_TRAJET.depart, [la2, lo2] = NPF_BANC_TRAJET.arrivee;
-    const p1 = la1 * r, p2 = la2 * r, dl = (lo2 - lo1) * r;
-    const route = ((Math.atan2(Math.sin(dl) * Math.cos(p2), Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl)) / r) + 360) % 360;
-    const a = Math.sin((p2 - p1) / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
-    const distanceNm = 2 * 6371000 * Math.asin(Math.sqrt(a)) / 1852;
-    return { route, retour: (route + 180) % 360, distanceNm, vitesseKt: 2 * distanceNm };
+function npfBancDepartTrajet() {
+    const T = NPF_BANC_TRAJET_COMMUN;
+    let a = null;
+    try { a = (typeof pelicanAirports !== 'undefined' && Array.isArray(pelicanAirports) ? pelicanAirports : []).find(x => x && x.oaci === T.oaci) || null; } catch (_) {}
+    if (!a && typeof getAirportByOaci === 'function') { try { a = getAirportByOaci(T.oaci); } catch (_) {} }
+    return a && Number.isFinite(Number(a.lat)) && Number.isFinite(Number(a.lon)) ? { lat: Number(a.lat), lon: Number(a.lon), nom: String(a.name || '') } : null;
 }
 
 function arreterNpfBancTrajet(raison = 'arrêté') {
@@ -69567,6 +69601,7 @@ function arreterNpfBancTrajet(raison = 'arrêté') {
     try {
         simulationSpeedKt = t.avant.vitesse;
         simulationRouteDeg = t.avant.route;
+        simulationAltitudeFt = t.avant.altitude;
         refreshSimulationMotionButtonState();
     } catch (_) {}
     try { if (!t.avant.suivi && centerGpsFollowActive) disableCenterGpsFollow(); } catch (_) {}
@@ -69576,10 +69611,12 @@ function arreterNpfBancTrajet(raison = 'arrêté') {
 
 function demarrerNpfBancTrajet(minutes) {
     if (!map || !npfBancCarteLeaflet) return false;
+    const T = NPF_BANC_TRAJET_COMMUN;
+    const depart = npfBancDepartTrajet();
+    if (!depart) { try { alert('Trajet impossible : terrain ' + T.oaci + ' absent des données de l\'app.'); } catch (_) {} return false; }
     arreterNpfBancTrajet('remplacé par un nouveau trajet');
     const duree = Number(minutes) >= 60 ? 60 : 30;
-    const calc = calculerNpfBancTrajet();
-    const avant = { sim: !!isSimulationMode, vitesse: simulationSpeedKt, route: simulationRouteDeg, suivi: !!centerGpsFollowActive };
+    const avant = { sim: !!isSimulationMode, vitesse: simulationSpeedKt, route: simulationRouteDeg, altitude: simulationAltitudeFt, suivi: !!centerGpsFollowActive };
     if (!isSimulationMode) {
         const alerte = window.alert;
         window.alert = () => {};
@@ -69587,33 +69624,40 @@ function demarrerNpfBancTrajet(minutes) {
     }
     if (!isSimulationMode) return false;
     const gpsAvant = !!simulationWasLiveGpsActiveBeforeSimulation;
-    const poserRoute = vraie => { simulationRouteDeg = normalizeSimulationRoute(vraie - Number(getNpfMagneticDeclination() || 0)); };
-    simulationSpeedKt = calc.vitesseKt;
-    poserRoute(calc.route);
-    applySimulatedUserPosition(NPF_BANC_TRAJET.depart[0], NPF_BANC_TRAJET.depart[1], { forceFullRefresh: true });
-    /* Déclinaison du point de départ (connue seulement une fois l'avion posé à Valence). */
-    poserRoute(calc.route);
+    simulationSpeedKt = T.vitesseKt;
+    simulationRouteDeg = parseSimulationRouteInput(T.routeMagDeg);   // 360,0 -> 000,0 (même valeur que la saisie)
+    simulationAltitudeFt = T.altitudeFt;
+    applySimulatedUserPosition(depart.lat, depart.lon, { forceFullRefresh: true });
     try { refreshSimulationMotionButtonState(); } catch (_) {}
     if (!centerGpsFollowActive) enableCenterGpsFollow();
-    const t = { minutes: duree, ecouleMs: 0, dernier: performance.now(), retourFait: false, avant, gpsAvant, minuterie: null };
+    const debut = new Date();
+    const t = { minutes: duree, volS: 0, prochaineNote: 600, lat: depart.lat, lon: depart.lon, depart, avant, gpsAvant, minuterie: null };
     npfBancTrajetEnCours = t;
-    npfBancCarteLeaflet.trajetDebut('Trajet ' + duree + ' min ' + NPF_BANC_TRAJET.nom + (duree >= 60 ? ' ⇄ ' : ' → ') + NPF_BANC_TRAJET.but
-        + ' | ' + Math.round(calc.vitesseKt) + ' kt, route vraie ' + Math.round(calc.route) + '° | suivi ON | carte actuelle (Leaflet)');
+    npfBancCarteLeaflet.trajetDebut(npfBancTexteDepart(duree, depart, debut, 'carte actuelle (Leaflet)'));
+    npfBancCarteLeaflet.trajetNote('départ : ' + npfBancTextePosition(0, depart.lat, depart.lon, depart, Number(getNpfMagneticDeclination())));
     t.minuterie = setInterval(() => {
         if (npfBancTrajetEnCours !== t) return;
-        const n = performance.now();
-        if (!document.hidden) t.ecouleMs += Math.min(1000, Math.max(0, n - t.dernier));
-        t.dernier = n;
-        if (!t.retourFait && t.minutes >= 60 && t.ecouleMs >= 30 * 60000) t.retourFait = true;
-        /* La déclinaison magnétique suit la position : la route est reposée à chaque pas pour garder la MÊME route vraie
-         * que le prototype (route vraie constante, comme sa simulation). */
-        poserRoute(t.retourFait ? calc.retour : calc.route);
-        if (t.ecouleMs >= t.minutes * 60000) arreterNpfBancTrajet('fini');
+        const la = Number(simulationMotionLatitude), lo = Number(simulationMotionLongitude);
+        if (!Number.isFinite(la) || !Number.isFinite(lo)) return;
+        /* Temps de vol simulé = distance réellement parcourue par la simulation de l'app / vitesse. */
+        t.volS += npfBancDistanceNm(t.lat, t.lon, la, lo) / T.vitesseKt * 3600;
+        t.lat = la;
+        t.lon = lo;
+        while (t.volS >= t.prochaineNote && t.prochaineNote <= t.minutes * 60) {
+            npfBancCarteLeaflet.trajetNote(npfBancTextePosition(t.volS, la, lo, depart, Number(getNpfMagneticDeclination())));
+            t.prochaineNote += 600;
+        }
+        if (t.volS >= t.minutes * 60) arreterNpfBancTrajet('fini');
     }, 500);
     return true;
 }
 window.demarrerNpfBancTrajet = demarrerNpfBancTrajet;
 window.arreterNpfBancTrajet = arreterNpfBancTrajet;
+/* Essais et DIAG : état du trajet en cours (lecture seule). */
+window.getNpfBancTrajetEtat = () => {
+    const t = npfBancTrajetEnCours;
+    return t ? { minutes: t.minutes, volS: t.volS, lat: t.lat, lon: t.lon, routeMag: simulationRouteDeg, vitesse: simulationSpeedKt, altitude: simulationAltitudeFt } : null;
+};
 /*
  * v18.07 — RÉSEAU RTBA (AZBA) sur la carte, mêmes règles que BFG TEST (Briefing_fdf_TEST v5.51, index.html, module
  * « RTBA (AZBA) SUR LA CARTE FRANCE »), reprises à l'identique :
